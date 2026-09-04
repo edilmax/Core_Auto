@@ -10,6 +10,7 @@ import json
 import unittest
 
 from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
+from test_rimborso_torna_da_ogni_strada import _BancoDelleStrade
 from fase83_server import (
     RouterHTTP, crea_router, percorso_statico_sicuro,
     jsonld_alloggio, pagina_alloggio_html, sitemap_xml, robots_txt, _importo,
@@ -74,6 +75,112 @@ class TestBase(unittest.TestCase):
         r = crea_router(crea_sistema(ConfigCasaVIP(abilitato=False)))
         s, _ = r.gestisci("GET", "/api/health")
         self.assertEqual(s, 503)
+
+
+class TestIlPulsanteDellaControversia(_BancoDelleStrade):
+    """⛔ LE GUARDIE DEL FRENO «ARBITRATO» STANNO QUI, NEL TEST DEDICATO DEL SERVER, perche' e'
+    il primo occhio che il Giudice della mutazione accende su `fase83_server.py`: il giro
+    `--diff HEAD` del 2026-09-04 ha lasciato 10 mutanti vivi su 16 nelle righe nuove di
+    `_rimborso_dovuto_scheda` non perche' fossero scoperte, ma perche' le guardie della catena
+    (`test_rimborso_torna_da_ogni_strada`) stanno in fondo all'alfabeto e fuori dagli 8 occhi.
+    Una guardia per sopravvissuto, nel file che il Giudice guarda per primo (metodo della
+    casella 5). Il banco e' quello delle catene (importato): un solo banco, non due copie.
+
+    Riga per riga (numeri del giro del 4 settembre, invecchiano): `gz is not None`/`stato ==
+    "risolto"`/`ospite_rimborso == dovuto`/`arbitrato is None` nel freno delle date/`arbitrato
+    is not None` nella riga -> `test_..._HA_il_pulsante`; `and`/`or` nel riconoscimento ->
+    `..._cifra_diversa`; `or 0` sulla quota host -> `..._quota_host`; `<=` -> `..._al_centesimo`.
+    """
+
+    def _controversia_risolta(self, giorno, email, pi, frazione=3, resto=7):
+        ci, co = self.date(giorno)
+        b, totale = self.prenota(ci, co, email)
+        rif = b["riferimento"]
+        self.paga(rif, pi)
+        s, _c = self.g("POST", "/api/garanzia/contesta", {"voucher_token": b["voucher_token"]})
+        self.assertEqual(s, 200, "PREMESSA NON VALIDA: la contestazione non riesce")
+        in_garanzia = int((self.sis.garanzia.stato(rif) or {}).get("importo_host_cents") or 0)
+        self.assertGreater(in_garanzia, 0, "PREMESSA NON VALIDA: niente in garanzia")
+        deciso = in_garanzia // frazione + resto
+        s, out = self.g("POST", "/api/admin/controversia/risolvi",
+                        {"riferimento": rif, "rimborso_ospite_cents": deciso},
+                        {"X-Admin-Key": "ak"})
+        self.assertEqual(s, 200, "PREMESSA NON VALIDA: l'arbitrato non riesce: %r" % (out,))
+        return rif, pi, deciso, totale, in_garanzia
+
+    def test_la_riga_della_controversia_risolta_HA_il_pulsante_e_manda_la_cifra_esatta(self):
+        rif, pi, deciso, _t, _g = self._controversia_risolta(30, "c1@fase83.it", "pi_c1")
+        riga = self.riga(rif)
+        self.assertIsNotNone(riga)
+        self.assertTrue(riga.get("arbitrato"), "la riga non dice di nascere da un arbitrato: %r" % (riga,))
+        self.assertTrue(riga.get("bottone"), "manca il pulsante (manca: %r)" % (riga.get("manca"),))
+        self.assertNotIn("date_liberate", riga.get("manca") or [])
+        s, o = self.premi(rif)
+        self.assertEqual((s, o.get("stato"), o.get("importo_cents")), (200, "rimborsato", deciso), o)
+        self.assertEqual([(c["payment_intent"], c["importo_cents"]) for c in self.stripe.creazioni],
+                         [(pi, deciso)], "il gateway non ha ricevuto ESATTAMENTE la cifra dell'arbitro")
+
+    def test_senza_pulsante_se_la_garanzia_dice_una_cifra_diversa(self):
+        rif, _pi, _d, _t, _g = self._controversia_risolta(32, "c2@fase83.it", "pi_c2")
+        vero = self.sis.garanzia.stato
+
+        def diversa(pid):
+            st = vero(pid)
+            return dict(st, ospite_rimborso_cents=int(st["ospite_rimborso_cents"]) + 1) \
+                if (st and pid == rif) else st
+        self.sis.garanzia.stato = diversa
+        try:
+            riga = self.riga(rif)
+            self.assertFalse(riga.get("arbitrato"))
+            self.assertFalse(riga.get("bottone"), "pulsante con una cifra diversa in garanzia: %r" % (riga,))
+            self.assertIn("date_liberate", riga.get("manca") or [])
+            self.assertEqual(self.premi(rif)[0], 409)
+            self.assertEqual(self.stripe.creazioni, [])
+        finally:
+            self.sis.garanzia.stato = vero
+
+    def test_senza_pulsante_se_quota_host_piu_rimborso_superano_il_pagato(self):
+        rif, _pi, _d, _t, _g = self._controversia_risolta(34, "c3@fase83.it", "pi_c3")
+        vero = self.sis.garanzia.stato
+
+        def gonfiata(pid):
+            st = vero(pid)
+            return dict(st, host_riceve_cents=10 ** 9) if (st and pid == rif) else st
+        self.sis.garanzia.stato = gonfiata
+        try:
+            riga = self.riga(rif)
+            self.assertTrue(riga.get("arbitrato"))
+            self.assertFalse(riga.get("bottone"), "pulsante oltre il pagato: %r" % (riga,))
+            self.assertIn("arbitrato_supera_il_pagato", riga.get("manca") or [])
+            self.assertEqual(self.premi(rif)[0], 409)
+            self.assertEqual(self.stripe.creazioni, [])
+        finally:
+            self.sis.garanzia.stato = vero
+
+    def test_al_centesimo_quota_host_piu_rimborso_UGUALE_al_pagato_NON_e_una_perdita(self):
+        """D16 al confine: uguale al pagato non e' «di piu'». Un `<` al posto di `<=` toglierebbe
+        il pulsante proprio al rimborso pieno con host a zero."""
+        rif, pi, deciso, _t, _g = self._controversia_risolta(36, "c4@fase83.it", "pi_c4")
+        vero = self.sis.garanzia.stato
+        riga0 = self.riga(rif)
+        pagato = int(riga0.get("pagato_cents") or 0)
+        self.assertGreater(pagato, deciso, "PREMESSA NON VALIDA: il pagato deve superare il deciso")
+
+        def al_confine(pid):
+            st = vero(pid)
+            return dict(st, host_riceve_cents=pagato - deciso) if (st and pid == rif) else st
+        self.sis.garanzia.stato = al_confine
+        try:
+            riga = self.riga(rif)
+            self.assertTrue(riga.get("bottone"),
+                            "quota host + rimborso == pagato e il pulsante manca: il confine e' "
+                            "stato escluso (manca: %r)" % (riga.get("manca"),))
+            s, o = self.premi(rif)
+            self.assertEqual((s, o.get("importo_cents")), (200, deciso), o)
+            self.assertEqual([(c["payment_intent"], c["importo_cents"]) for c in self.stripe.creazioni],
+                             [(pi, deciso)])
+        finally:
+            self.sis.garanzia.stato = vero
 
 
 class TestCatalogo(unittest.TestCase):

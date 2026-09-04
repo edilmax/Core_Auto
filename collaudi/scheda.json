@@ -33,12 +33,12 @@
  "d70ecb7a31cc": {
   "blocco": 1,
   "comando": "python collaudi/esame_rimborsi.py --scrivi",
-  "commit": "59a068b",
+  "commit": "0887247",
   "condizione": "i soldi tornano DAVVERO all'ospite da OGNI strada che porta a un rimborso, non solo da quella che qualcuno si e' ricordato di provare (il 2026-08-16 le strade erano due e ne funzionava una). ⛔ L'AUTOMATICO NON e' la riga d'arrivo di questo blocco: e' una decisione del fondatore, e si accende dopo -- prima si guadagna la fiducia, poi si toglie il dito",
-  "denominatore": 32,
-  "esito": false,
+  "denominatore": 38,
+  "esito": true,
   "impronta": "4218eaec4034",
-  "motivo": "«rimborso deciso dall'arbitro (controversia risolta)»: USCITA MANUALE DICHIARATA (in lista con la cifra, SENZA pulsante)",
-  "quando": "2026-09-04T17:04:43"
+  "motivo": "",
+  "quando": "2026-09-04T19:18:32"
  }
 }

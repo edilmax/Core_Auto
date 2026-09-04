@@ -403,6 +403,76 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🔘 IL PULSANTE DELLA CONTROVERSIA: LA SETTIMA STRADA TORNA, E LA CASELLA 2 È VERDE — 4 settembre, tarda sera, corsia B (albero B2, ramo `pulsante-controversia` su `0887247`)
+
+**Da dove nasce.** Letta la voce qui sotto (sei strade su sette, la controversia «uscita manuale
+dichiarata»), il fondatore ha descritto il suo modo di lavorare — *«la controversia sono io che
+sento le parti e poi decido quanto dare indietro a uno e quanto dare indietro all'altro. Le cifre
+le metto io»*, *«ci saranno una casella host, una casella cliente … decido se mandare tutto al
+cliente o all'host o dividere … [mi piacerebbe] avere il pulsante da cliccare»* — e alle 18:2x ha
+scritto **«autorizzato»**. Il pannello faceva già quasi tutto (campo € con la cifra esatta al
+cliente, il resto all'host scritto accanto, «Risolvi»; la quota host parte da sola): mancava
+l'ultimo gesto verso l'ospite, il pulsante «Restituisci» sulla riga della controversia.
+
+**La riga di produzione (una, in `fase83_server.py`, `_rimborso_dovuto_scheda`).** La riga della
+controversia non aveva il pulsante perché `date_liberate = stato in ("rimborsato",
+"cancellata_host")` è falso per costruzione dopo un soggiorno avvenuto, e nello split parziale con
+Connect scattava anche `payout_gia_pagato` (la quota host parte alla risoluzione). Ora la scheda
+riconosce l'**arbitrato**: la garanzia dice `risolto` con ESATTAMENTE la cifra in lista
+(`ospite_rimborso_cents == dovuto`). Per quella riga il freno delle date non si applica (chi ha
+dormito ha un giudizio a favore) e il FRENO 3 diventa aritmetica, D16: `dovuto + host_riceve_cents
+<= pagato`, altrimenti `manca: arbitrato_supera_il_pagato`. Nel dubbio (garanzia illeggibile, cifra
+diversa) la riga resta senza pulsante: decide una persona. La riga porta `arbitrato: true`; la nota
+della rotta di risoluzione e la frase di riserva del pannello (`deploy/admin.html`) dicono la strada
+nuova invece di «esegui il rimborso su Stripe (manuale, controllato)». Il pulsante stesso
+(`_admin_rimborsa_dovuto`) non cambia: ricalcola la scheda e manda ESATTAMENTE `dovuto_cents`.
+
+**D20, nell'ordine.** La guardia della catena intera per la controversia è stata scritta FUORI dal
+repository e vista **ROSSA** sul prodotto di prima (`guardia_rossa_controversia_pulsante_ROSSO_1.log`:
+`LA RIGA C'E' MA NON SI PUO' PREMERE (manca: ['date_liberate'])`), poi **VERDE** dopo la riga
+(`…_VERDE_2.log`), poi portata nella suite al posto del collaudo che documentava l'uscita manuale.
+Il freno nuovo è provato nelle DUE direzioni con due guardie in più: cifra diversa in garanzia →
+niente pulsante e `manca: date_liberate` come prima; quota host gonfiata → niente pulsante e
+`manca: arbitrato_supera_il_pagato`, e in tutt'e due i casi la rotta rifiuta (409) e il gateway
+non riceve niente. `test_rimborso_torna_da_ogni_strada`: 9 collaudi verdi in 9 s.
+
+**Misurato dopo (`python collaudi/esame_rimborsi.py --scrivi`, registro
+`esame_rimborsi_scrivi_giro4_pulsante.log`):** 66 collaudi verdi, 187 eventi, **STRADE_TORNANO=7/7**
+(la controversia: «in lista col pulsante, il gateway riceve la cifra, la riga esce»); E2E contro
+Stripe di prova **verde, 31 passi**, con i sei passi nuovi (R6-bis): la riga della controversia HA
+il pulsante (`arbitrato=True`), premuto rimborsa 17007, Stripe vede ESATTAMENTE UN rimborso di 17007,
+la riga esce perché lo dice Stripe. **La scheda ha scritto la casella 2 VERDE** (denominatore 38 =
+7 strade + 31 passi, impronta invariata perché `fase83` non è fra i moduli del blocco): **Blocco 1
+SOLDI 4 su 6.** Guardie dei rimborsi + censimento + `test_fase83_server`: 166 collaudi verdi.
+Giudice della mutazione sulle righe toccate (`--diff HEAD`, atteso 0 sopravvissuti scritto prima
+in `atteso_giudice_diff_pulsante.txt`).
+
+**Il Giudice ha lasciato 10 vivi su 16, e il primo sospetto era lo strumento (S3): aveva ragione.**
+Giro 1 (`giudice_diff_pulsante_giro1_10_vivi.log`): provati 16, uccisi 6, **sopravvissuti 10**, tutti
+nelle righe nuove (`is not`/`==`/`and`/`or`/`>`/`<=` del riconoscimento dell'arbitrato e del freno
+aritmetico). Non erano scoperte: le guardie della catena (`test_rimborso_torna_da_ogni_strada`) le
+uccidono, ma il modo `--diff` non accetta `--killer` e accende 8 occhi — il dedicato
+`test_fase83_server` più i primi importatori **in ordine alfabetico** — e «test_rimborso_t…» sta
+in fondo. È la stessa lezione del 3 settembre (gli occhi scelti male producono sopravvissuti
+credibili e senza significato), vista dall'altro lato. Due cure, nessun criterio allargato: (1) **una
+guardia per sopravvissuto nel file dedicato** — `test_fase83_server.TestIlPulsanteDellaControversia`,
+4 collaudi sullo stesso banco delle catene (importato, non copiato): la riga risolta ha il pulsante e
+manda la cifra esatta; cifra diversa in garanzia → niente pulsante; quota host gonfiata → niente
+pulsante; **al centesimo, quota host + rimborso UGUALE al pagato non è una perdita** (il `<=` al
+confine: un `<` toglierebbe il pulsante proprio al rimborso pieno con host a zero); (2) la
+condizione `dovuto > 0` nel riconoscimento era **ridondante per costruzione** (`_giornale` rifiuta
+importi non positivi, quindi un movimento «rimborso» ha sempre importo > 0): il suo mutante `>=` era
+equivalente, e un equivalente si toglie dal codice, non si dichiara (B6). Giro 2
+(`giudice_diff_pulsante_giro2.log`, atteso 0 sopravvissuti in `atteso_giudice_diff_pulsante_giro2.txt`):
+**provati 14 · uccisi 14 · sopravvissuti 0 · scoperti 0 · non determinabili 0** — «ogni riga cambiata
+è sorvegliata». Prima e dopo ogni giro `fase83_server.py` identico (sha256) e 0 biglietti. Dopo le
+quattro guardie nel dedicato: caricatore **6203** (`caricatore_20260904_191441.log`); cricchetti ruff
+686 = 686 e bandit 548 = 548; audit 0 discrepanze.
+
+**Resta (dichiarato):** il deploy — è cambiata una riga di produzione, e il pannello vivo avrà il
+pulsante solo dopo, col suo «autorizzato»; e il limite `gia = rimborsato_cents > 0` (una riga si
+chiude a qualunque rimborso visto su Stripe), fuori dall'autorizzazione di oggi.
+
 ### 💸 LA CASELLA 2: I SOLDI TORNANO DA SEI STRADE SU SETTE, E LA SETTIMA È MANUALE PER SCELTA — 4 settembre sera, corsia B (albero B2, ramo `casella2` su `59a068b`)
 
 **Da dove nasce.** Alle 15:20 del 4 settembre, nella finestra della corsia B, il fondatore ha scritto:

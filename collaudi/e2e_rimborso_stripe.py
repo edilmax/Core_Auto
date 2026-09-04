@@ -17,7 +17,9 @@ COSA DIMOSTRA, in ordine:
   R3  premendo il pulsante Stripe registra UN rimborso, dell'importo ESATTO dovuto
   R4  premendolo DUE volte Stripe continua a vedere UN rimborso solo (chiave di idempotenza)
   R5  la riga esce dalla lista perche' lo dice STRIPE, non perche' l'abbiamo tolta noi
-  R6  CONTROVERSIA: la cifra ESATTA in euro decisa dall'arbitro e' quella che Stripe rimborsa
+  R6  CONTROVERSIA: la cifra ESATTA in euro decisa dall'arbitro e' quella in lista, e (dal
+      2026-09-04, col pulsante sulla riga della controversia) e' quella che Stripe rimborsa:
+      premuto il pulsante, Stripe vede UN rimborso di quella cifra e la riga esce
   R7  e dopo un rimborso da controversia la tariffa tecnica NON diventa una nostra perdita
       (ordine del fondatore 2026-08-17: «non devo pagare io la spesa delle Stripe»)
 
@@ -341,6 +343,31 @@ def main():
             passo("con l'importo deciso dall'arbitro",
                   int(riga2.get("dovuto_cents") or 0) == esatta,
                   "lista=%s deciso=%d" % (riga2.get("dovuto_cents"), esatta))
+            # ---- R6-bis (dal 2026-09-04): il pulsante c'e', e STRIPE rimborsa la cifra ----
+            # Fino a quel giorno la riga della controversia era senza pulsante e il rimborso
+            # restava manuale; ordine del fondatore («le cifre le metto io … il pulsante da
+            # cliccare», «autorizzato»): la cifra la mette lui, il pulsante la esegue esatta.
+            passo("la riga della controversia HA il pulsante", bool(riga2.get("bottone")),
+                  "manca=%r arbitrato=%r" % (riga2.get("manca"), riga2.get("arbitrato")))
+            if riga2.get("bottone"):
+                st, es = g("POST", "/api/admin/rimborsa_dovuto", {"riferimento": rif2},
+                           {"X-Admin-Key": "ak"})
+                passo("premuto il pulsante, la rotta dice di aver rimborsato la cifra dell'arbitro",
+                      st == 200 and es.get("stato") == "rimborsato"
+                      and int(es.get("importo_cents") or -1) == esatta,
+                      "stato=%s corpo=%s" % (st, str(es)[:120]))
+                righe3, err3 = rimborsi_su_stripe(chiave, pi2)
+                passo("Stripe risponde sui rimborsi della controversia", err3 is None, repr(err3))
+                if righe3 is not None:
+                    passo("STRIPE vede ESATTAMENTE UN rimborso sulla controversia",
+                          len(righe3) == 1, "trovati=%d" % len(righe3))
+                    passo("e su STRIPE c'e' la cifra dell'arbitro, al centesimo",
+                          bool(righe3) and int(righe3[0].get("amount") or 0) == esatta,
+                          "stripe=%s deciso=%d" % ((righe3[0].get("amount") if righe3 else None),
+                                                   esatta))
+                st, corpo = lista()
+                passo("e la controversia esce dalla lista perche' lo dice Stripe",
+                      riga_di(corpo, rif2) is None, "in_attesa=%s" % corpo.get("in_attesa"))
 
         print("\n--- R7: e la spesa di Stripe NON diventa una nostra perdita ---")
         costi = sis.pagamenti_pendenti.aggrega_costi_tecnici()

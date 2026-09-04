@@ -26,39 +26,46 @@
 
 ---
 
-## 💸 CORSIA B — 2026-09-04 sera: LA CASELLA 2 È MISURATA DA UNA MACCHINA — 6 strade su 7 tornano, la 7ª è manuale per scelta del prodotto (commit `9f88ff5` su `casella2`, PR #146 **unita a master alle 17:33**: merge `f650203`, CI di master verde 15 controlli)
+## 💸 CORSIA B — 2026-09-04 sera: LA CASELLA 2 È VERDE, SCRITTA DALLA MACCHINA — 7 strade su 7 tornano, la controversia ha il pulsante (ramo `pulsante-controversia` su `0887247`; prima: PR #146 `f650203` con 6/7, PR #147 `0887247` col registro dei sei occhi)
 
-**STATO (misurato, si rimisura con `python collaudi/esame_rimborsi.py`):** le sette strade che
-scrivono un rimborso nel giornale (censite dall'albero sintattico di `fase83_server.py`) sono
+**STATO (misurato, si rimisura con `python collaudi/esame_rimborsi.py --scrivi`):** le sette strade
+che scrivono un rimborso nel giornale (censite dall'albero sintattico di `fase83_server.py`) sono
 percorse **intere** — scrittura → lista col pulsante → gateway con la cifra esatta → riga che esce
 perché Stripe conferma — da collaudi verdi, con il provider vero e la sola rete finta
-(`test_rimborso_torna_da_ogni_strada.py`, una catena per strada). L'E2E contro Stripe di **prova**
-(`collaudi/e2e_rimborso_stripe.py`) è verde: 25 passi, un rimborso vero eseguito e riletto da Stripe
-con la cifra esatta. **La scheda ha scritto la casella 2 ROSSA col suo motivo**, e il motivo è uno
-solo: la strada **«rimborso deciso dall'arbitro (controversia risolta)»** arriva in lista con la
-cifra esatta ma **SENZA pulsante** (`manca: date_liberate`, freno voluto perché il soggiorno c'è
-stato: lo dichiara `_admin_controversia_risolvi`) — i soldi tornano solo per mano di una persona nel
-pannello di Stripe, e nessuna macchina vede la cifra che digita. **Blocco 1 SOLDI resta 3 su 6**,
-ma «mai misurata» è diventato «misurata, e manca questo». Zero righe di produzione, nessun attrezzo
-riparato. Caricatore **6197**. Il racconto sta nella voce di registro *«LA CASELLA 2: I SOLDI
-TORNANO DA SEI STRADE SU SETTE, E LA SETTIMA È MANUALE PER SCELTA»*.
+(`test_rimborso_torna_da_ogni_strada.py`, una catena per strada, 9 collaudi). L'E2E contro Stripe di
+**prova** è verde: **31 passi**, due rimborsi veri eseguiti e riletti da Stripe con la cifra esatta,
+compreso quello della controversia (170,07 € decisi → 170,07 € su Stripe). **La scheda ha scritto la
+casella 2 VERDE** (38 cose esaminate: 7 strade + 31 passi): **Blocco 1 SOLDI 4 su 6**.
+**Una riga di produzione**, con l'«autorizzato» del fondatore delle 18:2x («le cifre le metto io …
+avere il pulsante da cliccare»): `_rimborso_dovuto_scheda` in `fase83_server.py` riconosce la
+controversia risolta (garanzia «risolto» con ESATTAMENTE la cifra in lista) e al posto del freno «date
+liberate» — che dopo un soggiorno non può passare — pretende l'aritmetica «quota host + rimborso ≤
+pagato»; la riga porta il campo `arbitrato`; la nota della rotta di risoluzione e la frase di riserva
+del pannello dicono la strada nuova. Guardia vista ROSSA sul prodotto di prima e VERDE dopo (D20), più
+due guardie sul freno nuovo nelle due direzioni e **quattro nel test dedicato del server**
+(`test_fase83_server.TestIlPulsanteDellaControversia`), perché il Giudice `--diff` accende il
+dedicato e i primi importatori in ordine alfabetico: il giro 1 aveva lasciato 10 mutanti vivi su 16
+per gli occhi, non per le righe; il giro 2 li ha uccisi tutti (14 su 14, 0 sopravvissuti), e la
+condizione ridondante `dovuto > 0` (mutante equivalente per costruzione) è stata tolta, non
+dichiarata. Caricatore **6203**. Il racconto: voci di registro *«LA CASELLA 2: …»* e *«IL PULSANTE
+DELLA CONTROVERSIA»*.
 
 **COSA MANCA, in ordine:**
-1. **la decisione del fondatore sulla settima strada**, ed è una sola: o **una riga di produzione**
-   («autorizzato») che dia alla riga della controversia il suo pulsante coi suoi freni (le date
-   occupate da un soggiorno avvenuto non sono un motivo per non restituire la quota decisa
-   dall'arbitro; e il freno «host già pagato» va distinto da «host pagato della SUA quota»), oppure
-   la riscrittura della casella accettando l'uscita manuale. Finché non decide, la casella resta
-   rossa e dice perché: è la verità, non un rimprovero;
-2. ✅ **FATTO alle 17:59** — il controllo incrociato a SEI OCCHI automatici sui cinque moduli della
-   casella 5 (`giudice_moduli_5_20260904_141526.log`, `CODICE_USCITA_DIRETTO=0`, 3 h 43 min): 246
-   provati, 245 uccisi, **0 sopravvissuti**, 1 equivalente, 0 non determinabili = l'atteso scritto
-   prima. La casella 5 ha anche la prova «automatica» (voce di registro della casella 5, in cima).
-   `Core_Auto_B` è tornato pulito su `origin/master`;
-3. ⛔ un limite del prodotto scritto e NON riparato (produzione): la riga di un rimborso dovuto
-   si chiude a QUALUNQUE rimborso > 0 visto su Stripe (`_rimborso_dovuto_scheda`, `gia`): un
-   rimborso manuale minore del dovuto chiude la promessa lo stesso. Con il pulsante (punto 1) il
-   caso sparisce per costruzione. ⛔ Le caselle 3 e 6 restano del fondatore.
+1. ✅ il **Giudice della mutazione** sulle righe toccate: giro 2 `--diff HEAD` = 14 provati, 14
+   uccisi, 0 sopravvissuti (`corsia_B_2026-09-04\giudice_diff_pulsante_giro2.log`); poi commit, CI
+   verde, unione a master;
+2. il **deploy**: è cambiata una riga di produzione (`fase83_server.py`, `deploy/admin.html`), quindi
+   il pannello vivo avrà il pulsante solo dopo il deploy — **«autorizzato, metti il pulsante alla
+   controversia»** del fondatore alle 19:0x: si fa con `DEPLOY.md` (paracadute `:prec` PRIMA del
+   build, scambio rm-first, verifica `money_path_pronto`, tre sha allineati). ⚠️ Il deploy porta
+   master intero: con il pulsante vanno in produzione anche le due modifiche del 2 settembre mai
+   deployate (`fase83` webhook: 503 quando un esito non è applicato, così Stripe ritenta;
+   `fase178`/`deploy/watchdog.sh`: allarme se la CI resta rossa);
+3. ⛔ un limite del prodotto scritto e NON riparato (produzione, fuori dall'«autorizzato» di oggi):
+   la riga di un rimborso dovuto si chiude a QUALUNQUE rimborso > 0 visto su Stripe
+   (`_rimborso_dovuto_scheda`, `gia`): un rimborso manuale minore del dovuto chiude la promessa lo
+   stesso. Con il pulsante il caso sparisce in pratica, non per costruzione. ⛔ Le caselle 3 e 6
+   restano del fondatore.
 
 ---
 
@@ -307,12 +314,15 @@ GitHub master       5ba642a   <- "Merge PR #133 from lavoro-a"; genitori 936c2a8
                                  TRE unioni in questa giornata: #131 (lavoro-d), #132
                                  (lavoro-c), #133 (lavoro-a). Nessuna richiesta aperta.
 rami                lavoro-a/b/c/d: TUTTI dentro master (0 commit fuori)
-CARICATORE          6197      <- PowerShell vera (MSYSTEM vuoto, openssl assente), da fermo,
-                                 misurato il 2026-09-04 alle 17:03 nell'albero `Core_Auto_B2`
-                                 (ramo `casella2` su 59a068b = master + le 16 guardie della
-                                 casella 2: 7 catene in `test_rimborso_torna_da_ogni_strada`
-                                 + 9 sull'esame in `test_pipeline_ci`), PRIMA di lanciare (S14).
-                                 Registro: `caricatore_20260904_170322.log`, CODICE_USCITA_DIRETTO=0.
+CARICATORE          6203      <- PowerShell vera (MSYSTEM vuoto, openssl assente), da fermo,
+                                 misurato il 2026-09-04 alle 19:14 nell'albero `Core_Auto_B2`
+                                 (ramo `pulsante-controversia` su 0887247 = master + le 6 guardie
+                                 sul freno nuovo della controversia: 2 in
+                                 `test_rimborso_torna_da_ogni_strada` + 4 nel dedicato
+                                 `test_fase83_server`), PRIMA di lanciare (S14).
+                                 Registro: `caricatore_20260904_191441.log`, CODICE_USCITA_DIRETTO=0.
+                                 (Era 6197 alle 17:03 con le 16 guardie della casella 2,
+                                 `caricatore_20260904_170322.log`.)
                                  (Era 6181 alle 14:07 con le 32 guardie della casella 5,
                                  `caricatore_20260904_140739.log`; 6149 su master alle 00:49.)
                                  ⛔ E NON E' NESSUNO DEI DUE NUMERI CHE L'UNIONE METTEVA A
@@ -1435,9 +1445,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: f650203
+CONSEGNE AGGIORNATE A: 0887247
 
-SUITE ATTUALE: Ran 6197 test
+SUITE ATTUALE: Ran 6203 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
