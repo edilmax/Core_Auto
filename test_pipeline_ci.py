@@ -11399,5 +11399,130 @@ class TestIlGiudiceSceglieGliOcchiConUnCriterio(unittest.TestCase):
         self.assertEqual(1, dati[sch.chiave(riga["condizione"], 1)]["blocco"])
 
 
+class TestLEsameDellaProduzioneNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
+    """⛔ D18 PUNTO 4 PER `collaudi/esame_produzione.py`, l'attrezzo che scrive la casella 6 del
+    blocco dei soldi («gli invarianti sono verificati in PRODUZIONE, non solo nei test»).
+
+    Quell'esame legge il server VIVO (salute, registro del container, HEAD) e giudica. Qui non
+    si tocca la rete: si mettono davanti al GIUDIZIO letture costruite -- sane e storte -- e si
+    pretende che dica verde solo su quelle sane; e che senza letture, o con un guasto iniettato,
+    NON scriva mai nella scheda. Una guardia che leggesse il sorgente la soddisferebbe un
+    commento (sbaglio S6): qui l'esame si ESEGUE.
+    """
+
+    def _esame(self):
+        return self._carica("esame_produzione.py", "_esame_produzione_sotto_guardia")
+
+    def test_IL_GIUDIZIO_DICE_VERDE_SOLO_SU_LETTURE_SANE(self):
+        esame = self._esame()
+        ora = 1_800_000_000
+        verde, passi, motivi, den = esame.giudica(esame.letture_finte(ora))
+        self.assertTrue(verde, motivi)
+        self.assertEqual(den, len(esame.CODICI) + len(passi))
+        self.assertGreaterEqual(den, 14, "il denominatore non conta i cinque invarianti piu' i passi")
+        storte = {
+            "una violazione": esame.inietta_il_guasto(esame.letture_finte(ora)),
+            "riga vecchia di 26 ore": esame.letture_finte(ora, eta_sec=26 * 3600),
+            "quattro invarianti": esame.letture_finte(ora, verificati=esame.CODICI[:4]),
+            "battito muto": esame.letture_finte(ora, guardiano="muto"),
+            "Guardiano non pulito": esame.letture_finte(ora, pulito=False),
+            "un non eseguito": esame.letture_finte(ora, non_eseguiti=1),
+            "un archivio cieco": esame.letture_finte(ora, ciechi=1),
+            "VPS fuori da master": esame.letture_finte(ora, head="b" * 40),
+            "salute giu'": dict(esame.letture_finte(ora), salute_http=503, salute={}),
+            "registro vuoto": dict(esame.letture_finte(ora), registro=""),
+        }
+        for nome, letture in storte.items():
+            verde, _p, motivi, _d = esame.giudica(letture)
+            self.assertFalse(verde, "con «%s» l'esame ha detto VERDE" % nome)
+            self.assertTrue(motivi, "con «%s» il rosso e' MUTO: nessun motivo" % nome)
+
+    def test_LA_RIGA_CHE_LEGGE_E_QUELLA_CHE_LA_PRODUZIONE_SCRIVE(self):
+        """La sonda cerca nel registro la riga di `fase202.formatta_riga`: le due forme devono
+        restare UNA. Qui la riga la produce fase202 davvero, e l'esame deve saperla leggere."""
+        import fase202_invarianti_archivi as f202
+        esame = self._esame()
+        riga = f202.formatta_riga({"verificati": list(f202.CODICI),
+                                   "letti": {"archivi": 25, "prenotazioni": 0},
+                                   "violazioni": {}, "non_eseguiti": [], "ciechi": []})
+        registro = "2026-09-04T17:36:00.000000000Z x INFO core_auto.invarianti_archivi %s" % riga
+        indice, quando, campi = esame._ultima_riga_invarianti(registro)
+        self.assertEqual(indice, 0)
+        self.assertIsNotNone(quando)
+        self.assertEqual(campi["verificati"], list(f202.CODICI))
+        self.assertEqual((campi["violazioni"], campi["non_eseguiti"], campi["ciechi"]), (0, 0, 0))
+
+    def test_SENZA_LETTURE_NON_SCRIVE(self):
+        esame = self._esame()
+        vera_registra = esame.scheda.registra
+        scritture = []
+        try:
+            esame.scheda.registra = lambda *a, **k: scritture.append((a, k))
+            self.assertEqual(esame.main(["--scrivi", "--da-file", os.path.join(
+                self.RADICE, "collaudi", "letture_che_non_esistono.json")]), 2)
+            self.assertEqual(scritture, [], "l'esame ha scritto senza letture")
+        finally:
+            esame.scheda.registra = vera_registra
+
+    def test_CON_IL_GUASTO_DENTRO_NON_SCRIVE_MAI(self):
+        esame = self._esame()
+        vera_registra = esame.scheda.registra
+        scritture = []
+        try:
+            esame.scheda.registra = lambda *a, **k: scritture.append((a, k))
+            self.assertEqual(esame.main(["--con-guasto", "--scrivi"]), 2)
+            self.assertEqual(scritture, [])
+        finally:
+            esame.scheda.registra = vera_registra
+
+    def test_DA_FILE_UN_ROSSO_SI_SCRIVE_COL_MOTIVO_E_UN_VERDE_SENZA(self):
+        """Il cancello `--scrivi` registra ANCHE un rosso, ma col motivo (una casella vuota
+        senza motivo manda a caccia di un guasto che puo' non esistere)."""
+        import json
+        import tempfile
+        esame = self._esame()
+        vera_registra = esame.scheda.registra
+        scritture = []
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        ora = 1_800_000_000
+        try:
+            esame.scheda.registra = lambda *a, **k: scritture.append(k) or {
+                "blocco": 1, "esito": k["esito"], "denominatore": k["denominatore"],
+                "impronta": "x", "motivo": k.get("motivo") or ""}
+            for nome, letture, atteso in (("sane", esame.letture_finte(ora), True),
+                                          ("storte", esame.inietta_il_guasto(esame.letture_finte(ora)), False)):
+                percorso = os.path.join(d, nome + ".json")
+                with io.open(percorso, "w", encoding="utf-8") as f:
+                    json.dump(letture, f)
+                uscita = esame.main(["--scrivi", "--da-file", percorso])
+                self.assertEqual(uscita, 0 if atteso else 1)
+            self.assertEqual([s["esito"] for s in scritture], [True, False])
+            self.assertFalse(scritture[0].get("motivo"), "un verde con un motivo addosso")
+            self.assertIn("violazioni=1", scritture[1]["motivo"])
+        finally:
+            esame.scheda.registra = vera_registra
+
+    def test_IL_TESTO_DELLA_CASELLA_NON_E_RICOPIATO_A_MANO(self):
+        esame = self._esame()
+        blocco = [b for b in esame.BLOCCHI if b["ordine"] == esame.BLOCCO_SOLDI]
+        self.assertEqual(len(blocco), 1)
+        condizioni = blocco[0]["finito_quando"]
+        self.assertGreater(len(condizioni), esame.INDICE_CASELLA)
+        self.assertIn("PRODUZIONE", condizioni[esame.INDICE_CASELLA])
+        with io.open(os.path.join(QUI, "collaudi", "esame_produzione.py"), encoding="utf-8") as f:
+            sorgente = f.read()
+        self.assertNotIn(condizioni[esame.INDICE_CASELLA], sorgente,
+                         "il testo della casella e' ricopiato nell'esame: il giorno che il piano "
+                         "cambia, l'esame spunterebbe una casella che non esiste piu'")
+
+    def test_L_ESAME_DICHIARA_COSA_NON_HA_GUARDATO_E_SA_PROVARSI(self):
+        esame = self._esame()
+        self.assertTrue(getattr(esame, "NON_GUARDA", ()))
+        self.assertTrue(all(isinstance(r, str) and r.strip() for r in esame.NON_GUARDA))
+        riuscita, righe = esame.autoprova()
+        self.assertTrue(riuscita, righe)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -165,6 +165,10 @@ BLOCCHI = (
             "fase167_credito_single_use", "fase177_financial_controller", "fase181_audit_console",
             "fase182_riconciliazione", "fase183_carta_offsession", "fase186_guardiano",
             "fase188_paga_struttura", "fase191_blocco_globale", "fase199_invarianti",
+            # 2026-09-04 (casella 6, «autorizzato»): il giro quotidiano dei cinque invarianti
+            # sugli archivi veri. Entra qui, e l'impronta del blocco cambia: le caselle gia'
+            # verdi si rimisurano coi loro attrezzi, non si riportano a mano.
+            "fase202_invarianti_archivi",
         ),
         # ⛔ IL PERCORSO DEL DENARO — decisione del fondatore del 2026-08-22, e nasce da una
         #    misura. La casella della mutazione pretendeva zero punti scoperti su TUTTI i 24

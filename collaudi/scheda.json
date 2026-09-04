@@ -2,43 +2,56 @@
  "16d2c823889f": {
   "blocco": 1,
   "comando": "python collaudi/mutazione_prodotto.py --modulo fase65_split_payment.py fase85_pagamenti_stripe.py fase87_stripe_webhook.py fase101_stripe_connect.py fase131_payout_dashboard.py --tetto 62 --minuti 60 --killer test_fase65_split_payment test_fase85_pagamenti_stripe test_fase87_stripe_webhook test_fase101_stripe_connect test_fase131_payout_dashboard",
-  "commit": "6bf37a5",
+  "commit": "9829aa5",
   "condizione": "zero punti di mutazione scoperti sul PERCORSO DEL DENARO -- i cinque moduli che un euro attraversa davvero: entra, viene confermato, va sul conto dell'host, si divide fra ospiti, esce col bonifico -- sul codice che la produzione ESEGUE",
   "denominatore": 245,
   "esito": true,
-  "impronta": "4218eaec4034",
+  "impronta": "b72543b884e1",
   "motivo": "",
-  "quando": "2026-09-04T14:05:22"
+  "quando": "2026-09-04T22:26:55"
  },
  "50691c557e6e": {
   "blocco": 1,
   "comando": "python collaudi/esame_soldi.py --scrivi",
-  "commit": "463384a",
+  "commit": "9829aa5",
   "condizione": "le dimostrazioni z3 sugli invarianti GIRANO in CI, e i test che le portano NON risultano saltati",
   "denominatore": 54,
   "esito": true,
-  "impronta": "4218eaec4034",
-  "quando": "2026-09-03T10:58:54"
+  "impronta": "b72543b884e1",
+  "motivo": "",
+  "quando": "2026-09-04T22:11:53"
+ },
+ "813b9082642c": {
+  "blocco": 1,
+  "comando": "python collaudi/esame_produzione.py --scrivi",
+  "commit": "9829aa5",
+  "condizione": "gli invarianti sono verificati in PRODUZIONE, non solo nei test",
+  "denominatore": 14,
+  "esito": false,
+  "impronta": "b72543b884e1",
+  "motivo": "il registro del server ha la riga INVARIANTI ARCHIVI, piu' giovane di 25 h (nessuna riga INVARIANTI ARCHIVI nelle ultime 26h del registro); il giro ha verificato TUTTI e cinque gli invarianti (I1,I2,I3,I4,I5) (verificati=); violazioni=0 (violazioni=-1); non_eseguiti=0 (nessun invariante saltato) (non_eseguiti=-1); ciechi=0 (ogni archivio si e' letto) (ciechi=-1); il giro del Guardiano che la contiene e' finito pulito (GUARDIANO: nessuno stato anomalo) (nessuna riga GUARDIANO dopo quella)",
+  "quando": "2026-09-04T22:13:20"
  },
  "c3cf3da4543f": {
   "blocco": 1,
   "comando": "python collaudi/esame_soldi.py --scrivi",
-  "commit": "463384a",
+  "commit": "9829aa5",
   "condizione": "esistono le relazioni metamorfiche sull'aritmetica del denaro",
   "denominatore": 15,
   "esito": true,
-  "impronta": "4218eaec4034",
-  "quando": "2026-09-03T10:58:54"
+  "impronta": "b72543b884e1",
+  "motivo": "",
+  "quando": "2026-09-04T22:11:54"
  },
  "d70ecb7a31cc": {
   "blocco": 1,
   "comando": "python collaudi/esame_rimborsi.py --scrivi",
-  "commit": "0887247",
+  "commit": "9829aa5",
   "condizione": "i soldi tornano DAVVERO all'ospite da OGNI strada che porta a un rimborso, non solo da quella che qualcuno si e' ricordato di provare (il 2026-08-16 le strade erano due e ne funzionava una). ⛔ L'AUTOMATICO NON e' la riga d'arrivo di questo blocco: e' una decisione del fondatore, e si accende dopo -- prima si guadagna la fiducia, poi si toglie il dito",
   "denominatore": 38,
   "esito": true,
-  "impronta": "4218eaec4034",
+  "impronta": "b72543b884e1",
   "motivo": "",
-  "quando": "2026-09-04T19:18:32"
+  "quando": "2026-09-04T22:13:19"
  }
 }
