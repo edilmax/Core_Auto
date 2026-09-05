@@ -200,5 +200,123 @@ class TestStress(unittest.TestCase):
                 shutil.rmtree(d, ignore_errors=True)
 
 
+def _pren(n, prezzo=10000):
+    return [{"prenotazione_id": "p%d" % i, "prezzo_guest_cents": prezzo} for i in range(n)]
+
+
+class TestLeGuardieDeiPuntiScoperti(unittest.TestCase):
+    """Una guardia per ogni punto che il Giudice della mutazione ha trovato SCOPERTO col
+    solo occhio dedicato (2026-09-05, Blocco 2 casella 4): il guasto passava e i test
+    restavano verdi. Ogni test dice quale riga difende, cosi' fra sei mesi si sa perche'."""
+
+    def test_la_politica_e_congelata(self):
+        # riga 63: `frozen=True` -- una politica che si puo' cambiare a mano dopo la
+        # costruzione e' una politica che nessuno sa piu' quale sia.
+        from dataclasses import FrozenInstanceError
+        pol = PoliticaNoShow()
+        with self.assertRaises(FrozenInstanceError):
+            pol.min_campione = 0
+
+    def test_la_voce_di_compensazione_e_congelata(self):
+        # riga 71: `frozen=True` sulla voce che porta i centesimi del voucher.
+        from dataclasses import FrozenInstanceError
+        voce = CompensazioneVoce(prenotazione_id="p", voucher_cents=1)
+        with self.assertRaises(FrozenInstanceError):
+            voce.voucher_cents = 0
+
+    def test_segmento_non_stringa_o_vuoto_rifiutato_senza_sollevare(self):
+        # righe 114-115: `not isinstance(...) OR not strip()` -> False. Con `and` un
+        # segmento None solleverebbe; con `return True` uno vuoto verrebbe accettato.
+        st = crea_storico_presenze()
+        self.assertFalse(st.registra_esito("a", None, "presentato"))
+        self.assertFalse(st.registra_esito("a", "   ", "presentato"))
+        self.assertEqual(st.conteggi("a", "   ")["totale"], 0)
+
+    def test_registrazione_valida_dice_vero(self):
+        # riga 131: chi registra un esito deve sapere che e' andato a buon fine.
+        st = crea_storico_presenze()
+        self.assertTrue(st.registra_esito("a", "ven", "presentato"))
+        self.assertEqual(st.conteggi("a", "ven")["presentati"], 1)
+
+    def test_l_avviso_porta_la_traccia_dell_errore(self):
+        # riga 200: `exc_info=True` -- l'avviso deve portare LA COSA, del tipo giusto
+        # (una tupla con l'eccezione vera), non un `False` che sembra "niente".
+        class InvRotto:
+            def imposta_disponibilita(self, *a, **k):
+                raise RuntimeError("db giu'")
+        g = crea_gestore_noshow()
+        with self.assertLogs("core_auto.predictive_noshow", level="WARNING") as cm:
+            esito = g.applica_a_inventario(InvRotto(), "casa", "2026-07-03",
+                                           capacita_reale=10, prezzo_netto_cents=10000)
+        self.assertEqual(esito, 0)
+        traccia = cm.records[0].exc_info
+        self.assertIsInstance(traccia, tuple)
+        self.assertIs(traccia[0], RuntimeError)
+
+    def test_capacita_invalida_non_consulta_nemmeno_lo_storico(self):
+        # riga 176: `capacita <= 0` -- con capacita' zero si esce PRIMA di leggere lo
+        # storico (con `< 0` lo zero passerebbe e andrebbe a leggere il database).
+        class StoricoRotto:
+            def conteggi(self, *a, **k):
+                raise RuntimeError("storico letto quando non doveva")
+        g = GestoreNoShow(StoricoRotto())
+        self.assertEqual(g.consiglia_posti_virtuali(0, "a", "ven"), 0)
+
+    def test_un_tasso_di_un_solo_punto_base_conta_gia(self):
+        # riga 179 riscritta (`rate_bps < 1`): a 1 bps, con capacita' 10000, safety 100% e
+        # tetto 100%, un no-show atteso c'e' -> 1 posto virtuale (con `<= 1` sarebbe 0).
+        g = crea_gestore_noshow(politica=PoliticaNoShow(
+            min_campione=20, prior_k=9980, safety_bps=10000, max_overbooking_bps=10000))
+        _popola(g._st, "a", "ven", 19, 1)          # 1 * 10000 // (20 + 9980) = 1 bps esatto
+        self.assertEqual(g.tasso_noshow_bps("a", "ven"), 1)
+        self.assertEqual(g.consiglia_posti_virtuali(10000, "a", "ven"), 1)
+
+    def test_capacita_zero_compensa_tutti(self):
+        # riga 210: `capacita_reale < 0` -- zero posti e' un caso valido: tutti esuberi.
+        g = crea_gestore_noshow()
+        piano = g.piano_compensazione(_pren(2), capacita_reale=0, voucher_bps=1000)
+        self.assertEqual([v.prenotazione_id for v in piano], ["p0", "p1"])
+
+    def test_prezzo_zero_conta_come_prenotazione_valida(self):
+        # riga 217: `prezzo_guest_cents >= 0` -- una prenotazione gratuita occupa un
+        # posto e conta nell'eccedenza (con `> 0` sparirebbe dal conto).
+        g = crea_gestore_noshow()
+        pren = [{"prenotazione_id": "gratis", "prezzo_guest_cents": 0}] + _pren(1)
+        piano = g.piano_compensazione(pren, capacita_reale=1, voucher_bps=2000)
+        self.assertEqual([v.prenotazione_id for v in piano], ["p0"])
+
+    def test_esattamente_pieni_nessuna_compensazione(self):
+        # riga 219: `eccedenza <= 0` -- con `<` un'eccedenza ZERO farebbe
+        # `validi[-0:]`, cioe' TUTTI i prenotati compensati.
+        g = crea_gestore_noshow()
+        self.assertEqual(g.piano_compensazione(_pren(10), capacita_reale=10,
+                                               voucher_bps=2000), [])
+
+    def test_voucher_bps_non_intero_vale_zero_senza_sollevare(self):
+        # riga 221: `not _intero(voucher_bps) OR voucher_bps < 0` -> 0. Con `and` un
+        # voucher_bps non numerico solleverebbe TypeError dentro il piano.
+        g = crea_gestore_noshow()
+        piano = g.piano_compensazione(_pren(11), capacita_reale=10, voucher_bps="x")
+        self.assertEqual([v.voucher_cents for v in piano], [0])
+
+    def test_lo_storico_in_memoria_si_usa_da_un_altro_thread(self):
+        # riga 257: `check_same_thread=False` -- il server e' a thread: lo storico in
+        # memoria dev'essere usabile da un thread diverso da chi l'ha creato.
+        st = crea_storico_presenze()
+        errori = []
+
+        def lavoro():
+            try:
+                st.registra_esito("a", "ven", "no_show")
+            except Exception as e:  # pragma: no cover
+                errori.append(repr(e))
+
+        t = threading.Thread(target=lavoro)
+        t.start()
+        t.join()
+        self.assertEqual(errori, [])
+        self.assertEqual(st.conteggi("a", "ven")["no_show"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()

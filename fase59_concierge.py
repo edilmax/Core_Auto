@@ -296,10 +296,15 @@ class ProtocolloConcierge:
                 if self._cat is not None:
                     _ss, _sm = self._cat.sconto_lungo_di(alloggio)
                     _nn = len(elenco_notti)
-                    _bps = _sm if (_nn >= 28 and _sm > 0) else (_ss if (_nn >= 7 and _ss > 0) else 0)
-                    if _bps > 0:
-                        sconto_lungo = netto_listino * _bps // 10000
-                        netto = netto_listino - sconto_lungo
+                    # senza `_ss > 0` (2026-09-05, «autorizzato»): con lo sconto settimana a
+                    # zero `_bps` vale 0 e il ramo sotto non entra, come prima -- ma prima
+                    # quel confronto aveva un mutante che nessun test poteva distinguere.
+                    _bps = _sm if (_nn >= 28 and _sm > 0) else (_ss if _nn >= 7 else 0)
+                    # `max(_bps, 0)` e non `if _bps > 0` (2026-09-05, «autorizzato»): allo zero
+                    # i due rami davano lo stesso sconto (0) e un guasto nel confronto era
+                    # invisibile a ogni test; un bps negativo non alza mai il prezzo.
+                    sconto_lungo = netto_listino * max(_bps, 0) // 10000
+                    netto = netto_listino - sconto_lungo
             except Exception:
                 sconto_lungo = 0
             sconto_nr = 0

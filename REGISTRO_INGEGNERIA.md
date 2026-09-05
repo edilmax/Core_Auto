@@ -505,6 +505,49 @@ di file in `collaudi/` (`prima_di_dire_fatto._impronta`, la rete anti-interruzio
 nessun altro membro. Righe aggiunte nelle PARTI 11 e 13 di `collaudi/METODO_v4.md` (anche per il difetto
 dell'I3 di stanotte). **Cosa non guarda:** la guardia prova i 25 moduli del Blocco 1, non ogni blocco: la
 funzione e' una sola e non guarda il numero del blocco.
+### 🧬 BLOCCO 2, CASELLA 4, PRIMA METÀ: LE GUARDIE DEI 150 PUNTI SCOPERTI E LE OTTO RISCRITTURE AUTORIZZATE — 5 settembre, chat B (albero B2, ramo `blocco2-casella4` su `2a3d6d7`)
+
+**Il fondatore:** *«vai avanti con il prossimo blocco che dice piano.py»*, poi *«fai la cosa giusta e con logica, una
+volta fatto bene e non si torna più indietro»*, poi *«autorizzato»*. **La casella:** «zero punti di mutazione scoperti
+sul codice che la produzione ESEGUE». **Il metodo della casella 5** (il costo è degli occhi, non dei moduli): un giro
+per modulo col solo test dedicato come `--killer`, sui 9 moduli del blocco che `raggiungibilita.py` dice vivi
+(fase34/36/71 sono fuori produzione e il Giudice li salta dichiarandolo).
+
+**Primo giro (dedicato):** 429 punti, **150 scoperti** — fase58 83 su 147 (il dedicato era sottile: 14 occhi in casa,
+usato 1), fase59 1 su 114, fase62 14 su 28, fase67 24 su 70, fase82 6 su 19, fase111 2 su 13, fase135 3 su 6, fase152 17
+su 32, fase187 (senza dedicato: occhio `test_fuso_alloggio`) 2 su 9. **Non si scrivono 150 guardie a caso**: ogni punto
+è stato letto, e ogni guardia dice quale riga difende (`TestLeGuardieDeiPuntiScoperti` in 7 file di test, +71 test).
+Fra i punti: gli `exc_info=True` (il registro deve portare LA COSA, del tipo giusto), i `frozen=True`, le liste che
+arriverebbero al database, i confini (366 notti, 120 giorni, il tetto e la soglia inclusi), il soggiorno minimo che è
+quello della PRIMA notte, «venduta vince su chiusa», gli orfani con una riga monca, il parser dei comandi (4 parti solo
+per DISPO/PREZZO, i tetti diversi), i canali che esplodono, il fuso di ripiego sul paese, l'ora locale fuori scala.
+
+**Secondo giro (dedicato, dopo le guardie):** fase58 147 provati / 140 uccisi / 6 equivalenti / 1 vivo, fase59 114/106/7/1,
+fase62 28/26/2/0, fase67 70/70, fase82 19/19, fase111 13/11/2/0, fase135 6/6, fase152 32/32, fase187 9/7/0/2 (poi 2
+guardie in `test_fuso_alloggio`). **I 12 «equivalenti» erano tutti la stessa forma:** un controllo RIDONDANTE nella stessa
+funzione mascherava il solo valore in cui sano e guasto differiscono (`ci >= co` e `n <= 0` si coprono; `rowcount and
+rowcount > 0` corto-circuita lo zero; una finestra di zero notti non è mai «disponibile»; `v if v > 0 else 0` allo zero dà
+0 nei due rami; `_ss > 0` con `if _bps > 0` sotto). La mattina erano state scritte 10 dichiarazioni nello schedario con
+prova (z3, esaustiva, traccia) e il conteggio inchiodato delle «traccia» era salito 12 → 20 col perché; e restavano 2 punti
+NON dichiarabili (una voce avrebbe perdonato due punti sulla stessa riga: `prima_finestra` terzo `or`, `quota` `_ss > 0`).
+**Con l'«autorizzato» la strada è diventata quella del METODO (18.1: «o diventa un test nuovo, o è codice da
+cancellare»):** otto riscritture di PRODUZIONE a comportamento identico — `fase58.notti` `if n < 1 or n > MAX_NOTTI`
+senza `ci >= co`; `cancella_alloggio` `return max(0, cur.rowcount)`; `prima_finestra` quattro controlli separati (`n < 1`,
+`span < 1 or span > 120`, `n > span` al posto del tetto morto `MAX_NOTTI`); `fase59.quota` sconto soggiorno lungo senza
+`_ss > 0` e `sconto_lungo = netto_listino * max(_bps, 0) // 10000`; `fase62` `rate_bps < 1` e `max(voucher_bps, 0)`;
+`fase111` `max(prezzo, 0)` e `max(giorni, 0)` con `type(v) is int` intatto. **Le 10 voci sono state TOLTE** e la riscrittura
+di `quota` ha fatto DECADERE (controllo 2b, come deve) una voce del 24/8, tolta anche lei: conteggio delle «traccia»
+**12 → 20 → 11**, col perché nel test. Guardie nuove sui confini che ora esistono (n == span, span 1, 1 bps). Dedicati
+237/237, schedario 24/24, ruff 682 = 682, bandit 548 = 548, `test_pipeline_ci` da PowerShell.
+
+**Il giro UNICO** (che scrive la casella) è partito alle 13:02 sui 9 moduli ed è stato **FERMATO apposta** dopo un minuto:
+la stessa mattina `fase203` (la difesa iCal, ramo `ical-orologio`) entrava nel Blocco 2, e un verdetto su 9 moduli sarebbe
+scaduto all'unione. Il Giudice tiene nel biglietto (`%TEMP%\bookinvip_mutazione_in_corso_<albero>\giro_*\originale.txt`) la
+copia dell'originale: `fase58` è stato ripristinato da lì, sha256 `d3667d8cc79710a3` identico alla versione riscritta,
+biglietto tolto. **Cosa manca:** riallineare il ramo su master con `fase203`, e il giro unico sui **10** moduli coi 10 occhi
+(`test_fase203_ical_orologio` per fase203). ⚠️ Osservato UNA volta: `test_IL_GANCIO_PRE_COMMIT_CHIAMA_DAVVERO_IL_PRE_FATTO`
+rosso nel modulo intero («1 giro di mutazione APERTO») e verde da solo subito dopo con zero biglietti su disco: instabilità
+da capire, non nascosta.
 
 ### 🏁 BLOCCO 2, CASELLA 2: IL BLOCCO ATOMICO REGGE SOTTO GARA — 10 GIRI × 24 AGENTI, 1 CONFERMA — 5 settembre, notte, chat B (albero B2, ramo `blocco2-macchina-stati`)
 
