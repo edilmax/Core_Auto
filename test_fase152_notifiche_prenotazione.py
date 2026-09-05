@@ -12,8 +12,9 @@ import unittest
 from fase61_localizzazione import Localizzatore
 from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import crea_router
-from fase152_notifiche_prenotazione import (CanaleLine, CanaleWeChat, CanaleWhatsApp,
-                                            NotificatorePrenotazione, componi_avviso_host,
+from fase152_notifiche_prenotazione import (CanaleLine, CanaleTelegram, CanaleWeChat,
+                                            CanaleWhatsApp, NotificatorePrenotazione,
+                                            componi_avviso_host,
                                             crea_notificatore_prenotazione)
 
 
@@ -205,6 +206,93 @@ class TestE2EHostAvvisato(unittest.TestCase):
                         % [e[1] for e in host_mails])
         self.assertTrue(any("Benvenuto" in e[2] for e in host_mails),
                         "email di benvenuto (C2) mancante alla registrazione")
+
+
+class TestLeGuardieDeiPuntiScoperti(unittest.TestCase):
+    """Una guardia per ogni punto che il Giudice della mutazione ha trovato SCOPERTO col
+    solo occhio dedicato (2026-09-05, Blocco 2 casella 4: 17 punti su 32)."""
+
+    @staticmethod
+    def _spia(esito=(200, "ok")):
+        chiamate = []
+
+        def fake(url, headers, body):
+            chiamate.append((url, headers, body))
+            return esito
+        return chiamate, fake
+
+    def test_whatsapp_e_attivo_solo_con_token_E_numero(self):
+        # riga 55: `token AND phone_id`.
+        self.assertFalse(CanaleWhatsApp("tok", "").attivo())
+        self.assertFalse(CanaleWhatsApp("", "PH").attivo())
+        self.assertTrue(CanaleWhatsApp("tok", "PH").attivo())
+
+    def test_whatsapp_e_telegram_senza_destinatario_non_chiamano_la_rete(self):
+        # righe 58 e 137-138: senza destinatario si dice no PRIMA di toccare la rete.
+        chiamate, fake = self._spia()
+        self.assertFalse(CanaleWhatsApp("tok", "PH", fetch=fake).invia("", "o", "t"))
+        self.assertFalse(CanaleTelegram("tok", fetch=fake).invia("", "o", "t"))
+        self.assertEqual(chiamate, [])
+
+    def test_ogni_canale_che_esplode_dice_no_e_lascia_la_traccia(self):
+        # righe 69, 99-100, 120-121, 147-148: la rete che esplode -> False, e l'avviso
+        # porta LA COSA, del tipo giusto (una tupla con l'eccezione vera).
+        def boom(*a):
+            raise TimeoutError("giu'")
+        casi = ((CanaleWhatsApp("t", "p", fetch=boom), "+39333"),
+                (CanaleLine(fetch=boom), "TOK"),
+                (CanaleWeChat(fetch=boom), "https://x"),
+                (CanaleTelegram("t", fetch=boom), "123"))
+        for canale, destinatario in casi:
+            with self.subTest(canale=type(canale).__name__):
+                with self.assertLogs("fase152_notifiche_prenotazione",
+                                     level="WARNING") as registro:
+                    self.assertFalse(canale.invia(destinatario, "o", "t"))
+                traccia = registro.records[0].exc_info
+                self.assertIsInstance(traccia, tuple)
+                self.assertIs(traccia[0], TimeoutError)
+
+    def test_telegram_tiene_il_token_usa_la_rete_iniettata_e_spegne_le_anteprime(self):
+        # righe 130 (`bot_token or ""`), 131 (`fetch or _fetch_post`), 144 (anteprime spente).
+        chiamate, fake = self._spia()
+        tg = CanaleTelegram("tok", fetch=fake)
+        self.assertTrue(tg.attivo())
+        self.assertTrue(tg.invia("123", "o", "t"))
+        self.assertEqual(len(chiamate), 1)
+        self.assertIn("bottok/", chiamate[0][0])
+        self.assertIs(chiamate[0][2]["disable_web_page_preview"], True)
+
+    def test_un_canale_che_esplode_nel_dispatcher_lascia_la_traccia(self):
+        # riga 174.
+        n = NotificatorePrenotazione([CanaleEsplode()])
+        with self.assertLogs("fase152_notifiche_prenotazione", level="WARNING") as registro:
+            rep = n.avvisa({"email": "h@x.it"}, "o", "t")
+        self.assertEqual(rep, {"inviati": 0, "falliti": 1})
+        traccia = registro.records[0].exc_info
+        self.assertIsInstance(traccia, tuple)
+        self.assertIs(traccia[0], RuntimeError)
+
+    def test_l_origine_vuota_diventa_un_trattino_e_quella_piena_resta(self):
+        # riga 185: `origine or "—"`.
+        visti = []
+
+        class Loc:
+            def notifica(self, chiave, lingua, **kw):
+                visti.append(kw)
+                return "testo"
+        componi_avviso_host(Loc(), alloggio="Casa", ci="2026-07-10", co="2026-07-12",
+                            origine="")
+        componi_avviso_host(Loc(), alloggio="Casa", ci="2026-07-10", co="2026-07-12",
+                            origine="web")
+        self.assertEqual([v["origine"] for v in visti], ["—", "web"])
+
+    def test_i_canali_extra_validi_entrano_e_i_None_no(self):
+        # riga 220: `c is not None`.
+        chiamate, fake = self._spia()
+        extra = CanaleLine(fetch=fake)
+        n = crea_notificatore_prenotazione(canali_extra=[None, extra])
+        self.assertIn(extra, n._canali)
+        self.assertNotIn(None, n._canali)
 
 
 if __name__ == "__main__":

@@ -73,10 +73,14 @@ def notti(check_in: Any, check_out: Any) -> Optional[List[str]]:
     """Notti [check_in, check_out) come liste di stringhe ISO (intervallo semi-aperto,
     come fase34). None se date invalide/incoerenti o range fuori tetto."""
     ci, co = _data_iso(check_in), _data_iso(check_out)
-    if ci is None or co is None or ci >= co:
+    if ci is None or co is None:
         return None
     n = (co - ci).days
-    if n <= 0 or n > MAX_NOTTI:
+    # ⛔ UNA condizione, `n < 1` (2026-09-05, «autorizzato» del fondatore): prima c'erano
+    #    `ci >= co` qui sopra e `n <= 0` qui, che si coprivano a vicenda -- ogni guasto
+    #    dell'una era mascherato dall'altra (mutanti equivalenti per costruzione), cioe'
+    #    un pezzo di questa riga non lo guardava nessun test. Cosi' zero notti -> None.
+    if n < 1 or n > MAX_NOTTI:
         return None
     return [(ci + datetime.timedelta(days=i)).isoformat() for i in range(n)]
 
@@ -177,7 +181,9 @@ class ChannelManager:
             with con:
                 cur = con.execute("DELETE FROM inventario WHERE alloggio_id=?", (alloggio_id,))
                 con.execute("DELETE FROM movimenti WHERE alloggio_id=?", (alloggio_id,))
-            return cur.rowcount if (cur.rowcount and cur.rowcount > 0) else 0
+            # `max`, non `rowcount and rowcount > 0` (2026-09-05, «autorizzato»): -1 («non so»
+            # di sqlite) e 0 valgono 0, e non c'e' un confronto che un altro mascheri.
+            return max(0, cur.rowcount)
         finally:
             con.close()
 
@@ -393,10 +399,20 @@ class ChannelManager:
             n = int(n_notti)
         except (TypeError, ValueError):
             return None
-        if d0 is None or d1 is None or n <= 0 or n > MAX_NOTTI:
+        # ⛔ Quattro controlli SEPARATI e ognuno visibile (2026-09-05, «autorizzato»): prima
+        #    `n <= 0`, `n > MAX_NOTTI` e `span <= 0` stavano in due `or` e ogni loro guasto
+        #    era mascherato da `disponibile` (una finestra di zero notti, o piu' larga del
+        #    periodo, non risulta mai disponibile) -- mutanti equivalenti per costruzione.
+        #    `n > span` dice la cosa vera: una finestra piu' larga del periodo non ci sta,
+        #    e con span <= 120 il vecchio tetto MAX_NOTTI non poteva mai scattare.
+        if d0 is None or d1 is None:
+            return None
+        if n < 1:
             return None
         span = (d1 - d0).days
-        if span <= 0 or span > 120:                 # tetto anti-abuso sull'ampiezza
+        if span < 1 or span > 120:                  # tetto anti-abuso sull'ampiezza
+            return None
+        if n > span:
             return None
         ultimo = d1 - datetime.timedelta(days=n)    # co = inizio+n deve stare dentro [da, a)
         d = d0

@@ -53,5 +53,27 @@ class TestBidirezionale(unittest.TestCase):
         self.assertIsInstance(s.importa(genera_ical(PREN), object(), "casa-1"), dict)
 
 
+class TestLeGuardieDeiPuntiScoperti(unittest.TestCase):
+    """Una guardia per ogni punto che il Giudice della mutazione ha trovato SCOPERTO
+    (2026-09-05, Blocco 2 casella 4): il guasto passava e i test restavano verdi."""
+
+    def test_anno_mese_e_giorno_fuori_scala_non_producono_eventi(self):
+        # riga 22: le tre condizioni sulla data valgono INSIEME (anno di 4 cifre, mese
+        # 1-12, giorno 1-31). Con un `or` al posto di un `and` un mese 13 o un anno di
+        # due cifre finirebbero nel feed che Airbnb e Booking importano.
+        for ci, co in (("2026-13-01", "2026-13-02"),
+                       ("2026-01-32", "2026-01-33"),
+                       ("26-01-01", "26-01-02")):
+            with self.subTest(check_in=ci):
+                ics = genera_ical([{"check_in": ci, "check_out": co}])
+                self.assertEqual(ics.count("BEGIN:VEVENT"), 0)
+
+    def test_stesso_giorno_zero_notti_nessun_evento(self):
+        # riga 50: `ci < co` -- arrivo e partenza uguali sono zero notti: nessun
+        # evento (con `<=` uscirebbe un VEVENT a durata zero, e DTEND e' esclusivo).
+        ics = genera_ical([{"check_in": "2026-08-01", "check_out": "2026-08-01"}])
+        self.assertEqual(ics.count("BEGIN:VEVENT"), 0)
+
+
 if __name__ == "__main__":
     unittest.main()

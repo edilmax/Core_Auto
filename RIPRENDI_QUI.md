@@ -55,6 +55,24 @@ PR → CI → unione → VPS `pull --ff-only` → la prova in un secondo albero 
 fondatore: «sì/no» sulle 7 righe NO dei soldi della porta del METODO come caselle del Blocco 1; «autorizzato» per
 riscrivere 7 righe ridondanti in `fase58` e 2 in `fase62` che generano mutanti equivalenti (Blocco 2, casella 4, in
 lavorazione in B2 sul ramo `blocco2-casella4`); la casella 3 (iCal).
+**🧬 5 SETTEMBRE, 14:3x — BLOCCO 2, CASELLA 4, PRIMA METÀ (ramo `blocco2-casella4` su `2a3d6d7`, «autorizzato» del fondatore):**
+il Giudice col solo test dedicato sui 9 moduli del blocco vivi in produzione (429 punti) aveva lasciato **150 punti scoperti**
+(fase58 83, fase59 1, fase62 14, fase67 24, fase82 6, fase111 2, fase135 3, fase152 17, fase187 2). Scritte le guardie, una per
+punto, nei dedicati (`TestLeGuardieDeiPuntiScoperti` in 7 file, +71 test); **12 punti erano equivalenti per costruzione**
+(controlli ridondanti che si coprivano a vicenda: nessun test poteva distinguerli) e con l'«autorizzato» quelle righe di
+PRODUZIONE sono state **riscritte con una condizione sola**, comportamento identico: `fase58` (`notti` `n < 1`;
+`cancella_alloggio` `max(0, rowcount)`; `prima_finestra` quattro controlli separati e `n > span`), `fase59` (sconto
+soggiorno lungo senza `_ss > 0` e `max(_bps, 0)`), `fase62` (`rate_bps < 1`, `max(voucher_bps, 0)`), `fase111`
+(`max(v, 0)` due volte). Le 10 dichiarazioni di equivalenza scritte la mattina sono state TOLTE, e la riscrittura ha fatto
+decadere una voce del 24/8 su `fase59` (anch'essa tolta): il conteggio inchiodato delle «traccia» va 12 → 11, col perché nel
+test. Secondo giro col dedicato: fase58 147/140+6 eq/1, fase59 114/106+7/1, fase62 28/26+2, fase67 70/70, fase82 19/19,
+fase111 13/11+2, fase135 6/6, fase152 32/32, fase187 9/7/2 → poi le riscritture hanno tolto gli equivalenti e i due
+sopravvissuti; dedicati 237/237 verdi, schedario 24/24, caricatore **6336**, ruff 682 e bandit 548 (nessuna nuova).
+**Il giro UNICO della casella 4 va rifatto sui 10 moduli** dopo il riallineamento su master (con `fase203` e il suo
+occhio `test_fase203_ical_orologio`): il giro partito alle 13:02 è stato FERMATO apposta (fase58 ripristinato
+dall'`originale.txt` del biglietto del Giudice, sha256 `d3667d8cc79710a3` uguale, biglietto tolto). ⚠️ Osservato UNA volta:
+`test_IL_GANCIO_PRE_COMMIT_CHIAMA_DAVVERO_IL_PRE_FATTO` rosso nel modulo intero («1 giro di mutazione APERTO») e verde da
+solo subito dopo, con zero biglietti su disco: instabilità da capire (`casella4_test_pipeline_ci_pwsh.log`).
 
 **🏁 5 SETTEMBRE, 01:0x — BLOCCO 1 DI NUOVO 6 SU 6 (impronta `e94151bd5a8b`) E BLOCCO 2 A 2 SU 4:** la PR #152 (cura
 dell'I3) è **unita** (master `d0907428…`) e **deployata** alle 23:00:13Z (paracadute `:prec` = `083637e3…`, immagine
@@ -1583,9 +1601,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 3fe8a19
+CONSEGNE AGGIORNATE A: 4cadcd4
 
-SUITE ATTUALE: Ran 6310 test
+SUITE ATTUALE: Ran 6381 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

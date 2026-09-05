@@ -144,5 +144,26 @@ class TestAncoraggioAiCalcoli(unittest.TestCase):
         self.assertNotEqual(tokyo, hono)
 
 
+class TestLeGuardieDeiPuntiScoperti(unittest.TestCase):
+    """Una guardia per ogni punto che il Giudice della mutazione ha trovato SCOPERTO
+    (2026-09-05, Blocco 2 casella 4: 2 punti su 9). Questo file e' l'unico occhio di
+    fase187, e le guardie stanno qui."""
+
+    def test_il_paese_fa_da_ripiego_quando_la_citta_non_e_in_tabella(self):
+        # riga 100: `str(paese or "")` -- con `and` il ripiego sul paese sparirebbe.
+        self.assertEqual(F.fuso_da_luogo("Cittadina Ignota", "IT"), "Europe/Rome")
+        self.assertEqual(F.fuso_da_luogo("Cittadina Ignota", None), "")
+
+    def test_un_ora_locale_fuori_scala_o_non_intera_vale_l_ora_del_check_in(self):
+        # riga 124: `isinstance(ora, int) AND 0 <= ora <= 23` -- con `or` un 99 farebbe
+        # esplodere `datetime` e una stringa solleverebbe nel confronto.
+        atteso = F.istante_locale("2026-09-05", F.ORA_CHECKIN_LOCALE, "Asia/Tokyo")
+        self.assertIsNotNone(atteso)
+        self.assertEqual(F.istante_locale("2026-09-05", 99, "Asia/Tokyo"), atteso)
+        self.assertEqual(F.istante_locale("2026-09-05", -1, "Asia/Tokyo"), atteso)
+        self.assertEqual(F.istante_locale("2026-09-05", "15", "Asia/Tokyo"), atteso)
+        self.assertNotEqual(F.istante_locale("2026-09-05", 3, "Asia/Tokyo"), atteso)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
