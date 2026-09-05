@@ -245,6 +245,10 @@ BLOCCHI = (
             "fase59_concierge", "fase62_predictive_noshow", "fase67_coda_intelligente",
             "fase71_commitment", "fase82_ical_sync", "fase111_cancellazione",
             "fase135_ical_bidirezionale", "fase152_notifiche_prenotazione", "fase187_fuso_orario",
+            # 2026-09-05 («autorizzato»): l'orologio dell'iCal, la difesa dal ritardo dei
+            # calendari esterni (casella 3). Entra qui, e l'impronta del blocco cambia: le
+            # caselle gia' verdi si rimisurano coi loro attrezzi, non si riportano a mano.
+            "fase203_ical_orologio",
         ),
         "attrezzi": ("z3", "gare", "mutazione", "orologio", "hypothesis", "e2e", "produzione"),
         "finito_quando": (

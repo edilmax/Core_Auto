@@ -68,23 +68,34 @@
  "ec84faaea398": {
   "blocco": 2,
   "comando": "python collaudi/esame_prenotazioni.py --scrivi",
-  "commit": "2a3d6d7",
+  "commit": "3fe8a19",
   "condizione": "la macchina a stati copre cancellazioni, modifiche, no-show e sovra-affitto",
   "denominatore": 34,
   "esito": true,
-  "impronta": "8cd3a6e3c800",
+  "impronta": "1b960e1cc6ed",
   "motivo": "",
-  "quando": "2026-09-05T01:58:26"
+  "quando": "2026-09-05T13:11:18"
+ },
+ "f10f35b6a7b3": {
+  "blocco": 2,
+  "comando": "python collaudi/esame_ical.py --scrivi",
+  "commit": "3fe8a19",
+  "condizione": "iCal ha una difesa dal RITARDO 15 min-2 ore (oggi: zero, e' la finestra delle prenotazioni fantasma)",
+  "denominatore": 24,
+  "esito": true,
+  "impronta": "1b960e1cc6ed",
+  "motivo": "",
+  "quando": "2026-09-05T13:32:19"
  },
  "f5d22a937896": {
   "blocco": 2,
   "comando": "python collaudi/esame_gare.py --scrivi",
-  "commit": "2a3d6d7",
+  "commit": "3fe8a19",
   "condizione": "il blocco atomico regge sotto gara (misurato: 10 giri x 24 agenti, 1 conferma)",
   "denominatore": 51,
   "esito": true,
-  "impronta": "8cd3a6e3c800",
+  "impronta": "1b960e1cc6ed",
   "motivo": "",
-  "quando": "2026-09-05T02:06:49"
+  "quando": "2026-09-05T13:11:28"
  }
 }

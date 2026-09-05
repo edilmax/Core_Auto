@@ -84,6 +84,20 @@ class TestComposizione(unittest.TestCase):
                                       co="2026-07-12", lingua="en")
         self.assertNotEqual(c_it.split("\n")[0], c_en.split("\n")[0])   # testo diverso per lingua
 
+    def test_con_un_calendario_esterno_collegato_l_avviso_chiede_di_bloccare_le_date(self):
+        # fase203 (2026-09-05): il lato dell'OTA lo chiude la mano dell'host, e l'avviso
+        # glielo dice chiaro; senza calendari esterni resta «nessuna azione richiesta».
+        loc = Localizzatore()
+        og, corpo = componi_avviso_host(loc, alloggio="Casa", ci="2026-07-10", co="2026-07-12",
+                                        calendari_esterni=1)
+        self.assertIn("BLOCCA ORA", corpo)
+        self.assertIn("BLOCCA", og)
+        self.assertNotIn("nessuna azione richiesta", corpo)
+        og0, corpo0 = componi_avviso_host(loc, alloggio="Casa", ci="2026-07-10",
+                                          co="2026-07-12", calendari_esterni=0)
+        self.assertIn("nessuna azione richiesta", corpo0)
+        self.assertNotIn("BLOCCA", og0)
+
 
 class TestCanaleWhatsApp(unittest.TestCase):
     def test_gating_e_invio_con_fetch_finto(self):

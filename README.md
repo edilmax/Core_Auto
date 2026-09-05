@@ -42,8 +42,8 @@ competitivo è il **take-rate più basso del mercato**, reso possibile dall'auto
 ```
 Core_Auto/
 ├── main_casavip.py             avvio del prodotto: legge le variabili d'ambiente e compone il sistema
-├── fase*.py                    152 moduli del motore (uno per funzione — indice in REGISTRO_INGEGNERIA.md)
-├── test_*.py                   415 file di test (la suite INTERA deve essere verde prima di ogni deploy)
+├── fase*.py                    153 moduli del motore (uno per funzione — indice in REGISTRO_INGEGNERIA.md)
+├── test_*.py                   417 file di test (la suite INTERA deve essere verde prima di ogni deploy)
 ├── deploy/                     ciò che vede il browser: 14 pagine + app.js + configurazioni nginx
 │   ├── index.html              vetrina, ricerca, mappa, checkout (ospite)
 │   ├── host.html               pannello host: pubblica, calendario, incassi, consensi
