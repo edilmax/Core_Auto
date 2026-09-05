@@ -28,6 +28,22 @@
 
 ## 🏁 CHAT B (la sola) — 2026-09-04 notte: IL BLOCCO 1 SOLDI È 6 SU 6, SCRITTO DALLE MACCHINE — casella 6 (fase202 in produzione, deploy `201d723`) e casella 3 (esame degli orologi contro Stripe di prova); ramo `casella3` (PR #151) sopra la #150 unita
 
+**⏱️ 5 SETTEMBRE, 13:2x — BLOCCO 2, CASELLA 3: LA DIFESA DAL RITARDO DELL'iCAL (ramo `ical-orologio` su `3fe8a19`,
+«autorizzato» del fondatore, «non deve succedere doppia prenotazione»):** `fase203_ical_orologio` NUOVO. L'host salva
+l'URL del feed Airbnb/Booking (`POST /api/host/ical` con `url`); la macchina lo rilegge ogni 15 minuti (`_tick_ical`) e
+**prima di ogni nostra conferma** se l'ultima lettura ha più di 60 s: le notti appena vendute sull'OTA vengono bloccate e la
+prenotazione viene rifiutata. Ogni lettura lascia `ICAL SYNC | <ora esatta> | …` senza l'URL intero; 4 letture fallite di
+fila = anomalia del Guardiano (email). Fail-open dichiarato se l'OTA è giù. L'avviso all'host dice «BLOCCA ORA queste date
+su Airbnb/Booking» quando c'è un calendario esterno collegato (fase152). Fonti: Airbnb ogni 3 ore, Booking ogni 30-60
+minuti e tace se il feed si rompe. `collaudi/esame_ical.py` **24 passi verdi** dalle rotte vere, `--con-guasto` ROSSO
+visto; `test_fase203` 35, `test_fase83_ical_gancio` 3 (l'occhio del gancio in fase83), guardie dell'esame 5; Giudice su
+fase203 giro 1 48/32/16 → 12 guardie → giro 2 **48/48**; sulle righe cambiate di fase83/fase152 (`--diff`, che sceglie gli
+occhi da solo e ignora `--killer`): 3 punti del gancio visti ROSSI a mano coi loro test, 4 punti dentro `servi()` (i tick)
+non raggiungibili da nessun collaudo, dichiarati. La CI ha trovato 2 rossi nella suite intera (`ical_feed.db` da dichiarare
+fra gli archivi che nascono all'accensione; il blocco della marca temporale non deve nominare `inventario`): curati. Blocco 2 → **3 su 4** (impronta `1b960e1cc6ed`, caselle 1-2 rimisurate).
+Voce di registro: *«BLOCCO 2, CASELLA 3: LA DIFESA DAL RITARDO DELL'iCAL»*. **Cosa manca:** commit → PR → CI → unione → poi il ramo `blocco2-casella4` (B2) si riallinea su master e il
+giro UNICO gira sui 10 moduli (fase203 compreso) → deploy col paracadute → sonda di produzione.
+
 **📏 5 SETTEMBRE, 02:3x — IL METRO RIPARATO: le impronte non dipendono più dai fine riga (ramo `metro-fine-riga`
 su `2a3d6d7`, parola del fondatore «ripara»):** lo stesso Blocco 1 leggeva 6 su 6 in B2 e **0 su 6** in un albero
 pulito con lo stesso codice (sha256 dei byte grezzi + CRLF/LF di git su Windows: nell'albero del fondatore il metro
@@ -1567,9 +1583,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 2a3d6d7
+CONSEGNE AGGIORNATE A: 3fe8a19
 
-SUITE ATTUALE: Ran 6266 test
+SUITE ATTUALE: Ran 6310 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

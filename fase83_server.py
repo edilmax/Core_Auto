@@ -5346,6 +5346,21 @@ class RouterHTTP:
             return 400, {"errore": "json_non_valido"}
         if self._transazioni_bloccate():           # kill-switch globale: niente nuove prenotazioni
             return 503, {"errore": "transazioni_sospese"}
+        # LA DIFESA DAL RITARDO iCal (fase203, 2026-09-05, «autorizzato»): PRIMA di confermare,
+        # se l'alloggio ha un calendario esterno collegato e l'ultima lettura ha piu' di un
+        # minuto, il feed si rilegge ADESSO: le notti appena vendute sull'OTA vengono bloccate
+        # e `blocca` rifiuta da solo. ISOLATO e fail-open: un'OTA giu' non ferma una prenotazione.
+        try:
+            from fase203_ical_orologio import prima_di_confermare
+            firma = getattr(self._sys, "firma", None)
+            # `decodifica` risponde None a qualunque token non valido (anche non testuale) e
+            # `prima_di_confermare` rifiuta da se' un alloggio non testuale: nessun controllo
+            # doppio qui, cosi' ogni guasto e' visibile al Giudice (equivalenti zero).
+            d_qt = firma.decodifica(dati.get("quote_token")) if firma is not None else None
+            prima_di_confermare(self._sys, d_qt.get("alloggio_id") if isinstance(d_qt, dict)
+                                else None)
+        except Exception:
+            logger.error("ical: rilettura prima della conferma fallita (ISOLATA)", exc_info=True)
         r = self._sys.concierge.prenota(dati)
         status = int(getattr(r, "status", 200))
         corpo = dict(getattr(r, "corpo", {}) or {})
@@ -7292,11 +7307,19 @@ class RouterHTTP:
             # ancora pendente (gate: niente PIN prima del pagamento, nemmeno all'host).
             _pin = (self._sys.firma.pin_checkin(ref) if getattr(self._sys, "firma", None)
                     and not pagamento_pendente else "")
+            # Se l'alloggio ha un calendario esterno collegato (fase203), l'avviso dice
+            # all'host di BLOCCARE SUBITO le date sull'OTA: il loro calendario legge il
+            # nostro feed entro ore, e fino ad allora la sua mano e' l'unica difesa.
+            try:
+                from fase203_ical_orologio import archivio_di
+                n_feed = len(archivio_di(self._sys).elenco(allog))
+            except Exception:
+                n_feed = 0
             ogg, testo = componi_avviso_host(
                 Localizzatore(), alloggio=titolo, ci=ci, co=co, origine=origine,
                 riferimento=codice_prenotazione(ref), pin=_pin,
                 link_pannello=(self._base_url or "https://bookinvip.com") + "/host.html",
-                lingua=lingua)
+                lingua=lingua, calendari_esterni=n_feed)
             notif.avvisa(contatti, ogg, testo)
         except Exception:
             logger.warning("avviso host prenotazione fallito (ignorato)", exc_info=True)
@@ -10569,11 +10592,24 @@ class RouterHTTP:
         dati = self._json(body)
         if dati is None:
             return 400, {"errore": "json_non_valido"}
-        alloggio, ical = dati.get("alloggio_id"), dati.get("ical")
-        if not (isinstance(alloggio, str) and alloggio and isinstance(ical, str)):
+        alloggio, ical, url = dati.get("alloggio_id"), dati.get("ical"), dati.get("url")
+        if not (isinstance(alloggio, str) and alloggio
+                and (isinstance(ical, str) or isinstance(url, str))):
             return 422, {"errore": "campi_non_validi"}
         if not self._verifica_proprieta(headers, alloggio):
             return 403, {"errore": "non_tuo"}
+        if isinstance(url, str):
+            # LA DIFESA DAL RITARDO (fase203, 2026-09-05, «autorizzato»): l'host salva l'URL del
+            # feed (Airbnb/Booking/Vrbo) e da qui in poi la macchina lo rilegge da sola -- ogni
+            # 15 minuti e prima di ogni nostra conferma -- invece di un incolla una tantum.
+            from fase203_ical_orologio import TIMEOUT_TICK_SEC, archivio_di, rileggi
+            arch = archivio_di(self._sys)
+            if not arch.salva(alloggio, url):
+                return 422, {"errore": "url_non_valido",
+                             "messaggio": "Serve l'indirizzo https del calendario (.ics)."}
+            letture = rileggi(arch, self._sys.inventario, alloggio, eta_massima_sec=0,
+                              timeout=TIMEOUT_TICK_SEC, motivo="salvataggio")
+            return 200, {"feed_salvati": len(arch.elenco(alloggio)), "letture": letture}
         from fase82_ical_sync import sincronizza
         return 200, sincronizza(self._sys.inventario, alloggio, ical)
 
@@ -11348,6 +11384,12 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                     except Exception:
                         pass
                     rep = giro_quotidiano(sistema)     # fase186 + gli invarianti (fase202)
+                    try:
+                        from fase203_ical_orologio import con_feed_rotti
+                        rep = con_feed_rotti(rep, sistema)   # + i feed iCal rotti (fase203)
+                    except Exception:
+                        logger.warning("ical: feed rotti non aggiunti al rapporto (ignorato)",
+                                       exc_info=True)
                     if not rep.get("pulito"):
                         logger.critical("GUARDIANO: %d stato/i anomalo/i -> %s",
                                         rep.get("conta"), rep.get("anomalie"))
@@ -11502,5 +11544,25 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                                    exc_info=True)
                 __import__("time").sleep(3600)   # ogni ora, ma marca una volta al giorno
         _th4.Thread(target=_tick_marca_temporale, daemon=True).start()
+
+    # L'OROLOGIO DELL'iCAL (fase203, 2026-09-05, «autorizzato»): ogni 15 minuti rilegge i feed
+    # OTA salvati dagli host e blocca le date occupate; ogni lettura lascia la sua riga con
+    # l'ora esatta; un feed rotto per un'ora e' un'anomalia del Guardiano. Isolato: mai rompe.
+    # Nessuna condizione qui: `giro_periodico` risponde da se' (conteggio a zero) se il
+    # sistema non ha l'archivio delle date, e il blocco della marca temporale qui sopra deve
+    # restare l'ultimo prima del `serve_forever` senza nominare altri archivi.
+    import threading as _thi
+
+    def _tick_ical():
+        while True:
+            try:
+                from fase203_ical_orologio import RILETTURA_SEC, giro_periodico
+                giro_periodico(sistema)
+                attesa = RILETTURA_SEC
+            except Exception:
+                logger.warning("ical: giro periodico fallito (ignorato)", exc_info=True)
+                attesa = 900
+            __import__("time").sleep(attesa)
+    _thi.Thread(target=_tick_ical, daemon=True).start()
 
     srv.serve_forever()

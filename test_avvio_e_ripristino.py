@@ -97,6 +97,9 @@ TABELLE_ATTESE = {
     "domanda.db": {"domanda"},
     "finanza.db": {"libro_giornale", "note", "debiti"},
     "garanzia.db": {"garanzia"},
+    # 2026-09-05 (fase203, «autorizzato»): i feed iCal degli host, accanto all'inventario;
+    # nasce al primo giro dell'orologio dell'iCal, cioe' all'accensione.
+    "ical_feed.db": {"ical_feed"},
     "inventario.db": {"inventario", "movimenti"},
     "kyc.db": {"kyc"},
     "messaggi.db": {"messaggi"},

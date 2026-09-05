@@ -11845,5 +11845,86 @@ class TestLEsameDelleGareNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
         self.assertTrue(riuscita, righe)
 
 
+class TestLEsameDellICalNonPuoBARARE(unittest.TestCase):
+    """⛔ D18 sull'attrezzo che scrive la casella 3 del Blocco 2 (`collaudi/esame_ical.py`):
+    la difesa dal RITARDO dell'iCal. Le cinque cose che un metro deve saper fare PRIMA di
+    misurare, provate qui e non raccontate."""
+
+    @staticmethod
+    def _esame():
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "_esame_ical", os.path.join(QUI, "collaudi", "esame_ical.py"))
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        return m
+
+    def test_la_casella_che_scrive_e_quella_del_piano_e_parla_di_iCal_e_RITARDO(self):
+        import importlib.util
+        esame = self._esame()
+        spec = importlib.util.spec_from_file_location(
+            "_piano_ical", os.path.join(QUI, "collaudi", "piano.py"))
+        piano = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(piano)
+        blocco = [b for b in piano.BLOCCHI if b["ordine"] == esame.BLOCCO]
+        self.assertEqual(len(blocco), 1)
+        testo = blocco[0]["finito_quando"][esame.INDICE_CASELLA]
+        self.assertIn("iCal", testo)
+        self.assertIn("RITARDO", testo)
+        ok, righe = esame.precondizioni()
+        self.assertTrue(ok, "una precondizione dell'esame non regge: %r" % (righe,))
+
+    def test_il_giudizio_grida_e_tace_nelle_due_direzioni(self):
+        esame = self._esame()
+        riuscita, righe = esame.autoprova()
+        self.assertTrue(riuscita, "\n".join(righe))
+        verde, motivi, den = esame.giudica(esame.passi_finti())
+        self.assertTrue(verde)
+        self.assertEqual(den, len(esame.passi_finti()))
+        # una sezione mancante NON e' un verde per assenza
+        senza = [p for p in esame.passi_finti() if p[0] != "conferma"]
+        verde2, motivi2, _ = esame.giudica(senza)
+        self.assertFalse(verde2)
+        self.assertTrue(any("conferma" in m for m in motivi2))
+
+    def test_col_guasto_dentro_non_scrive_mai(self):
+        """`--con-guasto` con `--scrivi`: si ferma PRIMA di misurare (uscita 2), senza
+        toccare la scheda."""
+        import contextlib
+        import io
+        esame = self._esame()
+        prima = os.path.getmtime(os.path.join(QUI, "collaudi", "scheda.json"))
+        uscita = io.StringIO()
+        with contextlib.redirect_stdout(uscita):
+            codice = esame.main(["--con-guasto", "--scrivi"])
+        self.assertEqual(codice, 2, uscita.getvalue()[-600:])
+        self.assertEqual(prima, os.path.getmtime(os.path.join(QUI, "collaudi", "scheda.json")))
+
+    def test_il_guasto_e_davvero_la_difesa_spenta_e_l_esame_lo_vede_ROSSO(self):
+        """LA DIREZIONE CHE CONTA: con la rilettura prima della conferma spenta, l'esame deve
+        dire ROSSO sulla sezione «conferma» (la prenotazione fantasma passa). Se dicesse verde,
+        non misurerebbe la difesa."""
+        import contextlib
+        import io
+        esame = self._esame()
+        uscita = io.StringIO()
+        with contextlib.redirect_stdout(uscita):
+            codice = esame.main(["--con-guasto"])
+        self.assertEqual(codice, 1, uscita.getvalue()[-900:])
+        rossi = [p for p in esame.PASSI if not p[2]]
+        self.assertTrue(any(p[0] == "conferma" for p in rossi),
+                        "col guasto dentro nessun passo della sezione «conferma» e' rosso: %r"
+                        % (rossi,))
+
+    def test_dichiara_cosa_non_guarda(self):
+        esame = self._esame()
+        self.assertGreaterEqual(len(esame.NON_GUARDA), 3)
+        self.assertTrue(any("rete" in r.lower() for r in esame.NON_GUARDA))
+        self.assertTrue(any("host" in r.lower() for r in esame.NON_GUARDA))
+        # Le prove sul GANCIO di fase83 (esame verde sul codice sano, fail-open con la traccia,
+        # alloggio non testuale = 422) stanno in `test_fase83_ical_gancio.py`: e' l'occhio che
+        # il Giudice usa sulle righe cambiate di fase83, e sta da solo per costare secondi.
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
