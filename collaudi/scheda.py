@@ -164,7 +164,11 @@ def impronta_del_blocco(ordine, radice=RADICE):
         h.update(b"\0")
         try:
             with io.open(os.path.join(radice, nome + ".py"), "rb") as f:
-                h.update(f.read())
+                # ⛔ I fine riga NON sono codice (2026-09-05): git su Windows riscrive
+                #    CRLF/LF da una cartella all'altra, e sui byte grezzi lo STESSO
+                #    Blocco 1 leggeva 6 su 6 in un albero e 0 su 6 in un altro. La
+                #    misura deve dipendere dal codice, non dalla cartella (D23).
+                h.update(f.read().replace(b"\r\n", b"\n"))
         except OSError:
             # ⛔ Un modulo che sparisce CAMBIA l'impronta, e deve: la casella diceva
             #    qualcosa su un insieme di file, e quell'insieme non e' piu' lo stesso.

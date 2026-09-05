@@ -2,89 +2,89 @@
  "16d2c823889f": {
   "blocco": 1,
   "comando": "python collaudi/mutazione_prodotto.py --modulo fase65_split_payment.py fase85_pagamenti_stripe.py fase87_stripe_webhook.py fase101_stripe_connect.py fase131_payout_dashboard.py --tetto 62 --minuti 60 --killer test_fase65_split_payment test_fase85_pagamenti_stripe test_fase87_stripe_webhook test_fase101_stripe_connect test_fase131_payout_dashboard",
-  "commit": "c06a382",
+  "commit": "2a3d6d7",
   "condizione": "zero punti di mutazione scoperti sul PERCORSO DEL DENARO -- i cinque moduli che un euro attraversa davvero: entra, viene confermato, va sul conto dell'host, si divide fra ospiti, esce col bonifico -- sul codice che la produzione ESEGUE",
   "denominatore": 245,
   "esito": true,
-  "impronta": "e94151bd5a8b",
+  "impronta": "bb8bae0cf2dc",
   "motivo": "",
-  "quando": "2026-09-05T00:40:13"
+  "quando": "2026-09-05T02:19:42"
  },
  "224ae0884a0b": {
   "blocco": 1,
   "comando": "python collaudi/esame_orologi.py --scrivi",
-  "commit": "c06a382",
+  "commit": "2a3d6d7",
   "condizione": "hold, payout e penale scadono davvero in un giro contro Stripe di PROVA con l'orologio NOSTRO spostato, e i tre esiti si rileggono da Stripe (rimborso dell'hold, bonifico all'host, penale addebitata)",
   "denominatore": 34,
   "esito": true,
-  "impronta": "e94151bd5a8b",
+  "impronta": "bb8bae0cf2dc",
   "motivo": "",
-  "quando": "2026-09-05T00:26:07"
+  "quando": "2026-09-05T02:00:19"
  },
  "50691c557e6e": {
   "blocco": 1,
   "comando": "python collaudi/esame_soldi.py --scrivi",
-  "commit": "c06a382",
+  "commit": "2a3d6d7",
   "condizione": "le dimostrazioni z3 sugli invarianti GIRANO in CI, e i test che le portano NON risultano saltati",
   "denominatore": 54,
   "esito": true,
-  "impronta": "e94151bd5a8b",
+  "impronta": "bb8bae0cf2dc",
   "motivo": "",
-  "quando": "2026-09-05T00:24:35"
+  "quando": "2026-09-05T01:58:18"
  },
  "813b9082642c": {
   "blocco": 1,
   "comando": "python collaudi/esame_produzione.py --scrivi",
-  "commit": "ac51e6e",
+  "commit": "2a3d6d7",
   "condizione": "gli invarianti sono verificati in PRODUZIONE, non solo nei test",
   "denominatore": 14,
   "esito": true,
-  "impronta": "e94151bd5a8b",
+  "impronta": "bb8bae0cf2dc",
   "motivo": "",
-  "quando": "2026-09-05T01:00:36"
+  "quando": "2026-09-05T01:58:22"
  },
  "c3cf3da4543f": {
   "blocco": 1,
   "comando": "python collaudi/esame_soldi.py --scrivi",
-  "commit": "c06a382",
+  "commit": "2a3d6d7",
   "condizione": "esistono le relazioni metamorfiche sull'aritmetica del denaro",
   "denominatore": 15,
   "esito": true,
-  "impronta": "e94151bd5a8b",
+  "impronta": "bb8bae0cf2dc",
   "motivo": "",
-  "quando": "2026-09-05T00:24:35"
+  "quando": "2026-09-05T01:58:18"
  },
  "d70ecb7a31cc": {
   "blocco": 1,
   "comando": "python collaudi/esame_rimborsi.py --scrivi",
-  "commit": "c06a382",
+  "commit": "2a3d6d7",
   "condizione": "i soldi tornano DAVVERO all'ospite da OGNI strada che porta a un rimborso, non solo da quella che qualcuno si e' ricordato di provare (il 2026-08-16 le strade erano due e ne funzionava una). ⛔ L'AUTOMATICO NON e' la riga d'arrivo di questo blocco: e' una decisione del fondatore, e si accende dopo -- prima si guadagna la fiducia, poi si toglie il dito",
   "denominatore": 38,
   "esito": true,
-  "impronta": "e94151bd5a8b",
+  "impronta": "bb8bae0cf2dc",
   "motivo": "",
-  "quando": "2026-09-05T00:25:42"
+  "quando": "2026-09-05T01:59:44"
  },
  "ec84faaea398": {
   "blocco": 2,
   "comando": "python collaudi/esame_prenotazioni.py --scrivi",
-  "commit": "d548c3f",
+  "commit": "2a3d6d7",
   "condizione": "la macchina a stati copre cancellazioni, modifiche, no-show e sovra-affitto",
   "denominatore": 34,
   "esito": true,
-  "impronta": "7ef3c7708bee",
+  "impronta": "8cd3a6e3c800",
   "motivo": "",
-  "quando": "2026-09-05T00:47:22"
+  "quando": "2026-09-05T01:58:26"
  },
  "f5d22a937896": {
   "blocco": 2,
   "comando": "python collaudi/esame_gare.py --scrivi",
-  "commit": "ac51e6e",
+  "commit": "2a3d6d7",
   "condizione": "il blocco atomico regge sotto gara (misurato: 10 giri x 24 agenti, 1 conferma)",
   "denominatore": 51,
   "esito": true,
-  "impronta": "7ef3c7708bee",
+  "impronta": "8cd3a6e3c800",
   "motivo": "",
-  "quando": "2026-09-05T00:57:24"
+  "quando": "2026-09-05T02:06:49"
  }
 }

@@ -403,6 +403,42 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 📏 IL METRO «È FINITO?» DIPENDEVA DALLA CARTELLA: I FINE RIGA NELL'IMPRONTA DEL BLOCCO — 5 settembre, notte, chat B (albero Core_Auto_B, ramo `metro-fine-riga` su `2a3d6d7`)
+
+**Il fondatore:** *«in parte sì, cosa vorresti dire con i numeri»*. Per rispondere con numeri misurati e non
+ricordati ho eseguito `python collaudi/piano.py` su master in un SECONDO albero pulito (Core_Auto_B): il
+Blocco 1 diceva **0 su 6** «scaduta», mentre in B2 diceva 6 su 6 sullo stesso codice. Primo sospetto lo
+strumento (S3), misurato con uno script di sola lettura: `scheda.impronta_del_blocco` fa lo sha256 dei
+**byte grezzi** dei moduli; git su Windows (`core.autocrlf=true`) scrive i file con CRLF al checkout, mentre
+`fase202` in B2 era stato scritto dall'editor con LF → B2: 24 moduli CRLF + 1 LF = `e94151bd5a8b`;
+Core_Auto_B: 25 CRLF = `9f6361241c6a`; in CI (Linux, tutto LF) una terza, `bb8bae0cf2dc`. Le sei righe
+della scheda valevano SOLO in B2: nell'albero del fondatore (`Core_Auto_A`, autocrlf true) il metro avrebbe
+risposto «non finito» a un blocco finito. Il Blocco 2 (12 moduli, tutti CRLF su Windows) coincideva fra i
+due alberi Windows (`7ef3c7708bee`) ma non con la CI (`8cd3a6e3c800`).
+
+**Parola del fondatore: «ripara».** La regola della giornata vietava le riparazioni di attrezzi: chiesto in
+tre righe con la proposta scritta, risposto con una parola.
+
+**D20, nell'ordine.** Guardia `test_pipeline_ci.TestIlTraguardoDeveEssereRAGGIUNGIBILE.`
+`test_L_IMPRONTA_NON_DIPENDE_DAI_FINE_RIGA_MA_DA_UN_BYTE_VERO_SI` (tre copie dei 25 moduli del Blocco 1:
+CRLF, LF, LF più un byte vero) vista **ROSSA** sul codice di ieri (`'9f6361241c6a' != 'bb8bae0cf2dc'`,
+`corsia_B_2026-09-05\metro_guardia_ROSSA.log`); cura di **UNA riga** in `collaudi/scheda.py`
+(`.replace(b"\r\n", b"\n")` prima dell'hash, col perché accanto); guardia **VERDE** nelle due direzioni
+(`metro_guardia_VERDE.log`, 3 test: i fine riga non contano, un byte vero sì). Le 8 righe verdi sono
+SCADUTE come devono (impronte nuove: Blocco 1 `bb8bae0cf2dc`, Blocco 2 `8cd3a6e3c800`, uguali in ogni albero
+e in CI) e **RIMISURATE coi loro attrezzi, mai a mano**: esame_soldi 54/15 · esame_rimborsi 7/7 + E2E 31 = 38
+(2 pagamenti di prova Stripe) · esame_orologi 34 · esame_produzione 9/9 (den 14) · giro unico del Giudice sui
+5 moduli del denaro **246 provati / 245 uccisi / 0 sopravvissuti / 1 equivalente** (12 min) ·
+esame_prenotazioni 34 · esame_gare 51 → **Blocco 1 = 6 su 6, Blocco 2 = 2 su 4** in Core_Auto_B (registri
+`metro_*.log`). Ruff 686 = 686, bandit 548 = 548, caricatore **6266** (= 6265 + 1, PowerShell vera).
+
+**La famiglia (METODO, parti 11 e 13):** «misura che dipende dalla cartella, non dal codice». Gli altri hash
+di file in `collaudi/` (`prima_di_dire_fatto._impronta`, la rete anti-interruzione, `mutazione_prodotto.`
+`impronta_di` sulle ancore ripulite dei margini) sono per albero per costruzione: verificato col grep,
+nessun altro membro. Righe aggiunte nelle PARTI 11 e 13 di `collaudi/METODO_v4.md` (anche per il difetto
+dell'I3 di stanotte). **Cosa non guarda:** la guardia prova i 25 moduli del Blocco 1, non ogni blocco: la
+funzione e' una sola e non guarda il numero del blocco.
+
 ### 🏁 BLOCCO 2, CASELLA 2: IL BLOCCO ATOMICO REGGE SOTTO GARA — 10 GIRI × 24 AGENTI, 1 CONFERMA — 5 settembre, notte, chat B (albero B2, ramo `blocco2-macchina-stati`)
 
 **Cosa misura `collaudi/esame_gare.py`:** un alloggio con una unità; a ogni giro 24 agenti chiedono 24

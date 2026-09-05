@@ -28,6 +28,18 @@
 
 ## 🏁 CHAT B (la sola) — 2026-09-04 notte: IL BLOCCO 1 SOLDI È 6 SU 6, SCRITTO DALLE MACCHINE — casella 6 (fase202 in produzione, deploy `201d723`) e casella 3 (esame degli orologi contro Stripe di prova); ramo `casella3` (PR #151) sopra la #150 unita
 
+**📏 5 SETTEMBRE, 02:3x — IL METRO RIPARATO: le impronte non dipendono più dai fine riga (ramo `metro-fine-riga`
+su `2a3d6d7`, parola del fondatore «ripara»):** lo stesso Blocco 1 leggeva 6 su 6 in B2 e **0 su 6** in un albero
+pulito con lo stesso codice (sha256 dei byte grezzi + CRLF/LF di git su Windows: nell'albero del fondatore il metro
+avrebbe detto «non finito»). Guardia vista rossa, UNA riga in `collaudi/scheda.py`, guardia verde; le 8 caselle
+rimisurate coi loro attrezzi sulle impronte nuove **`bb8bae0cf2dc`** (Blocco 1) e **`8cd3a6e3c800`** (Blocco 2),
+uguali in ogni cartella e in CI → **Blocco 1 6 su 6, Blocco 2 2 su 4** (giro unico 246/245/0 + 1 equivalente).
+Caricatore **6266**. Voce di registro: *«IL METRO "È FINITO?" DIPENDEVA DALLA CARTELLA»*. **Cosa manca:** commit →
+PR → CI → unione → VPS `pull --ff-only` → la prova in un secondo albero pulito (stessi numeri). In coda, parole del
+fondatore: «sì/no» sulle 7 righe NO dei soldi della porta del METODO come caselle del Blocco 1; «autorizzato» per
+riscrivere 7 righe ridondanti in `fase58` e 2 in `fase62` che generano mutanti equivalenti (Blocco 2, casella 4, in
+lavorazione in B2 sul ramo `blocco2-casella4`); la casella 3 (iCal).
+
 **🏁 5 SETTEMBRE, 01:0x — BLOCCO 1 DI NUOVO 6 SU 6 (impronta `e94151bd5a8b`) E BLOCCO 2 A 2 SU 4:** la PR #152 (cura
 dell'I3) è **unita** (master `d0907428…`) e **deployata** alle 23:00:13Z (paracadute `:prec` = `083637e3…`, immagine
 nuova `7139adbd…`, app e backup healthy, `/api/health` 200 `guardiano ok`; unico file di produzione cambiato: `fase202`);
@@ -1555,9 +1567,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: ac51e6e
+CONSEGNE AGGIORNATE A: 2a3d6d7
 
-SUITE ATTUALE: Ran 6265 test
+SUITE ATTUALE: Ran 6266 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

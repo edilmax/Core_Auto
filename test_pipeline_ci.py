@@ -9296,6 +9296,57 @@ class TestIlTraguardoDeveEssereRAGGIUNGIBILE(unittest.TestCase):
         finally:
             shutil.rmtree(culla, ignore_errors=True)
 
+    def test_L_IMPRONTA_NON_DIPENDE_DAI_FINE_RIGA_MA_DA_UN_BYTE_VERO_SI(self):
+        """⛔ Trovato il 2026-09-05: lo STESSO Blocco 1, con lo STESSO codice, leggeva 6 su 6
+        in un albero e 0 su 6 in un altro (e 0 su 6 nell'albero del fondatore). L'impronta
+        era calcolata sui byte grezzi dei moduli, e git su Windows riscrive i fine riga
+        (CRLF/LF) da una cartella all'altra: la misura dipendeva dalla CARTELLA, non dal
+        codice (D23: l'ambiente fa parte della misura), e il metro che risponde «e' finito?»
+        rispondeva in due modi diversi alla stessa domanda.
+        Due direzioni (ferrea 10): i fine riga NON contano; un cambiamento vero nel codice SI'."""
+        import importlib.util
+        import shutil
+        import tempfile
+        scheda = self._scheda()
+        spec = importlib.util.spec_from_file_location(
+            "_piano_fine_riga", os.path.join(QUI, "collaudi", "piano.py"))
+        piano = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(piano)
+        moduli = sorted([b for b in piano.BLOCCHI if b["ordine"] == 1][0]["moduli"])
+        self.assertTrue(moduli, "il blocco 1 non ha moduli: misura non valida (S1)")
+        culla = tempfile.mkdtemp(prefix="fine_riga_")
+        try:
+            copie = {}
+            for nome_copia in ("crlf", "lf", "byte_vero"):
+                copie[nome_copia] = os.path.join(culla, nome_copia)
+                os.makedirs(copie[nome_copia])
+            for nome in moduli:
+                with open(os.path.join(QUI, nome + ".py"), "rb") as f:
+                    lf = f.read().replace(b"\r\n", b"\n")
+                crlf = lf.replace(b"\n", b"\r\n")
+                for nome_copia, dati in (("crlf", crlf), ("lf", lf), ("byte_vero", lf)):
+                    with open(os.path.join(copie[nome_copia], nome + ".py"), "wb") as f:
+                        f.write(dati)
+            # Nella terza copia cambia il CODICE di un modulo, non i suoi fine riga.
+            with open(os.path.join(copie["byte_vero"], moduli[0] + ".py"), "ab") as f:
+                f.write(b"\nUN_BYTE_VERO_IN_PIU = 1\n")
+            imp_crlf = scheda.impronta_del_blocco(1, radice=copie["crlf"])
+            imp_lf = scheda.impronta_del_blocco(1, radice=copie["lf"])
+            imp_byte = scheda.impronta_del_blocco(1, radice=copie["byte_vero"])
+            self.assertTrue(imp_crlf and imp_lf and imp_byte,
+                            "impronta non calcolabile: misura non valida (S1)")
+            self.assertEqual(
+                imp_crlf, imp_lf,
+                "l'impronta del blocco cambia quando cambiano SOLO i fine riga (%s con CRLF, "
+                "%s con LF): la stessa scheda dice «finito» in una cartella e «scaduto» in "
+                "un'altra con lo stesso codice" % (imp_crlf, imp_lf))
+            self.assertNotEqual(
+                imp_lf, imp_byte,
+                "un cambiamento vero nel codice del blocco NON cambia l'impronta (%s): la "
+                "normalizzazione ha reso cieco il metro" % imp_byte)
+        finally:
+            shutil.rmtree(culla, ignore_errors=True)
+
 
 class TestDueBlocchiNonPossonoCondividereUnaCasella(unittest.TestCase):
     """⛔ SPUNTARE I SOLDI AVREBBE SPUNTATO ANCHE LE PRENOTAZIONI.

@@ -490,7 +490,8 @@ Costa meno di 3 minuti a difetto. Alla fine ho la mappa di dove sono cieco — m
 
 | # | Cosa era | Cosa lo ha fatto uscire | Che controllo l'avrebbe preso | Famiglia chiusa? |
 |---|---|---|---|---|
-| | | | | |
+| 1 | 2026-09-05 · `fase202` I3: la prova firmata cercata solo in `quote_token`, che la prenotazione istantanea non salva (salva `idem_key` e il voucher nel corpo) → email falsa ogni giorno al primo pagamento vero | leggere il codice di CHI SCRIVE la riga (`fase83._registra_hold`) invece di fidarmi della mia idea della riga | una guardia che fa la prenotazione dalle ROTTE VERE e poi chiama l'auditor (esiste: `TestI3SullaProvaFirmataVera`, vista rossa prima) | in parte: chiusa per I3; le guardie di I2 e I5 usano ancora righe scritte a mano |
+| 2 | 2026-09-05 · `scheda.impronta_del_blocco` faceva lo sha256 dei byte grezzi dei moduli: lo STESSO Blocco 1 leggeva 6 su 6 in un albero e 0 su 6 in un altro, perché git su Windows riscrive i fine riga (CRLF/LF) da una cartella all'altra | eseguire lo stesso metro in un SECONDO albero pulito, dopo la domanda del fondatore «cosa vuoi dire con i numeri» | una guardia che calcola l'impronta su due copie uguali salvo i fine riga, e su una con un byte vero in più (esiste: `test_L_IMPRONTA_NON_DIPENDE_DAI_FINE_RIGA_MA_DA_UN_BYTE_VERO_SI`, vista rossa prima) | sì: gli altri hash di file in `collaudi/` sono per albero per costruzione (verificato col grep il 2026-09-05) |
 
 Poi conto per famiglia. **La famiglia con più difetti è quella dove mi manca uno strato.**
 
@@ -688,7 +689,8 @@ La parte viva. Cresce e mi segue da un software all'altro.
 | Guasto che non so riprodurre | deterministic simulation | Il seme + orologio finto | test | |
 | Chiave finita nel codice | secret scanning | Scansione ad ogni modifica | test | |
 | Libreria con falle note | dependency scanning | Scansione ad ogni modifica | test | |
-| | | | | |
+| Misura che dipende dalla cartella, non dal codice | environment-dependent measurement | Fine riga normalizzati nell'impronta + guardia CRLF/LF/byte vero | test | 2026-09-05 |
+| Auditor che giudica la mia idea della riga, non la riga che il prodotto scrive | test through real routes | Guardia che passa dalle rotte vere prima dell'auditor | test | 2026-09-05 (I3; I2/I5 ancora aperte) |
 
 **Una famiglia chiusa non si riapre.** Se torna, il controllo era debole: lo rinforzo, non ne aggiungo un altro.
 
@@ -1066,4 +1068,4 @@ Il giorno in cui la PARTE 12 è tutta spuntata con misure vere, il lavoro non è
 
 ---
 
-*Versione 4 — ultimo aggiornamento: ___________*
+*Versione 4 — ultimo aggiornamento: 2026-09-05 (righe 1 e 2 della PARTE 11, due famiglie nella PARTE 13)*
