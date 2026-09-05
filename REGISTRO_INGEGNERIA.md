@@ -456,8 +456,13 @@ cambiate di `fase83`/`fase152` il Giudice in modo `--diff` (11 punti; sceglie gl
 alfabetico, e IGNORA `--killer`: `giro_sul_diff` non ha quel parametro) ha ucciso 3 e lasciato 8: i **3 del gancio**
 (`firma is not None`, `exc_info=True`, `isinstance(alloggio, str) and alloggio`) sono stati **visti ROSSI a mano**,
 iniettati con l'editor e uccisi ciascuno dal suo test in `test_fase83_ical_gancio`, ripristino byte-identico (sha256);
-i **5 dentro `servi()`** (`_tick_guardiano` e `_tick_ical`: righe 11392, 11551, 11555, 11561, 11564) girano solo col
-server acceso, che nessun collaudo avvia: **dichiarati**, nessun equivalente. `fase203` entra in `piano.py` Blocco 2
+i **4 dentro `servi()`** (`_tick_guardiano` riga 11392 e `_tick_ical` righe 11557, 11563, 11566: un `exc_info`, il
+`while True`, un altro `exc_info` e il `daemon=True`) girano solo col server acceso, che nessun collaudo avvia:
+**dichiarati**, nessun equivalente. ⚠️ La CI (suite intera su Linux) ha poi trovato due rossi che i collaudi locali non
+avevano visto: `ical_feed.db` nasce all'accensione (primo giro del tick) e va dichiarato in `TABELLE_ATTESE` di
+`test_avvio_e_ripristino`; e il blocco della marca temporale dev'essere l'ultimo prima di `serve_forever` senza nominare
+`inventario` — il `_tick_ical` stava dopo di lui con una condizione su `inventario`: tolta la condizione (`giro_periodico`
+risponde da sé a un sistema monco). Rimisurato col `--diff` dopo le cure: 3 punti nuovi, tutti dentro `_tick_ical`. `fase203` entra in `piano.py` Blocco 2
 «moduli»: impronta `1b960e1cc6ed`, caselle 1 e 2 RIMISURATE (esame_prenotazioni 34, esame_gare 51), casella 3
 scritta da `esame_ical` (24) → **Blocco 2 = 3 su 4**. README 153 moduli / 417 file di test.
 

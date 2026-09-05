@@ -38,8 +38,9 @@ su Airbnb/Booking» quando c'è un calendario esterno collegato (fase152). Fonti
 minuti e tace se il feed si rompe. `collaudi/esame_ical.py` **24 passi verdi** dalle rotte vere, `--con-guasto` ROSSO
 visto; `test_fase203` 35, `test_fase83_ical_gancio` 3 (l'occhio del gancio in fase83), guardie dell'esame 5; Giudice su
 fase203 giro 1 48/32/16 → 12 guardie → giro 2 **48/48**; sulle righe cambiate di fase83/fase152 (`--diff`, che sceglie gli
-occhi da solo e ignora `--killer`): 3 punti del gancio visti ROSSI a mano coi loro test, 5 punti dentro `servi()` (i tick)
-non raggiungibili da nessun collaudo, dichiarati. Blocco 2 → **3 su 4** (impronta `1b960e1cc6ed`, caselle 1-2 rimisurate).
+occhi da solo e ignora `--killer`): 3 punti del gancio visti ROSSI a mano coi loro test, 4 punti dentro `servi()` (i tick)
+non raggiungibili da nessun collaudo, dichiarati. La CI ha trovato 2 rossi nella suite intera (`ical_feed.db` da dichiarare
+fra gli archivi che nascono all'accensione; il blocco della marca temporale non deve nominare `inventario`): curati. Blocco 2 → **3 su 4** (impronta `1b960e1cc6ed`, caselle 1-2 rimisurate).
 Voce di registro: *«BLOCCO 2, CASELLA 3: LA DIFESA DAL RITARDO DELL'iCAL»*. **Cosa manca:** commit → PR → CI → unione → poi il ramo `blocco2-casella4` (B2) si riallinea su master e il
 giro UNICO gira sui 10 moduli (fase203 compreso) → deploy col paracadute → sonda di produzione.
 

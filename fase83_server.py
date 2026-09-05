@@ -11548,19 +11548,21 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
     # L'OROLOGIO DELL'iCAL (fase203, 2026-09-05, «autorizzato»): ogni 15 minuti rilegge i feed
     # OTA salvati dagli host e blocca le date occupate; ogni lettura lascia la sua riga con
     # l'ora esatta; un feed rotto per un'ora e' un'anomalia del Guardiano. Isolato: mai rompe.
-    if getattr(sistema, "inventario", None) is not None:
-        import threading as _thi
+    # Nessuna condizione qui: `giro_periodico` risponde da se' (conteggio a zero) se il
+    # sistema non ha l'archivio delle date, e il blocco della marca temporale qui sopra deve
+    # restare l'ultimo prima del `serve_forever` senza nominare altri archivi.
+    import threading as _thi
 
-        def _tick_ical():
-            while True:
-                try:
-                    from fase203_ical_orologio import RILETTURA_SEC, giro_periodico
-                    giro_periodico(sistema)
-                    attesa = RILETTURA_SEC
-                except Exception:
-                    logger.warning("ical: giro periodico fallito (ignorato)", exc_info=True)
-                    attesa = 900
-                __import__("time").sleep(attesa)
-        _thi.Thread(target=_tick_ical, daemon=True).start()
+    def _tick_ical():
+        while True:
+            try:
+                from fase203_ical_orologio import RILETTURA_SEC, giro_periodico
+                giro_periodico(sistema)
+                attesa = RILETTURA_SEC
+            except Exception:
+                logger.warning("ical: giro periodico fallito (ignorato)", exc_info=True)
+                attesa = 900
+            __import__("time").sleep(attesa)
+    _thi.Thread(target=_tick_ical, daemon=True).start()
 
     srv.serve_forever()
