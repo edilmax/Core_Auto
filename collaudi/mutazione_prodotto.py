@@ -890,6 +890,14 @@ def scegli_sorveglianti(sorveglianti, tetto, modulo, radice=None):
 #     punto (riga+colonna), non solo il testo. Chiude questa famiglia di difetti per
 #     costruzione, come la chiave della scheda il 2026-08-21.
 EQUIVALENTI_DICHIARATI = {
+    # ⛔ QUI STAVANO DIECI VOCI SCRITTE E TOLTE LO STESSO GIORNO (2026-09-05, Blocco 2 casella 4):
+    #    2 in fase62 (z3 ed esaustiva), 6 in fase58 e 2 in fase111 (traccia). Avevano tutte la
+    #    stessa forma -- un controllo RIDONDANTE nella stessa funzione mascherava il solo valore
+    #    in cui sano e guasto differivano -- e col «autorizzato» del fondatore quelle righe sono
+    #    state RISCRITTE con una condizione sola (`n < 1`, `max(0, rowcount)`, quattro controlli
+    #    separati in `prima_finestra`, `rate_bps < 1`, `max(v, 0)`): ogni mutante e' tornato
+    #    uccidibile e le voci non servono. E' la strada del METODO (18.1): «o diventa un test
+    #    nuovo, o e' codice da cancellare» -- mai una cecita' dichiarata quando si puo' evitare.
     ("fase184_marca_temporale.py", "_der_intero", "if valore < 0:", "<", "<="): {
         "ancore": ["if valore < 0:"],
         "impronta": "047e9643f6d6c25eba35f57816c8f34750e6565cba43b0ebe7407ad685f5b365",
@@ -1222,31 +1230,11 @@ EQUIVALENTI_DICHIARATI = {
     # sopravvissuto resta VIVO e il giro resta rosso finche' la chiave non sa dire QUALE
     # operatore della riga. Meglio un rosso che una cecita'.
 
-    ("fase59_concierge.py", "quota", "if _bps > 0:", ">", ">="): {
-        "ancore": ["netto_listino = netto",
-                   "_bps = _sm if (_nn >= 28 and _sm > 0) else (_ss if (_nn >= 7 and _ss > 0)"
-                   " else 0)\nif _bps > 0:\nsconto_lungo = netto_listino * _bps // 10000\n"
-                   "netto = netto_listino - sconto_lungo"],
-        "impronta": "a7d3aa2b3279dc9c6ff4aa8c126cbece653fdfac7454f44bf05faba446e797f0",
-        # `traccia` e non `esaustiva`: la prova non e' sui PARAMETRI di `quota` (che accetta
-        # qualunque cosa), e' sul valore di una variabile LOCALE seguito da dove nasce a dove
-        # si usa. E' la stessa forma delle voci di fase177. Lo pretende il controllo 3.
-        "metodo": "traccia",
-        "dominio": "tutti gli interi che `_bps` puo' assumere. La riga sopra lo assegna "
-                   "SOLO da `_sm`/`_ss` quando sono > 0, oppure 0: quindi `_bps >= 0` "
-                   "sempre, e il dominio residuo e' {0} piu' i positivi.",
-        "data": "2026-08-24",
-        "prova":
-        "DIMOSTRATO PER ESAURIMENTO. `>` e `>=` sugli interi differiscono in UN SOLO punto: "
-        "_bps == 0. In quel punto la versione mutata entra nel corpo ed esegue "
-        "`sconto_lungo = netto_listino * 0 // 10000` (= 0) e `netto = netto_listino - 0`. Ma "
-        "`netto_listino = netto` (ancora 1) e `netto` non e' riassegnato in mezzo: la riga "
-        "rimette in `netto` il valore che gia' aveva, e `sconto_lungo` era gia' 0 dalla sua "
-        "inizializzazione. Stato finale identico su entrambe le variabili osservabili "
-        "(`prezzo_netto_cents`, `sconto_soggiorno_lungo_cents`). Nessun ingresso puo' "
-        "distinguerle.",
-    },
-
+    # ⛔ QUI STAVA LA VOCE `quota` / `if _bps > 0:` / `>` -> `>=` del 2026-08-24. Il 2026-09-05
+    #    la riscrittura dello sconto soggiorno-lungo (l'«autorizzato» del fondatore) l'ha fatta
+    #    DECADERE -- l'ancora non c'era piu', controllo 2b, come deve -- e invece di rifarla
+    #    quella riga e' diventata `sconto_lungo = netto_listino * max(_bps, 0) // 10000`:
+    #    nessun confronto da mascherare, nessuna voce da tenere.
     ("fase59_concierge.py", "quota", "if not _intero(comm) or comm < 0:", "<", "<="): {
         "ancore": ["if not _intero(comm) or comm < 0:\ncomm = 0"],
         "impronta": "178e4c87509e3b4b345a1b7d3b588dbcc259187b777b6e8b495ccab64c3fb0a2",

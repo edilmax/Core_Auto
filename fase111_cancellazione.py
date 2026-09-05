@@ -58,8 +58,9 @@ def calcola_rimborso(prezzo_pagato_cents: Any, giorni_all_arrivo: Any, *,
     # SBAGLIATI, non per i tipi CAMUFFATI. Guardia:
     # `test_fase111_cancellazione.TestIDueBUCHITrovatiDalGiudice.
     #  test_un_intero_che_MENTE_sul_confronto_non_ottiene_un_rimborso` (vista rossa prima).
-    pagato = prezzo_pagato_cents if type(prezzo_pagato_cents) is int \
-        and prezzo_pagato_cents > 0 else 0
+    # `max(v, 0)` e non `v if v > 0 else 0` (2026-09-05, «autorizzato»): allo zero i due rami
+    # davano lo stesso 0 e un guasto nel confronto era invisibile a ogni test.
+    pagato = max(prezzo_pagato_cents, 0) if type(prezzo_pagato_cents) is int else 0
     if pagato == 0:
         return {"rimborso_cents": 0, "trattenuto_cents": 0, "bps": 0,
                 "politica": pol.nome}
@@ -68,7 +69,7 @@ def calcola_rimborso(prezzo_pagato_cents: Any, giorni_all_arrivo: Any, *,
                 "politica": pol.nome, "ripensamento": True}
     # stessa ragione della riga sopra: l'intero dev'essere vero, se no il valore puo'
     # scegliersi lo scaglione mentendo sul confronto
-    g = giorni_all_arrivo if type(giorni_all_arrivo) is int and giorni_all_arrivo >= 0 else 0
+    g = max(giorni_all_arrivo, 0) if type(giorni_all_arrivo) is int else 0
     fee = max(0, int(fee_pulizia_cents)) if type(fee_pulizia_cents) is int else 0
     fee = min(fee, pagato)
     soggiorno = pagato - fee                                # parte soggetta a penale
