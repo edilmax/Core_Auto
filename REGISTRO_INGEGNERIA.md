@@ -583,6 +583,26 @@ di file in `collaudi/` (`prima_di_dire_fatto._impronta`, la rete anti-interruzio
 nessun altro membro. Righe aggiunte nelle PARTI 11 e 13 di `collaudi/METODO_v4.md` (anche per il difetto
 dell'I3 di stanotte). **Cosa non guarda:** la guardia prova i 25 moduli del Blocco 1, non ogni blocco: la
 funzione e' una sola e non guarda il numero del blocco.
+### 🏁 BLOCCO 2, CASELLA 4, SECONDA METÀ: IL GIRO UNICO SUI 13 MODULI E IL BLOCCO 2 A 4 SU 4 — 6 settembre, chat B (albero B2, stesso ramo, riallineato su `4cadcd4`)
+
+**Il fondatore:** *«vai avanti, cura il test lento e rilancia il giro sui 13»*. **Il numero:** giro unico 5, 13 moduli,
+dedicati come `--killer`, `--minuti 600`, staccato alle 11:16:07, finito alle 19:21:41 (29.134 s): **474 provati · 468
+uccisi · 0 sopravvissuti · 6 equivalenti (schedario) · 0 non determinabili · riconferme 30/30**; fase34, fase36 e fase71
+dichiarati fuori produzione dal Giudice (59 punti non mutati); uscita 0; casella scritta su `0624129adf38`. Poi le
+caselle 1-3 rimisurate coi loro attrezzi sui byte del ramo (34/34, 51/51, 24/24): **Blocco 2, 4 su 4**.
+
+**I due giri buttati, e cosa hanno insegnato.** Il giro 4 (10 moduli, 28.517 s) è uscito 1 per due motivi che non erano
+mutanti vivi: (1) **un punto NON DETERMINABILE** (fase58:686, `False -> True`: i 10 killer non finivano in 163 s); (2) il
+Giudice, ricevuti 10 moduli su 13, **rifiuta di scrivere la casella** — i tre fuori produzione li salta dichiarandoli solo
+se glieli passi, altrimenti per lui sono «mai aperti». Sul punto (1) il sospetto scritto nel foglio (il fuzz di
+`test_fase59`, 600 giri) era **sbagliato**: col mutante iniettato con l'editor e ripristinato byte-identico, i 10 killer
+uno per uno sommano ~30 s e insieme, come li lancia il Giudice, 31/36/32/34 s in quattro giri, sempre 9 rossi. La causa
+era la **macchina carica**: nello stesso minuto (17:48-17:53) giravano in un altro albero l'ispettore statico su 576 file e
+il censimento di raggiungibilità — «sola lettura» per il repository, non per il processore. È la ferrea 4 vista dal lato
+in cui si rompe, e la S3 (prima lo strumento): un tetto di tempo misura anche chi altro usa la macchina. **Nessuna riga di
+test è stata curata**, perché non c'era niente da curare (D1); nel giro 5 lo stesso punto è UCCISO. Da oggi, durante un
+giro, niente che consumi CPU in nessun albero.
+
 ### 🧬 BLOCCO 2, CASELLA 4, PRIMA METÀ: LE GUARDIE DEI 150 PUNTI SCOPERTI E LE OTTO RISCRITTURE AUTORIZZATE — 5 settembre, chat B (albero B2, ramo `blocco2-casella4` su `2a3d6d7`)
 
 **Il fondatore:** *«vai avanti con il prossimo blocco che dice piano.py»*, poi *«fai la cosa giusta e con logica, una

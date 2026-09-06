@@ -43,6 +43,17 @@
   "motivo": "",
   "quando": "2026-09-05T01:58:22"
  },
+ "a6c9694a48f1": {
+  "blocco": 2,
+  "comando": "python collaudi/mutazione_prodotto.py --modulo fase34_prenotazioni.py fase36_booking_api.py fase58_channel_manager.py fase59_concierge.py fase62_predictive_noshow.py fase67_coda_intelligente.py fase71_commitment.py fase82_ical_sync.py fase111_cancellazione.py fase135_ical_bidirezionale.py fase152_notifiche_prenotazione.py fase187_fuso_orario.py fase203_ical_orologio.py --tetto 150 --minuti 600 --killer test_fase58_channel_manager test_fase59_concierge test_fase62_predictive_noshow test_fase67_coda_intelligente test_fase82_ical_sync test_fase111_cancellazione test_fase135_ical_bidirezionale test_fase152_notifiche_prenotazione test_fuso_alloggio test_fase203_ical_orologio",
+  "commit": "fcdc665",
+  "condizione": "zero punti di mutazione scoperti sul codice che la produzione ESEGUE",
+  "denominatore": 468,
+  "esito": true,
+  "impronta": "0624129adf38",
+  "motivo": "",
+  "quando": "2026-09-06T19:21:39"
+ },
  "c3cf3da4543f": {
   "blocco": 1,
   "comando": "python collaudi/esame_soldi.py --scrivi",
@@ -68,34 +79,34 @@
  "ec84faaea398": {
   "blocco": 2,
   "comando": "python collaudi/esame_prenotazioni.py --scrivi",
-  "commit": "3fe8a19",
+  "commit": "fcdc665",
   "condizione": "la macchina a stati copre cancellazioni, modifiche, no-show e sovra-affitto",
   "denominatore": 34,
   "esito": true,
-  "impronta": "1b960e1cc6ed",
+  "impronta": "0624129adf38",
   "motivo": "",
-  "quando": "2026-09-05T13:11:18"
+  "quando": "2026-09-06T19:23:56"
  },
  "f10f35b6a7b3": {
   "blocco": 2,
   "comando": "python collaudi/esame_ical.py --scrivi",
-  "commit": "3fe8a19",
+  "commit": "fcdc665",
   "condizione": "iCal ha una difesa dal RITARDO 15 min-2 ore (oggi: zero, e' la finestra delle prenotazioni fantasma)",
   "denominatore": 24,
   "esito": true,
-  "impronta": "1b960e1cc6ed",
+  "impronta": "0624129adf38",
   "motivo": "",
-  "quando": "2026-09-05T13:32:19"
+  "quando": "2026-09-06T19:24:20"
  },
  "f5d22a937896": {
   "blocco": 2,
   "comando": "python collaudi/esame_gare.py --scrivi",
-  "commit": "3fe8a19",
+  "commit": "fcdc665",
   "condizione": "il blocco atomico regge sotto gara (misurato: 10 giri x 24 agenti, 1 conferma)",
   "denominatore": 51,
   "esito": true,
-  "impronta": "1b960e1cc6ed",
+  "impronta": "0624129adf38",
   "motivo": "",
-  "quando": "2026-09-05T13:11:28"
+  "quando": "2026-09-06T19:24:16"
  }
 }

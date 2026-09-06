@@ -94,6 +94,20 @@ occhio `test_fase203_ical_orologio`): il giro partito alle 13:02 è stato FERMAT
 dall'`originale.txt` del biglietto del Giudice, sha256 `d3667d8cc79710a3` uguale, biglietto tolto). ⚠️ Osservato UNA volta:
 `test_IL_GANCIO_PRE_COMMIT_CHIAMA_DAVVERO_IL_PRE_FATTO` rosso nel modulo intero («1 giro di mutazione APERTO») e verde da
 solo subito dopo, con zero biglietti su disco: instabilità da capire (`casella4_test_pipeline_ci_pwsh.log`).
+**🏁 6 SETTEMBRE, 19:2x — BLOCCO 2, CASELLA 4, SECONDA METÀ: IL BLOCCO 2 È 4 SU 4, SCRITTO DALLE MACCHINE** (stesso ramo,
+riallineato su `4cadcd4` = il tip unito in master `0f6ccb9`). Il giro UNICO 5 sui **13 moduli** del blocco (fase203 compreso, i tre
+fuori produzione fase34/36/71 dichiarati dal Giudice, 59 punti non mutati) è durato 29.134 s: **474 provati · 468 uccisi · 0
+sopravvissuti · 6 equivalenti (schedario) · 0 non determinabili · 30 riconferme tutte ok**, uscita 0 → casella 4 scritta da
+`mutazione_prodotto` sull'impronta `0624129adf38`. Le caselle 1-3 erano misurate sull'impronta di master (`1b960e1cc6ed`): le 8
+riscritture autorizzate di questo ramo la cambiano, e sono state **rimisurate coi loro attrezzi** sui byte di qui (esame_prenotazioni
+34/34 · esame_gare 51/51 · esame_ical 24/24, tutte VERDI, registri `*_rimisura_casella4.log`). I due giri precedenti sono stati
+buttati: il 4 (28.517 s, uscita 1) per **1 punto NON DETERMINABILE** su fase58:686 e perché, con 10 moduli su 13 nella lista, il
+Giudice rifiuta di scrivere la casella («non misurata» è vero, «non passa» sarebbe falso). Quel punto **non era un test lento** — i
+10 killer insieme fanno 31-36 s contro un tetto di 163 (`crono_killer_fase58_686*.log`) — era la macchina carica da due strumenti
+«di sola lettura» lanciati in un altro albero nello stesso minuto: un tetto di tempo misura anche chi altro usa la macchina
+(ferrea 4). Nessuna riga di test è stata cambiata; nel giro 5, a macchina libera, lo stesso punto è UCCISO. **Cosa manca:** commit
+(«procedi al commit»), PR #156 (già aperta sulla prima metà, CI verde), CI, unione; poi il deploy delle 8 riscritture col
+paracadute e l'esame in produzione.
 
 **🏁 5 SETTEMBRE, 01:0x — BLOCCO 1 DI NUOVO 6 SU 6 (impronta `e94151bd5a8b`) E BLOCCO 2 A 2 SU 4:** la PR #152 (cura
 dell'I3) è **unita** (master `d0907428…`) e **deployata** alle 23:00:13Z (paracadute `:prec` = `083637e3…`, immagine
@@ -1622,7 +1636,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: bd88911
+CONSEGNE AGGIORNATE A: f0e08da
 
 SUITE ATTUALE: Ran 6395 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
