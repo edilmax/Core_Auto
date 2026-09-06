@@ -11573,6 +11573,62 @@ class TestLEsameDellaProduzioneNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
         self.assertTrue(all(isinstance(r, str) and r.strip() for r in esame.NON_GUARDA))
         riuscita, righe = esame.autoprova()
         self.assertTrue(riuscita, righe)
+        riuscita, righe = esame.autoprova_oraria()
+        self.assertTrue(riuscita, righe)
+
+    # -- la casella «OGNI ORA» (2026-09-06): lo stesso attrezzo, un secondo giudizio --------
+    def test_LA_CADENZA_ORARIA_SI_LEGGE_SU_DUE_RIGHE_NON_SU_UNA(self):
+        """Una riga sola e fresca dice «girato adesso»: non e' «gira ogni ora». Il giudizio
+        orario pretende la precedente a meno di 70 minuti, e dice rosso su un passo di un giorno
+        (com'era il tick prima) anche se l'ultima riga e' fresca."""
+        esame = self._esame()
+        ora = 1_800_000_000
+        verde, passi, motivi, den = esame.giudica_orario(esame.letture_finte_orarie(ora))
+        self.assertTrue(verde, motivi)
+        self.assertEqual(den, len(esame.CODICI) + len(passi))
+        storte = {
+            "una riga sola": esame.letture_finte_orarie(ora, righe=1),
+            "passo di un giorno": esame.letture_finte_orarie(ora, passo_sec=86400),
+            "passo di 71 minuti": esame.letture_finte_orarie(ora, passo_sec=71 * 60),
+            "ultima vecchia di 71 minuti": esame.letture_finte_orarie(ora, eta_sec=71 * 60),
+            "una violazione": esame.inietta_il_guasto(esame.letture_finte_orarie(ora)),
+            "VPS fuori da master": esame.letture_finte_orarie(ora, head="b" * 40),
+            "registro vuoto": dict(esame.letture_finte_orarie(ora), registro=""),
+        }
+        for nome, letture in storte.items():
+            verde, _p, motivi, _d = esame.giudica_orario(letture)
+            self.assertFalse(verde, "con «%s» il giudizio orario ha detto VERDE" % nome)
+            self.assertTrue(motivi, "con «%s» il rosso e' MUTO" % nome)
+
+    def test_LA_CASELLA_ORARIA_SI_TROVA_PER_TESTO_ED_E_UNA_SOLA(self):
+        esame = self._esame()
+        testo = esame.condizione_oraria()
+        self.assertIn(esame.MARCA_ORARIA, testo)
+        with io.open(os.path.join(QUI, "collaudi", "esame_produzione.py"), encoding="utf-8") as f:
+            self.assertNotIn(testo, f.read(), "il testo della casella oraria e' ricopiato nell'esame")
+
+    def test_CON_CASELLA_OGNI_ORA_SCRIVE_QUELLA_E_NON_LA_SESTA(self):
+        import json
+        import tempfile
+        esame = self._esame()
+        vera_registra = esame.scheda.registra
+        scritture = []
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        percorso = os.path.join(d, "orarie.json")
+        with io.open(percorso, "w", encoding="utf-8") as f:
+            json.dump(esame.letture_finte_orarie(1_800_000_000), f)
+        try:
+            esame.scheda.registra = lambda *a, **k: scritture.append((a, k)) or {
+                "blocco": 1, "esito": k["esito"], "denominatore": k["denominatore"],
+                "impronta": "x", "motivo": ""}
+            self.assertEqual(esame.main(["--casella", "ogni-ora", "--scrivi", "--da-file", percorso]), 0)
+        finally:
+            esame.scheda.registra = vera_registra
+        self.assertEqual(1, len(scritture))
+        self.assertEqual(scritture[0][0][0], esame.condizione_oraria())
+        self.assertTrue(scritture[0][1]["esito"])
+        self.assertIn("ogni-ora", scritture[0][1]["comando"])
 
 
 class TestLEsameDegliOrologiNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):

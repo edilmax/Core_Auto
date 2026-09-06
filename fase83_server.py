@@ -10779,6 +10779,82 @@ def sweep_hold_una_passata(sistema: Any, router: Any) -> None:
         logger.warning("sweep hold fallito (ignorato)", exc_info=True)
 
 
+def _subentro_per_disaccordo(sistema: Any, *, ora_ts: Any = None) -> List[str]:
+    """«Se non si mettono d'accordo subentriamo noi» (regola del fondatore, 2026-09-06,
+    «autorizzato»). Alla scadenza della finestra di garanzia, se dopo il check-in hanno scritto
+    ENTRAMBI nella chat della prenotazione e l'ospite non ha premuto «tutto ok», i soldi NON
+    vanno all'host da soli: la garanzia passa a `contestato` (motivo `disaccordo_in_chat`), il
+    payout resta trattenuto e decide l'arbitro dal pannello, come per una segnalazione. Il
+    silenzio resta silenzio (chat vuota, un solo mittente, messaggi solo prima del check-in):
+    il rilascio automatico va come sempre. Il mondo fa lo stesso a tempo: Airbnb lascia 72 ore
+    alle parti e poi interviene. Ritorna i riferimenti su cui e' subentrata. Non solleva mai."""
+    gz = getattr(sistema, "garanzia", None)
+    msg = getattr(sistema, "messaggistica", None)
+    if gz is None or msg is None:
+        return []
+    import time as _ts
+    from fase160_escrow_garanzia import FINESTRA_ORE_DEFAULT
+    ora = ora_ts if isinstance(ora_ts, int) and not isinstance(ora_ts, bool) else int(_ts.time())
+    subentrate: List[str] = []
+    try:
+        for g in gz.aperte():
+            sblocco = int(g.get("sblocco_auto_ts") or 0)
+            if sblocco > ora:
+                continue
+            checkin = sblocco - FINESTRA_ORE_DEFAULT * 3600
+            rif = str(g.get("prenotazione_id") or "")
+            mittenti = {m.get("mittente") for m in (msg.thread(rif, "ospite") or [])
+                        if int(m.get("ts") or 0) >= checkin}
+            if "ospite" not in mittenti or len(mittenti) < 2:
+                continue
+            if not gz.contesta(rif, "disaccordo_in_chat").get("ok"):
+                continue
+            subentrate.append(rif)
+            try:
+                pd = getattr(sistema, "payout", None)
+                if pd is not None:
+                    pd.aggiorna_stato(rif, "trattenuto")
+            except Exception:
+                logger.warning("subentro: blocco payout fallito (ignorato)", exc_info=True)
+            logger.warning("SUBENTRO | riferimento %s | host e ospite hanno scritto dopo il "
+                           "check-in e nessun «tutto ok»: garanzia contestata, decide l'arbitro",
+                           _rif_per_registro(rif))
+            # L'arbitro va avvisato SUBITO, come per una segnalazione dell'ospite: senza email
+            # una garanzia contestata da noi aspetterebbe che qualcuno apra il pannello.
+            cfg = getattr(sistema, "config", None)
+            dest = (getattr(cfg, "email_alert", "") or getattr(cfg, "email_mittente", "")
+                    or "info@bookinvip.com")
+            prov = getattr(sistema, "email_provider", None)
+            if prov is not None and dest:
+                threading.Thread(
+                    target=_invia_tracciato,
+                    args=(prov, dest, "BookinVIP - SUBENTRO: host e ospite non si sono messi "
+                          "d'accordo (prenotazione %s)" % rif,
+                          "<p>Alla scadenza della garanzia host e ospite avevano scritto entrambi "
+                          "nella chat della prenotazione <b>%s</b> e l'ospite non ha premuto "
+                          "«tutto ok». I soldi restano fermi: leggi la conversazione nel pannello "
+                          "admin, riquadro Controversie, e decidi lo split.</p>" % rif,
+                          "subentro_disaccordo", rif),
+                    daemon=True).start()
+    except Exception:
+        logger.error("subentro per disaccordo: giro fallito (ISOLATO)", exc_info=True)
+    return subentrate
+
+
+def _invarianti_orari(sistema: Any) -> Optional[Dict[str, Any]]:
+    """Il passo ORARIO del Guardiano (casella 14 del blocco SOLDI, 2026-09-06, «autorizzato»
+    del fondatore): i cinque invarianti di fase199 sugli archivi veri, in sola lettura, con la
+    riga `INVARIANTI ARCHIVI` e il suo istante nel registro. Il METODO (7.4) chiede «ogni ora»;
+    prima giravano solo dentro il giro quotidiano. Senza cartella dati (archivi in memoria) non
+    c'e' niente da verificare: None, e nessuna riga che direbbe «verificato»."""
+    import os as _oso
+    from fase202_invarianti_archivi import scansiona_archivi
+    fin = getattr(getattr(sistema, "config", None), "db_finanza", "") or ""
+    if fin in ("", ":memory:"):
+        return None
+    return scansiona_archivi(_oso.path.dirname(fin))
+
+
 def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
           cartella_statica: str = "deploy", host_key: Optional[str] = None,
           base_url: str = "", admin_key: Optional[str] = None
@@ -11333,6 +11409,10 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
         def _tick_garanzia():
             while True:
                 try:
+                    # «Se non si mettono d'accordo subentriamo noi» (2026-09-06, «autorizzato»):
+                    # PRIMA del rilascio, o arriva a soldi gia' partiti. Un giro fallito qui non
+                    # ferma il rilascio: la funzione non solleva mai.
+                    _subentro_per_disaccordo(sistema)
                     # 24h di silenzio = tutto ok -> rilascio + bonifico AUTOMATICO all'host
                     for _r in (gz.auto_rilascia(dettagli=True, salta_se=_rimborsata) or []):
                         try:
@@ -11371,7 +11451,21 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
 
         def _tick_guardiano():
             import time as _tg
+            giro = 0
             while True:
+                # Casella 14 del blocco SOLDI (2026-09-06, «autorizzato» del fondatore): i cinque
+                # invarianti sugli archivi veri girano OGNI ORA (`_invarianti_orari`, riga col suo
+                # istante nel registro); il giro INTERO -- Stripe, OXR, email, battito -- resta una
+                # volta al giorno, cosi' un'anomalia che persiste non manda ventiquattro email.
+                if giro % 24:
+                    try:
+                        _invarianti_orari(sistema)
+                    except Exception:
+                        logger.error("invarianti orari: passo fallito (thread TENUTO VIVO)",
+                                     exc_info=True)
+                    giro += 1
+                    _tg.sleep(3600)
+                    continue
                 try:
                     from fase186_guardiano import riassunto_html
                     from fase202_invarianti_archivi import giro_quotidiano
@@ -11431,7 +11525,8 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                         logger.error("guardiano: battito non lasciato (ISOLATO)", exc_info=True)
                 except Exception:
                     logger.error("guardiano: giro fallito (thread TENUTO VIVO)", exc_info=True)
-                _tg.sleep(86400)                       # una volta al giorno
+                giro += 1
+                _tg.sleep(3600)                        # ogni ora; il giro intero ogni 24 passi
         _thg.Thread(target=_tick_guardiano, daemon=True).start()
 
         def _tick_hold():

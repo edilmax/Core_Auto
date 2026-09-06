@@ -505,5 +505,106 @@ class TestBuchiDiMutazione(unittest.TestCase):
         self.assertEqual(g.stato("T1")["stato"], "in_garanzia")
 
 
+class TestSeNonSiMettonoDAccordoSubentriamoNoi(unittest.TestCase):
+    """Regola del fondatore, 2026-09-06 («poi c'e' anche la chat host e cliente: se non si
+    mettono d'accordo subentriamo noi», «autorizzato se esce finito senza tornare piu' indietro»).
+    Alla scadenza delle 24 ore, se dopo il check-in hanno scritto ENTRAMBI nella chat e l'ospite
+    non ha premuto «tutto ok», i soldi NON vanno all'host da soli: si apre la controversia
+    (motivo `disaccordo_in_chat`), il payout resta trattenuto e decide l'arbitro. Il silenzio
+    resta silenzio: chat vuota, o un solo mittente, o messaggi solo PRIMA del check-in -> il
+    rilascio automatico va come sempre. VISTA ROSSA prima della modifica a fase83."""
+
+    CHECKIN = 1_800_000_000
+
+    def setUp(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(lambda: shutil.rmtree(d, ignore_errors=True))
+        self.sis = crea_sistema(ConfigCasaVIP(
+            abilitato=True, segreto_hmac=SEG, db_catalogo=f"{d}/c.db", db_inventario=f"{d}/i.db",
+            db_registro_host=f"{d}/r.db", db_viral=f"{d}/v.db", db_messaggi=f"{d}/m.db",
+            db_domanda=f"{d}/dom.db", db_garanzia=f"{d}/g.db", db_payout=f"{d}/y.db",
+            file_referral=f"{d}/ref.json", commissione_bps=1500))
+        self.g = self.sis.garanzia
+        self.msg = self.sis.messaggistica
+        self.assertTrue(self.g.apri("R1", 17000, alloggio_id="casa", ora_checkin_ts=self.CHECKIN))
+        self.assertTrue(self.sis.payout.registra_maturato("R1", "demo", 17000, "EUR"))
+        self.dopo = self.CHECKIN + 24 * 3600 + 60          # la finestra e' scaduta
+
+    def _scrive(self, chi, quando, testo="ciao"):
+        self.msg._now = lambda: quando
+        self.assertTrue(self.msg.invia("R1", "demo", "ospite", chi, testo))
+
+    def _subentro(self):
+        import fase83_server as S
+        return S._subentro_per_disaccordo(self.sis, ora_ts=self.dopo)
+
+    def test_ENTRAMBI_SCRIVONO_DOPO_IL_CHECKIN_E_NESSUN_OK_niente_rilascio_si_apre_la_controversia(self):
+        self._scrive("ospite", self.CHECKIN + 3600, "la doccia non funziona")
+        self._scrive("demo", self.CHECKIN + 7200, "non e' vero")
+        self.assertEqual(["R1"], self._subentro())
+        st = self.g.stato("R1")
+        self.assertEqual("contestato", st["stato"])
+        self.assertEqual("disaccordo_in_chat", st.get("motivo"))
+        self.assertEqual("trattenuto", self.sis.payout.stato_di("R1"))
+        # e il rilascio automatico, che gira subito dopo, NON paga l'host
+        self.assertEqual([], self.g.auto_rilascia(ora_ts=self.dopo, dettagli=True))
+        self.assertEqual("contestato", self.g.stato("R1")["stato"])
+
+    def test_SOLO_L_OSPITE_SCRIVE_il_rilascio_automatico_va_come_sempre(self):
+        self._scrive("ospite", self.CHECKIN + 3600, "che ore fa colazione?")
+        self.assertEqual([], self._subentro())
+        self.assertEqual(1, len(self.g.auto_rilascia(ora_ts=self.dopo, dettagli=True)))
+        self.assertEqual("rilasciato", self.g.stato("R1")["stato"])
+
+    def test_SCRIVONO_SOLO_PRIMA_DEL_CHECKIN_il_rilascio_automatico_va_come_sempre(self):
+        self._scrive("ospite", self.CHECKIN - 7200, "a che ora posso arrivare?")
+        self._scrive("demo", self.CHECKIN - 3600, "dalle 15")
+        self.assertEqual([], self._subentro())
+        self.assertEqual(1, len(self.g.auto_rilascia(ora_ts=self.dopo, dettagli=True)))
+
+    def test_SE_L_OSPITE_HA_PREMUTO_OK_la_chat_non_conta_piu(self):
+        self._scrive("ospite", self.CHECKIN + 3600, "manca un asciugamano")
+        self._scrive("demo", self.CHECKIN + 7200, "te lo porto")
+        self.assertIs(self.g.conferma_ospite("R1")["ok"], True)
+        self.assertEqual([], self._subentro())
+        self.assertEqual("rilasciato", self.g.stato("R1")["stato"])
+
+    def test_PRIMA_DELLA_SCADENZA_non_si_subentra_stanno_ancora_parlando(self):
+        self._scrive("ospite", self.CHECKIN + 3600, "la doccia non funziona")
+        self._scrive("demo", self.CHECKIN + 7200, "arrivo")
+        import fase83_server as S
+        self.assertEqual([], S._subentro_per_disaccordo(self.sis, ora_ts=self.CHECKIN + 10_000))
+        self.assertEqual("in_garanzia", self.g.stato("R1")["stato"])
+
+    def test_SENZA_CHAT_NEL_SISTEMA_non_solleva_e_non_blocca(self):
+        import fase83_server as S
+        self.sis.messaggistica = None
+        self.assertEqual([], S._subentro_per_disaccordo(self.sis, ora_ts=self.dopo))
+        self.assertEqual(1, len(self.g.auto_rilascia(ora_ts=self.dopo, dettagli=True)))
+
+    def test_IL_TICK_DELLA_GARANZIA_CHIAMA_IL_SUBENTRO_PRIMA_DEL_RILASCIO(self):
+        import ast
+        import io
+        import os
+        with io.open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "fase83_server.py"),
+                     encoding="utf-8") as f:
+            albero = ast.parse(f.read())
+        tick = [n for n in ast.walk(albero)
+                if isinstance(n, ast.FunctionDef) and n.name == "_tick_garanzia"]
+        self.assertEqual(1, len(tick), "il tick della garanzia non si trova piu'")
+        nomi = []
+        for n in ast.walk(tick[0]):
+            if isinstance(n, ast.Call):
+                fn = n.func
+                nomi.append((n.lineno, fn.id if isinstance(fn, ast.Name) else
+                             fn.attr if isinstance(fn, ast.Attribute) else ""))
+        righe = {nome: riga for riga, nome in sorted(nomi, reverse=True)}
+        self.assertIn("_subentro_per_disaccordo", righe,
+                      "il tick non chiama il subentro: i soldi vanno all'host anche se in chat "
+                      "stanno litigando")
+        self.assertLess(righe["_subentro_per_disaccordo"], righe["auto_rilascia"],
+                        "il subentro deve venire PRIMA del rilascio automatico, o arriva a soldi partiti")
+
+
 if __name__ == "__main__":
     unittest.main()

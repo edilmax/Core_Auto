@@ -26,6 +26,27 @@
 
 ---
 
+**⏰ 6 SETTEMBRE, mattina — BLOCCO 1, LA CASELLA «OGNI ORA» (ramo `casella14-invarianti-ogni-ora` su `0f6ccb9`, albero
+Core_Auto_B3, «autorizzato» del fondatore: «finiamo oggi tutto? autorizzato»):** il tick del Guardiano in `fase83` dorme
+un'ora invece di un giorno; 23 passi su 24 chiamano `_invarianti_orari` (i cinque invarianti di fase202 sugli archivi veri,
+sola lettura, riga `INVARIANTI ARCHIVI` col suo istante), il ventiquattresimo è il giro intero di prima (Stripe, OXR,
+email, battito). `fase83` non è nei moduli del Blocco 1 e `fase202` non è cambiata: l'impronta del blocco resta, le caselle
+1-6 non si rimisurano. Guardie: `test_fase202.TestGliInvariantiGiranoOgniOra` (4, viste rosse prima), 3 in
+`test_pipeline_ci.TestLEsameDellaProduzioneNonPuoBARARE` (viste rosse col guasto nell'esame). L'attrezzo:
+`esame_produzione.py --casella ogni-ora --scrivi` (due righe orarie a meno di 70 minuti; autoprova 11 casi).
+**Nello stesso ramo, la regola «se non si mettono d'accordo subentriamo noi»** (il fondatore, 13:3x, «autorizzato se esce
+finito senza tornare più indietro»): `fase83._subentro_per_disaccordo`, chiamata dal tick della garanzia PRIMA del rilascio
+automatico. Alla scadenza delle 24 ore, se dopo il check-in hanno scritto entrambi nella chat e l'ospite non ha premuto «tutto
+ok», la garanzia passa a `contestato` (motivo `disaccordo_in_chat`), il payout resta trattenuto, email all'arbitro; decide lui
+dal riquadro Controversie. Il silenzio resta silenzio (chat vuota, un solo mittente, messaggi solo prima del check-in): il
+rilascio va come sempre. 7 guardie in `test_fase160_escrow_garanzia.TestSeNonSiMettonoDAccordoSubentriamoNoi`, viste rosse
+prima (7/7) e verdi dopo (Ran 40). fase160 e fase113 non sono cambiate. Caricatore **6324** da fermo. Voce di registro:
+*«BLOCCO 1, LA CASELLA «OGNI ORA»»* (con il subentro in coda). **Cosa manca:** test_pipeline_ci da PowerShell,
+cricchetto bandit, pre-fatto, commit («procedi al commit»), PR, CI, unione; poi deploy col paracadute e, **un'ora dopo il
+deploy**, `esame_produzione.py --casella ogni-ora --scrivi` (serve la seconda riga oraria vera). ⚠️ Il ramo
+`blocco1-porta-soldi` (Core_Auto_B) porta la stessa riga di piano insieme alle altre sette: chi unisce per secondo
+risolve il conflitto in `collaudi/piano.py` tenendo la lista intera con questa riga UNA volta sola, in coda.
+
 ## 🏁 CHAT B (la sola) — 2026-09-04 notte: IL BLOCCO 1 SOLDI È 6 SU 6, SCRITTO DALLE MACCHINE — casella 6 (fase202 in produzione, deploy `201d723`) e casella 3 (esame degli orologi contro Stripe di prova); ramo `casella3` (PR #151) sopra la #150 unita
 
 **⏱️ 5 SETTEMBRE, 13:2x — BLOCCO 2, CASELLA 3: LA DIFESA DAL RITARDO DELL'iCAL (ramo `ical-orologio` su `3fe8a19`,
@@ -1583,9 +1604,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 3fe8a19
+CONSEGNE AGGIORNATE A: 0f6ccb9
 
-SUITE ATTUALE: Ran 6310 test
+SUITE ATTUALE: Ran 6324 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
