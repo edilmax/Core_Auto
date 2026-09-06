@@ -1,4 +1,15 @@
 {
+ "159ad2c8ab8f": {
+  "blocco": 1,
+  "comando": "python collaudi/esame_produzione.py --casella ogni-ora --scrivi",
+  "commit": "fc85b6d",
+  "condizione": "gli invarianti sui dati veri girano in produzione almeno OGNI ORA, non una volta al giorno, e l'ultimo giro si legge dal registro del server con la sua ora",
+  "denominatore": 13,
+  "esito": true,
+  "impronta": "bb8bae0cf2dc",
+  "motivo": "",
+  "quando": "2026-09-06T21:41:45"
+ },
  "16d2c823889f": {
   "blocco": 1,
   "comando": "python collaudi/mutazione_prodotto.py --modulo fase65_split_payment.py fase85_pagamenti_stripe.py fase87_stripe_webhook.py fase101_stripe_connect.py fase131_payout_dashboard.py --tetto 62 --minuti 60 --killer test_fase65_split_payment test_fase85_pagamenti_stripe test_fase87_stripe_webhook test_fase101_stripe_connect test_fase131_payout_dashboard",
