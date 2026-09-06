@@ -176,8 +176,8 @@ class GestoreNoShow:
         if not _intero(capacita) or capacita <= 0:
             return 0
         rate_bps = self.tasso_noshow_bps(alloggio_id, segmento)
-        if rate_bps <= 0:
-            return 0
+        if rate_bps < 1:            # `< 1`, non `<= 0` (2026-09-05): allo zero i due rami davano
+            return 0                # lo stesso 0 e un guasto qui era invisibile; cosi' no
         attesi = (capacita * rate_bps) // 10000               # no-show attesi
         sicuri = (attesi * self._pol.safety_bps) // 10000     # applica safety
         tetto = (capacita * self._pol.max_overbooking_bps) // 10000
@@ -218,8 +218,10 @@ class GestoreNoShow:
         eccedenza = len(validi) - capacita_reale
         if eccedenza <= 0:
             return []
-        if not _intero(voucher_bps) or voucher_bps < 0:
-            voucher_bps = 0
+        # `max`, non `if ... < 0: = 0` (2026-09-05, «autorizzato»): allo zero i due rami
+        # assegnavano lo stesso 0 e un guasto nel confronto era invisibile; cosi' non c'e'
+        # un confronto da mascherare.
+        voucher_bps = max(voucher_bps, 0) if _intero(voucher_bps) else 0
         esuberi = validi[-eccedenza:]           # gli ultimi prenotati cedono il posto
         piano: List[CompensazioneVoce] = []
         for p in esuberi:

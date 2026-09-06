@@ -5299,7 +5299,19 @@ class TestLoSchedarioDegliEquivalenti_3_DOMINIO_MAGGIORE_DELLA_FIRMA(unittest.Te
     #    usa, dentro la stessa funzione, e ognuna porta l'IMPRONTA del codice che ha
     #    dimostrato: se quel codice cambia, la voce decade da sola (controllo 2b). E' la
     #    differenza fra un debito e una dichiarazione con una scadenza automatica.
-    TRACCE_SU_FIRMA_LARGA = 12
+    # ⛔ 12 -> 20 -> 12 il 2026-09-05 (Blocco 2, casella 4). La mattina erano state scritte 8
+    #    voci `traccia` (6 in `fase58_channel_manager`, 2 in `fase111_cancellazione`), tutte
+    #    della stessa forma: un controllo RIDONDANTE nella stessa funzione mascherava il solo
+    #    valore in cui sano e guasto differivano. Col «autorizzato» del fondatore quelle righe
+    #    sono state RISCRITTE con una condizione sola (`n < 1`, `max(0, rowcount)`, quattro
+    #    controlli separati in `prima_finestra`, `max(v, 0)` in `calcola_rimborso`) e le 8
+    #    voci TOLTE: il debito e' stato pagato e il numero e' sceso -- «in quella direzione il
+    #    rosso e' una buona notizia».
+    # ⛔ 12 -> 11, stesso giorno: la riscrittura di `fase59.quota` (lo sconto soggiorno lungo)
+    #    ha fatto DECADERE una delle 7 voci del 2026-08-24 (`if _bps > 0:`, la sua ancora non
+    #    c'era piu' -- controllo 2b, come deve), e invece di rifarla quella riga e' stata
+    #    riscritta con `max(_bps, 0)`: nessun confronto da mascherare, voce tolta.
+    TRACCE_SU_FIRMA_LARGA = 11
 
     def test_LA_SCAPPATOIA_DEL_METODO_TRACCIA_E_CONTATA_E_INCHIODATA(self):
         """⛔ IL BUCO CHE RESTA, misurato invece che raccontato (D18 punto 3 + punto 4).

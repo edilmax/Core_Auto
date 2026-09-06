@@ -222,5 +222,135 @@ class TestStress(unittest.TestCase):
                 shutil.rmtree(d, ignore_errors=True)
 
 
+class TestLeGuardieDeiPuntiScoperti(unittest.TestCase):
+    """Una guardia per ogni punto che il Giudice della mutazione ha trovato SCOPERTO col
+    solo occhio dedicato (2026-09-05, Blocco 2 casella 4: 24 punti su 70 passavano coi
+    test verdi). Ogni test dice quale riga difende."""
+
+    def test_arrivo_e_partenza_uguali_non_sono_una_finestra(self):
+        # riga 66: `ci >= co` -> nessuna finestra (con `>` una notte di zero giorni passerebbe).
+        g = crea_gestore_coda()
+        e = g.iscrivi("casa", CI, CI, "a")
+        self.assertFalse(e.ok)
+        self.assertEqual(e.motivo, "date_non_valide")
+
+    def test_politica_ed_esiti_sono_congelati(self):
+        # righe 71, 83, 91, 97: `frozen=True`.
+        from dataclasses import FrozenInstanceError
+        from fase67_coda_intelligente import EsitoIscrizione, EsitoOfferta
+        for oggetto, campo in ((PoliticaCoda(), "deposito_cents"),
+                               (EsitoIscrizione(True), "ok"),
+                               (EsitoOfferta("offerto"), "esito"),
+                               (EsitoAccetta(True), "ok")):
+            with self.subTest(tipo=type(oggetto).__name__):
+                with self.assertRaises(FrozenInstanceError):
+                    setattr(oggetto, campo, "cambiato")
+
+    def test_la_prima_iscrizione_e_la_prima_accettazione_non_sono_replay(self):
+        # righe 88 e 101: `idempotente: bool = False`; righe 211 e 337: il replay dice ok.
+        clock = [1000]
+        g = crea_gestore_coda(orologio=lambda: clock[0])
+        primo = g.iscrivi("casa", CI, CO, "a")
+        self.assertTrue(primo.ok)
+        self.assertIs(primo.idempotente, False)
+        replay = g.iscrivi("casa", CI, CO, "a")
+        self.assertTrue(replay.ok)
+        self.assertIs(replay.idempotente, True)
+        g.libera("casa", CI, CO)
+        accettata = g.accetta("casa", CI, CO, "a")
+        self.assertTrue(accettata.ok)
+        self.assertIs(accettata.idempotente, False)
+        di_nuovo = g.accetta("casa", CI, CO, "a")
+        self.assertTrue(di_nuovo.ok)
+        self.assertIs(di_nuovo.idempotente, True)
+
+    def test_registra_liberazione_rifiuta_senza_sollevare_e_dice_vero_quando_scrive(self):
+        # righe 153-154 (`not isinstance OR not strip()` -> False) e 164 (`return True`).
+        g = crea_gestore_coda()
+        self.assertFalse(g.registra_liberazione(None, True))
+        self.assertFalse(g.registra_liberazione("   ", True))
+        self.assertTrue(g.registra_liberazione("casa", True))
+
+    def test_il_campione_minimo_e_la_soglia_sono_inclusi(self):
+        # riga 177: `tot < min_campione` -> con tot == min_campione si stima;
+        # riga 184: `prob < soglia` -> con prob == soglia la coda si offre.
+        g = crea_gestore_coda(politica=PoliticaCoda(min_campione=10, prior_k=0,
+                                                    soglia_bps=5000))
+        _con_storia(g, "casa", 5, 5)      # tot = 10 = min_campione; 5*10000//10 = 5000 = soglia
+        self.assertEqual(g.prob_liberazione_bps("casa"), 5000)
+        self.assertTrue(g.valuta_iscrizione("casa")["disponibile"])
+
+    def test_ospite_vuoto_rifiutato_senza_scrivere(self):
+        # righe 197-198: `isinstance(ospite_id, str) AND strip()`.
+        g = crea_gestore_coda()
+        e = g.iscrivi("casa", CI, CO, "   ")
+        self.assertFalse(e.ok)
+        self.assertEqual(e.motivo, "ospite_non_valido")
+        self.assertEqual(g.stato_coda("casa", CI, CO), [])
+
+    def test_la_posizione_di_chi_non_e_in_coda_o_ha_rinunciato_e_zero_senza_sollevare(self):
+        # riga 248: `r is None OR stato non attivo` -> 0.
+        g = crea_gestore_coda()
+        self.assertEqual(g.posizione("casa", CI, CO, "mai"), 0)
+        g.iscrivi("casa", CI, CO, "a")
+        g.rinuncia("casa", CI, CO, "a")
+        self.assertEqual(g.posizione("casa", CI, CO, "a"), 0)
+
+    def test_date_invalide_dicono_no_in_rinuncia_accetta_e_voucher(self):
+        # righe 262, 325, 409.
+        g = crea_gestore_coda()
+        self.assertFalse(g.rinuncia("casa", CO, CI, "a")["ok"])
+        self.assertFalse(g.accetta("casa", CO, CI, "a").ok)
+        self.assertFalse(g.converti_voucher("casa", CO, CI, "a")["ok"])
+
+    def test_accettare_chi_non_e_in_coda_dice_no(self):
+        # riga 334.
+        g = crea_gestore_coda()
+        e = g.accetta("casa", CI, CO, "mai")
+        self.assertFalse(e.ok)
+        self.assertEqual(e.motivo, "non_in_coda")
+
+    def test_l_offerta_vale_fino_all_ultimo_secondo_del_timeout(self):
+        # riga 342: `adesso - offerto_da > timeout` -> esattamente al timeout si accetta.
+        clock = [1000]
+        g = crea_gestore_coda(politica=PoliticaCoda(timeout_offerta_sec=7200),
+                              orologio=lambda: clock[0])
+        g.iscrivi("casa", CI, CO, "a")
+        g.libera("casa", CI, CO)
+        clock[0] = 1000 + 7200
+        self.assertTrue(g.accetta("casa", CI, CO, "a").ok)
+
+    def test_la_prenotazione_delegata_che_esplode_lascia_la_traccia(self):
+        # riga 363: `exc_info=True` -- l'errore porta LA COSA, del tipo giusto.
+        g = crea_gestore_coda()
+        g.iscrivi("casa", CI, CO, "a")
+        g.libera("casa", CI, CO)
+
+        def boom(*a):
+            raise RuntimeError("booking giu'")
+        with self.assertLogs("core_auto.coda_intelligente", level="ERROR") as registro:
+            e = g.accetta("casa", CI, CO, "a", prenota=boom)
+        self.assertEqual(e.motivo, "prenotazione_errore")
+        traccia = registro.records[0].exc_info
+        self.assertIsInstance(traccia, tuple)
+        self.assertIs(traccia[0], RuntimeError)
+
+    def test_la_coda_in_memoria_si_usa_da_un_altro_thread(self):
+        # riga 476: `check_same_thread=False` -- il server e' a thread.
+        g = crea_gestore_coda()
+        esiti = []
+
+        def lavoro():
+            try:
+                esiti.append(g.iscrivi("casa", CI, CO, "a").ok)
+            except Exception as e:  # pragma: no cover
+                esiti.append(repr(e))
+
+        t = threading.Thread(target=lavoro)
+        t.start()
+        t.join()
+        self.assertEqual(esiti, [True])
+
+
 if __name__ == "__main__":
     unittest.main()
