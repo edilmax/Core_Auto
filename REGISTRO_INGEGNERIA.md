@@ -548,6 +548,62 @@ scritta da `esame_ical` (24) → **Blocco 2 = 3 su 4**. README 153 moduli / 417 
 vero, e la sua riga nel registro del server sarà la prova); il gesto dell'host sull'OTA; il ritardo con cui le OTA
 leggono il nostro feed.
 
+### 🚪 LA PORTA DEI SOLDI DEL METODO ENTRA NEL PIANO: OTTO CASELLE NUOVE IN CODA AL BLOCCO 1 — 5 settembre, chat B (albero Core_Auto_B, ramo `blocco1-porta-soldi` su `3fe8a19`)
+
+**Il fondatore:** *«in parte sì, cosa vorresti dire con i numeri … era stato studiato per avere più blindata la parte dei
+soldi … voglio la macchina al 99,9%»*, poi, alla proposta di far entrare nel piano le righe della porta: *«fai la cosa
+giusta e con logica, una volta fatto bene e non si torna più indietro»*. **I numeri, misurati:** la porta del METODO
+(`collaudi/METODO_v4.md`, PARTE 12, ultima misura scritta su `8436dac`) ha 34 righe, 13 SÌ · 10 NO · 11 NON MISURATO;
+sui soldi 12 righe, 4 SÌ · 7 NO · 1 NON MISURATO. **Nessuna delle 7 NO era una casella del Blocco 1:** le sei caselle
+misurano altro (z3 in CI, rimborsi da ogni strada, orologi, metamorfiche, mutazione sui cinque moduli, invarianti in
+produzione). Quindi «Blocco 1 finito» non voleva dire «porta dei soldi chiusa»: due liste, e la regola zero 3 ne ammette
+una sola, `piano.py`.
+
+**Cosa è cambiato:** otto caselle **in coda** al Blocco 1 in `collaudi/piano.py` — le 7 righe NO (webhook che salva prima e
+risponde dopo · deduplicazione ≥ 3 giorni · elaborazione fallita che non risponde 200, anche sul ramo KYC · stato riletto
+dall'API · riconciliazione notturna con la mail anche a posto · scelta A/B/C scritta nelle condizioni · zero money-float) più
+la 7.4 (invarianti almeno ogni ora, oggi una volta al giorno). **Perché in coda e non in mezzo:** gli attrezzi
+(`esame_orologi` indice 2, `esame_produzione` indice 5, `esame_prenotazioni`/`esame_gare` nel Blocco 2) trovano la propria
+casella per INDICE; e nessuna delle otto contiene la parola «mutazione», perché `mutazione_prodotto.condizione_della_mutazione`
+pretende UNA sola casella con quella parola per blocco. Le sei caselle verdi restano verdi (l'impronta è sui moduli, non sui
+testi). `python collaudi/scheda.py --blocco 1` → **6 su 14**, le otto «mai misurata: nessun attrezzo ha ancora scritto questa
+casella». Guardie del piano, della scheda e degli esami: 89 su 89.
+
+**Le tre caselle del webhook riscritte la sera stessa (D25).** La chat A, in sola lettura, ha fatto la ricerca con
+fonti vere (`corsia_A_2026-09-05\ricerca_A.txt`: docs Stripe «Receive Stripe events in your webhook endpoint» — «Stripe
+tenta di consegnare gli eventi … per un massimo di tre giorni», «Restituisce rapidamente un codice di stato positivo
+(2xx) prima di qualsiasi logica complessa», «Tieni traccia degli ID evento per identificare consegne duplicate», «In
+alcuni casi vengono generati e inviati due oggetti Event separati … utilizza l'ID dell'oggetto in data.object e
+event.type»; «Fulfill orders»: «Perform fulfillment only once per payment … Controlla la proprietà payment_status»,
+«Checkout waits up to 10 seconds»; «Events»: rileggibili «for 30 days»; GitHub e Shopify «webhook best practices»,
+Hookdeck). Lette le fonti, «rispondi 200 subito» (casella 7) e «se l'elaborazione fallisce NON 200» (casella 9) si
+contraddicevano alla lettera. **Scelta nostra (D12):** l'evento si SALVA e si risponde 200 sempre (NON 200 solo finché
+non è salvato: Stripe ritenta fino a 3 giorni); l'elaborazione viene DOPO e un fallimento resta «non elaborato»
+nell'archivio, viene ritentato da noi e dopo un'ora di tentativi è un'anomalia del Guardiano con email — anche sul
+ramo KYC. La 8 conta come uno anche due Event diversi per lo stesso fatto; la 10 nomina `payment_status`/`status`
+riletti con GET e «se la rilettura fallisce non si conferma niente». Censimento delle otto contro il codice di master
+`0f6ccb9` in `corsia_B_2026-09-05\censimento_8_caselle_blocco1.txt` (ispettore statico: 3 rilievi money-float su codice
+non raggiungibile; `_conferma_pagamento` inghiotte le eccezioni; nessun `evt_`; il tick del Guardiano dorme 86400 s).
+
+**E una casella nuova in coda al Blocco 2 (la quinta), dal rilievo A5 della revisione indipendente.** La chat A ha
+trovato che `fase82` è solo additiva: una notte chiusa da un feed non si riapre mai quando l'evento sparisce, e l'eco del
+nostro calendario riesportato dall'OTA («Airbnb (Not available)») chiude le notti che i nostri ospiti cancellano, finché
+l'host non le riapre a mano. La sua ricerca (`corsia_A_2026-09-05\ricerca_A.txt`, 18 fonti: Vrbo Help «You can import up
+to five calendars per property», Smoobu «does not unblock any dates … that were not available prior to working with
+Smoobu», Operto «Blocks use the name: Airbnb (not available)», OwnerRez «it will cause a never-ending loop of updates»,
+RFC 5545 «The UID value MUST be the same across all revisions») dice come fanno i channel manager veri: riaprono solo
+ciò che hanno chiuso, tengono i blocchi esterni come oggetti con origine, riconoscono l'eco dal SUMMARY e non mettono
+nel proprio export i blocchi importati. La casella lo chiede, con un freno dichiarato: un feed che passa da N eventi a
+zero non riapre niente ed è un'anomalia (chi perde se va storta: l'ospite, se riaprissimo su un feed vuoto per errore).
+Il disegno P1-P5 è nel file di A; il SUMMARY dei blocchi di Booking e Vrbo e la stabilità dell'UID di Airbnb vanno
+MISURATI sui feed veri prima di costruire.
+
+**Cosa manca, dichiarato:** ogni casella nuova avrà il suo attrezzo che la scrive (rosso o verde col motivo), e quasi tutte
+chiedono prima una riga di produzione — «autorizzato» del fondatore, una alla volta. Fino ad allora il numero onesto del
+Blocco 1 è 6 su 14, non 6 su 6. *(Aggiunta del 6 settembre, notte: le otto sono entrate in master con questo commit, dopo
+che l'ottava — «OGNI ORA» — era arrivata per prima con la #157 ed era stata scritta dalla macchina con la #158: oggi il numero
+onesto è **7 su 14**.)*
+
 ### 📏 IL METRO «È FINITO?» DIPENDEVA DALLA CARTELLA: I FINE RIGA NELL'IMPRONTA DEL BLOCCO — 5 settembre, notte, chat B (albero Core_Auto_B, ramo `metro-fine-riga` su `2a3d6d7`)
 
 **Il fondatore:** *«in parte sì, cosa vorresti dire con i numeri»*. Per rispondere con numeri misurati e non

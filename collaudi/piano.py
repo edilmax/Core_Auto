@@ -233,13 +233,59 @@ BLOCCHI = (
             "un euro attraversa davvero: entra, viene confermato, va sul conto dell'host, si "
             "divide fra ospiti, esce col bonifico -- sul codice che la produzione ESEGUE",
             "gli invarianti sono verificati in PRODUZIONE, non solo nei test",
-            # 2026-09-06 («autorizzato» del fondatore): la regola 7.4 del METODO, «ogni ora»,
-            # che la casella qui sopra non misurava (il tick del Guardiano dormiva un giorno).
-            # E' UNA delle otto righe della porta dei soldi (PARTE 12) che entrano in coda al
-            # blocco: le altre sette arrivano col ramo `blocco1-porta-soldi`, e questa li'
-            # e' l'ultima, la 14. L'attrezzo che la scrive (`esame_produzione.py --casella
-            # ogni-ora`) la trova per TESTO («OGNI ORA»), non per indice, cosi' il posto in
-            # coda non cambia il verdetto.
+            # ⛔ LE OTTO RIGHE QUI SOTTO SONO ENTRATE IL 2026-09-05 col «fai la cosa giusta» del
+            #    fondatore, dopo la sua domanda «in parte si', cosa vorresti dire con i numeri».
+            #    La porta del METODO (collaudi/METODO_v4.md, PARTE 12) aveva SETTE righe NO sui
+            #    soldi e una regola (7.4, «ogni ora») che NESSUNA delle sei caselle qui sopra
+            #    misurava: finire quelle sei non chiudeva la porta dei soldi, e «finito» avrebbe
+            #    mentito. Stanno IN CODA, mai in mezzo: gli attrezzi (esame_*.py) trovano la
+            #    propria casella per INDICE. Ognuna nasce «mai misurata»: la scrive solo
+            #    l'attrezzo che la misura, e quasi tutte chiedono prima una riga di produzione
+            #    («autorizzato») per poter diventare verdi.
+            #    ⚠️ Le tre caselle del webhook (7, 8, 9) sono state RISCRITTE la sera del 5/9
+            #    dopo la ricerca D25 della chat A (docs Stripe «Receive events», «Fulfill
+            #    orders», «Events», «Idempotent requests»; GitHub e Shopify «webhook best
+            #    practices»; Hookdeck): «rispondi 200 subito» (7) e «se fallisce NON 200» (9)
+            #    si contraddicevano alla lettera. La scelta (D12, nostra): l'evento si SALVA e
+            #    si risponde 200 SEMPRE (finche' non e' salvato, non 200: Stripe ritenta fino a
+            #    3 giorni); l'elaborazione viene DOPO e, se fallisce, il retry e' NOSTRO e il
+            #    fallimento e' un'anomalia del Guardiano, non un codice HTTP.
+            "il gestore dei webhook di Stripe verifica la firma sul corpo grezzo, SALVA "
+            "l'evento con il suo identificativo, risponde 200 subito (e NON 200 finche' "
+            "l'evento non e' salvato, cosi' Stripe ritenta) e lo elabora DOPO, in un passo "
+            "separato",
+            "un evento Stripe consegnato due volte entro 72 ore viene elaborato UNA volta "
+            "sola: la memoria della deduplicazione degli eventi (evt_) dura almeno 3 giorni, "
+            "e due Event diversi per lo stesso fatto (stesso oggetto e stesso tipo) contano "
+            "come uno",
+            "un'elaborazione fallita di un evento Stripe NON sparisce: l'evento resta «non "
+            "elaborato» nell'archivio, viene ritentato da noi e dopo un'ora di tentativi e' "
+            "un'anomalia del Guardiano con email -- anche sul ramo dell'identita' (KYC), non "
+            "solo su quello del pagamento",
+            "lo stato di un pagamento si rilegge dall'API di Stripe con l'identificativo "
+            "(payment_status della sessione di Checkout, o status del PaymentIntent), non dal "
+            "contenuto dell'evento: l'ordine di arrivo degli eventi non conta, e se la "
+            "rilettura fallisce non si conferma niente (Stripe ritenta)",
+            "la riconciliazione col registro di Stripe gira OGNI notte e manda una mail anche "
+            "quando e' tutto a posto (la mail che non arriva e' un allarme), con URGENTE "
+            "nell'oggetto se c'e' un accredito mancante o un'operazione sconosciuta",
+            #    ⚠️ Riscritta la sera del 5/9 dopo la lettura del motore fatta dalla chat A
+            #    (casella12_A.txt): l'ospite paga il prezzo pulito e il rimborso e' prezzo x
+            #    politica + tassa intera, SENZA trattenute (fase59:322-357, fase83:6860/7034,
+            #    fase111:74-77); «la nostra commissione torna, quella del gestore no» e' vero
+            #    solo nei conti della piattaforma e nel pro-quota dell'host (fase83:6955).
+            #    Scrivere quella frase all'ospite avrebbe detto il falso in 8 lingue.
+            "chi paga cosa in un rimborso e' SCRITTO dove si legge, in tutte le lingue, e "
+            "coincide col motore: all'ospite che gli torna il prezzo secondo la politica e la "
+            "tassa di soggiorno per intero, senza trattenute; all'host, nel contratto, che "
+            "sulla parte trattenuta commissione e tariffa tecnica restano dovute pro quota e "
+            "che il costo del gestore di pagamento non torna a nessuno",
+            "nessun numero con la virgola tocca un prezzo o un importo: l'ispettore statico "
+            "conta ZERO rilievi money-float su tutto il codice, non solo sul percorso del "
+            "pagamento",
+            # L'ottava e' entrata in master per prima (6/9, PR #157, casella scritta la sera stessa
+            # con la PR #158): il suo attrezzo (`esame_produzione.py --casella ogni-ora`) la trova
+            # per TESTO («OGNI ORA»), non per indice, cosi' il posto in coda non cambia il verdetto.
             "gli invarianti sui dati veri girano in produzione almeno OGNI ORA, non una volta "
             "al giorno, e l'ultimo giro si legge dal registro del server con la sua ora",
         ),
@@ -266,6 +312,19 @@ BLOCCHI = (
             "iCal ha una difesa dal RITARDO 15 min-2 ore (oggi: zero, e' la finestra "
             "delle prenotazioni fantasma)",
             "zero punti di mutazione scoperti sul codice che la produzione ESEGUE",
+            #    ⚠️ Casella nata la sera del 5/9 dal rilievo A5 della revisione indipendente
+            #    (chat A) e dalla sua ricerca D25 (Vrbo/Airbnb Help, Smoobu «non sblocchiamo
+            #    cio' che non abbiamo bloccato noi», Operto «Airbnb (Not available)» = blocco,
+            #    OwnerRez «never-ending loop», RFC 5545). IN CODA (gli esami trovano la
+            #    propria casella per INDICE; qui niente parola «mutazione»). Oggi fase82 e'
+            #    solo additiva: una notte chiusa da un feed non si riapre mai, e l'eco del
+            #    nostro calendario riesportato dall'OTA chiude le notti dei nostri cancellati.
+            "il feed esterno vale nei due versi: una notte chiusa da un feed si riapre quando "
+            "sparisce da QUEL feed (e da nessun altro), con lo stato di prima, e solo se l'host "
+            "non l'ha toccata nel frattempo; i blocchi esterni sono oggetti con origine, non "
+            "sovrascritture dell'inventario; l'eco del nostro calendario riesportato dall'OTA "
+            "non chiude le nostre notti; un feed che passa da N eventi a zero non riapre "
+            "niente e diventa un'anomalia",
         ),
     },
     {
@@ -280,7 +339,13 @@ BLOCCHI = (
         ),
         "attrezzi": ("permessi", "produzione", "mutazione", "stati_impossibili", "finti_verdi"),
         "finito_quando": (
-            "nessuna rotta pubblica SCRIVE senza identita' (oggi due: `_split_crea`, `_split_paga`)",
+            # ⛔ Diceva «(oggi due: `_split_crea`, `_split_paga`)»: era vero fino al 2026-08-20,
+            #    poi le due rotte hanno preteso il voucher firmato (fase83 `_split_crea`/`_split_paga`),
+            #    e la casella e' rimasta a nominare un buco chiuso (misurato dalla chat A il 6/9
+            #    sera, riletto nel codice da B). Una riga d'arrivo non nomina l'esemplare: nomina
+            #    la FAMIGLIA, e la misura un attrezzo che enumera le rotte DAL CODICE.
+            "nessuna rotta pubblica SCRIVE senza identita': l'elenco delle rotte che scrivono "
+            "viene letto dal codice, e ognuna senza credenziali risponde 401/403/422, mai 200",
             "la matrice dei permessi e' verde su ogni rotta riservata, provata SUL SITO VERO",
             "ogni sonda negativa interroga un indirizzo che risponde diverso da 404",
         ),
@@ -336,8 +401,13 @@ BLOCCHI = (
         ),
         "attrezzi": ("occhio", "plausibilita", "e2e", "produzione"),
         "finito_quando": (
-            "nessun testo resta congelato in italiano dove la pagina dichiara 8 lingue "
-            "(restano ~1034 parole non tradotte)",
+            # ⛔ Diceva «(restano ~1034 parole non tradotte)»: numero vecchio, mai rimisurato.
+            #    Il 6/9 sera `collaudi/occhio_del_fondatore.py` ne conta 10, di cui 5 sui
+            #    «gusci» che il server riempie in 8 lingue: le parole ferme vere sono 5 in 3
+            #    pagine (chat C). Una riga d'arrivo non porta un numero: porta il criterio.
+            "nessun testo resta congelato in italiano dove la pagina dichiara 8 lingue: "
+            "l'occhio del fondatore conta ZERO parole ferme sulle pagine che non sono gusci "
+            "riempiti dal server",
             "ogni numero mostrato ha senso nel mondo vero (modo di rompersi 10)",
         ),
     },
