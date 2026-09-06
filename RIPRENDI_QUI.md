@@ -67,6 +67,43 @@ non raggiungibili da nessun collaudo, dichiarati. La CI ha trovato 2 rossi nella
 fra gli archivi che nascono all'accensione; il blocco della marca temporale non deve nominare `inventario`): curati. Blocco 2 → **3 su 4** (impronta `1b960e1cc6ed`, caselle 1-2 rimisurate).
 Voce di registro: *«BLOCCO 2, CASELLA 3: LA DIFESA DAL RITARDO DELL'iCAL»*. **Cosa manca:** commit → PR → CI → unione → poi il ramo `blocco2-casella4` (B2) si riallinea su master e il
 giro UNICO gira sui 10 moduli (fase203 compreso) → deploy col paracadute → sonda di produzione.
+**🚪 5 SETTEMBRE, 11:5x — LA PORTA DEI SOLDI DEL METODO ENTRA NEL PIANO (ramo `blocco1-porta-soldi` su `3fe8a19`, parola del
+fondatore «fai la cosa giusta e con logica, una volta fatto bene e non si torna più indietro»):** la PARTE 12 di
+`collaudi/METODO_v4.md` aveva **7 righe NO sui soldi** e una regola (7.4, «ogni ora») che nessuna delle sei caselle del Blocco 1
+misurava: finire quelle sei non chiudeva la porta dei soldi. Le 8 righe sono ora caselle **in coda** al Blocco 1 in
+`collaudi/piano.py` (mai in mezzo: gli attrezzi trovano la propria casella per indice; mai la parola «mutazione» nel testo) →
+`python collaudi/scheda.py --blocco 1` = **6 su 14**, le 8 nuove «mai misurata». Ognuna avrà il suo attrezzo che la scrive, e quasi
+tutte chiedono prima una riga di produzione («autorizzato»): webhook che salva prima e risponde dopo · deduplicazione 72 ore ·
+elaborazione fallita ≠ 200 anche sul ramo KYC · stato riletto dall'API · riconciliazione notturna con la mail ogni notte · scelta
+A/B/C scritta nelle condizioni · zero money-float · invarianti ogni ora. Guardie del piano 89/89. **Il metro riparato è su master:**
+PR #154 unita (`3fe8a19`), VPS allineato senza file di produzione, e la prova nel secondo albero pulito dice 6 su 6 e 2 su 4.
+**La sera, dopo la ricerca D25 della chat A (`corsia_A_2026-09-05\ricerca_A.txt`, 18 fonti; `casella12_A.txt`):** le tre
+caselle del webhook riscritte (la 7 «200 subito» e la 9 «se fallisce NON 200» si contraddicevano: l'evento si salva e si
+risponde 200 sempre, l'elaborazione fallita resta in archivio, la ritentiamo noi e dopo un'ora è un'anomalia del Guardiano;
+la 8 conta come uno due Event per lo stesso fatto; la 10 rilegge `payment_status` con GET); la casella 12 riscritta sul
+codice letto (all'ospite non viene trattenuto niente: il rimborso è prezzo × politica + tassa intera; la frase «la nostra
+torna, quella del gestore no» vale solo nei conti della piattaforma e va nel contratto host); e **una casella nuova in coda
+al Blocco 2** (la quinta, dal rilievo A5: il feed vale nei due versi, blocchi esterni con origine, l'eco non chiude le
+nostre notti, un feed che si svuota non riapre niente). Censimento delle otto contro master in
+`corsia_B_2026-09-05\censimento_8_caselle_blocco1.txt`.
+**Blocco 2, casella 4 (ramo `blocco2-casella4` in B2):** guardie per i punti scoperti di 6 moduli + 10 dichiarazioni di equivalenza
+con impronta (conteggio delle «traccia» inchiodato 12 → 20, col perché nel test); i giri del Giudice per modulo sono in corso;
+**2 punti non sono né uccidibili né dichiarabili** (fase58 riga 396 terzo `or→and`, fase59 riga 299 `_ss > 0`: una voce perdonerebbe
+due punti) e restano sopravvissuti finché quelle due righe di produzione non vengono riscritte («autorizzato»). **Cosa manca:**
+test_pipeline_ci dalla PowerShell → pre-fatto → commit → PR → CI → unione; poi la casella 4 (giro unico sui 9 moduli) e le tre
+decisioni del fondatore: «autorizzato» per le 2 righe (casella 4), per l'iCal (casella 3) e per le 8 caselle nuove del Blocco 1.
+**6 SETTEMBRE, notte — le 8 caselle entrano in master** (ramo `blocco1-porta-soldi-2` da `18def89`, rete `porta_soldi_v1.patch`
+sha256 `c3d2dfd2…` applicata a tre vie; l'ottava, «OGNI ORA», era già in master con la #157 e SCRITTA con la #158: qui compare una
+volta sola, in coda): `python collaudi/scheda.py --blocco 1` = **7 su 14**. Le tre decisioni di cui sopra sono tutte arrivate il 5 e
+il 6 settembre («autorizzato»). **La porta del lancio (decisione del fondatore, 6 settembre sera):** l'ordine dei lavori è: le
+caselle 7-11 del Blocco 1 (webhook e riconciliazione) → il Blocco 3 intero → «ogni cifra pubblica coincide col motore» (Blocco 4)
+→ il Blocco 7 intero → la casella 12 del Blocco 1 (il rimborso scritto in 8 lingue) → l'avvocato (Blocco 5). Le altre caselle
+dopo. Tre chat: B (unioni, CI, deploy, Giudice, produzione), A (Blocco 3: attrezzi e guardie), C (i testi del lancio).
+**La notte del 6 settembre, il Giudice sul Blocco 3** (9 moduli, occhi scelti da lui, 43 min): 118 provati, 73 uccisi, **42
+sopravvissuti** (fase64 8, fase80 3, fase127 14, fase143 17) e **3 moduli non giudicabili perché senza test dedicato**
+(`fase179_rate_limit`, `fase180_bunker`, `fase192_admin_accounts`): sono il lavoro della chat A. E la prima casella del Blocco 3
+è stata **riscritta**: nominava «`_split_crea`, `_split_paga`» come rotte aperte, ma dal 2026-08-20 pretendono il voucher
+firmato; ora chiede che l'elenco delle rotte che scrivono venga letto dal codice e che ognuna senza credenziali risponda 401/403/422.
 
 **📏 5 SETTEMBRE, 02:3x — IL METRO RIPARATO: le impronte non dipendono più dai fine riga (ramo `metro-fine-riga`
 su `2a3d6d7`, parola del fondatore «ripara»):** lo stesso Blocco 1 leggeva 6 su 6 in B2 e **0 su 6** in un albero
@@ -1639,7 +1676,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: f0e08da
+CONSEGNE AGGIORNATE A: 18def89
 
 SUITE ATTUALE: Ran 6395 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
