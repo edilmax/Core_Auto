@@ -41,9 +41,12 @@ ok», la garanzia passa a `contestato` (motivo `disaccordo_in_chat`), il payout 
 dal riquadro Controversie. Il silenzio resta silenzio (chat vuota, un solo mittente, messaggi solo prima del check-in): il
 rilascio va come sempre. 7 guardie in `test_fase160_escrow_garanzia.TestSeNonSiMettonoDAccordoSubentriamoNoi`, viste rosse
 prima (7/7) e verdi dopo (Ran 40). fase160 e fase113 non sono cambiate. Caricatore **6324** da fermo. Voce di registro:
-*«BLOCCO 1, LA CASELLA «OGNI ORA»»* (con il subentro in coda). **Cosa manca:** test_pipeline_ci da PowerShell,
-cricchetto bandit, pre-fatto, commit («procedi al commit»), PR, CI, unione; poi deploy col paracadute e, **un'ora dopo il
-deploy**, `esame_produzione.py --casella ogni-ora --scrivi` (serve la seconda riga oraria vera). ⚠️ Il ramo
+*«BLOCCO 1, LA CASELLA «OGNI ORA»»* (con il subentro in coda). **FATTO il 6 settembre sera:** commit `054d78e`, PR #157 unita
+(CI 16 controlli, gate success) → master `bd88911`, deploy col paracadute alle 18:15Z (poi `fc85b6d` alle 18:40Z con la casella 4
+del Blocco 2); nel registro del server le righe `INVARIANTI ARCHIVI` alle 18:39:57Z e 19:39:57Z (passo 3600 s) →
+`esame_produzione.py --casella ogni-ora --scrivi` **VERDE 8 passi su 8, denominatore 13**, casella scritta sull'impronta
+`bb8bae0cf2dc` (registro `esame_ogni_ora_scrivi.log`): **Blocco 1 SOLDI 7 su 7** nel piano di master (le altre sette righe della
+porta dei soldi arrivano col ramo `blocco1-porta-soldi`, e lì il blocco torna 7 su 14). ⚠️ Il ramo
 `blocco1-porta-soldi` (Core_Auto_B) porta la stessa riga di piano insieme alle altre sette: chi unisce per secondo
 risolve il conflitto in `collaudi/piano.py` tenendo la lista intera con questa riga UNA volta sola, in coda.
 
