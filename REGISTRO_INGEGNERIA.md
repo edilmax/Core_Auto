@@ -403,6 +403,84 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### ⏰ BLOCCO 1, LA CASELLA «OGNI ORA»: I CINQUE INVARIANTI GIRANO IN PRODUZIONE OGNI ORA, NON UNA VOLTA AL GIORNO — 6 settembre, chat B (albero Core_Auto_B3, ramo `casella14-invarianti-ogni-ora` su `0f6ccb9`, «autorizzato» del fondatore)
+
+**Il fondatore:** *«finiamo oggi tutto? autorizzato»*. **Cosa c'era (misurato):** il tick del Guardiano in
+`fase83.servi()` chiamava `giro_quotidiano` (fase186 + i cinque invarianti di fase202) e poi dormiva
+`86400` secondi; il METODO §7.4 chiede *«le invarianti girano ogni ora sui dati veri»*, e nessuna delle sei
+caselle del blocco lo misurava. La riga entra in coda al blocco (è una delle otto della porta dei soldi, la 14
+nel ramo `blocco1-porta-soldi`); l'attrezzo la trova per TESTO («OGNI ORA»), non per indice.
+
+**Cosa dice il mondo (D25, letto il 6 settembre):** XRP Ledger, «Invariant Checking» (docs, 2026): l'invariant
+checker è *«a second layer of code that runs automatically in real-time after each transaction»*, cioè la cadenza
+giusta è «ogni volta che i dati cambiano», non «una volta al giorno»; Trio, «Payment Ledger Architecture» (2026) e
+Finlego, «Real-Time Ledger System with Double-Entry Logic» (2026): riconciliazione *«daily or after each settlement
+window»* con classificazione della gravità e allarme, gli invarianti contabili come vincoli che «non si possono
+committare rotti»; OneUptime, «Reduce Alert Fatigue by Tuning Alert Thresholds» (2026-02) e Vectra, «What Is Alert
+Fatigue» (2026): un allarme che si ripete per la stessa causa viene ignorato, e il METODO §15.2 fissa la soglia
+del 10% di Google. Conclusione: gli invarianti ogni ora **sì**; l'email ogni ora **no** — la stessa anomalia
+manderebbe ventiquattro email e la ventiquattresima non la leggerebbe nessuno.
+
+**Cosa è cambiato (produzione, `fase83_server.py`, 31 righe):** `_invarianti_orari(sistema)` a livello di
+modulo — chiama `fase202.scansiona_archivi` sulla cartella di `db_finanza` (sola lettura; con archivi in
+memoria ritorna `None` e non scrive niente, perché una riga «verificato» su niente sarebbe un verde per
+assenza) — e il tick: un contatore, `sleep(3600)`, il passo orario 23 volte su 24, il giro intero (Stripe,
+OXR, email, battito del watchdog) alla ventiquattresima. ⚠️ `fase83` **non** sta fra i moduli del Blocco 1 e
+`fase202` non è stata toccata: l'impronta del blocco non cambia, le caselle 1-6 non si rimisurano. Limite
+dichiarato: una violazione trovata dal passo orario sta nel registro subito (`logger.error`) e nell'email entro
+un giorno.
+
+**Le guardie, viste ROSSE prima (registro `casella14_guardia_ROSSA_1.log`: 2 rossi + 2 errori sui motivi
+giusti — «dorme 86400», «`_invarianti_orari` non esiste») e VERDI dopo (`casella14_guardia_VERDE_2.log`,
+`Ran 43 OK`):** `test_fase202.TestGliInvariantiGiranoOgniOra`, 4 guardie — due sull'albero sintattico del tick
+(dorme 3600, chiama il passo orario **e** il giro quotidiano), due che ESEGUONO il passo su archivi veri in
+una cartella temporanea (una riga `INVARIANTI ARCHIVI` con i cinque codici; con `:memory:` tace e non solleva).
+
+**L'attrezzo che scrive la casella:** `collaudi/esame_produzione.py --casella ogni-ora [--scrivi]` — le stesse
+letture della casella 6 (salute, `docker logs` 26 h, HEAD del VPS, master), un secondo giudizio
+(`giudica_orario`): l'ULTIMA riga `INVARIANTI ARCHIVI` ha meno di 70 minuti **e la PRECEDENTE sta a meno di 70
+minuti da lei** — una riga sola dice «girato adesso», non «gira ogni ora» —, tutti e cinque verificati,
+`violazioni=0`, `non_eseguiti=0`, `ciechi=0`, VPS = master. Denominatore 13 (5 invarianti + 8 passi).
+`--autoprova` nelle due direzioni: 11 casi (due righe a un'ora → VERDE; una riga sola, passo di 71 minuti,
+passo di un giorno, violazione, archivio cieco, VPS fuori master, registro vuoto → ROSSO). Tre guardie nuove in
+`test_pipeline_ci.TestLEsameDellaProduzioneNonPuoBARARE`, viste ROSSE con un guasto iniettato nell'esame (il
+passo sulla seconda riga reso sempre vero: 2 rossi su 10, `casella14_guardie_esame_ROSSE_col_guasto.log`) e
+ripristino byte-identico (sha256 `4c6401cc…`). ⚠️ La casella si può scrivere solo **dopo il deploy e dopo
+un'ora**: servono due righe orarie vere nel registro del server.
+
+**Il punto che il giro unico 4 ha insegnato lo stesso giorno (S3, scritto qui perché non si ripeta):** il
+NON DETERMINABILE su `fase58:686` non era un test lento — i dieci killer insieme fanno 31-36 s contro un tetto
+di 163 — era **la macchina carica**: nello stesso minuto giravano in un altro albero l'ispettore statico (576
+file) e il censimento di raggiungibilità, «sola lettura» per il repository ma non per il processore. Un tetto di
+tempo misura anche chi altro usa la macchina (ferrea 4, vista dal lato in cui si rompe). Cura: nessuna riga di
+test cambiata; il giro 5 è partito sui 13 moduli con la macchina lasciata in pace.
+
+**Nello stesso ramo, la regola «SE NON SI METTONO D'ACCORDO SUBENTRIAMO NOI»** (il fondatore, 6 settembre 13:3x:
+*«poi c'è anche la chat host e cliente: se non si mettono d'accordo subentriamo noi»*, poi *«autorizzato se esce
+finito senza tornare più indietro»*). **Cosa c'era (misurato):** la chat per prenotazione (`fase113`) e il subentro
+dell'arbitro esistevano, ma partivano solo da un gesto: il cliente che preme «Segnala un problema», o l'admin che
+apre il pannello. Se host e ospite litigavano in chat e nessuno premeva niente, alle 24 ore i soldi partivano verso
+l'host da soli. **Cosa dice il mondo (D25):** Airbnb Resolution Center (guide 2026, iGMS · Keysteward · STR
+Assistance): le parti hanno 72 ore per accordarsi, *«if the other party doesn't respond within 72 hours, or you
+can't reach an agreement, ask Airbnb to step in»*; il subentro della piattaforma è **a tempo**, non a richiesta
+soltanto. Qui la finestra è quella della garanzia. **Cosa è cambiato (produzione, `fase83_server.py`):**
+`_subentro_per_disaccordo(sistema, ora_ts=)` a livello di modulo, chiamata dal tick della garanzia PRIMA di
+`auto_rilascia` (o arriva a soldi partiti): per ogni garanzia scaduta, se nella chat della prenotazione hanno scritto
+**entrambi** dopo il check-in (check-in = sblocco − finestra) e l'ospite non ha premuto «tutto ok», la garanzia passa
+a `contestato` con motivo `disaccordo_in_chat` (CAS di fase160: una conferma arrivata nel frattempo vince), il payout
+va `trattenuto`, riga `SUBENTRO` nel registro ed email all'arbitro. Il silenzio resta silenzio: chat vuota, un solo
+mittente, messaggi solo prima del check-in → rilascio come sempre. Non solleva mai; senza chat nel sistema ritorna
+vuoto. `fase160` e `fase113` **non** sono cambiate. Limite dichiarato: «non d'accordo» qui vuol dire «hanno scritto
+entrambi e nessun OK», non una lettura del testo: una chat cordiale sull'orario della colazione dopo il check-in
+senza OK finisce all'arbitro, che la chiude con «0% al cliente» in un clic. È la scelta più prudente sui soldi
+(D16: in dubbio si aspetta l'arbitro, mai un pagamento che poi va recuperato). **Guardie:**
+`test_fase160_escrow_garanzia.TestSeNonSiMettonoDAccordoSubentriamoNoi`, 7 — viste ROSSE prima
+(`subentro_guardia_ROSSA_1.log`: 6 errori «non esiste» + 1 rosso «il tick non chiama il subentro») e VERDI dopo
+(`subentro_guardia_VERDE_2.log`, `Ran 40 OK`): entrambi scrivono e nessun OK → contestato, trattenuto, il rilascio non
+paga; solo l'ospite → rilascio; solo prima del check-in → rilascio; OK premuto → la chat non conta; prima della
+scadenza → non si subentra; senza chat → non solleva e non blocca; il tick chiama il subentro **prima** del rilascio
+(albero sintattico, per numero di riga).
+
 ### ⏱️ BLOCCO 2, CASELLA 3: LA DIFESA DAL RITARDO DELL'iCAL — `fase203` NUOVO, LA RILETTURA PRIMA DI OGNI CONFERMA E L'AVVISO ALL'HOST — 5 settembre, chat B (albero Core_Auto_INT, ramo `ical-orologio` su `3fe8a19`, «autorizzato» del fondatore)
 
 **Il fondatore:** *«autorizzato»*, poi *«non deve succedere doppia prenotazione e evitiamo: chi si sposta, chi

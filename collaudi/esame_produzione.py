@@ -9,6 +9,11 @@
                                                         deve gridare, e NON scrive mai
     python collaudi/esame_produzione.py --autoprova     si vede gridare e tacere, senza rete
                                                         (D18 punto 2)
+    python collaudi/esame_produzione.py --casella ogni-ora [--scrivi]
+                                                        la casella «OGNI ORA» (2026-09-06): le
+                                                        stesse letture, un secondo giudizio --
+                                                        DUE righe INVARIANTI ARCHIVI a meno di
+                                                        70 minuti l'una dall'altra, l'ultima fresca
 
 ⛔ IL TESTO DELLA CASELLA NON SI RICOPIA: si legge da `collaudi/piano.py` (e' la chiave della
    scheda; una copia a mano spunterebbe una casella diversa il giorno che il piano cambia).
@@ -67,6 +72,11 @@ from fase178_watchdog import MAX_ETA_BATTITO_SEC  # noqa: E402
 BLOCCO_SOLDI = 1
 INDICE_CASELLA = 5                       # la sesta casella del blocco (0-based)
 COMANDO = "python collaudi/esame_produzione.py --scrivi"
+# La casella «OGNI ORA» (2026-09-06, «autorizzato»): si trova per TESTO, non per indice, perche'
+# entra in coda al blocco insieme ad altre sette e il suo posto puo' cambiare; il verdetto no.
+MARCA_ORARIA = "OGNI ORA"
+COMANDO_ORARIO = "python collaudi/esame_produzione.py --casella ogni-ora --scrivi"
+TETTO_ORARIO_SEC = 70 * 60               # «almeno ogni ora», con dieci minuti di respiro
 SALUTE = os.environ.get("BOOKINVIP_SALUTE", "https://bookinvip.com/api/health")
 VPS = os.environ.get("BOOKINVIP_VPS", "root@76.13.44.167")
 CHIAVE_SSH = os.environ.get("BOOKINVIP_CHIAVE_SSH",
@@ -95,6 +105,13 @@ NON_GUARDA = (
     "il bottone manuale del bunker (`/api/bunker/invarianti`, solo I1): resta com'e', non e' "
     "il giro quotidiano",
     "le altre cinque caselle del blocco: non le tocca",
+    "per la casella «OGNI ORA»: il passo orario SCRIVE la riga (e grida nel registro se trova una "
+    "violazione), ma l'email del Guardiano parte solo dal giro quotidiano: una violazione vista "
+    "alle 3 di notte sta nel registro subito e nell'email entro un giorno. Scelta dichiarata: "
+    "ventiquattro email per la stessa anomalia insegnerebbero a non leggerle (regola del 10%)",
+    "per la casella «OGNI ORA»: la cadenza si legge su DUE righe consecutive del registro; le ore "
+    "prima di quelle non le rilegge (un buco di tre ore ieri notte non lo vede se le ultime due "
+    "righe sono a posto). Il buco lo vede il watchdog, non questo esame",
 )
 
 
@@ -216,6 +233,72 @@ def giudica(letture, ora=None):
     return verde, passi, motivi, denominatore
 
 
+def _righe_invarianti(registro):
+    """TUTTE le righe INVARIANTI ARCHIVI del registro, in ordine: [(istante, campi), ...]."""
+    trovate = []
+    for r in (registro or "").splitlines():
+        m = RIGA.search(r)
+        if m:
+            trovate.append((_istante(r), {"verificati": m.group(1).split(","),
+                                          "violazioni": int(m.group(3)),
+                                          "non_eseguiti": int(m.group(4)),
+                                          "ciechi": int(m.group(5))}))
+    return trovate
+
+
+def giudica_orario(letture, ora=None):
+    """La casella «OGNI ORA»: la cadenza si legge su DUE righe del registro, non su una.
+    Una riga sola giovane dice «e' girato adesso», non «gira ogni ora»: la seconda, a meno di
+    70 minuti dalla prima, e' la prova che il passo si ripete. (verde, passi, motivi, denominatore)."""
+    ora = int(letture.get("ora") or 0) if ora is None else int(ora)
+    passi = []
+
+    def passo(nome, ok, dettaglio=""):
+        passi.append((nome, bool(ok), dettaglio))
+
+    http, sal = letture.get("salute_http"), letture.get("salute") or {}
+    passo("/api/health risponde 200 con status ok", http == 200 and sal.get("status") == "ok",
+          "http=%s status=%s %s" % (http, sal.get("status"), sal.get("_errore", "")))
+    righe = [(q, c) for q, c in _righe_invarianti(letture.get("registro")) if q is not None]
+    ultima = righe[-1] if righe else (None, None)
+    eta = (ora - ultima[0]) if ultima[0] is not None else None
+    passo("l'ULTIMA riga %s ha meno di %d minuti" % (MARCA, TETTO_ORARIO_SEC // 60),
+          eta is not None and 0 <= eta <= TETTO_ORARIO_SEC,
+          ("eta %d s (%.0f min)" % (eta, eta / 60.0)) if eta is not None
+          else "nessuna riga %s con istante nelle ultime %s" % (MARCA, FINESTRA_REGISTRO))
+    prima = righe[-2] if len(righe) >= 2 else (None, None)
+    passo_sec = (ultima[0] - prima[0]) if (prima[0] is not None and ultima[0] is not None) else None
+    passo("la riga PRECEDENTE sta a meno di %d minuti dall'ultima (la cadenza si vede)"
+          % (TETTO_ORARIO_SEC // 60),
+          passo_sec is not None and 0 < passo_sec <= TETTO_ORARIO_SEC,
+          ("passo %d s (%.0f min)" % (passo_sec, passo_sec / 60.0)) if passo_sec is not None
+          else "una riga sola: «girato adesso» non e' «gira ogni ora»")
+    campi = ultima[1] or {"verificati": [], "violazioni": -1, "non_eseguiti": -1, "ciechi": -1}
+    passo("l'ultimo passo ha verificato TUTTI e cinque gli invarianti (%s)" % ",".join(CODICI),
+          list(campi["verificati"]) == list(CODICI), "verificati=%s" % ",".join(campi["verificati"]))
+    passo("violazioni=0", campi["violazioni"] == 0, "violazioni=%s" % campi["violazioni"])
+    passo("non_eseguiti=0", campi["non_eseguiti"] == 0, "non_eseguiti=%s" % campi["non_eseguiti"])
+    passo("ciechi=0", campi["ciechi"] == 0, "ciechi=%s" % campi["ciechi"])
+    head, master = letture.get("vps_head") or "", letture.get("master") or ""
+    passo("il codice in produzione e' master (HEAD del VPS == origin/master)",
+          bool(head) and len(head) >= 7 and head == master,
+          "vps=%s master=%s" % (head[:12] or "?", master[:12] or "?"))
+
+    motivi = ["%s (%s)" % (n, d) if d else n for n, ok, d in passi if not ok]
+    return not motivi, passi, motivi, len(CODICI) + len(passi)
+
+
+def condizione_oraria():
+    """Il testo ESATTO della casella «OGNI ORA», letto dal piano: una e una sola, o si ferma."""
+    blocco = [b for b in BLOCCHI if b["ordine"] == BLOCCO_SOLDI]
+    cond = blocco[0]["finito_quando"] if len(blocco) == 1 else ()
+    trovate = [c for c in cond if MARCA_ORARIA in str(c)]
+    if len(trovate) != 1:
+        raise ValueError("il blocco dei soldi ha %d caselle con «%s», ne serve esattamente una"
+                         % (len(trovate), MARCA_ORARIA))
+    return trovate[0]
+
+
 # --------------------------------------------------------------------------------------
 # 3. MISURA PRIMA SE STESSO (D18 punto 1)
 # --------------------------------------------------------------------------------------
@@ -229,6 +312,12 @@ def precondizioni(con_rete=True):
                       else "il blocco dei soldi non ha una sesta casella"))
     except Exception as e:
         fuori.append(("la casella esiste nel piano", False, "%s: %s" % (type(e).__name__, e)))
+    try:
+        fuori.append(("la casella «%s» esiste nel piano, una sola" % MARCA_ORARIA, True,
+                      " ".join(str(condizione_oraria()).split())[:70]))
+    except Exception as e:
+        fuori.append(("la casella «%s» esiste nel piano, una sola" % MARCA_ORARIA, False,
+                      "%s: %s" % (type(e).__name__, e)))
     try:
         impronta = scheda.impronta_del_blocco(BLOCCO_SOLDI)
         fuori.append(("il blocco ha un'impronta", bool(impronta),
@@ -270,6 +359,45 @@ def inietta_il_guasto(letture):
     return storte
 
 
+def letture_finte_orarie(ora, *, eta_sec=600, passo_sec=3600, righe=2, **resto):
+    """Un registro con `righe` righe INVARIANTI ARCHIVI a distanza `passo_sec`, l'ultima
+    vecchia `eta_sec`: e' cio' che un server col passo orario acceso scrive davvero."""
+    base = letture_finte(ora, eta_sec=eta_sec, **resto)
+    modello = base["registro"].splitlines()[0]
+    quando_ultima = ora - eta_sec
+    testo = []
+    for i in range(righe - 1, -1, -1):
+        q = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(quando_ultima - i * passo_sec))
+        testo.append(q + modello[19:])
+    return dict(base, registro="\n".join(testo))
+
+
+def autoprova_oraria():
+    ora = 1_800_000_000
+    casi = (
+        ("due righe a un'ora, l'ultima fresca", letture_finte_orarie(ora), True),
+        ("tre righe a un'ora", letture_finte_orarie(ora, righe=3), True),
+        ("una riga SOLA, fresca", letture_finte_orarie(ora, righe=1), False),
+        ("ultima riga vecchia di 71 minuti", letture_finte_orarie(ora, eta_sec=71 * 60), False),
+        ("passo di 71 minuti fra le due", letture_finte_orarie(ora, passo_sec=71 * 60), False),
+        ("passo di UN GIORNO (il tick di prima)", letture_finte_orarie(ora, passo_sec=86400), False),
+        ("UNA violazione nell'ultimo passo", inietta_il_guasto(letture_finte_orarie(ora)), False),
+        ("quattro invarianti su cinque", letture_finte_orarie(ora, verificati=CODICI[:4]), False),
+        ("un archivio CIECO", letture_finte_orarie(ora, ciechi=1), False),
+        ("il VPS non e' su master", letture_finte_orarie(ora, head="b" * 40), False),
+        ("registro VUOTO", dict(letture_finte_orarie(ora), registro=""), False),
+    )
+    righe, riuscita = [], True
+    for nome, letture, atteso in casi:
+        verde, _passi, motivi, den = giudica_orario(letture)
+        ok = (verde == atteso)
+        riuscita = riuscita and ok
+        righe.append("   %-38s -> %-6s (atteso %-6s) denominatore %d%s"
+                     % (nome, "VERDE" if verde else "ROSSO", "VERDE" if atteso else "ROSSO", den,
+                        "" if ok else "   ⛔ NON E' QUELLO CHE DOVEVA DIRE: %s" % "; ".join(motivi)))
+    return riuscita, righe
+
+
 def autoprova():
     ora = 1_800_000_000
     casi = (
@@ -305,14 +433,24 @@ def _stampa_non_guarda():
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     os.chdir(RADICE)
+    oraria = "--casella" in argv and argv[argv.index("--casella") + 1] == "ogni-ora"
     print("=" * 86)
-    print("🧾 ESAME DEL BLOCCO SOLDI — casella 6: gli invarianti sono verificati in PRODUZIONE")
+    if oraria:
+        print("🧾 ESAME DEL BLOCCO SOLDI — casella «%s»: gli invarianti girano in produzione "
+              "almeno ogni ora" % MARCA_ORARIA)
+    else:
+        print("🧾 ESAME DEL BLOCCO SOLDI — casella 6: gli invarianti sono verificati in PRODUZIONE")
     print("=" * 86)
 
     if "--autoprova" in argv:
         print("🔁 AUTOPROVA — l'esame si vede gridare e tacere su letture costruite (D18 punto 2)")
         riuscita, righe = autoprova()
         for r in righe:
+            print(r)
+        print("   -- casella «%s» --" % MARCA_ORARIA)
+        riuscita_o, righe_o = autoprova_oraria()
+        riuscita = riuscita and riuscita_o
+        for r in righe_o:
             print(r)
         _stampa_non_guarda()
         print("=" * 86)
@@ -366,7 +504,7 @@ def main(argv=None):
     for r in (letture.get("registro") or "").splitlines()[-6:] or ["  (vuoto)"]:
         print("   %s" % r[:170])
     print("")
-    verde, passi, motivi, denominatore = giudica(letture)
+    verde, passi, motivi, denominatore = (giudica_orario if oraria else giudica)(letture)
     for nome, ok, dettaglio in passi:
         print("  %s  %s%s" % ("OK  " if ok else "ROSSO", nome, ("  -> " + dettaglio) if dettaglio else ""))
     motivo = "; ".join(motivi)
@@ -378,11 +516,13 @@ def main(argv=None):
         print("   perche': %s" % motivo)
 
     condizioni = [b for b in BLOCCHI if b["ordine"] == BLOCCO_SOLDI][0]["finito_quando"]
+    casella = condizione_oraria() if oraria else condizioni[INDICE_CASELLA]
     if "--scrivi" in argv:
         print("")
         print("SCRITTURA NELLA SCHEDA")
-        riga = scheda.registra(condizioni[INDICE_CASELLA], esito=verde, denominatore=denominatore,
-                               comando=COMANDO, ordine=BLOCCO_SOLDI, motivo=motivo or None)
+        riga = scheda.registra(casella, esito=verde, denominatore=denominatore,
+                               comando=COMANDO_ORARIO if oraria else COMANDO,
+                               ordine=BLOCCO_SOLDI, motivo=motivo or None)
         print("  scritta: blocco %d · esito %s · denominatore %d · impronta %s · motivo: %s"
               % (riga["blocco"], riga["esito"], riga["denominatore"], riga["impronta"],
                  riga.get("motivo") or "-"))

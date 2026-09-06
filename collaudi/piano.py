@@ -233,6 +233,15 @@ BLOCCHI = (
             "un euro attraversa davvero: entra, viene confermato, va sul conto dell'host, si "
             "divide fra ospiti, esce col bonifico -- sul codice che la produzione ESEGUE",
             "gli invarianti sono verificati in PRODUZIONE, non solo nei test",
+            # 2026-09-06 («autorizzato» del fondatore): la regola 7.4 del METODO, «ogni ora»,
+            # che la casella qui sopra non misurava (il tick del Guardiano dormiva un giorno).
+            # E' UNA delle otto righe della porta dei soldi (PARTE 12) che entrano in coda al
+            # blocco: le altre sette arrivano col ramo `blocco1-porta-soldi`, e questa li'
+            # e' l'ultima, la 14. L'attrezzo che la scrive (`esame_produzione.py --casella
+            # ogni-ora`) la trova per TESTO («OGNI ORA»), non per indice, cosi' il posto in
+            # coda non cambia il verdetto.
+            "gli invarianti sui dati veri girano in produzione almeno OGNI ORA, non una volta "
+            "al giorno, e l'ultimo giro si legge dal registro del server con la sua ora",
         ),
     },
     {

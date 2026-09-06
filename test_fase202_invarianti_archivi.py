@@ -619,5 +619,71 @@ class TestIlTickDiFase83ChiamaIlGiro(unittest.TestCase):
         self.assertTrue(importi, "il tick non importa `giro_quotidiano` da fase202")
 
 
+class TestGliInvariantiGiranoOgniOra(_Archivi):
+    """Casella 14 del blocco SOLDI («gli invarianti sui dati veri girano in produzione almeno
+    OGNI ORA, non una volta al giorno»), 2026-09-06, «autorizzato» del fondatore.
+    Il METODO (7.4) chiede «ogni ora»; il tick dormiva 86400 s. VISTA ROSSA prima della
+    modifica a fase83 (il tick dormiva un giorno e non aveva il passo orario)."""
+
+    def _tick(self):
+        with io.open(os.path.join(QUI, "fase83_server.py"), encoding="utf-8") as f:
+            albero = ast.parse(f.read())
+        tick = [n for n in ast.walk(albero)
+                if isinstance(n, ast.FunctionDef) and n.name == "_tick_guardiano"]
+        self.assertEqual(1, len(tick), "il tick del Guardiano non si trova piu'")
+        return tick[0]
+
+    def test_IL_TICK_DORME_UN_ORA_NON_UN_GIORNO(self):
+        dormite = [n.args[0].value for n in ast.walk(self._tick())
+                   if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                   and n.func.attr == "sleep" and n.args and isinstance(n.args[0], ast.Constant)]
+        self.assertTrue(dormite, "il tick non dorme con una costante: la cadenza non si legge")
+        self.assertEqual({3600}, set(dormite),
+                         "il tick dorme %r s: gli invarianti NON girano ogni ora" % dormite)
+
+    def test_IL_TICK_CHIAMA_IL_PASSO_ORARIO_OLTRE_AL_GIRO_QUOTIDIANO(self):
+        chiamate = {n.func.id for n in ast.walk(self._tick())
+                    if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
+        self.assertIn("_invarianti_orari", chiamate,
+                      "il tick non chiama il passo orario: fra un giro quotidiano e l'altro "
+                      "gli invarianti non li guarda nessuno")
+        self.assertIn("giro_quotidiano", chiamate, "il giro quotidiano intero deve restare")
+
+    def test_IL_PASSO_ORARIO_SCRIVE_LA_RIGA_CON_I_CINQUE_INVARIANTI_SUGLI_ARCHIVI_VERI(self):
+        import fase83_server as S
+        self._notti("villa", ["2027-05-01", "2027-05-02"])
+        self._pagata("R1")
+        self._incasso("R1", 30000)
+        with self.assertLogs("core_auto.invarianti_archivi", level="INFO") as registro:
+            rapporto = S._invarianti_orari(self.sys)
+        righe = [r for r in registro.output if A.MARCA in r]
+        self.assertEqual(1, len(righe), "il passo orario deve scrivere UNA riga %s: %r"
+                         % (A.MARCA, registro.output))
+        self.assertIn("verificati=%s" % ",".join(A.CODICI), righe[0])
+        self.assertEqual(list(A.CODICI), rapporto["verificati"])
+        self.assertEqual({}, rapporto["violazioni"])
+
+    def test_IL_PASSO_ORARIO_SENZA_CARTELLA_DATI_TACE_E_NON_SOLLEVA(self):
+        import fase83_server as S
+
+        class _Cfg:
+            db_finanza = ":memory:"
+
+        class _Sis:
+            config = _Cfg()
+
+        import logging
+        prese = []
+        h = logging.Handler()
+        h.emit = prese.append
+        log = logging.getLogger("core_auto.invarianti_archivi")
+        log.addHandler(h)
+        self.addCleanup(log.removeHandler, h)
+        self.assertIsNone(S._invarianti_orari(_Sis()))
+        self.assertEqual([], [r for r in prese if A.MARCA in r.getMessage()],
+                         "senza archivi su disco non c'e' niente da verificare, e non si "
+                         "scrive una riga che direbbe «verificato»")
+
+
 if __name__ == "__main__":
     unittest.main()
