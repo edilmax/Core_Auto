@@ -1,4 +1,15 @@
 {
+ "0d33183e3804": {
+  "blocco": 3,
+  "comando": "python collaudi/esame_accessi.py --casella sonde --scrivi",
+  "commit": "ae69c1f",
+  "condizione": "ogni sonda negativa interroga un indirizzo che risponde diverso da 404",
+  "denominatore": 89,
+  "esito": true,
+  "impronta": "01970b37c064",
+  "motivo": "",
+  "quando": "2026-09-07T12:54:38"
+ },
  "159ad2c8ab8f": {
   "blocco": 1,
   "comando": "python collaudi/esame_produzione.py --casella ogni-ora --scrivi",
@@ -42,6 +53,17 @@
   "impronta": "bb8bae0cf2dc",
   "motivo": "",
   "quando": "2026-09-05T01:58:18"
+ },
+ "6bb68f1abf5b": {
+  "blocco": 3,
+  "comando": "python collaudi/esame_accessi.py --casella matrice --scrivi",
+  "commit": "ae69c1f",
+  "condizione": "la matrice dei permessi e' verde su ogni rotta riservata, provata SUL SITO VERO",
+  "denominatore": 169,
+  "esito": true,
+  "impronta": "01970b37c064",
+  "motivo": "",
+  "quando": "2026-09-07T12:54:38"
  },
  "813b9082642c": {
   "blocco": 1,
@@ -97,6 +119,17 @@
   "impronta": "0624129adf38",
   "motivo": "",
   "quando": "2026-09-06T19:23:56"
+ },
+ "eec63adbaf5b": {
+  "blocco": 3,
+  "comando": "python collaudi/esame_accessi.py --casella scrive --scrivi",
+  "commit": "ae69c1f",
+  "condizione": "nessuna rotta pubblica SCRIVE senza identita': l'elenco delle rotte che scrivono viene letto dal codice, e ognuna senza credenziali risponde 401/403/422, mai 200",
+  "denominatore": 59,
+  "esito": true,
+  "impronta": "01970b37c064",
+  "motivo": "",
+  "quando": "2026-09-07T12:54:38"
  },
  "f10f35b6a7b3": {
   "blocco": 2,

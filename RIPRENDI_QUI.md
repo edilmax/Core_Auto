@@ -104,6 +104,33 @@ sopravvissuti** (fase64 8, fase80 3, fase127 14, fase143 17) e **3 moduli non gi
 (`fase179_rate_limit`, `fase180_bunker`, `fase192_admin_accounts`): sono il lavoro della chat A. E la prima casella del Blocco 3
 è stata **riscritta**: nominava «`_split_crea`, `_split_paga`» come rotte aperte, ma dal 2026-08-20 pretendono il voucher
 firmato; ora chiede che l'elenco delle rotte che scrivono venga letto dal codice e che ognuna senza credenziali risponda 401/403/422.
+**7 SETTEMBRE, mattina — LA CONSEGNA DELLA NOTTE DELLA CHAT A ENTRA IN MASTER (ramo `integra-A-2026-09-07` da `ae69c1f`, rete
+`corsia_A_2026-09-07\lavoro_A.patch` sha256 `ad2dc32d…` applicata a tre vie, 13 file byte-identici all'albero A3, zero `fase*.py`):**
+`collaudi/esame_accessi.py` legge le rotte dal codice (129 esatte) e prova sul router locale e sul sito vero che nessuna scrive senza
+identità, che la matrice dei permessi regge anche con le credenziali di un altro host e che nessuna sonda negativa riceve 404; le tre
+caselle rilanciate `--scrivi` sul testo di master → `python collaudi/scheda.py --blocco 3` = **3 su 3** (la riga scritta da A sul
+testo vecchio della casella 1 è stata tolta dalla scheda). I tre moduli senza dedicato ne hanno uno (`test_fase179_rate_limit`,
+`test_fase180_bunker`, `test_fase192_admin_accounts`); i 42 sopravvissuti del Blocco 3 hanno tutti una guardia vista rossa (nessuna
+equivalenza dichiarata). **Blocco 4, due caselle che NON possono diventare verdi così come sono scritte, e non per colpa degli
+attrezzi:** `collaudi/esame_prezzi.py` (relazioni metamorfiche sul motore vero, `fase59_concierge.quota`) trova che «l'ordine degli
+sconti non cambia il totale» è FALSO: sconto lungo poi −12% con due divisioni intere differisce di un centesimo dall'ordine
+inverso (26 notti da 1,00 €: 16,48 contro 16,47) — decisione del fondatore fra riscrivere il testo della casella («nell'ordine
+dichiarato») e lo sconto in UN passo in produzione («autorizzato», poi rimisura del Blocco 2); `collaudi/esame_parita.py` misura che
+«costa SEMPRE meno che sulle OTA» è NON MISURABILE: `fase125` mostra all'ospite una stima a percentuali fisse (+15/+14/+4%) e non
+legge nessuna OTA, `fase190_rate_parity` è dormiente (0 riferimenti in fase81/83/main), la parità non è nel contratto — nessuna
+delle due caselle è scritta nella scheda (restano «mai misurata»), e una guardia grida il giorno in cui uno dei tre fatti cambia. Difetto latente scritto, non riparato:
+`fase190.crea_gestore_rate_parity(":memory:")` apre una connessione nuova a ogni chiamata (fase190:183-185). Il Giudice sui Blocchi 4
+e 7 la notte fra il 6 e il 7: 414 provati, 282 uccisi, **132 sopravvissuti** (fase88 52, fase72 30, fase70 13, fase78 7, fase75 6,
+fase69 6, fase98 5, fase106 5, fase109 4, fase125 2, fase115 2): sono le guardie che la chat A scrive oggi.
+**La CI della PR #160 (`2c60533`) è uscita ROSSA e ha avuto ragione lei (ferrea 8):** `qualita` per 5 segnalazioni nuove di ruff e
+9 di bandit nei file di A (chiuse nel codice nuovo: variabile del ciclo `_g`, una variabile inutilizzata, importazioni non usate, il
+sottoprocesso nel test sostituito dalla chiamata in-processo come in `test_pipeline_ci`, le password di prova in costanti come in
+`test_marca_temporale_server`); e `full-suite` con **23 rossi** in `test_marca_temporale_server`, `test_qualifica_catena` e
+`test_rotte_ostile`, tutti `503 marca_temporale_non_attiva`: `esame_accessi.sistema_locale()` scriveva `MARCA_TEMPORALE=0`
+nell'ambiente e non lo rimetteva, e nella suite intera (un processo solo) spegneva la marca ai test che venivano dopo. Cura: il
+valore di prima si rimette subito dopo `crea_sistema`; guardia `test_il_sistema_locale_rimette_MARCA_TEMPORALE_com_era` vista
+ROSSA col guasto rimesso con l'editor (1 rosso da sola, 14 nella catena esame → marca), ripristino byte-identico, poi verde.
+Il test_pipeline_ci locale non poteva vederlo: non contiene quei tre moduli.
 
 **📏 5 SETTEMBRE, 02:3x — IL METRO RIPARATO: le impronte non dipendono più dai fine riga (ramo `metro-fine-riga`
 su `2a3d6d7`, parola del fondatore «ripara»):** lo stesso Blocco 1 leggeva 6 su 6 in B2 e **0 su 6** in un albero
@@ -1676,9 +1703,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 18def89
+CONSEGNE AGGIORNATE A: ae69c1f
 
-SUITE ATTUALE: Ran 6395 test
+SUITE ATTUALE: Ran 6491 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
