@@ -54,6 +54,28 @@
   "motivo": "",
   "quando": "2026-09-05T01:58:18"
  },
+ "506a24febc87": {
+  "blocco": 6,
+  "comando": "python collaudi/esame_plausibilita.py --scrivi",
+  "commit": "39448a0",
+  "condizione": "ogni numero mostrato ha senso nel mondo vero (modo di rompersi 10)",
+  "denominatore": 24,
+  "esito": true,
+  "impronta": "198b6c89a289",
+  "motivo": "",
+  "quando": "2026-09-07T18:26:41"
+ },
+ "5c447a0ee514": {
+  "blocco": 5,
+  "comando": "python collaudi/esame_legale.py --casella spunte --scrivi",
+  "commit": "39448a0",
+  "condizione": "le 3 spunte obbligatorie sono bloccate lato browser E rifiutate 422 lato server",
+  "denominatore": 36,
+  "esito": true,
+  "impronta": "2fa799ea69f9",
+  "motivo": "",
+  "quando": "2026-09-07T18:26:40"
+ },
  "6bb68f1abf5b": {
   "blocco": 3,
   "comando": "python collaudi/esame_accessi.py --casella matrice --scrivi",
@@ -64,6 +86,17 @@
   "impronta": "01970b37c064",
   "motivo": "",
   "quando": "2026-09-07T12:54:38"
+ },
+ "7d0c5b891c14": {
+  "blocco": 5,
+  "comando": "python collaudi/esame_legale.py --casella lingue --scrivi",
+  "commit": "39448a0",
+  "condizione": "termini e privacy sono leggibili in tutte le lingue dichiarate",
+  "denominatore": 43,
+  "esito": true,
+  "impronta": "2fa799ea69f9",
+  "motivo": "",
+  "quando": "2026-09-07T18:26:40"
  },
  "813b9082642c": {
   "blocco": 1,
@@ -109,6 +142,17 @@
   "motivo": "",
   "quando": "2026-09-05T01:58:18"
  },
+ "d4e612aafcd1": {
+  "blocco": 9,
+  "comando": "python collaudi/esame_marketing.py --casella giurisdizioni --scrivi",
+  "commit": "39448a0",
+  "condizione": "si pubblica SOLO dove e' lecito (le giurisdizioni le decide fase154)",
+  "denominatore": 8,
+  "esito": false,
+  "impronta": "dac198979bc0",
+  "motivo": "[chiamanti] almeno un modulo di produzione importa fase154 (albero sintattico) (chiamanti=[]); [decisori] fase89_jurisdiction_outreach decide un paese: passa da fase154 (non importa fase154); [decisori] fase95_outreach_email decide un paese: passa da fase154 (non importa fase154)",
+  "quando": "2026-09-07T18:26:42"
+ },
  "d70ecb7a31cc": {
   "blocco": 1,
   "comando": "python collaudi/esame_rimborsi.py --scrivi",
@@ -119,6 +163,17 @@
   "impronta": "bb8bae0cf2dc",
   "motivo": "",
   "quando": "2026-09-05T01:59:44"
+ },
+ "df0678e71e35": {
+  "blocco": 9,
+  "comando": "python collaudi/esame_marketing.py --casella interruttore --scrivi",
+  "commit": "39448a0",
+  "condizione": "nessun canale pubblica senza che una persona possa fermarlo",
+  "denominatore": 26,
+  "esito": true,
+  "impronta": "dac198979bc0",
+  "motivo": "",
+  "quando": "2026-09-07T18:26:42"
  },
  "e0c5eaf17028": {
   "blocco": 6,

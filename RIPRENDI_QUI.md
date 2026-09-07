@@ -169,6 +169,23 @@ il lordo ospite mentre il mastro accanto dice 16400. **Decisioni del fondatore s
 fase58); (2) lo sconto in un passo con un arrotondamento in fase59 (il centesimo); (3) le 4 righe ridondanti sopra;
 (4) fase98:91: `PAGAMENTO_BPS=0` esplicito dall'ambiente porta la tariffa tecnica a zero senza rumore — la guardia pinna il
 comportamento di oggi, «anche lo zero ripiega?» è una riga di produzione; (5) il ripensamento 48 h. Caricatore 6644.
+**7 SETTEMBRE, sera — TERZA E QUARTA CONSEGNA DELLA CHAT A + UNA RIGA DI PRODUZIONE «autorizzato»: un consenso NEGATO non è più
+un consenso** (ramo `integra-A3-2026-09-07` sopra A2; reti `lavoro_A_3.patch` sha `b9b4faa2…` e il delta `lavoro_A_4.patch`
+sha `f545bf3b…`; parola del fondatore alle 18:2x: «autorizzato tutto quello che nuoce va riparato con logica»). **Produzione:**
+`fase83_server.py` righe 8771 e 8909, registrazione e ri-accettazione dell'host giudicavano le tre spunte con `bool(v)`, e per
+Python `bool("false")` è vero: un client che mandava `"accetta_clausole": "false"` otteneva 201 e la prova firmata archiviava
+`vessatorie: True`. Ora vale solo il booleano `True`. D20 nell'ordine: guardia `test_un_consenso_NEGATO_come_stringa_non_e_un_consenso`
+in `test_fase83_server` vista ROSSA sul codice di produzione (`201 != 422 … 'vessatorie': True`, registro
+`consenso_falso_ROSSO_prima.log`), poi le due righe, poi verde e i 108 del dedicato verdi. **Quattro attrezzi nuovi di A, tutti
+rilanciati `--scrivi` qui:** `esame_legale.py` (Blocco 5: spunte 36/36 VERDE dopo la riparazione, lingue 43/43) → **Blocco 5 = 2 su 3**
+(la terza è l'avvocato); `esame_plausibilita.py` (riusa `plausibilita.py`, 24/24 sul sito vivo ma su DUE annunci di prova: dirà
+qualcosa quando ci saranno annunci veri; `--dati=CARTELLA` per gli archivi veri) → **Blocco 6 = 2 su 2, CHIUSO**;
+`esame_marketing.py` (Blocco 9: «possa fermarlo» 26/26 VERDE, 10 canali contati dall'albero sintattico ognuno con l'interruttore;
+«giurisdizioni le decide fase154» ROSSA 5/8 col motivo: 0 import di produzione di fase154, fase89 cablato su `("US",)` e fase95
+decidono da soli; nessuna pubblicazione illecita in atto, la decisione sta nel posto sbagliato — strada: fase89 legge
+`giurisdizioni_consentite("email")` da fase154, «autorizzato») → **Blocco 9 = 1 su 2**; `esame_pannello_soldi.py` in A2.
+Difetto scritto e non riparato: fase83:614 normalizza «xx» a «en» prima di fase185, così `tradotto` dice vero per una lingua
+sconosciuta. Caricatore **6661**.
 
 **📏 5 SETTEMBRE, 02:3x — IL METRO RIPARATO: le impronte non dipendono più dai fine riga (ramo `metro-fine-riga`
 su `2a3d6d7`, parola del fondatore «ripara»):** lo stesso Blocco 1 leggeva 6 su 6 in B2 e **0 su 6** in un albero
@@ -1741,9 +1758,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 6c67368
+CONSEGNE AGGIORNATE A: 39448a0
 
-SUITE ATTUALE: Ran 6644 test
+SUITE ATTUALE: Ran 6661 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

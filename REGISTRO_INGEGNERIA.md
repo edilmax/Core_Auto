@@ -403,6 +403,35 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### ✅ UN CONSENSO NEGATO ERA ARCHIVIATO COME DATO: `bool("false")` È VERO — 7 settembre, sera, trovato dalla chat A (`collaudi/esame_legale.py`), riparato da B (albero B2, ramo `integra-A3-2026-09-07`, «autorizzato tutto quello che nuoce va riparato con logica» del fondatore)
+
+**Cosa c'era (misurato):** `fase83_server.py`, registrazione host (riga 8771) e ri-accettazione (8909) giudicavano le tre
+spunte obbligatorie — contratto, clausole vessatorie ex artt. 1341-1342 c.c., privacy — con `if not bool(v)`. Per Python
+`bool("false")` e `bool("0")` sono VERI: un client che mandava `"accetta_clausole": "false"` otteneva **201**, l'account
+nasceva e la prova firmata HMAC archiviava `vessatorie: True`. Un consenso che l'utente ha NEGATO registrato come dato,
+e la prova firmata è quella che si porta davanti a un giudice. Il browser nostro manda booleani veri, quindi la porta la
+apriva solo chi chiama l'API a mano — ma la casella del Blocco 5 dice «rifiutate 422 lato server», ed era falsa.
+**D20 nell'ordine:** guardia `TestSelfServiceHost.test_un_consenso_NEGATO_come_stringa_non_e_un_consenso` in
+`test_fase83_server.py` (i valori `"false"`, `"0"`, `"no"`, `1`, `"true"` → 422 con `accetta_clausole` fra i mancanti;
+nessun account nato; stessa regola su `/api/host/riaccetta`) vista ROSSA sul codice di produzione con la risposta per
+intero (`201 != 422 … 'vessatorie': True`, `consenso_falso_ROSSO_prima.log`); poi **due righe**, `if v is not True`;
+poi verde, e i 108 del dedicato verdi. L'esame di A passa da ROSSO 33/36 a VERDE 36/36.
+
+**Le quattro caselle scritte dagli attrezzi di A nella stessa integrazione:** `collaudi/esame_legale.py` (Blocco 5,
+caselle 1-2: sistema vero in cartella temporanea, le 7 combinazioni di spunte mancanti → 422 con esattamente quelle, i
+«falsi non booleani» → 422, `host.html` letto dal file con le tre caselle e il pulsante `disabled`, la pagina `/entra-host`
+in 8 lingue; e per termini/privacy × 8 lingue la rotta vera risponde con la lingua chiesta e 16 testi tutti diversi) →
+Blocco 5 = 2 su 3 (la terza è l'avvocato); `collaudi/esame_plausibilita.py` (Blocco 6 casella 2, riusa `plausibilita.py`:
+24/24 sul sito vivo, ma su due annunci di prova) → **Blocco 6 = 2 su 2, chiuso**; `collaudi/esame_marketing.py` (Blocco 9:
+casella 1 VERDE 26/26, dieci canali con la rete contati dall'albero sintattico, ognuno con la fabbrica a `{}` che non
+sforna nulla e il tick senza canali a zero pubblicazioni; casella 2 ROSSA 5/8 col motivo: **zero import di produzione di
+fase154**, fase89 cablato su `("US",)` e fase95 decidono da soli; oggi coerenti con fase154, quindi nessuna pubblicazione
+illecita in atto, ma la decisione sta nel posto sbagliato) → Blocco 9 = 1 su 2. Difetto scritto e non riparato:
+fase83:614 normalizza «xx» a «en» prima di fase185, così `tradotto` dice vero per una lingua sconosciuta. Guardie sugli
+attrezzi in `test_pipeline_ci.py` (6 + 6 + 4), viste rosse; la guardia dei censimenti ha preso A per davvero al primo
+giro (una regex contava `urlopen(` in un commento: riscritta sull'albero sintattico, sbaglio S6). Caricatore **6661**;
+ruff 677/686, bandit 548/548.
+
 ### 🧬 I 132 SOPRAVVISSUTI DEI BLOCCHI 4 E 7 HANNO LA GUARDIA, E IL PANNELLO HOST CONTA COME INCASSO UN HOLD MAI PAGATO — 7 settembre, chat A (albero Core_Auto_A3, ramo `blocco3-accessi-A` su `16d7da2`); integrata da B (albero B2, ramo `integra-A2-2026-09-07`)
 
 **Rete:** `corsia_A_2026-09-07\lavoro_A_2.patch` (sha256 `f8f4faaa…`, 13 file: 11 `test_fase*.py`, `test_pipeline_ci.py`,
