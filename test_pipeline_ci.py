@@ -11994,5 +11994,153 @@ class TestLEsameDellICalNonPuoBARARE(unittest.TestCase):
         # il Giudice usa sulle righe cambiate di fase83, e sta da solo per costare secondi.
 
 
+class TestLEsameDeiPrezziNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
+    """⛔ D18 PUNTO 4 PER `collaudi/esame_prezzi.py`, l'attrezzo della casella «le relazioni
+    metamorfiche reggono» del Blocco 4 (prezzi). Esegue le relazioni con Hypothesis sul motore
+    VERO (`fase59.quota` con inventario e catalogo in memoria) e conta relazioni x casi.
+
+    Qui non si tocca il motore vero (costa secondi): si mettono davanti alle RELAZIONI un motore
+    finto sano e uno storto, e si pretende che dicano rosso solo dove c'e' il guasto; che il
+    giudizio conti i casi; e che `--con-guasto --scrivi` si fermi. Scritta il 2026-09-07 dalla
+    chat A; vista ROSSA col guasto iniettato nell'attrezzo (la relazione R1 resa sempre vera).
+
+    ⛔ IL RITROVAMENTO DELLA NOTTE, che questa guardia tiene fermo: la relazione R2 («l'ordine
+    degli sconti non cambia il totale») NON regge sull'aritmetica di fase59 -- lo sconto lungo
+    PRIMA e il -12% DOPO, con la divisione intera, differiscono di un centesimo dall'ordine
+    inverso (misurato sul motore vero: 26 notti da 1,00 EUR con sconto 28,02%: 16,48 contro
+    16,47). Il motore finto «sano» qui sotto copia quell'aritmetica e R2 e' ROSSA anche su di
+    lui, per costruzione; sul motore «ordine inverso» tace. Se un giorno R2 diventa verde sul
+    motore sano, vuol dire che qualcuno ha cambiato l'aritmetica (o la relazione): questa guardia
+    lo dice.
+    """
+
+    def _esame(self):
+        return self._carica("esame_prezzi.py", "_esame_prezzi_sotto_guardia")
+
+    def test_LA_CASELLA_ESISTE_UNA_SOLA_E_IL_MOTORE_VERO_E_FASE59(self):
+        esame = self._esame()
+        self.assertIn(esame.MARCA, esame.condizione())
+        self.assertEqual(esame.BLOCCO, 4)
+        t = esame.tariffe_di_produzione()
+        self.assertGreater(t["psp_bps"], 0)
+        self.assertGreater(t["psp_fisso"], 0)
+        # una quota sola sul motore vero: costa millisecondi e prova che l'aggancio e' vivo
+        q = esame.motore_vero(10000, notti=1, tariffe=t)
+        self.assertEqual(q["prezzo_listino_cents"], 10000)
+        self.assertEqual(q["costo_pagamento_cents"], 10000 * t["psp_bps"] // 10000 + t["psp_fisso"])
+
+    def test_LE_RELAZIONI_DICONO_ROSSO_SOLO_DOVE_C_E_IL_GUASTO(self):
+        esame = self._esame()
+        t = {"psp_bps": 500, "psp_fisso": 25, "commissione_bps": 1000}
+        rosse = lambda guasto: set(  # noqa: E731
+            m.split(" ")[0] for m in esame.giudica(
+                esame.relazioni(esame.motore_finto(guasto, t), t, casi=25, seme=3))[2])
+        self.assertEqual(rosse(None), {"R2"}, "sul motore sano (aritmetica di fase59) solo R2 e' rossa")
+        self.assertEqual(rosse("ordine_inverso"), set(), "scontando prima il -12%, R2 tace")
+        self.assertIn("R1", rosse("doppio_piu_uno"))
+        self.assertIn("R1b", rosse("fisso_per_notte"))
+        self.assertIn("R4", rosse("prezzo_alto_costa_meno"))
+
+    def test_IL_GIUDIZIO_CONTA_I_CASI_E_UNA_RELAZIONE_A_ZERO_CASI_NON_E_VERDE(self):
+        esame = self._esame()
+        verde, passi, motivi, den = esame.giudica([("R1 x", 300, []), ("R2 y", 47, ["p=1 -> 2 != 3"])])
+        self.assertFalse(verde)
+        self.assertEqual(den, 347, "il denominatore e' la somma dei casi ESEGUITI")
+        self.assertTrue(any(m.startswith("R2") for m in motivi))
+        verde, _p, motivi, den = esame.giudica([("R1 x", 0, [])])
+        self.assertFalse(verde, "zero casi eseguiti non e' un verde")
+        self.assertTrue(esame.giudica([("R1 x", 10, [])])[0])
+
+    def test_CON_IL_GUASTO_DENTRO_NON_SCRIVE_MAI(self):
+        esame = self._esame()
+        vera_registra = esame.scheda.registra
+        scritture = []
+        try:
+            esame.scheda.registra = lambda *a, **k: scritture.append((a, k))
+            self.assertEqual(esame.main(["--con-guasto", "--scrivi"]), 2)
+            self.assertEqual(scritture, [])
+        finally:
+            esame.scheda.registra = vera_registra
+
+    def test_DICHIARA_COSA_NON_GUARDA(self):
+        esame = self._esame()
+        self.assertGreaterEqual(len(esame.NON_GUARDA), 4)
+        self.assertTrue(any("tassa" in r.lower() for r in esame.NON_GUARDA))
+        self.assertTrue(any("ordine" in r.lower() for r in esame.NON_GUARDA))
+
+
+class TestLEsameDellaParitaNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
+    """⛔ D18 PUNTO 4 PER `collaudi/esame_parita.py`, l'attrezzo della casella «da noi costa SEMPRE
+    meno che sulle OTA, e l'host non puo' mentire sul prezzo» (Blocco 4).
+
+    ⛔ IL RILIEVO che questa guardia tiene fermo (2026-09-07, chat A): la casella NON e' misurabile
+    dal codice. `fase125` non legge nessuna OTA (stima con percentuali fisse sul NOSTRO prezzo, quindi
+    «costa meno» e' vero per costruzione), `fase190` -- l'unico posto in cui un prezzo OTA vero
+    entrerebbe -- e' dormiente (nessuna rotta lo chiama), e il contratto host non nomina la parita'.
+    L'esame misura cio' che il codice sa fare (l'aritmetica del confronto, i confini della violazione,
+    lo store) e resta ROSSO per «NON MISURABILE» finche' i tre fatti non cambiano: questa guardia
+    pretende che NON possa diventare verde con tre NO, e che con tre SI' e relazioni sane lo diventi.
+    """
+
+    def _esame(self):
+        return self._carica("esame_parita.py", "_esame_parita_sotto_guardia")
+
+    def test_LA_CASELLA_ESISTE_E_I_MODULI_VERI_RISPONDONO(self):
+        esame = self._esame()
+        self.assertIn(esame.MARCA, esame.condizione())
+        c, v, p, g = esame.moduli_veri()
+        r = c(10000)
+        self.assertEqual(r["nostro_totale_cents"], 10000)
+        self.assertGreater(r["ota_totale_cents"], 10000)
+        self.assertTrue(v(10300, 10000), "3% sopra l'OTA e' una violazione")
+        self.assertFalse(v(10200, 10000), "2% esatto no")
+        ges = g()
+        self.assertIsNotNone(ges.segnala(alloggio_slug="x", ota_nome="o", ota_prezzo_cents=100, nostro_prezzo_cents=200))
+
+    def test_CON_TRE_NO_LA_CASELLA_NON_PUO_ESSERE_VERDE(self):
+        esame = self._esame()
+        sani = [("P1 x", 10, []), ("P2 y", 10, []), ("P3 z", 10, [])]
+        no = [("a", False, "0"), ("b", False, "0"), ("c", False, "0")]
+        verde, _p, motivi, den = esame.giudica(sani, no)
+        self.assertFalse(verde)
+        self.assertEqual(den, 30)
+        self.assertTrue(any(m.startswith("NON MISURABILE") for m in motivi), motivi)
+        si = [("a", True, ""), ("b", True, ""), ("c", True, "")]
+        self.assertTrue(esame.giudica(sani, si)[0], "con tre SI' e relazioni sane e' verde")
+        self.assertFalse(esame.giudica([("P1 x", 10, ["k -> ko"])], si)[0], "una relazione rotta resta rossa")
+
+    def test_OGGI_I_TRE_FATTI_SONO_NO_LETTI_DAI_FILE(self):
+        """Se un giorno fase190 viene cablato, o il contratto nomina la parita', questa guardia
+        diventa rossa: e' il segnale che la casella va RIMISURATA, non un difetto."""
+        esame = self._esame()
+        misure = esame.misurabilita(self.RADICE)
+        self.assertEqual(len(misure), 3)
+        for nome, ok, dett in misure:
+            self.assertFalse(ok, "«%s» e' diventato SI' (%s): rimisurare la casella" % (nome, dett))
+
+    def test_LE_RELAZIONI_DICONO_ROSSO_SOLO_DOVE_C_E_IL_GUASTO(self):
+        esame = self._esame()
+        si = [("a", True, ""), ("b", True, ""), ("c", True, "")]
+
+        def rosse(guasto):
+            c, v, p, g = esame.moduli_finti(guasto)
+            return set(m.split(" ")[0] for m in esame.giudica(esame.relazioni(c, v, p, g, casi=20, seme=2), si)[2])
+        self.assertEqual(rosse(None), set())
+        self.assertEqual(rosse("ota_costa_meno"), {"P1"})
+        self.assertEqual(rosse("confine_sbagliato"), {"P2"})
+        self.assertEqual(rosse("niente_penalita"), {"P3"})
+
+    def test_CON_IL_GUASTO_DENTRO_NON_SCRIVE_MAI(self):
+        esame = self._esame()
+        vera_registra = esame.scheda.registra
+        scritture = []
+        try:
+            esame.scheda.registra = lambda *a, **k: scritture.append((a, k))
+            self.assertEqual(esame.main(["--con-guasto", "--scrivi"]), 2)
+            self.assertEqual(scritture, [])
+        finally:
+            esame.scheda.registra = vera_registra
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

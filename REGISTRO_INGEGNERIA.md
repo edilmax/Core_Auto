@@ -403,6 +403,81 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🚪 BLOCCO 3 A 3 SU 3, TRE MODULI DI SICUREZZA CHE NON AVEVANO TEST, E IL CENTESIMO DEGLI SCONTI — notte fra il 6 e il 7 settembre, chat A (albero Core_Auto_A3, ramo `blocco3-accessi-A` su `18def89`); integrata da B il 7 settembre (albero B2, ramo `integra-A-2026-09-07` da `ae69c1f`)
+
+**Il mandato (porta del lancio, decisione del fondatore del 6 settembre sera):** la chat A fa attrezzi e guardie del
+Blocco 3, mai produzione, mai commit; B integra. **Rete:** `corsia_A_2026-09-07\lavoro_A.patch` (sha256 `ad2dc32d…`),
+13 file, tutti `test_*.py`, `collaudi/esame_*.py` e `collaudi/scheda.json`; i `fase*.py` toccati dalle guardie sono
+byte-identici (sha256 prima = dopo per ognuno, registri nella stessa cartella). Consegna: `consegna_A.txt`.
+
+**1. `collaudi/esame_accessi.py` — l'attrezzo delle tre caselle del Blocco 3** (modello `esame_produzione.py`; le
+caselle si trovano per TESTO). Le rotte si **enumerano dal codice** (`RouterHTTP._instrada`: 129 esatte, 2 prefissi,
+più quelle servite fuori dal router), mai da una lista a mano: la lista a mano di `mappa_scoperta.py` nominava
+`/api/host/logout`, che non esiste (l'uscita è `/api/gate/logout`) — l'ha trovato la guardia al primo giro. Tre
+misure: (a) ogni rotta NON GET chiamata sul router vero (sistema in cartella temporanea) senza credenziali e con
+corpo `{}` → 401/403, salvo 5 rotte che rispondono 200 a vuoto per progetto e 28 pubbliche, ognuna col motivo letto
+nel codice; (b) la matrice dei permessi sulle 84 rotte riservate su tre assi: senza credenziali in locale, con le
+credenziali di un ALTRO host registrato davvero (l'host B chiama 21 rotte con l'annuncio, l'id e l'email di A: rosso
+se la risposta nomina A), senza credenziali sul sito vero; (c) nessuna sonda negativa riceve 404, un indirizzo
+inventato DEVE rispondere 404, e la lista a mano di `verifica_produzione.p3` sta dentro le rotte del codice. D18: 7
+precondizioni che fermano, `--autoprova` 17 casi nelle due direzioni, `NON_GUARDA` stampato, `--con-guasto` che non
+scrive mai (uscita 2). Guardia `test_esame_accessi.py` (14) vista rossa col guasto iniettato con l'editor, ripristino
+byte-identico. **Rilanciato da B il 7 settembre sul testo delle caselle di master** (la casella 1 era stata riscritta
+con la #159, e la scheda si aggancia al testo): `--scrivi` → **VERDE 3/3 den 59 · 6/6 den 169 · 6/6 den 89**,
+`python collaudi/scheda.py --blocco 3` = **3 su 3**; la riga scritta da A sul testo vecchio è stata tolta dalla scheda.
+⚠️ Il sito vivo riceve ~90 sonde negative dall'IP di chi lancia: nel registro del server compaiono righe `RATE-LIMIT
+… lockout` e `BUNKER: accesso NEGATO`. Sono le sonde, non un attacco. **Non esaminato (dichiarato dall'attrezzo):**
+l'asse «altro host» sul sito vivo (servono due conti veri), la matrice per ruolo fra operatori admin (fase192), una
+sessione bunker vera da un IP sbagliato, i prefissi `/api/catalogo/` e `/api/recensioni/`, cosa fanno le rotte DOPO la
+porta.
+
+**2. I tre moduli che il Giudice non poteva giudicare** perché senza test dedicato — ora ce l'hanno:
+`test_fase179_rate_limit` (11: l'ottavo fallimento blocca e il settimo no, raddoppio con tetto, finestra, sfratto LRU,
+parametri assurdi), `test_fase180_bunker` (17: TOTP contro il vettore RFC 6238 App. B come giudice esterno, sessione
+legata all'IP che scade nel secondo esatto, logout che revoca solo la sua sessione), `test_fase192_admin_accounts`
+(11: matrice ruolo × azione, stesso errore a password sbagliata e a email inesistente, revoca all'istante). Sei mutanti
+a mano visti rossi; la larghezza vera la dirà il Giudice nella prossima notte sul Blocco 3.
+
+**3. I 42 sopravvissuti della notte sul Blocco 3** (fase64 8, fase80 3, fase127 14, fase143 17): 32 guardie in coda ai
+dedicati, **42 su 42 punti visti rossi** col mutante del Giudice iniettato con l'editor, ripristino byte-identico,
+**zero dichiarazioni di equivalenza** (B6). Trovato per strada e non riparato (nessun difetto di produzione): in fase127
+e fase143 i rami «ISOLATA/ISOLATO» col DB rotto non erano mai stati eseguiti da un test (D19); ora una connessione che
+esplode dopo lo schema li attraversa e rispondono fail-closed come dichiarato.
+
+**4. Blocco 4, `collaudi/esame_prezzi.py` — le relazioni metamorfiche sul motore VERO** (`fase59_concierge.quota`,
+tariffe lette da `main_casavip.py`, Hypothesis 300 casi a relazione; D25: Chen, Cheung, Yiu 1998; Segura et al. 2016).
+R1 raddoppiare le notti raddoppia il listino · R1b la quota fissa non raddoppia · R3 conservazione · R4 monotonia:
+verdi. **R2 «l'ordine degli sconti non cambia il totale»: ROSSA sul motore vero.** fase59 applica lo sconto lungo
+(righe 296-302) e poi il −12% non rimborsabile (305-310), ognuno con divisione intera `// 10000`: nell'ordine inverso
+il totale differisce di un centesimo in una parte dei casi, nei due versi (26 notti da 1,00 €, sconto 28,02%: 16,48
+contro 16,47; 7 notti da 11.557,29 €, sconto 0,01%: 71.185,79 contro 71.185,80). È matematica, non l'attrezzo:
+l'autoprova lo riproduce su un motore finto con la stessa aritmetica e tace su uno che sconta in un passo. Chi ci
+perde: nessuno per più di un centesimo a prenotazione; ma la casella letta alla lettera non può diventare verde finché
+o il testo dice «nell'ordine dichiarato», o il motore calcola gli sconti in UN passo con UN arrotondamento (riga di
+produzione, «autorizzato», poi rimisura del Blocco 2: cambia l'impronta). **Decisione del fondatore, aperta.** Guardia
+`TestLEsameDeiPrezziNonPuoBARARE` (5) in `test_pipeline_ci.py`, vista rossa col guasto nell'attrezzo. La casella NON è
+scritta nella scheda.
+
+**5. Blocco 4, `collaudi/esame_parita.py` — «costa SEMPRE meno che sulle OTA» è NON MISURABILE dal codice.** Misurato
+col `grep`, non a memoria: `fase125_confronto_guest` è chiamato da una sola riga (fase83:7684) e mostra all'ospite un
+«prezzo OTA» che non viene da nessuna OTA (il nostro +15% markup, +14% guest fee, +4% DCC: percentuali fisse, quindi
+«da noi costa meno» è vero per costruzione e non misura niente); `fase190_rate_parity` è DORMIENTE (0 riferimenti in
+fase81/83/main, nessun ranking lo legge); la clausola di parità non è nel contratto (0 righe in fase163 e in
+`deploy/*.html`) e l'host non dichiara nessun prezzo OTA. L'attrezzo misura lo stesso ciò che si può (P1 il confronto
+mostrato non mente contro di noi, P2 confini di `e_violazione`, P3 fase190 in memoria: verdi, 300 casi l'una) e tiene
+la casella rossa col motivo; la guardia `test_OGGI_I_TRE_FATTI_SONO_NO_LETTI_DAI_FILE` diventa rossa il giorno in cui
+uno dei tre fatti cambia: è il segnale «rimisura», non un difetto. **Difetto latente scritto, non riparato:**
+`fase190.crea_gestore_rate_parity(":memory:")` apre una connessione nuova a ogni chiamata (fase190:183-185) e in
+memoria ogni connessione è un archivio vuoto → «no such table: parity_reports» alla prima segnalazione; il modulo ha
+già `_ConnCondivisa` e la fabbrica non lo usa. Modulo dormiente, mai eseguito da un test (D19). Guardia
+`TestLEsameDellaParitaNonPuoBARARE` (5), vista rossa col guasto. La casella NON è scritta nella scheda.
+
+**Numeri dell'integrazione (misurati in B2 sul ramo, non sommati):** caricatore da fermo **6490** (master `ae69c1f`
+dichiarava 6395); i 10 moduli/classi toccati rilanciati uno per uno, uscita 0 su tutti; README 153 moduli / **421**
+file di test (erano 417). Zero righe di produzione. Il Giudice sui Blocchi 4 e 7 nella stessa notte (in B3, registro
+`corsia_B_2026-09-05\giudice_notte_blocchi_4_7.log`): 414 provati, 282 uccisi, **132 sopravvissuti**, 0 non
+determinabili, 5 moduli fuori produzione dichiarati (fase43, 44, 45, 189, 190): sono il lavoro della chat A del 7.
+
 ### ⏰ BLOCCO 1, LA CASELLA «OGNI ORA»: I CINQUE INVARIANTI GIRANO IN PRODUZIONE OGNI ORA, NON UNA VOLTA AL GIORNO — 6 settembre, chat B (albero Core_Auto_B3, ramo `casella14-invarianti-ogni-ora` su `0f6ccb9`, «autorizzato» del fondatore)
 
 **Il fondatore:** *«finiamo oggi tutto? autorizzato»*. **Cosa c'era (misurato):** il tick del Guardiano in
