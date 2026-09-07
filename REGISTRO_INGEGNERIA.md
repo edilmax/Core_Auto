@@ -403,6 +403,78 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🚨 IL GUARDIANO GRIDAVA PER UN ROSSO CHE ERA GIÀ STATO SMENTITO DA QUATTRO ORE — 7 settembre, chat A (albero Core_Auto_A, ramo `corsia-a-watchdog` su `ae69c1f`, «autorizzato» del fondatore)
+
+**Cosa è cambiato.** `deploy/watchdog.sh` (il blocco che giudica la CI: **nessun'altra riga**,
+nessun altro file di produzione, nessuna dipendenza nuova) e `test_watchdog.py` (una classe,
+4 guardie). **STATO: acceso**, gira dentro la suite. ⚠️ Sul VPS il watchdog gira dal
+**checkout git** dell'host, quindi si aggiorna con un `git pull` e **non** vuole un deploy.
+
+**Com'è cominciata.** Un allarme Telegram al fondatore alle **00:10 UTC**, con scritto solo
+`🚨 BookinVIP WATCHDOG (vps)`. Misurato dall'esterno: sito **HTTP 200**, `status: ok`,
+`guardiano: ok`, cinque colpi di fila fra 0,2 e 0,5 s. Il VPS stava bene. Letto poi il
+registro sul server (in sola lettura, con l'«autorizzato»), l'allarme aveva **una riga sola**:
+
+```
+ci|critico|la CI su master e' ROSSA: c'e' un difetto che nessuno sta vedendo
+firma degli allarmi attivi: "ci,"
+```
+
+**Il difetto, e perché il prodotto era sano.** La sentinella esterna (`sentinella.yml`, il
+controllo che gira su GitHub apposta per non morire insieme al VPS) è caduta alle
+**00:06:18** su un buco di rete, ed è **ripassata alle 04:39:01** e di nuovo alle **09:47:00**.
+GitHub elenca sotto lo stesso commit **ogni** tentativo di ogni controllo — è il suo storico,
+non un errore — e `watchdog.sh` li contava **tutti**, senza chiedersi quale fosse l'ultimo di
+ciascuno. Misurato sulla risposta vera di GitHub per `ae69c1f`:
+
+```
+33 tentativi elencati · 16 controlli distinti
+metodo vecchio (conta ogni tentativo)      -> 1 rosso  -> ALLARME
+metodo nuovo   (solo l'ultimo di ognuno)   -> 0 rossi  -> silenzio
+```
+
+🔑 **E non poteva spegnersi da solo:** finché master resta su quel commit, quel `failure` resta
+nella lista. L'unica cosa che zittiva il guardiano era un commit nuovo — cioè non poteva più
+tornare sereno per conto suo, qualunque cosa facesse la macchina. Sul registro del VPS: allarme
+ogni 10 minuti **dalle 04:50 alle 08:50**, circa **25 allarmi** per un guasto risolto da ore, e
+col messaggio *«c'è un difetto che nessuno sta vedendo»*, cioè mandando a cercare una cosa che
+non c'era. È la **regola ferrea 10**: un falso allarme è grave quanto uno mancato, perché
+insegna a ignorare il segnale — e il giorno che suona per un guasto vero è già stato declassato
+a rumore.
+
+**Riparato nell'ordine di D20.** Prima la guardia, **vista rossa** sullo script vero
+(`AssertionError: 'ko' != 'ok'`, uscita 1), poi la riparazione, poi la stessa guardia verde
+(uscita 0). Quattro prove, e **tre delle quattro esistono per non riparare troppo**: un
+controllo il cui ultimo esito è rosso deve **continuare** a gridare · un job `cancelled` (il
+caso vero del 1° settembre) resta rosso · e i due tentativi elencati **al contrario** devono
+dare lo stesso verdetto, perché GitHub non promette nessun ordine e appoggiarcisi funzionerebbe
+oggi per sbagliare in silenzio domani. Decide `started_at`; **a parità d'ora vince il rosso**.
+
+💡 **Nota di metodo.** La guardia non cerca parole dentro lo script — un commento la
+soddisferebbe (sbaglio S6, già pagato con `server_tokens`). **Estrae dallo script vero le righe
+che decidono e le esegue** con una risposta finta: se cambiano forma, non le trova e lo dice,
+invece di passare per inerzia.
+
+⚠️ **Un secondo rilievo, trovato dal `foglio_unico` mentre chiudevo e NON riparato.** La voce 7
+(«i numeri della macchina non sono scritti a mano nei documenti») è **rossa su master, non per
+colpa di questo lavoro**: `RIPRENDI_QUI.md:4225` scrive *«88 raggiungibili su 151»* mentre
+`raggiungibilita.py` oggi ne misura **90**. Verificato che preesiste: il mio `git diff` su quel
+file è **una riga sola** (la 1681, il conto dei test), e la 4225 è **identica a `origin/master`**.
+Non l'ho corretta apposta: la regola ferrea 15 vieta le correzioni di passaggio dentro un
+intervento con un altro scopo — è così che uno scopo si allarga da solo, e quello è il canale
+principale delle regressioni. ⛔ E vale la pena notare *come* si è visto: `foglio_unico.py` esce
+**1**, ma il pre-fatto esce **0**, perché nello stesso rapporto ci sono **due tabelle da dieci** e
+il verdetto finale conta l'altra. Un rosso vero che non ferma niente e che si legge solo se uno
+guarda la tabella giusta.
+
+⚠️ **Un rilievo trovato per strada, scritto e non riparato** (regola di corsia). La sentinella
+esterna dichiara di girare **ogni 15 minuti** (`cron: '7,22,37,52 * * * *'`). Misurato dall'API
+su 11 ore e un quarto: **5 giri invece di 45**, con buchi fino a **3h 06m**. Il workflow risulta
+`active`: è GitHub che diluisce i lavori programmati, ed è un limite che il file stesso
+dichiara. Ma la conseguenza non è scritta da nessuna parte: la finestra cieca sul «il VPS è
+morto?» **non è di 15 minuti, è di oltre due ore**. L'ultimo miglio — un servizio dedicato tipo
+UptimeRobot — richiede un account che apre il fondatore, e resta **non fatto e non coperto**.
+
 ### ⏰ BLOCCO 1, LA CASELLA «OGNI ORA»: I CINQUE INVARIANTI GIRANO IN PRODUZIONE OGNI ORA, NON UNA VOLTA AL GIORNO — 6 settembre, chat B (albero Core_Auto_B3, ramo `casella14-invarianti-ogni-ora` su `0f6ccb9`, «autorizzato» del fondatore)
 
 **Il fondatore:** *«finiamo oggi tutto? autorizzato»*. **Cosa c'era (misurato):** il tick del Guardiano in

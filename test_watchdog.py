@@ -796,5 +796,197 @@ class TestIlGuardianoDEVEGuardareANCHELaCI(unittest.TestCase):
                          "grida lo stesso: %r" % (r["allarmi"],))
 
 
+class TestUnROSSOGIASUPERATONonPuoGRIDAREPERSEMPRE(unittest.TestCase):
+    """UN CONTROLLO CHE E' FALLITO E POI E' PASSATO NON E' UN GUASTO: E' UN GUASTO RISOLTO.
+
+    ⛔ IL DIFETTO VERO, MISURATO IL 2026-09-07 SU `ae69c1f` (master).
+    La sentinella esterna fallisce un giro per un buco di rete, e lo rifa' 4 ore dopo:
+
+        00:06:18  il-sito-risponde-e-la-sentinella-e-viva  ->  failure
+        04:39:01  il-sito-risponde-e-la-sentinella-e-viva  ->  success   (LO STESSO controllo)
+
+    GitHub elenca TUTTI E DUE i tentativi sotto lo stesso commit -- e' il suo modo di
+    tenere lo storico, non un errore. Ma `watchdog.sh` conta le conclusioni una per una,
+    senza chiedersi quale sia l'ULTIMA di ogni controllo: quindi vede ancora un rosso e
+    grida. Misurato sul registro del VPS: allarme ogni 10 minuti dalle 04:50 alle 08:50,
+    circa VENTICINQUE allarmi per un rosso che era gia' stato smentito alle 04:39.
+
+    🔑 E non si spegne da solo. Finche' master resta su quel commit, quel `failure` resta
+    nella lista: l'unica cosa che zittisce l'allarme e' un commit nuovo. Cioe' il guardiano
+    non puo' piu' tornare sereno per conto suo, qualunque cosa faccia la macchina.
+
+    ⛔ PERCHE' E' GRAVE QUANTO UN ALLARME MANCATO (regola ferrea 10). Un allarme che suona
+    quando tutto va bene insegna a ignorarlo, e il giorno che suona per un guasto vero e'
+    gia' stato declassato a rumore. Qui e' peggio del solito, perche' il messaggio dice
+    *«c'e' un difetto che nessuno sta vedendo»*: manda a cercare un guasto che non c'e'.
+
+    Nota di metodo: qui NON si cerca una parola nel testo dello script -- un commento la
+    soddisferebbe (sbaglio S6, gia' pagato con `server_tokens`). Si ESTRAGGONO dallo
+    script vero le righe che decidono, e si ESEGUONO passando un caso finto. Se cambiano
+    forma, questa guardia non le trova e lo dice, invece di passare per inerzia.
+    """
+
+    SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "deploy", "watchdog.sh")
+
+    def _risposta_github(self, tentativi):
+        """Un corpo come quello vero di GitHub.
+
+        `tentativi` = [(nome, conclusione, quando), ...]. L'ora c'e' perche' e' l'unica
+        cosa che dice quale tentativo e' l'ULTIMO: l'ordine nella lista non lo dice, e
+        fidarsene sarebbe una premessa non dichiarata che un giorno cade in silenzio.
+        """
+        import json
+        return json.dumps({"check_runs": [
+            {"name": n, "status": "completed", "conclusion": c, "started_at": q}
+            for n, c, q in tentativi]})
+
+    def _shell_posix(self):
+        """La shell con cui si esegue uno script `sh`, o None. E si PROVA che funzioni.
+
+        Su Linux basta il PATH. Su Windows la suite parte da PowerShell, il cui PATH non ha
+        `sh` -- ed e' lo sbaglio S11: la stessa domanda dà due risposte a seconda della
+        shell da cui la fai. Una shell POSIX c'e' lo stesso, la installa Git: si ricava da
+        dove sta `git`, invece di arrendersi e saltare il controllo.
+
+        ⛔ E OGNI CANDIDATA SI METTE ALLA PROVA PRIMA DI USARLA (D18 punto 1: un metro
+        storto va scoperto dal metro). Misurato il 2026-09-07 su questa macchina:
+        `shutil.which("bash")` da PowerShell risponde `C:\\Windows\\system32\\bash.EXE`,
+        che NON e' una shell -- e' il lanciatore di WSL, e senza distribuzione installata
+        stampa «Sottosistema Windows per Linux non ha distribuzioni installate» **in UTF-16
+        sullo standard output**, con stderr VUOTO ed esito 1. Un candidato che esiste, si
+        lancia, e non e' quello che credi: senza questa prova la guardia sarebbe diventata
+        rossa parlando dello script, mentre il guasto era nel suo stesso attrezzo (S3).
+        """
+        import os
+        import shutil
+        import subprocess
+        candidate = []
+        trovata = shutil.which("sh")
+        if trovata:
+            candidate.append(trovata)
+        git = shutil.which("git")
+        if git:
+            radice = os.path.dirname(os.path.dirname(git))   # ...\Git\cmd\git.exe -> ...\Git
+            for pezzi in (("bin", "sh.exe"), ("usr", "bin", "sh.exe"),
+                          ("bin", "bash.exe"), ("usr", "bin", "bash.exe")):
+                candidate.append(os.path.join(radice, *pezzi))
+        # `bash` dal PATH per ULTIMO, apposta: su Windows e' quasi sempre WSL.
+        trovata = shutil.which("bash")
+        if trovata:
+            candidate.append(trovata)
+
+        for c in candidate:
+            if not os.path.exists(c):
+                continue
+            try:
+                p = subprocess.run([c, "-c", "printf pronta"], capture_output=True,
+                                   text=True, timeout=20)
+            except Exception:
+                continue
+            if p.returncode == 0 and p.stdout.strip() == "pronta":
+                return c
+        return None
+
+    def _righe_che_giudicano(self):
+        """Le righe DELLO SCRIPT che trasformano la risposta di GitHub in ko/ok."""
+        with open(self.SCRIPT, encoding="utf-8", errors="replace") as f:
+            righe = f.read().replace("\r\n", "\n").split("\n")
+        inizio = next((i for i, r in enumerate(righe) if r.strip().startswith("rossi=")), None)
+        self.assertIsNotNone(
+            inizio, "in %s non c'e' piu' nessuna riga che comincia con `rossi=`: questa "
+                    "guardia non sa piu' dove guardare. Va ri-ancorata, non tolta."
+                    % self.SCRIPT)
+        fine = next((i for i in range(inizio, len(righe)) if "CI=ko" in righe[i]), None)
+        self.assertIsNotNone(fine, "trovato `rossi=` ma non la riga che assegna CI=ko")
+        return "\n".join(righe[inizio:fine + 1])
+
+    def _giudizio_dello_script(self, tentativi):
+        """Esegue quelle righe con una risposta finta e restituisce il verdetto (ko/ok)."""
+        import shlex
+        import subprocess
+        import sys
+        sh = self._shell_posix()
+        # ⛔ QUI NON SI SALTA. Un `skipTest` perche' «manca la shell» sarebbe un test che si
+        #    assolve da solo per una condizione che riguarda proprio cio' che deve
+        #    verificare (uno script sh): sparirebbe dal rapporto come «saltato» e nessuno
+        #    lo leggerebbe piu'. Lo prende gia' `prima_di_lanciare.py`, controllo 3, e ha
+        #    bocciato la prima stesura di questa classe. Una shell POSIX non e' opzionale
+        #    in questo progetto: su Linux c'e' sempre, su Windows la porta Git.
+        self.assertIsNotNone(
+            sh, "nessuna shell POSIX trovata, nemmeno quella di Git: qui non si puo' "
+                "eseguire uno script del progetto, e questo e' un guasto dell'ambiente "
+                "da riparare -- non un collaudo da saltare")
+        blocco = self._righe_che_giudicano()
+        # `$PY` e' l'interprete che lo script si cerca da solo poco piu' sopra: qui gli si
+        # passa QUESTO, cosi' la guardia prova la riga vera senza dipendere dal PATH della
+        # shell -- che su Windows e su Linux non e' lo stesso (sbaglio S11).
+        programma = ("PY=%s\nJ=\"$(cat)\"\n" % shlex.quote(sys.executable.replace("\\", "/"))
+                     + blocco + '\nprintf "%s" "$CI"\n')
+        p = subprocess.run([sh, "-c", programma], input=self._risposta_github(tentativi),
+                           capture_output=True, text=True)
+        self.assertEqual(p.returncode, 0, "le righe estratte non girano: %s" % p.stderr)
+        verdetto = p.stdout.strip()
+        self.assertNotEqual(verdetto, "cieco",
+                            "il verdetto e' «cieco»: l'interprete passato come $PY non ha "
+                            "prodotto un numero, quindi questa guardia starebbe misurando "
+                            "se stessa invece dello script (sbaglio S3). stderr=%r"
+                            % p.stderr)
+        return verdetto
+
+    def test_un_controllo_RIFATTO_e_PASSATO_non_e_piu_rosso(self):
+        """Il caso vero del 2026-09-07: stesso controllo, prima fallito e poi passato."""
+        verdetto = self._giudizio_dello_script([
+            ("altro-job", "success", "2026-09-06T22:25:00Z"),
+            ("il-sito-risponde-e-la-sentinella-e-viva", "failure", "2026-09-07T00:06:18Z"),
+            ("il-sito-risponde-e-la-sentinella-e-viva", "success", "2026-09-07T04:39:01Z"),
+        ])
+        self.assertEqual(
+            verdetto, "ok",
+            "il guardiano conta ancora il tentativo VECCHIO: dice %r mentre l'ultimo "
+            "esito di ogni controllo e' verde. Cosi' l'allarme non puo' spegnersi finche' "
+            "master non si sposta, e grida ogni 10 minuti per un guasto gia' risolto "
+            "(regola ferrea 10: un falso allarme e' grave quanto uno mancato)." % verdetto)
+
+    def test_ma_un_rosso_ANCORA_IN_PIEDI_deve_continuare_a_gridare(self):
+        """L'altra direzione, obbligatoria: riparando non si deve diventare ciechi.
+
+        Un controllo il cui ULTIMO esito e' rosso resta un allarme, anche se prima era
+        passato. Senza questa meta', la riparazione potrebbe spegnere l'allarme sempre --
+        e un guardiano muto e' il difetto che questo file esiste per impedire.
+        """
+        verdetto = self._giudizio_dello_script([
+            ("altro-job", "success", "2026-09-07T01:00:00Z"),
+            ("un-controllo", "success", "2026-09-07T01:00:00Z"),   # prima andava
+            ("un-controllo", "failure", "2026-09-07T05:00:00Z"),   # ADESSO e' rotto
+        ])
+        self.assertEqual(verdetto, "ko",
+                         "l'ultimo esito di `un-controllo` e' rosso e il guardiano tace "
+                         "(%r): questo e' l'allarme mancato." % verdetto)
+
+    def test_NON_decide_l_ORDINE_nella_lista_ma_QUANDO(self):
+        """Lo stesso caso, con i due tentativi elencati AL CONTRARIO.
+
+        ⛔ Serve a impedire una riparazione comoda e sbagliata: «tieni l'ultimo elemento
+        della lista». GitHub non promette nessun ordine, e una riparazione che ci si
+        appoggia funziona finche' l'ordine non cambia -- poi sbaglia in silenzio, che e'
+        il modo peggiore. Qui il rosso e' scritto DOPO il verde, ma e' PIU' VECCHIO.
+        """
+        verdetto = self._giudizio_dello_script([
+            ("un-controllo", "success", "2026-09-07T04:39:01Z"),   # il piu' RECENTE
+            ("un-controllo", "failure", "2026-09-07T00:06:18Z"),   # piu' vecchio, ma dopo
+        ])
+        self.assertEqual(verdetto, "ok",
+                         "il verdetto e' %r: sta decidendo l'ORDINE nella lista invece "
+                         "dell'ora. Funzionerebbe oggi e sbaglierebbe il giorno che "
+                         "GitHub cambia l'ordine, senza dirlo a nessuno." % verdetto)
+
+    def test_e_un_JOB_SCADUTO_resta_rosso(self):
+        """`cancelled` non e' fra i buoni: e' il caso vero del 1 settembre, gia' scritto
+        nello script. Qui si pretende che la riparazione non se lo porti via."""
+        self.assertEqual(
+            self._giudizio_dello_script([("un-job", "cancelled", "2026-09-07T05:00:00Z")]),
+            "ko", "un job SCADUTO non viene piu' visto come rosso")
+
+
 if __name__ == "__main__":
     unittest.main()
