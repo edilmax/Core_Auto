@@ -403,6 +403,43 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🧬 I 132 SOPRAVVISSUTI DEI BLOCCHI 4 E 7 HANNO LA GUARDIA, E IL PANNELLO HOST CONTA COME INCASSO UN HOLD MAI PAGATO — 7 settembre, chat A (albero Core_Auto_A3, ramo `blocco3-accessi-A` su `16d7da2`); integrata da B (albero B2, ramo `integra-A2-2026-09-07`)
+
+**Rete:** `corsia_A_2026-09-07\lavoro_A_2.patch` (sha256 `f8f4faaa…`, 13 file: 11 `test_fase*.py`, `test_pipeline_ci.py`,
+`collaudi/esame_pannello_soldi.py`), consegna `consegna_A_2.txt` sezioni E-I. Undici `fase*.py` byte-identici (sha256
+prima = dopo per ognuno). Conflitto additivo in `test_pipeline_ci.py` risolto con l'editor.
+
+**1. I 132 sopravvissuti della notte del Giudice sui Blocchi 4 e 7** (fase88 52, fase72 30, fase70 13, fase78 7,
+fase75 6, fase69 6, fase98 5, fase106 5, fase109 4, fase125 2, fase115 2): **128 uccisi** con una guardia nel test
+dedicato, ognuna vista rossa col mutante del Giudice iniettato con l'editor e ripristino byte-identico (registri
+`test_faseNN_ROSSO_*.log`). **4 sopravvivono per costruzione e restano sopravvissuti, nessuna dichiarazione di
+equivalenza (B6):** fase72:196 e :200 (primo confronto di `_proietta`: il mutante cambia solo `dv == 0`, e con `dv == 0`
+`proiettato == attuale`, quindi tutte le strade finiscono in `None`; e `predici_guasti` scarta `dv == 0` alla riga 180),
+fase106:59 (`prezzo_base > 0` → `>= 0`: la riga 60 `if base == 0` assorbe), fase125:24 (`v >= 0` → `v > 0`: l'unico
+ingresso che differisce è 0 e risponde 0 in entrambi). Prova per casi nella consegna, guardie che documentano la
+promessa: la strada per chiuderli è la riscrittura della riga ridondante («autorizzato»), in un giro solo con fase59.
+Due cose trovate per strada: fase98:91 accetta `PAGAMENTO_BPS=0` esplicito dall'ambiente e porta la tariffa tecnica a
+zero senza rumore (la guardia pinna il comportamento di oggi; «anche lo zero ripiega?» è una decisione sui soldi);
+fase109:48, il temporaneo di `_scrivi` nasce nella cartella corrente (la guardia legge il `dir=` con un mock su
+`tempfile.mkstemp`).
+
+**2. `collaudi/esame_pannello_soldi.py` — Blocco 7, casella 2 «il pannello dice sempre la verità sui suoi soldi (nessun
+saldo stimato)».** Sistema vero in cartella temporanea, Stripe finto, DUE host, il mastro su file letto con SQL come
+secondo conto: 20 passi su 21 verdi (mastro = rotta = cassaforte = netto + tassa, 16400; hold solo `in_attesa`;
+rimborsata `trattenuto`; A non vede B; 401 senza token). **Il rilievo, e la casella resta ROSSA col motivo (non
+scritta):** `/api/host/metriche` `revenue_cents` CRESCE per un hold MAI pagato (20000 → 40000): fase58:583 somma
+`unita_occupate × prezzo` sul calendario, e l'hold occupa le notti prima di pagare; ed è il lordo ospite, mentre il
+mastro accanto dice 16400. È un «saldo stimato» alla lettera. Strade (decisione del fondatore: soldi, righe fase83
+9644-9670 / fase58): revenue dai soli pagati · hold esclusi dal calendario · casella riscritta. D18 completo:
+precondizioni, `--con-guasto` (hold marcato maturato: 5 rossi, uscita 1; con `--scrivi` FERMO uscita 2), `--autoprova`
+13 casi, `NON_GUARDA` 6; guardie `TestLEsameDelPannelloSoldiNonPuoBARARE` (6) viste rosse con 5 guasti nell'attrezzo;
+**ambiente intatto misurato** (`UPLOAD_DIR` e `ProviderStripe._fetch_reale` salvati e rimessi anche se il banco
+esplode): la lezione della CI di stamattina applicata prima di consegnare.
+
+**Cura di B prima di spingere:** bandit segnalava 2 B106 e poi 1 B105 sul test di fase88 (`line_token="LINE-1"` come
+argomento, poi la costante chiamata `LINE_TOKEN`): il valore sta in `CANALE_LINE`, e il cricchetto torna 548/548;
+ruff 677/686. Caricatore **6644**. Undici moduli di test + la classe nuova verdi uno per uno. Blocco 7: 0 su 2.
+
 ### 📜 LA CLAUSOLA SULLA LINGUA ENTRA NEL TESTO CHE L'HOST FIRMA, E LE ULTIME 5 PAROLE CONGELATE NON ERANO TRADUZIONI — 7 settembre, chat C (albero Core_Auto_C3, ramo `testi-lancio-C` su `18def89`); integrata da B (albero B2, ramo `integra-C-2026-09-07`, «se è la cosa giusta autorizzato» del fondatore)
 
 **Rete:** `corsia_C_2026-09-07\lavoro_C_finale_con_host_da_solo.patch` (sha256 `f60553cb…`, 6 file: tre attrezzi nuovi,

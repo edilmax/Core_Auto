@@ -59,5 +59,31 @@ class TestMetriche(unittest.TestCase):
             self.assertIsInstance(v, int)
 
 
+# ═══════════════════════════════════════════════════════════════════════════════════════
+# I 2 PUNTI SOPRAVVISSUTI DELLA NOTTE FRA IL 6 E IL 7 SETTEMBRE 2026 (Giudice, Blocco 4)
+# ═══════════════════════════════════════════════════════════════════════════════════════
+
+class TestI2PuntiSopravvissutiDellaNotteDel7Settembre(unittest.TestCase):
+    """Il Giudice (giudice_notte_blocchi_4_7) ha trovato 2 punti: una prenotazione con
+    `notti` a ZERO deve ricalcolare le notti dalle date (non fidarsi dello zero), e un
+    lead time di ZERO giorni (prenotato il giorno stesso) entra nella media. UNA guardia
+    per punto, vista ROSSA col mutante iniettato con l'editor."""
+
+    def test_riga20_con_notti_a_ZERO_le_notti_si_ricalcolano_dalle_date(self):
+        p = [{"prezzo_guest_cents": 20000, "notti": 0,
+              "check_in": "2026-09-10", "check_out": "2026-09-12"}]
+        m = calcola_metriche(p, giorni_periodo=30, unita=1)
+        self.assertEqual(2, m["notti_vendute"], "notti=0 e' stato preso per buono")
+        self.assertEqual(10000, m["adr_cents"])
+
+    def test_riga50_un_lead_time_di_ZERO_giorni_entra_nella_media(self):
+        p = [{"prezzo_guest_cents": 100, "notti": 1, "lead_time_giorni": 0},
+             {"prezzo_guest_cents": 100, "notti": 1, "lead_time_giorni": 4}]
+        self.assertEqual(2, calcola_metriche(p)["lead_time_medio_giorni"],
+                         "la prenotazione del giorno stesso e' uscita dalla media")
+        p_neg = [{"prezzo_guest_cents": 100, "notti": 1, "lead_time_giorni": -1}]
+        self.assertEqual(0, calcola_metriche(p_neg)["lead_time_medio_giorni"])
+
+
 if __name__ == "__main__":
     unittest.main()
