@@ -58,7 +58,7 @@ class TestGuidaOperativa(unittest.TestCase):
 
     def test_la_pagina_e_viva(self):
         self.assertGreater(len(self.testo), 1500, "pagina troppo corta: e' un guscio?")
-        self.assertIn("<title>", self.testo)
+        self.assertIn("<title", self.testo)   # il <title> porta data-i18n dal 2026-09-07
 
     def test_la_penale_dichiarata_e_quella_del_MOTORE(self):
         """Il cuore della guardia: la percentuale scritta nella guida deve venire dalla

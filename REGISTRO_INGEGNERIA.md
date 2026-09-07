@@ -403,6 +403,65 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 📜 LA CLAUSOLA SULLA LINGUA ENTRA NEL TESTO CHE L'HOST FIRMA, E LE ULTIME 5 PAROLE CONGELATE NON ERANO TRADUZIONI — 7 settembre, chat C (albero Core_Auto_C3, ramo `testi-lancio-C` su `18def89`); integrata da B (albero B2, ramo `integra-C-2026-09-07`, «se è la cosa giusta autorizzato» del fondatore)
+
+**Rete:** `corsia_C_2026-09-07\lavoro_C_finale_con_host_da_solo.patch` (sha256 `f60553cb…`, 6 file: tre attrezzi nuovi,
+la scheda, due file di test), applicata sopra il ramo di A; conflitto additivo in `test_pipeline_ci.py` (A e C hanno
+aggiunto classi in coda) risolto con l'editor tenendo tutte e due. Consegna: `consegna_C.txt` sezioni A-I + addendum,
+`fascicolo_avvocato.txt` (6 domande).
+
+**1. `collaudi/esame_cifre_pubbliche.py` — Blocco 4, casella 1 «ogni cifra pubblica coincide col motore».** Non conta da
+sé: riusa l'uscita di `audit_millimetrico.py` (78 confronti) e la trasforma in una casella con precondizioni, autoprova
+nelle due direzioni, `NON_GUARDA`, `--con-guasto` che non scrive. Rilanciato da B con `--scrivi` sul testo di master:
+VERDE, denominatore 78 → `python collaudi/scheda.py --blocco 4` = 1 su 3. Guardia `TestLEsameDelleCifrePubblicheNonPuoBARARE`
+(5) in `test_pipeline_ci.py`.
+
+**2. `collaudi/esame_testi_congelati.py` — Blocco 6, casella 1 «nessun testo resta congelato in italiano».** Riusa il
+criterio di `occhio_del_fondatore.esamina` (9 pagine vere × 8 lingue = denominatore 72; 5 gusci esclusi perché
+renderizzati dal JS). **Il numero «~1034 parole» era vecchio: misurato, sono 5**, in 3 pagine — e nessuna delle cinque
+era prosa italiana: tre NOMI PROPRI in minuscolo in un menu a tendina di `host.html` (`booking` `airbnb` `expedia`: il
+criterio dell'occhio usa la minuscola per distinguere la prosa dai nomi), un `<title>` già in inglese (`commissioni.html`)
+e uno in italiano (`guida-operativa.html`). Riparazione, non dizionario: i marchi scritti come si scrivono (`Booking`
+`Airbnb` `Expedia`, con `value="booking"` ecc. esplicito così l'API riceve gli stessi valori di prima: fase69 li
+normalizza in minuscolo comunque); i due `<title>` marcati `data-i18n="tit"` con la chiave nelle 8 lingue dentro il
+dizionario `TR` che le due pagine già usano (`apply()` scrive `textContent`/`innerHTML` su ogni `[data-i18n]`, e
+`querySelectorAll` prende anche il `<head>`). L'esame da ROSSO «5 parole in 3 pagine» a VERDE 72 (registri
+`esame_testi_congelati_prima.log` / `_dopo.log`) → `scheda.py --blocco 6` = 1 su 2. **Rilievo scritto e non riparato:**
+i `<title>` del sito sono in lingue miste (`diventa-host.html` inglese, `contratto-host.html` italiano). Guardia
+`TestLEsameDeiTestiCongelatiNonPuoBARARE` (6).
+
+**3. La clausola sulla lingua nel contratto host (produzione, `fase163_accettazioni.py`).** C aveva prima esagerato il
+difetto («l'host non lo sa») e si è corretta con la misura: l'host È informato dal contorno (`contratto-host.html:72-73`
+«testo che fa fede: italiano», campo `lingua_che_fa_fede` nella risposta API). Il difetto vero: **la clausola non era nel
+TESTO FIRMATO** — `doc_sha256()` vincola versione + testo italiano, e né `_IT` né `_EN` dicevano quale lingua fa fede; i
+Termini per l'ospite lo fanno bene (art. 12 dentro il testo). E lo stesso fatto era scritto a mano in sei posti
+(fase185 costante, fase163:406 copia, due righe in contratto-host.html, privacy.html, termini.html). D20 nell'ordine:
+guardia `TestLaLinguaCheFaFedeSTAnelTESTOFIRMATO` in `test_fase163_accettazioni.py` vista ROSSA sul codice di produzione
+(«il testo FIRMATO non dice quale lingua fa fede, in: ['it', 'en']», `C_test_fase163_accettazioni.log`) e verificata
+capace di dire verde (clausola iniettata in memoria); poi, con l'«autorizzato» del fondatore, **ART. 16 — LINGUA** in coda
+a `_IT` e `_EN` (fa fede l'italiano, il testo su cui è calcolata l'impronta del documento sottoscritto) e
+`CONTRATTO_HOST_VERSIONE` da `2026-08-10` a **`2026-09-07`** (ogni host rifirma al login: oggi 0 host firmati, costo
+zero); guardia verde, 21/21 (`C_test_fase163_VERDE.log`). Il secondo test della classe (la costante di fase185 e la copia
+di fase163 coincidono) è latente e dichiarato: passa oggi, serve il giorno in cui una delle due copie cambia. ⚠️ Per
+l'avvocato (nel fascicolo): se l'ART. 16 vada aggiunto all'elenco dell'ART. 15 (approvazione specifica ex artt.
+1341-1342 c.c.) — per un host che non legge l'italiano è plausibilmente onerosa.
+
+**4. `collaudi/esame_host_da_solo.py` — Blocco 7 casella 1, IN CORSO, non finito.** Entra come file, nessun test lo
+importa, nessuna casella scritta. Misurato da C prima di fermarsi: il viaggio dell'host passa tutti i 14 passi dalle
+rotte vere (registrazione con 3 spunte, pubblica col token e 401 senza, calendario, prenotazione, Stripe finto conferma,
+ospite conferma, maturato 0 → 18000 nel pannello). Trappola da tenere: con `stripe_secret_key` vuota il payout matura
+senza pagamento, quindi chiave finta e provider sostituito sono obbligatori. La chat C di stanotte si è fermata alle
+02:1x per una violazione di B2 (un `sed -i.bak` su questo file) e ha fatto la cosa giusta; la riga cambiata dal `sed` era
+una sola (`ATTESI` → `len(PASSI_ATTESI)`), letta, e il `.bak` è stato tolto da B.
+
+**5. Le chiavi del rimborso in 8 lingue** (`rimborso_cosa_torna`, `rimborso_ripensamento`, con segnaposto `{ore}`
+`{giorni}` e la strada «`applicaTraduzioni` sostituisce, il server manda `num` accanto a `ui`», `GIORNI_MIN_RIPENSAMENTO`
+da promuovere a costante) restano nella consegna: produzione fase83 + `index.html`, SOLO dopo la risposta del fondatore
+sul ripensamento 48 h (comunicarlo com'è o restringerlo).
+
+**Numeri (misurati sull'albero di C sopra la cura di A):** caricatore **6504**; ruff 680/686 e bandit 548/548, nessuna
+segnalazione nuova; i tre moduli di test toccati verdi uno per uno.
+
 ### 🚪 BLOCCO 3 A 3 SU 3, TRE MODULI DI SICUREZZA CHE NON AVEVANO TEST, E IL CENTESIMO DEGLI SCONTI — notte fra il 6 e il 7 settembre, chat A (albero Core_Auto_A3, ramo `blocco3-accessi-A` su `18def89`); integrata da B il 7 settembre (albero B2, ramo `integra-A-2026-09-07` da `ae69c1f`)
 
 **Il mandato (porta del lancio, decisione del fondatore del 6 settembre sera):** la chat A fa attrezzi e guardie del

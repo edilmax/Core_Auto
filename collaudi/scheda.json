@@ -76,6 +76,17 @@
   "motivo": "",
   "quando": "2026-09-05T01:58:22"
  },
+ "8267c64a367a": {
+  "blocco": 4,
+  "comando": "python collaudi/esame_cifre_pubbliche.py --scrivi",
+  "commit": "2c60533",
+  "condizione": "ogni cifra pubblica coincide col motore (lo misura gia' `audit_millimetrico.py`)",
+  "denominatore": 78,
+  "esito": true,
+  "impronta": "16b54b3dfa6e",
+  "motivo": "",
+  "quando": "2026-09-07T16:45:06"
+ },
  "a6c9694a48f1": {
   "blocco": 2,
   "comando": "python collaudi/mutazione_prodotto.py --modulo fase34_prenotazioni.py fase36_booking_api.py fase58_channel_manager.py fase59_concierge.py fase62_predictive_noshow.py fase67_coda_intelligente.py fase71_commitment.py fase82_ical_sync.py fase111_cancellazione.py fase135_ical_bidirezionale.py fase152_notifiche_prenotazione.py fase187_fuso_orario.py fase203_ical_orologio.py --tetto 150 --minuti 600 --killer test_fase58_channel_manager test_fase59_concierge test_fase62_predictive_noshow test_fase67_coda_intelligente test_fase82_ical_sync test_fase111_cancellazione test_fase135_ical_bidirezionale test_fase152_notifiche_prenotazione test_fuso_alloggio test_fase203_ical_orologio",
@@ -108,6 +119,17 @@
   "impronta": "bb8bae0cf2dc",
   "motivo": "",
   "quando": "2026-09-05T01:59:44"
+ },
+ "e0c5eaf17028": {
+  "blocco": 6,
+  "comando": "python collaudi/esame_testi_congelati.py --scrivi",
+  "commit": "2c60533",
+  "condizione": "nessun testo resta congelato in italiano dove la pagina dichiara 8 lingue: l'occhio del fondatore conta ZERO parole ferme sulle pagine che non sono gusci riempiti dal server",
+  "denominatore": 72,
+  "esito": true,
+  "impronta": "198b6c89a289",
+  "motivo": "",
+  "quando": "2026-09-07T16:45:06"
  },
  "ec84faaea398": {
   "blocco": 2,
