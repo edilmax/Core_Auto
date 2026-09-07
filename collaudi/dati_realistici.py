@@ -102,7 +102,7 @@ REF_ANNO_PRIMA = "IDEM-2025-9001"      # esercizio fiscale precedente
 # Quando fase163 alza la versione, questa riga si aggiorna A MANO -- e chi se ne
 # dimentica lo scopre subito, perche' `test_una_versione_vecchia_del_contratto_obbliga_a_
 # riaccettare` diventa rossa. E' il segnale, non un fastidio.
-CONTRATTO_VERSIONE_CORRENTE = "2026-08-10"    # deve combaciare con fase163 (a mano)
+CONTRATTO_VERSIONE_CORRENTE = "2026-09-07"    # deve combaciare con fase163 (a mano)
 CONTRATTO_VERSIONE_VECCHIA = "2026-01-11"     # una versione DAVVERO vecchia, mai corrente
 PRIVACY_VERSIONE_CORRENTE = "2026-07-20"
 

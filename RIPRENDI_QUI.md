@@ -148,6 +148,11 @@ dizionario che la pagina già usa (non un modello nuovo): la casella dei testi c
 `.bak` lasciato dal `sed` di stanotte in C3 è stato tolto dopo aver letto la riga che il `sed` aveva cambiato. Restano aperte per il
 fondatore: il ripensamento 48 h (chiavi `rimborso_cosa_torna`/`rimborso_ripensamento`, produzione fase83 + index.html) e il
 centesimo degli sconti (fase59) + i due punti di fase72 (righe 196/200) non uccidibili senza riscrittura: un giro solo, «autorizzato».
+**La CI della PR #161 (`5d5675e`) ha trovato 4 rossi nella suite intera, tutti guardie che hanno fatto il loro mestiere sulle
+righe di produzione nuove:** `test_dati_reali` (la copia a mano della versione del contratto in `collaudi/dati_realistici.py`,
+che per scelta non importa dal motore: aggiornata a 2026-09-07), `test_guida_operativa` (cercava `<title>` alla lettera: ora
+`<title` porta `data-i18n`), `test_occhio_fondatore` ×2 (il cricchetto delle parole ferme pretende che i tetti scendano quando
+il debito scende: `commissioni` 1→0, `guida-operativa` 1→0, `host` 3→0, totale 10→5). Nessuna riga di produzione toccata dalla cura.
 
 **📏 5 SETTEMBRE, 02:3x — IL METRO RIPARATO: le impronte non dipendono più dai fine riga (ramo `metro-fine-riga`
 su `2a3d6d7`, parola del fondatore «ripara»):** lo stesso Blocco 1 leggeva 6 su 6 in B2 e **0 su 6** in un albero
