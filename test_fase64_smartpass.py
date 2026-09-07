@@ -152,5 +152,75 @@ class TestWallet(unittest.TestCase):
         self.assertIn("istruzioni", p)
 
 
+class TestGliOttoSopravvissutiDellaNotte(unittest.TestCase):
+    """Una guardia per ognuno degli 8 punti che il Giudice ha trovato scoperti nella notte del
+    2026-09-06 (giudice_notte_blocco3_2.log): ognuna e' stata vista ROSSA col mutante
+    iniettato con l'editor e ripristino byte-identico."""
+
+    def _pass_firmato(self, **campi):
+        dati = {"prenotazione_id": "p1", "alloggio_id": "casa", "check_in": "2026-07-01",
+                "check_out": "2026-07-03", "valido_da": DA, "valido_a": A}
+        dati.update(campi)
+        return FirmaQuote(SEGRETO).codifica(dati)
+
+    def test_riga50_un_valore_che_NON_e_un_intero_vero_rende_il_pass_corrotto(self):
+        ver = crea_verificatore_pass(SEGRETO, orologio=lambda: DENTRO)
+        for storto in ("123", 1.5, True, None, [DA]):
+            e = ver.verifica(self._pass_firmato(valido_da=storto), "casa")
+            self.assertEqual((e.consentito, e.motivo), (False, "pass_corrotto"), repr(storto))
+            e = ver.verifica(self._pass_firmato(valido_a=storto), "casa")
+            self.assertEqual((e.consentito, e.motivo), (False, "pass_corrotto"), repr(storto))
+
+    def test_riga82_l_esito_della_porta_non_si_riscrive(self):
+        import dataclasses
+        e = EsitoAccesso(False, "scaduto")
+        with self.assertRaises(dataclasses.FrozenInstanceError):
+            e.consentito = True
+        self.assertFalse(e.consentito)
+
+    def test_riga108_un_pass_che_apre_e_chiude_nello_stesso_istante_non_si_emette(self):
+        em = EmettitorePass(FirmaQuote(SEGRETO), ora_checkin=11, ora_checkout=11)
+        self.assertIsNone(em.emetti("p1", "casa", "2026-07-01", "2026-07-01", fuso=FUSO),
+                          "valido_da == valido_a: finestra vuota, niente pass")
+        self.assertIsNotNone(em.emetti("p1", "casa", "2026-07-01", "2026-07-02", fuso=FUSO))
+
+    def test_riga140_141_ogni_campo_del_pass_deve_avere_il_tipo_giusto_da_solo(self):
+        ver = crea_verificatore_pass(SEGRETO, orologio=lambda: DENTRO)
+        casi = (dict(prenotazione_id=123), dict(alloggio_id=["casa"]),
+                dict(valido_da="%d" % DA), dict(valido_a=float(A)))
+        for storto in casi:
+            e = ver.verifica(self._pass_firmato(**storto), "casa")
+            self.assertEqual((e.consentito, e.motivo), (False, "pass_corrotto"), repr(storto))
+        buono = ver.verifica(self._pass_firmato(), "casa")
+        self.assertTrue(buono.consentito, "il pass sano entra: la guardia distingue")
+
+    def test_riga142_un_pass_corrotto_NON_e_consentito(self):
+        ver = crea_verificatore_pass(SEGRETO, orologio=lambda: DENTRO)
+        e = ver.verifica(self._pass_firmato(prenotazione_id=None), "casa")
+        self.assertIs(e.consentito, False)
+        self.assertEqual(e.motivo, "pass_corrotto")
+
+    def test_riga156_la_revoca_che_esplode_lascia_la_TRACCIA_nel_registro(self):
+        def boom(pid):
+            raise RuntimeError("db revoche giu'")
+        ver = crea_verificatore_pass(SEGRETO, orologio=lambda: DENTRO, revocato=boom)
+        token = crea_emettitore_pass(SEGRETO).emetti("p1", "casa", "2026-07-01",
+                                                     "2026-07-03", fuso=FUSO)
+        with self.assertLogs("core_auto.smartpass", level="ERROR") as reg:
+            e = ver.verifica(token, "casa")
+        self.assertFalse(e.consentito)
+        rec = [r for r in reg.records if "revoca" in r.getMessage()][0]
+        self.assertIsInstance(rec.exc_info, tuple, "exc_info=True: la traccia c'e', non un False")
+        self.assertIs(rec.exc_info[0], RuntimeError, "ed e' l'eccezione della revoca")
+
+    def test_riga176_le_istruzioni_del_wallet_hanno_un_testo_di_serie_e_uno_proprio(self):
+        p = costruisci_pass_wallet("tok", alloggio_id="casa", titolo="Casa", check_in="2026-07-01",
+                                   check_out="2026-07-03")
+        self.assertEqual(p["istruzioni"], "Avvicina questo codice alla serratura per entrare.")
+        p2 = costruisci_pass_wallet("tok", alloggio_id="casa", titolo="Casa", check_in="2026-07-01",
+                                    check_out="2026-07-03", istruzioni="Codice al citofono: 4")
+        self.assertEqual(p2["istruzioni"], "Codice al citofono: 4")
+
+
 if __name__ == "__main__":
     unittest.main()
