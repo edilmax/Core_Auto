@@ -6,6 +6,8 @@ muffa (richiede durata sostenuta: scatta solo oltre 48h, non sul transitorio), n
 pericolo (ok), letture non-intere ignorate, pericoli multipli (union azioni, severita'
 max), esecuzione attuatori isolata, regole custom, robustezza.
 """
+import dataclasses
+import logging
 import unittest
 
 from fase75_guardian_engine import (
@@ -129,6 +131,72 @@ class TestRobustezza(unittest.TestCase):
                 g.esegui(rep, bad)
             except Exception as e:  # pragma: no cover
                 self.fail(f"sollevato su {bad!r}: {e}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════════════
+# I 6 PUNTI SOPRAVVISSUTI DELLA NOTTE FRA IL 6 E IL 7 SETTEMBRE 2026 (Giudice, Blocco 7)
+# ═══════════════════════════════════════════════════════════════════════════════════════
+
+class TestI6PuntiSopravvissutiDellaNotteDel7Settembre(unittest.TestCase):
+    """Il Giudice (giudice_notte_blocchi_4_7) ha trovato 6 punti in cui il guasto passa e i
+    test restano verdi: il confine ESATTO di una soglia «giu», una regola immediata che
+    si lasciava spegnere da una durata di tipo storto, lo stato 'manutenzione' deciso al
+    contrario, la traccia dell'attuatore che esplode, e i due `frozen`. UNA guardia per
+    punto, vista ROSSA col mutante iniettato con l'editor."""
+
+    # ── righe 47 · 77: regola e pericolo sono IMMUTABILI ──────────────────────────
+    def test_riga47_RegolaPericolo_e_congelata(self):
+        r = RegolaPericolo("gelo", "temp", 0, "avviso", ("riscalda",), direzione="giu")
+        with self.assertRaises(dataclasses.FrozenInstanceError):
+            r.soglia = 100
+        self.assertEqual(hash(RegolaPericolo("gelo", "temp", 0, "avviso", ("riscalda",),
+                                             direzione="giu")), hash(r))
+
+    def test_riga77_Pericolo_e_congelato(self):
+        p = Pericolo("fire", "fumo", 1, "critico", ("allarme",))
+        with self.assertRaises(dataclasses.FrozenInstanceError):
+            p.severita = "avviso"
+        self.assertEqual(hash(Pericolo("fire", "fumo", 1, "critico", ("allarme",))), hash(p))
+
+    # ── riga 115: la soglia «giu» scatta ANCHE sul valore esatto ───────────────────
+    def test_riga115_una_soglia_giu_scatta_sul_valore_ESATTO_e_non_un_passo_sopra(self):
+        regole = (RegolaPericolo("gelo", "temp", 0, "avviso", ("riscalda",), direzione="giu"),)
+        g = crea_guardian(regole)
+        self.assertEqual(1, len(g.valuta("casa", {"temp": 0}).pericoli), "temp = soglia ignorata")
+        self.assertEqual([], g.valuta("casa", {"temp": 1}).pericoli)
+
+    # ── riga 118: una regola IMMEDIATA non guarda le durate, nemmeno se sono storte ─
+    def test_riga118_una_regola_immediata_scatta_anche_con_una_durata_di_tipo_storto(self):
+        g = crea_guardian()
+        for durate in ({"water": "n/d"}, {"water": None}, {"water": -1}, {"water": 0}):
+            rep = g.valuta("casa", {"water": 1}, durate_sostenute=durate)
+            self.assertEqual(["water_leak"], [p.tipo for p in rep.pericoli],
+                             "la perdita d'acqua non scatta con durate=%r" % (durate,))
+
+    # ── riga 134: 'manutenzione' solo se c'e' DAVVERO l'azione di blocco ───────────
+    def test_riga134_lo_stato_manutenzione_dipende_dall_azione_di_blocco_non_dalle_altre(self):
+        solo_avviso = (RegolaPericolo("x", "s", 1, "avviso", ("notifica_host",)),)
+        self.assertEqual("ok", crea_guardian(solo_avviso).valuta("casa", {"s": 1}).stato_consigliato,
+                         "un avviso senza blocco e' diventato 'manutenzione'")
+        solo_blocco = (RegolaPericolo("x", "s", 1, "avviso", ("blocca_manutenzione",)),)
+        self.assertEqual("manutenzione",
+                         crea_guardian(solo_blocco).valuta("casa", {"s": 1}).stato_consigliato)
+
+    # ── riga 156: l'attuatore che esplode lascia LA traccia nel registro ──────────
+    def test_riga156_un_attuatore_che_esplode_grida_ERROR_con_la_traccia(self):
+        g = crea_guardian()
+        rep = g.valuta("casa", {"fumo": 1})
+
+        def boom(_):
+            raise RuntimeError("sirena muta")
+        with self.assertLogs("core_auto.guardian", level="ERROR") as cm:
+            esiti = g.esegui(rep, {"allarme": boom})
+        self.assertIs(False, esiti["allarme"])
+        self.assertEqual(1, len(cm.records))
+        rec = cm.records[0]
+        self.assertEqual(logging.ERROR, rec.levelno)
+        self.assertIsInstance(rec.exc_info, tuple, "l'attuatore fallito non lascia la traccia")
+        self.assertIs(RuntimeError, rec.exc_info[0])
 
 
 if __name__ == "__main__":

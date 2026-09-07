@@ -153,6 +153,22 @@ righe di produzione nuove:** `test_dati_reali` (la copia a mano della versione d
 che per scelta non importa dal motore: aggiornata a 2026-09-07), `test_guida_operativa` (cercava `<title>` alla lettera: ora
 `<title` porta `data-i18n`), `test_occhio_fondatore` ×2 (il cricchetto delle parole ferme pretende che i tetti scendano quando
 il debito scende: `commissioni` 1→0, `guida-operativa` 1→0, `host` 3→0, totale 10→5). Nessuna riga di produzione toccata dalla cura.
+**7 SETTEMBRE, sera — LA SECONDA CONSEGNA DELLA CHAT A: i 132 sopravvissuti dei Blocchi 4 e 7 hanno tutti la loro guardia, e il
+pannello host ha un «saldo stimato»** (ramo `integra-A2-2026-09-07` sopra quello di C, rete `corsia_A_2026-09-07\lavoro_A_2.patch`
+sha256 `f8f4faaa…`, 13 file: 11 `test_fase*.py`, `test_pipeline_ci.py`, `collaudi/esame_pannello_soldi.py`; zero `fase*.py`, undici
+moduli byte-identici): **128 punti uccisi** con una guardia vista rossa ciascuno, **4 sopravvivono per costruzione e restano
+sopravvissuti senza dichiarazione** (fase72:196 e :200 primo confronto di `_proietta` con `dv == 0`; fase106:59 `prezzo_base > 0`
+che la riga 60 assorbe; fase125:24 `v >= 0` dove solo lo zero differisce e risponde 0 in entrambi): prova per casi in
+`consegna_A_2.txt`, la strada è la riscrittura della riga ridondante con «autorizzato». `collaudi/esame_pannello_soldi.py` (Blocco 7
+casella 2, «il pannello dice sempre la verità sui suoi soldi»): sistema vero, Stripe finto, due host, mastro su file letto con SQL
+come secondo conto: 20 passi su 21 verdi (mastro = rotta = cassaforte = netto + tassa; A non vede B; 401 senza token) e **UN
+rilievo vero, la casella resta ROSSA col motivo e non è scritta**: `/api/host/metriche` `revenue_cents` CRESCE per un hold MAI
+pagato (20000 → 40000): fase58:583 somma `unita_occupate × prezzo` sul calendario e l'hold occupa le notti prima di pagare; ed è
+il lordo ospite mentre il mastro accanto dice 16400. **Decisioni del fondatore sui soldi, in un giro solo («autorizzato»):**
+(1) revenue del pannello dai soli pagati, oppure hold esclusi dal calendario, oppure casella riscritta (fase83:9644-9670 /
+fase58); (2) lo sconto in un passo con un arrotondamento in fase59 (il centesimo); (3) le 4 righe ridondanti sopra;
+(4) fase98:91: `PAGAMENTO_BPS=0` esplicito dall'ambiente porta la tariffa tecnica a zero senza rumore — la guardia pinna il
+comportamento di oggi, «anche lo zero ripiega?» è una riga di produzione; (5) il ripensamento 48 h. Caricatore 6644.
 
 **📏 5 SETTEMBRE, 02:3x — IL METRO RIPARATO: le impronte non dipendono più dai fine riga (ramo `metro-fine-riga`
 su `2a3d6d7`, parola del fondatore «ripara»):** lo stesso Blocco 1 leggeva 6 su 6 in B2 e **0 su 6** in un albero
@@ -1725,9 +1741,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 3f09eb9
+CONSEGNE AGGIORNATE A: 6c67368
 
-SUITE ATTUALE: Ran 6504 test
+SUITE ATTUALE: Ran 6644 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

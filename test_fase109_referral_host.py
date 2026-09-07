@@ -1,7 +1,10 @@
 """Test Fase 109 - Referral host-porta-host. Puro + durevole; nessuna rete."""
+import logging
 import os
+import shutil
 import tempfile
 import unittest
+from unittest import mock
 
 from fase109_referral_host import ReferralHost, crea_referral_host
 
@@ -66,6 +69,71 @@ class TestReferral(unittest.TestCase):
         self.assertEqual(ReferralHost(SEG, p).crediti("hostA"), 1000)
         os.remove(p)
         os.rmdir(d)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════════════
+# I 4 PUNTI SOPRAVVISSUTI DELLA NOTTE FRA IL 6 E IL 7 SETTEMBRE 2026 (Giudice, Blocco 7)
+# ═══════════════════════════════════════════════════════════════════════════════════════
+
+class TestI4PuntiSopravvissutiDellaNotteDel7Settembre(unittest.TestCase):
+    """Il Giudice (giudice_notte_blocchi_4_7) ha trovato 4 punti in cui il guasto passa e i
+    test restano verdi: il file temporaneo che nasce ALTROVE rispetto al file (e allora
+    `os.replace` non e' piu' atomico, o fallisce fra due volumi), la scrittura fallita
+    senza traccia, il conteggio dei referee qualificati che mescola i referrer (bonus
+    di scaglione sbagliato: soldi), e una scrittura su disco per un credito di zero.
+    UNA guardia per punto, vista ROSSA col mutante iniettato con l'editor."""
+
+    def setUp(self):
+        self.d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.d, True)
+
+    # ── riga 48: il temporaneo nasce ACCANTO al file, non nella cartella corrente ───
+    def test_riga48_il_file_temporaneo_nasce_nella_cartella_del_file(self):
+        percorso = os.path.join(self.d, "referral.json")
+        r = crea_referral_host(SEG, percorso)
+        with mock.patch.object(tempfile, "mkstemp", wraps=tempfile.mkstemp) as mk:
+            self.assertTrue(r.registra_referral(r.genera_codice("hostA"), "hostB"))
+        self.assertEqual(1, mk.call_count)
+        self.assertEqual(self.d, mk.call_args.kwargs.get("dir"),
+                         "il temporaneo e' nato in %r invece che accanto al file"
+                         % (mk.call_args.kwargs.get("dir"),))
+        self.assertTrue(os.path.exists(percorso))
+        self.assertEqual([], [f for f in os.listdir(self.d) if f.endswith(".tmp")])
+
+    # ── riga 58: una scrittura fallita grida WARNING con la traccia ────────────────
+    def test_riga58_una_scrittura_fallita_grida_WARNING_con_la_traccia(self):
+        percorso = os.path.join(self.d, "cartella_che_non_esiste", "referral.json")
+        r = crea_referral_host(SEG, percorso)
+        with self.assertLogs("core_auto.referral_host", level="WARNING") as cm:
+            r.registra_referral(r.genera_codice("hostA"), "hostB")
+        self.assertEqual(1, len(cm.records))
+        rec = cm.records[0]
+        self.assertEqual(logging.WARNING, rec.levelno)
+        self.assertIsInstance(rec.exc_info, tuple, "la scrittura fallita non lascia la traccia")
+        self.assertTrue(issubclass(rec.exc_info[0], OSError), repr(rec.exc_info[0]))
+
+    # ── riga 93: si contano SOLO i qualificati DI QUEL referrer ────────────────────
+    def test_riga93_lo_scaglione_conta_solo_i_referee_qualificati_dello_STESSO_referrer(self):
+        r = crea_referral_host(SEG)
+        cod_b = r.genera_codice("hostB")
+        for i in range(3):                                   # B ha gia' 3 qualificati
+            self.assertTrue(r.registra_referral(cod_b, "b%d" % i))
+            self.assertEqual(1000, r.conferma_qualifica("b%d" % i))
+        cod_a = r.genera_codice("hostA")
+        self.assertTrue(r.registra_referral(cod_a, "a0"))
+        self.assertTrue(r.registra_referral(cod_a, "a1"))    # a1 resta NON qualificato
+        self.assertEqual(1000, r.conferma_qualifica("a0"),
+                         "il primo referee di A ha preso lo scaglione di B")
+        self.assertEqual(1000, r.crediti("hostA"))
+        self.assertEqual(3000, r.crediti("hostB"))
+
+    # ── riga 110: un credito di ZERO non scrive su disco ───────────────────────────
+    def test_riga110_usare_un_credito_che_non_c_e_non_scrive_su_disco(self):
+        percorso = os.path.join(self.d, "referral.json")
+        r = crea_referral_host(SEG, percorso)
+        self.assertEqual(0, r.usa_credito("hostZ", 100))
+        self.assertFalse(os.path.exists(percorso), "scritto su disco per un credito di zero")
+        self.assertEqual(0, r.crediti("hostZ"))
 
 
 if __name__ == "__main__":

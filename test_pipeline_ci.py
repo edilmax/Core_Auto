@@ -12301,5 +12301,135 @@ class TestLEsameDeiTestiCongelatiNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
         self.assertGreaterEqual(len(e.NON_GUARDA), 3, "D18 punto 3")
 
 
+class TestLEsameDelPannelloSoldiNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
+    """⛔ D18 PUNTO 4 PER `collaudi/esame_pannello_soldi.py`, l'attrezzo della casella «il pannello
+    dice sempre la verita' sui suoi soldi (nessun saldo stimato)» (Blocco 7, chat A 2026-09-07).
+
+    Qui NON si avvia il banco (sistema vero + Stripe finto: e' il lavoro dell'esame, non della
+    guardia): si mette il GIUDIZIO davanti a passi costruiti; si pretende che col guasto dentro non
+    scriva mai; che il SECONDO conto (le righe del mastro lette con SQL) sommi davvero per host e non
+    mescoli gli host; che l'ambiente (UPLOAD_DIR, il fetch di Stripe sulla classe) torni com'era anche
+    quando il banco esplode; e che il testo della casella non sia ricopiato nel sorgente.
+
+    ⛔ IL RILIEVO che l'esame tiene fermo: `/api/host/metriche` risponde un `revenue_cents` che cresce
+    per un hold MAI pagato (il calendario di fase58 somma unita' occupate x prezzo, e un hold occupa le
+    notti prima di pagare). Finche' e' cosi' la casella e' ROSSA col suo motivo: non si aggira."""
+
+    def _esame(self):
+        return self._carica("esame_pannello_soldi.py", "_esame_pannello_soldi_sotto_guardia")
+
+    def test_IL_GIUDIZIO_DICE_VERDE_SOLO_CON_LE_CINQUE_SITUAZIONI_INTERE(self):
+        esame = self._esame()
+        verde, motivi, den = esame.giudica(esame.passi_finti())
+        self.assertTrue(verde, motivi)
+        self.assertEqual(den, 10)
+        for s in esame.SITUAZIONI:
+            verde, motivi, _d = esame.giudica(esame.passi_finti(rossi=(s,)))
+            self.assertFalse(verde, "con un rosso in «%s» ha detto VERDE" % s)
+            self.assertTrue(motivi)
+            verde, motivi, _d = esame.giudica(esame.passi_finti(senza=(s,)))
+            self.assertFalse(verde, "con «%s» non misurata ha detto VERDE" % s)
+        self.assertFalse(esame.giudica([])[0])
+        self.assertFalse(esame.giudica(esame.passi_finti() + [("altro", "x", True, "")])[0])
+
+    def test_COL_GUASTO_DENTRO_NON_SCRIVE_MAI(self):
+        esame = self._esame()
+        vera_registra = esame.scheda.registra
+        scritture = []
+        try:
+            esame.scheda.registra = lambda *a, **k: scritture.append((a, k))
+            self.assertEqual(esame.main(["--con-guasto", "--scrivi"]), 2)
+            self.assertEqual(scritture, [])
+        finally:
+            esame.scheda.registra = vera_registra
+
+    def test_IL_SECONDO_CONTO_LEGGE_DAVVERO_IL_MASTRO_E_NON_MESCOLA_GLI_HOST(self):
+        """Il secondo conto e' SQL sul file del mastro: qui gli si da' un mastro costruito a mano con
+        due host e tre stati, e si pretende le somme giuste per ognuno e nessuna riga di nessuno."""
+        import sqlite3
+        esame = self._esame()
+        d = tempfile.mkdtemp()
+        try:
+            percorso = os.path.join(d, "payout.db")
+            con = sqlite3.connect(percorso)
+            con.execute("CREATE TABLE payout (prenotazione_id TEXT PRIMARY KEY, host_id TEXT NOT NULL, "
+                        "minori INTEGER NOT NULL, valuta TEXT NOT NULL, stato TEXT NOT NULL, ts INTEGER NOT NULL)")
+            con.executemany("INSERT INTO payout VALUES (?,?,?,?,?,0)", [
+                ("p1", "A", 100, "EUR", "maturato"), ("p2", "A", 250, "EUR", "maturato"),
+                ("p3", "A", 70, "EUR", "in_attesa"), ("p4", "B", 999, "EUR", "maturato"),
+                ("p5", "B", 5, "USD", "trattenuto")])
+            con.commit()
+            con.close()
+            self.assertEqual(esame.riepilogo_dal_mastro(percorso, "A"), {"EUR": {"maturato": 350, "in_attesa": 70}})
+            self.assertEqual(esame.riepilogo_dal_mastro(percorso, "B"), {"EUR": {"maturato": 999}, "USD": {"trattenuto": 5}})
+            self.assertEqual(esame.riepilogo_dal_mastro(percorso, "C"), {})
+            self.assertEqual(sorted(r["prenotazione_id"] for r in esame.righe_del_mastro(percorso, "A")), ["p1", "p2", "p3"])
+            self.assertEqual(len(esame.righe_del_mastro(percorso)), 5)
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_L_AMBIENTE_TORNA_COM_ERA_ANCHE_SE_IL_BANCO_ESPLODE(self):
+        """Lezione della CI del 2026-09-07: un attrezzo che costruisce un sistema locale non deve
+        lasciare `os.environ` cambiato ne' il fetch di Stripe sostituito sulla classe."""
+        import fase85_pagamenti_stripe as stripe_mod
+        esame = self._esame()
+        vero_banco = esame.Banco
+        vera_registra = esame.scheda.registra
+        prima_upload = os.environ.get("UPLOAD_DIR")
+        prima_fetch = vars(stripe_mod.ProviderStripe).get("_fetch_reale")
+        scritture = []
+
+        class _BancoCheEsplode(object):
+            def __init__(self, d):
+                os.environ["UPLOAD_DIR"] = d + "/uploads"                  # come fa il banco vero
+                stripe_mod.ProviderStripe._fetch_reale = staticmethod(lambda *a, **k: None)
+                raise RuntimeError("banco rotto apposta")
+        def _registra_finta(*a, **k):
+            scritture.append((a, k))
+            return {"blocco": 7, "esito": k.get("esito"), "denominatore": k.get("denominatore"),
+                    "impronta": "finta", "motivo": k.get("motivo")}
+        try:
+            esame.Banco = _BancoCheEsplode
+            esame.scheda.registra = _registra_finta
+            flusso = io.StringIO()
+            vero_stdout = sys.stdout
+            sys.stdout = flusso
+            try:
+                rc = esame.main(["--scrivi"])
+            finally:
+                sys.stdout = vero_stdout
+            self.assertEqual(rc, 1, flusso.getvalue()[-800:])
+            self.assertIn("ESPLOSO", flusso.getvalue())
+            self.assertEqual(len(scritture), 1, "un banco esploso deve scrivere un ROSSO col motivo, non tacere")
+            self.assertIs(scritture[0][1].get("esito"), False)
+            self.assertEqual(os.environ.get("UPLOAD_DIR"), prima_upload, "UPLOAD_DIR e' rimasto cambiato")
+            self.assertIs(vars(stripe_mod.ProviderStripe).get("_fetch_reale"), prima_fetch,
+                          "il fetch di Stripe e' rimasto sostituito sulla classe")
+        finally:
+            esame.Banco = vero_banco
+            esame.scheda.registra = vera_registra
+            if prima_upload is None:
+                os.environ.pop("UPLOAD_DIR", None)
+            else:
+                os.environ["UPLOAD_DIR"] = prima_upload
+            if prima_fetch is not None:
+                stripe_mod.ProviderStripe._fetch_reale = prima_fetch
+
+    def test_IL_TESTO_DELLA_CASELLA_NON_E_RICOPIATO_A_MANO(self):
+        esame = self._esame()
+        testo = esame.condizione()
+        self.assertIn("saldo stimato", testo)
+        with io.open(os.path.join(QUI, "collaudi", "esame_pannello_soldi.py"), encoding="utf-8") as f:
+            sorgente = f.read()
+        self.assertNotIn(testo, sorgente)
+
+    def test_L_ESAME_DICHIARA_COSA_NON_HA_GUARDATO_E_SA_PROVARSI(self):
+        esame = self._esame()
+        self.assertTrue(getattr(esame, "NON_GUARDA", ()))
+        self.assertTrue(all(isinstance(r, str) and r.strip() for r in esame.NON_GUARDA))
+        riuscita, righe = esame.autoprova()
+        self.assertTrue(riuscita, righe)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
