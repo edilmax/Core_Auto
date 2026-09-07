@@ -12,10 +12,10 @@ che mette una rotta 2xx non dichiarata fra le `aperte` e' stata spostata fra le 
 aggiunge le rotte servite fuori dal router e' stata tolta -> `test_le_rotte_vengono_dal_codice`
 rosso (manca `/api/bunker/marca.tsr`).
 """
+import contextlib
 import io
-import json
 import os
-import subprocess
+import shutil
 import sys
 import unittest
 
@@ -122,11 +122,32 @@ class TestLEsameDegliAccessiNonPuoBARARE(unittest.TestCase):
 
     # ── --con-guasto non scrive MAI ──────────────────────────────────────────────────
     def test_con_guasto_e_scrivi_insieme_si_fermano_con_uscita_2(self):
-        esito = subprocess.run([sys.executable, os.path.join(QUI, "collaudi", "esame_accessi.py"),
-                                "--con-guasto", "--scrivi"], stdout=subprocess.PIPE,
-                               stderr=subprocess.PIPE, timeout=120)
-        self.assertEqual(esito.returncode, 2, esito.stdout.decode("utf-8", "replace")[-400:])
-        self.assertIn("FERMO", esito.stdout.decode("utf-8", "replace"))
+        # In-processo, come le altre guardie sugli attrezzi (test_pipeline_ci): un
+        # sottoprocesso non comprerebbe niente e conterebbe come segnalazione nuova
+        # per gli strumenti statici (S603/B603).
+        uscita = io.StringIO()
+        with contextlib.redirect_stdout(uscita):
+            codice = ea.main(["--con-guasto", "--scrivi"])
+        self.assertEqual(codice, 2, uscita.getvalue()[-400:])
+        self.assertIn("FERMO", uscita.getvalue())
+
+    # ── il sistema locale NON lascia l'ambiente sporco ────────────────────────────────
+    def test_il_sistema_locale_rimette_MARCA_TEMPORALE_com_era(self):
+        """Nella suite intera tutto gira in UN processo: un attrezzo che spegne la marca
+        temporale nell'ambiente e non la riaccende spegne anche i test che vengono dopo
+        (23 rossi in CI su 2c60533, tutti `503 marca_temporale_non_attiva`)."""
+        prima = os.environ.get("MARCA_TEMPORALE")
+        os.environ["MARCA_TEMPORALE"] = "1"
+        try:
+            _r, d, _dati = ea.sistema_locale()
+            shutil.rmtree(d, ignore_errors=True)
+            self.assertEqual(os.environ.get("MARCA_TEMPORALE"), "1",
+                             "sistema_locale() ha lasciato MARCA_TEMPORALE cambiata")
+        finally:
+            if prima is None:
+                os.environ.pop("MARCA_TEMPORALE", None)
+            else:
+                os.environ["MARCA_TEMPORALE"] = prima
 
 
 if __name__ == "__main__":

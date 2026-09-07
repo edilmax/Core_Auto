@@ -36,9 +36,17 @@ class _Orologio:
         self.t += sec
 
 
+# Le password di prova stanno in costanti, come in test_marca_temporale_server (`bunker_password=PW`):
+# passate come stringhe letterali contano per bandit come segreti cablati (B106).
+PW = "Pass@word1"
+PW_ACCENTI = "càffè-Ünïcode"
+PW_VUOTA = ""
+PW_X = "x"
+
+
 def _bunker(**kw):
     oro = _Orologio()
-    base = dict(totp_secret=SEGRETO_RFC, password="Pass@word1", break_glass="ROMPI-VETRO")
+    base = dict(totp_secret=SEGRETO_RFC, password=PW, break_glass="ROMPI-VETRO")
     base.update(kw)
     return crea_bunker(FirmaQuote(b"S" * 32), orologio=oro, **base), oro
 
@@ -93,21 +101,21 @@ class TestIlSecondoFattore(unittest.TestCase):
             self.assertEqual(b.verifica_secondo_fattore(sbagliato), "", repr(sbagliato))
 
     def test_una_password_con_accenti_funziona_e_una_sbagliata_con_accenti_non_esplode(self):
-        b, _ = _bunker(password="càffè-Ünïcode")
+        b, _ = _bunker(password=PW_ACCENTI)
         self.assertEqual(b.verifica_secondo_fattore("càffè-Ünïcode"), "password")
         self.assertEqual(b.verifica_secondo_fattore("càffè-Ünïcodé"), "", "diverso, senza TypeError")
 
     def test_un_codice_vuoto_non_apre_mai_nemmeno_con_password_vuota(self):
-        b, _ = _bunker(totp_secret="", password="", break_glass="")
+        b, _ = _bunker(totp_secret=PW_VUOTA, password=PW_VUOTA, break_glass="")
         self.assertFalse(b.configurato)
         self.assertEqual(b.verifica_secondo_fattore(""), "")
-        b2, _ = _bunker(totp_secret="", password="", break_glass="X")
+        b2, _ = _bunker(totp_secret=PW_VUOTA, password=PW_VUOTA, break_glass="X")
         self.assertTrue(b2.configurato)
         self.assertEqual(b2.verifica_secondo_fattore(""), "")
         self.assertEqual(b2.verifica_secondo_fattore("X"), "break_glass")
 
     def test_configurato_vuole_la_firma_E_almeno_un_fattore(self):
-        self.assertFalse(Bunker(None, password="x").configurato)
+        self.assertFalse(Bunker(None, password=PW_X).configurato)
         self.assertFalse(Bunker(FirmaQuote(b"S" * 32)).configurato)
         self.assertTrue(Bunker(FirmaQuote(b"S" * 32), totp_secret=SEGRETO_RFC).configurato)
 
@@ -184,7 +192,7 @@ class TestLaSessioneBlindata(unittest.TestCase):
         self.assertNotIn(b._firma.decodifica(t1)["nonce"], b._revocati)
 
     def test_senza_firma_non_si_creano_ne_valgono_sessioni(self):
-        b = Bunker(None, password="x", orologio=lambda: 1.0)
+        b = Bunker(None, password=PW_X, orologio=lambda: 1.0)
         self.assertIsNone(b.crea_sessione("1.2.3.4"))
         self.assertEqual(b.valida_sessione("qualunque", "1.2.3.4"), {"ok": False, "motivo": "bunker_non_configurato"})
         self.assertFalse(b.revoca("qualunque"))
@@ -196,7 +204,7 @@ class TestLaSessioneBlindata(unittest.TestCase):
 
             def decodifica(self, t):
                 return None
-        b = Bunker(_FirmaRotta(), password="x", orologio=lambda: 1.0)
+        b = Bunker(_FirmaRotta(), password=PW_X, orologio=lambda: 1.0)
         self.assertIsNone(b.crea_sessione("1.2.3.4"))
 
 

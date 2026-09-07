@@ -201,8 +201,7 @@ def relazioni(motore, tariffe, *, casi=CASI_DI_SERIE, seme=0):
 
     # R1 — 2n notti = 2x listino (stessa fascia di sconto)
     def r1(p, n, fascia, sl):
-        base = 0 if fascia == "corta" else n     # corta: n,2n in 1..3 ; media: n,2n in 7..13
-        nn = n if fascia == "corta" else n + 7
+        nn = n if fascia == "corta" else n + 7   # corta: n,2n in 1..3 ; media: n,2n in 7..13
         q1 = motore(p, notti=nn, sconto_settimana_bps=sl)
         q2 = motore(p, notti=2 * nn, sconto_settimana_bps=sl)
         if int(q2["prezzo_listino_cents"]) != 2 * int(q1["prezzo_listino_cents"]):

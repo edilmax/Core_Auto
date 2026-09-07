@@ -243,13 +243,25 @@ def sistema_locale():
     from fase83_server import crea_router
     from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
     d = tempfile.mkdtemp(prefix="esame_accessi_")
+    # La marca temporale (fase184) si spegne SOLO per costruire questo sistema: fase81 legge
+    # la variabile una volta, a `crea_sistema`; alle richieste il server guarda l'archivio.
+    # Il valore di prima si rimette SUBITO: lasciato a "0", nella suite intera (un processo
+    # solo) spegneva la marca a test_marca_temporale_server, test_qualifica_catena e
+    # test_rotte_ostile — 23 rossi nella CI su 2c60533, tutti 503 marca_temporale_non_attiva.
+    marca_prima = os.environ.get("MARCA_TEMPORALE")
     os.environ["MARCA_TEMPORALE"] = "0"
     kw = dict(abilitato=True, segreto_hmac=b"S" * 32, con_registrazione_host=True,
               bunker_password="SuperPw@1")
     for campo in ConfigCasaVIP.__dataclass_fields__:
         if campo.startswith("db_"):
             kw[campo] = os.path.join(d, campo + ".db")
-    sis = crea_sistema(ConfigCasaVIP(**kw))
+    try:
+        sis = crea_sistema(ConfigCasaVIP(**kw))
+    finally:
+        if marca_prima is None:
+            os.environ.pop("MARCA_TEMPORALE", None)
+        else:
+            os.environ["MARCA_TEMPORALE"] = marca_prima
     router = crea_router(sis, host_key="hk", admin_key="ak", base_url="https://bookinvip.com")
 
     def registra(email, ip):
@@ -364,7 +376,7 @@ def letture_vive(esatte=None):
     inventate (poche apposta: contano nel buttafuori); l'indirizzo di controllo."""
     esatte = esatte if esatte is not None else rotte_dal_codice()[0]
     righe = []
-    for metodo, path, _g_ in esatte:
+    for metodo, path, _g in esatte:
         if not riservata(path):
             continue
         righe.append({"metodo": metodo, "path": path, "senza": _chiedi_vivo(metodo, path)})

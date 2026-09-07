@@ -122,6 +122,15 @@ delle due caselle è scritta nella scheda (restano «mai misurata»), e una guar
 `fase190.crea_gestore_rate_parity(":memory:")` apre una connessione nuova a ogni chiamata (fase190:183-185). Il Giudice sui Blocchi 4
 e 7 la notte fra il 6 e il 7: 414 provati, 282 uccisi, **132 sopravvissuti** (fase88 52, fase72 30, fase70 13, fase78 7, fase75 6,
 fase69 6, fase98 5, fase106 5, fase109 4, fase125 2, fase115 2): sono le guardie che la chat A scrive oggi.
+**La CI della PR #160 (`2c60533`) è uscita ROSSA e ha avuto ragione lei (ferrea 8):** `qualita` per 5 segnalazioni nuove di ruff e
+9 di bandit nei file di A (chiuse nel codice nuovo: variabile del ciclo `_g`, una variabile inutilizzata, importazioni non usate, il
+sottoprocesso nel test sostituito dalla chiamata in-processo come in `test_pipeline_ci`, le password di prova in costanti come in
+`test_marca_temporale_server`); e `full-suite` con **23 rossi** in `test_marca_temporale_server`, `test_qualifica_catena` e
+`test_rotte_ostile`, tutti `503 marca_temporale_non_attiva`: `esame_accessi.sistema_locale()` scriveva `MARCA_TEMPORALE=0`
+nell'ambiente e non lo rimetteva, e nella suite intera (un processo solo) spegneva la marca ai test che venivano dopo. Cura: il
+valore di prima si rimette subito dopo `crea_sistema`; guardia `test_il_sistema_locale_rimette_MARCA_TEMPORALE_com_era` vista
+ROSSA col guasto rimesso con l'editor (1 rosso da sola, 14 nella catena esame → marca), ripristino byte-identico, poi verde.
+Il test_pipeline_ci locale non poteva vederlo: non contiene quei tre moduli.
 
 **📏 5 SETTEMBRE, 02:3x — IL METRO RIPARATO: le impronte non dipendono più dai fine riga (ramo `metro-fine-riga`
 su `2a3d6d7`, parola del fondatore «ripara»):** lo stesso Blocco 1 leggeva 6 su 6 in B2 e **0 su 6** in un albero
@@ -1696,7 +1705,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 ```
 CONSEGNE AGGIORNATE A: ae69c1f
 
-SUITE ATTUALE: Ran 6490 test
+SUITE ATTUALE: Ran 6491 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

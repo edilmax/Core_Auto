@@ -472,8 +472,23 @@ memoria ogni connessione è un archivio vuoto → «no such table: parity_report
 già `_ConnCondivisa` e la fabbrica non lo usa. Modulo dormiente, mai eseguito da un test (D19). Guardia
 `TestLEsameDellaParitaNonPuoBARARE` (5), vista rossa col guasto. La casella NON è scritta nella scheda.
 
-**Numeri dell'integrazione (misurati in B2 sul ramo, non sommati):** caricatore da fermo **6490** (master `ae69c1f`
-dichiarava 6395); i 10 moduli/classi toccati rilanciati uno per uno, uscita 0 su tutti; README 153 moduli / **421**
+**6. La CI ha bocciato il primo commit, e aveva ragione (ferrea 8: il verde locale è un indizio).** Su `2c60533`
+`qualita` rosso per 5 segnalazioni nuove di ruff e 9 di bandit nei file di A (chiuse nel codice nuovo, mai assorbite
+nel cricchetto: `_g` al posto di `_g_`, una variabile morta, importazioni non usate, il sottoprocesso nel test sostituito
+dalla chiamata in-processo come già fa `test_pipeline_ci`, le password di prova in costanti come in
+`test_marca_temporale_server`). E `full-suite` rosso con **23 test** di `test_marca_temporale_server`,
+`test_qualifica_catena` e `test_rotte_ostile`, tutti `503 marca_temporale_non_attiva`: `esame_accessi.sistema_locale()`
+scriveva `MARCA_TEMPORALE=0` nell'ambiente per costruire il sistema di prova e non lo rimetteva; nella suite intera, che
+gira in un processo solo, la marca restava spenta per tutti i test dopo di lui in ordine alfabetico. Un attrezzo che
+misura non deve cambiare la macchina a chi viene dopo (D18): il valore di prima si rimette subito dopo `crea_sistema`
+(fase81 lo legge lì; alle richieste il server guarda l'archivio, non l'ambiente). Guardia
+`test_il_sistema_locale_rimette_MARCA_TEMPORALE_com_era` vista rossa col guasto rimesso con l'editor — 1 rosso da sola, 14
+nella catena `test_esame_accessi` → `test_marca_temporale_server` nello stesso processo — ripristino byte-identico
+(sha256 `8d8783fd…` prima e dopo), poi 51 test verdi sui quattro moduli insieme. Il `test_pipeline_ci` locale non poteva
+vederlo: quei tre moduli non ne fanno parte.
+
+**Numeri dell'integrazione (misurati in B2 sul ramo, non sommati):** caricatore da fermo **6491** dopo la cura (6490 al
+primo commit; master `ae69c1f` dichiarava 6395); i 10 moduli/classi toccati rilanciati uno per uno, uscita 0 su tutti; README 153 moduli / **421**
 file di test (erano 417). Zero righe di produzione. Il Giudice sui Blocchi 4 e 7 nella stessa notte (in B3, registro
 `corsia_B_2026-09-05\giudice_notte_blocchi_4_7.log`): 414 provati, 282 uccisi, **132 sopravvissuti**, 0 non
 determinabili, 5 moduli fuori produzione dichiarati (fase43, 44, 45, 189, 190): sono il lavoro della chat A del 7.
