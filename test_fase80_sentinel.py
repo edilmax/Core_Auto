@@ -202,5 +202,56 @@ class TestRobustezza(unittest.TestCase):
             self.fail(f"verifica ha sollevato: {e}")
 
 
+class TestITreSopravvissutiDellaNotte(unittest.TestCase):
+    """Una guardia per ognuno dei 3 punti trovati scoperti dal Giudice la notte del 2026-09-06
+    (giudice_notte_blocco3_2.log), vista ROSSA col mutante iniettato con l'editor."""
+
+    def test_riga69_basta_UNA_lista_non_vuota_perche_il_rapporto_NON_sia_integro(self):
+        self.assertTrue(ReportIntegrita().integro)
+        for campo in ("modificati", "aggiunti", "rimossi", "canary_violati"):
+            rep = ReportIntegrita(**{campo: ["/x.py"]})
+            self.assertFalse(rep.integro, "solo «%s» non vuoto: non integro" % campo)
+        self.assertTrue(ReportIntegrita(canary_violati=["/c"]).critico)
+        self.assertFalse(ReportIntegrita(modificati=["/m"]).critico)
+
+    def test_riga163_la_notifica_che_esplode_lascia_la_TRACCIA_nel_registro(self):
+        d = tempfile.mkdtemp()
+        try:
+            _scrivi(os.path.join(d, "a.py"), "x")
+
+            def boom(_):
+                raise RuntimeError("canale giu'")
+            s = Sentinel(cartella=d, notificatore=boom)
+            s.istantanea()
+            _scrivi(os.path.join(d, "a.py"), "HACKED")
+            with self.assertLogs("core_auto.sentinel", level="WARNING") as reg:
+                rep = s.verifica()
+            self.assertFalse(rep.integro)
+            rec = [r for r in reg.records if "notifica fallita" in r.getMessage()][0]
+            self.assertIsInstance(rec.exc_info, tuple, "exc_info=True: la traccia c'e', non un False")
+            self.assertIs(rec.exc_info[0], RuntimeError)
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_riga274_la_catena_in_memoria_si_usa_anche_da_un_altro_thread(self):
+        import threading
+        c = crea_catena()
+        c.append("evento-dal-thread-principale")
+        esiti = {}
+
+        def lavoro():
+            try:
+                esiti["hash"] = c.append("evento-da-un-altro-thread")
+            except Exception as e:                       # sqlite3.ProgrammingError senza check_same_thread=False
+                esiti["errore"] = "%s: %s" % (type(e).__name__, e)
+        t = threading.Thread(target=lavoro)
+        t.start()
+        t.join(10)
+        self.assertNotIn("errore", esiti, esiti.get("errore"))
+        self.assertTrue(esiti.get("hash"))
+        self.assertEqual(c.conteggio(), 2)
+        self.assertTrue(c.verifica_catena()["integro"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -5,10 +5,12 @@ Copre: confronto base noi-vs-OTA, l'INVARIANTE (guadagno_extra + risparmio_guest
 surplus, sempre), sconto al guest, tassa separata, PSP pass-through, benchmark
 piattaforma, fail-closed, purezza interi.
 """
+import dataclasses
 import unittest
 
 from fase69_trasparenza import (
-    OTA_BENCHMARK_BPS, PoliticaConfronto, confronta, confronta_piattaforma,
+    OTA_BENCHMARK_BPS, Confronto, PoliticaConfronto, _bps, _intero_nn, confronta,
+    confronta_piattaforma,
 )
 
 
@@ -126,6 +128,64 @@ class TestFailClosed(unittest.TestCase):
         d = confronta(10000).as_dict()
         self.assertEqual(d["money_unit"], "cents_integer")
         self.assertIsInstance(d["guadagno_extra_host_cents"], int)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════════════
+# I 6 PUNTI SOPRAVVISSUTI DELLA NOTTE FRA IL 6 E IL 7 SETTEMBRE 2026 (Giudice, Blocco 4)
+# ═══════════════════════════════════════════════════════════════════════════════════════
+
+class TestI6PuntiSopravvissutiDellaNotteDel7Settembre(unittest.TestCase):
+    """Il Giudice (giudice_notte_blocchi_4_7) ha trovato 6 punti in cui il guasto passa e i
+    test restano verdi: il filtro dei bps (un bps assurdo o booleano che passa produce una
+    commissione OTA doppia o da un centesimo), lo zero dei filtri interi, lo sconto
+    ESATTAMENTE pari al prezzo, e i due `frozen`. UNA guardia per punto, vista ROSSA col
+    mutante iniettato con l'editor."""
+
+    # ── riga 53: lo zero e' un intero non negativo ─────────────────────────────────
+    def test_riga53_lo_zero_e_un_intero_non_negativo(self):
+        """Nei chiamanti (`sconto`, `tassa`) uno zero rifiutato ripiega comunque su 0: il
+        confine si vede solo sul filtro, e il filtro e' il contratto."""
+        self.assertIs(True, _intero_nn(0))
+        self.assertIs(False, _intero_nn(-1))
+        self.assertIs(False, _intero_nn(False))
+        self.assertIs(False, _intero_nn(0.0))
+
+    # ── riga 57: un bps fuori dal filtro vale ZERO, mai «se stesso» ────────────────
+    def test_riga57_un_bps_ASSURDO_o_BOOLEANO_azzera_la_commissione_invece_di_moltiplicarla(self):
+        self.assertEqual(0, _bps(20000))
+        self.assertEqual(0, _bps(True))
+        self.assertEqual(0, _bps(-1))
+        self.assertEqual(10000, _bps(10000))
+        c = confronta(100000, politica=PoliticaConfronto(commissione_ota_bps=20000))
+        self.assertEqual(0, c.commissione_ota_cents, "bps 20000 ha prodotto una commissione DOPPIA")
+        c = confronta(100000, politica=PoliticaConfronto(commissione_ota_bps=True))
+        self.assertEqual(0, c.commissione_ota_cents, "bps True ha prodotto una commissione da 1 bps")
+
+    def test_riga57_un_bps_di_tipo_storto_non_esplode(self):
+        for cattivo in ("abc", None, 3.5):
+            c = confronta(100000, politica=PoliticaConfronto(commissione_nostra_bps=cattivo))
+            self.assertEqual(0, c.commissione_nostra_cents, "bps %r accettato" % (cattivo,))
+
+    # ── righe 60 · 67: politica e prospetto sono IMMUTABILI ────────────────────────
+    def test_riga60_PoliticaConfronto_e_congelata(self):
+        p = PoliticaConfronto()
+        with self.assertRaises(dataclasses.FrozenInstanceError):
+            p.commissione_nostra_bps = 0
+        self.assertEqual(hash(PoliticaConfronto()), hash(p))
+
+    def test_riga67_Confronto_e_congelato(self):
+        c = confronta(10000)
+        with self.assertRaises(dataclasses.FrozenInstanceError):
+            c.host_netto_nostro_cents = 0
+        self.assertIsInstance(c, Confronto)
+
+    # ── riga 122: lo sconto ESATTAMENTE pari al prezzo e' ammesso ──────────────────
+    def test_riga122_uno_sconto_pari_al_prezzo_intero_e_ammesso_e_uno_in_piu_no(self):
+        c = confronta(10000, sconto_guest_cents=10000)
+        self.assertEqual(10000, c.risparmio_guest_cents, "sconto = prezzo rifiutato")
+        self.assertEqual(0, c.imponibile_nostro_cents)
+        self.assertEqual(0, c.host_netto_nostro_cents)
+        self.assertEqual(0, confronta(10000, sconto_guest_cents=10001).risparmio_guest_cents)
 
 
 if __name__ == "__main__":

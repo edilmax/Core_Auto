@@ -104,6 +104,71 @@ sopravvissuti** (fase64 8, fase80 3, fase127 14, fase143 17) e **3 moduli non gi
 (`fase179_rate_limit`, `fase180_bunker`, `fase192_admin_accounts`): sono il lavoro della chat A. E la prima casella del Blocco 3
 è stata **riscritta**: nominava «`_split_crea`, `_split_paga`» come rotte aperte, ma dal 2026-08-20 pretendono il voucher
 firmato; ora chiede che l'elenco delle rotte che scrivono venga letto dal codice e che ognuna senza credenziali risponda 401/403/422.
+**7 SETTEMBRE, mattina — LA CONSEGNA DELLA NOTTE DELLA CHAT A ENTRA IN MASTER (ramo `integra-A-2026-09-07` da `ae69c1f`, rete
+`corsia_A_2026-09-07\lavoro_A.patch` sha256 `ad2dc32d…` applicata a tre vie, 13 file byte-identici all'albero A3, zero `fase*.py`):**
+`collaudi/esame_accessi.py` legge le rotte dal codice (129 esatte) e prova sul router locale e sul sito vero che nessuna scrive senza
+identità, che la matrice dei permessi regge anche con le credenziali di un altro host e che nessuna sonda negativa riceve 404; le tre
+caselle rilanciate `--scrivi` sul testo di master → `python collaudi/scheda.py --blocco 3` = **3 su 3** (la riga scritta da A sul
+testo vecchio della casella 1 è stata tolta dalla scheda). I tre moduli senza dedicato ne hanno uno (`test_fase179_rate_limit`,
+`test_fase180_bunker`, `test_fase192_admin_accounts`); i 42 sopravvissuti del Blocco 3 hanno tutti una guardia vista rossa (nessuna
+equivalenza dichiarata). **Blocco 4, due caselle che NON possono diventare verdi così come sono scritte, e non per colpa degli
+attrezzi:** `collaudi/esame_prezzi.py` (relazioni metamorfiche sul motore vero, `fase59_concierge.quota`) trova che «l'ordine degli
+sconti non cambia il totale» è FALSO: sconto lungo poi −12% con due divisioni intere differisce di un centesimo dall'ordine
+inverso (26 notti da 1,00 €: 16,48 contro 16,47) — decisione del fondatore fra riscrivere il testo della casella («nell'ordine
+dichiarato») e lo sconto in UN passo in produzione («autorizzato», poi rimisura del Blocco 2); `collaudi/esame_parita.py` misura che
+«costa SEMPRE meno che sulle OTA» è NON MISURABILE: `fase125` mostra all'ospite una stima a percentuali fisse (+15/+14/+4%) e non
+legge nessuna OTA, `fase190_rate_parity` è dormiente (0 riferimenti in fase81/83/main), la parità non è nel contratto — nessuna
+delle due caselle è scritta nella scheda (restano «mai misurata»), e una guardia grida il giorno in cui uno dei tre fatti cambia. Difetto latente scritto, non riparato:
+`fase190.crea_gestore_rate_parity(":memory:")` apre una connessione nuova a ogni chiamata (fase190:183-185). Il Giudice sui Blocchi 4
+e 7 la notte fra il 6 e il 7: 414 provati, 282 uccisi, **132 sopravvissuti** (fase88 52, fase72 30, fase70 13, fase78 7, fase75 6,
+fase69 6, fase98 5, fase106 5, fase109 4, fase125 2, fase115 2): sono le guardie che la chat A scrive oggi.
+**La CI della PR #160 (`2c60533`) è uscita ROSSA e ha avuto ragione lei (ferrea 8):** `qualita` per 5 segnalazioni nuove di ruff e
+9 di bandit nei file di A (chiuse nel codice nuovo: variabile del ciclo `_g`, una variabile inutilizzata, importazioni non usate, il
+sottoprocesso nel test sostituito dalla chiamata in-processo come in `test_pipeline_ci`, le password di prova in costanti come in
+`test_marca_temporale_server`); e `full-suite` con **23 rossi** in `test_marca_temporale_server`, `test_qualifica_catena` e
+`test_rotte_ostile`, tutti `503 marca_temporale_non_attiva`: `esame_accessi.sistema_locale()` scriveva `MARCA_TEMPORALE=0`
+nell'ambiente e non lo rimetteva, e nella suite intera (un processo solo) spegneva la marca ai test che venivano dopo. Cura: il
+valore di prima si rimette subito dopo `crea_sistema`; guardia `test_il_sistema_locale_rimette_MARCA_TEMPORALE_com_era` vista
+ROSSA col guasto rimesso con l'editor (1 rosso da sola, 14 nella catena esame → marca), ripristino byte-identico, poi verde.
+Il test_pipeline_ci locale non poteva vederlo: non contiene quei tre moduli.
+**7 SETTEMBRE, pomeriggio — LA CONSEGNA DELLA CHAT C ENTRA IN MASTER, con due righe di produzione «autorizzato»** (ramo
+`integra-C-2026-09-07` sopra quello di A, rete `corsia_C_2026-09-07\lavoro_C_finale_con_host_da_solo.patch` sha256 `f60553cb…`,
+conflitto additivo in `test_pipeline_ci.py` risolto con l'editor tenendo le classi di A e di C; parola del fondatore: «se è la
+cosa giusta autorizzato», 16:4x): `collaudi/esame_cifre_pubbliche.py` (Blocco 4 casella 1: 78 confronti dall'uscita dell'audit
+millimetrico, VERDE, riscritta sul testo di master) e `collaudi/esame_testi_congelati.py` (Blocco 6 casella 1: criterio dell'occhio
+del fondatore, 9 pagine vere × 8 lingue) → `scheda.py --blocco 4` = **1 su 3**, `--blocco 6` = **1 su 2**. **Produzione (a):**
+`fase163_accettazioni.py`, ART. 16 «LINGUA» in coda al contratto host in it e en (fa fede l'italiano, il testo su cui è calcolata
+l'impronta firmata) e `CONTRATTO_HOST_VERSIONE` 2026-08-10 → **2026-09-07** (oggi 0 host firmati: costa zero); D20 nell'ordine:
+la guardia di C `TestLaLinguaCheFaFedeSTAnelTESTOFIRMATO` vista ROSSA sul codice di produzione («il testo FIRMATO non dice quale
+lingua fa fede, in: ['it', 'en']»), poi la riga, poi 21/21 verdi. **Produzione (b), sotto `deploy/`:** i tre marchi in
+`host.html` scritti come si scrivono (`Booking` `Airbnb` `Expedia`, con `value` esplicito così l'API riceve gli stessi valori di
+prima) e i due `<title>` di `commissioni.html` e `guida-operativa.html` marcati `data-i18n="tit"` con la chiave nelle 8 lingue nel
+dizionario che la pagina già usa (non un modello nuovo): la casella dei testi congelati da ROSSO «5 parole in 3 pagine» a VERDE.
+`esame_host_da_solo.py` (Blocco 7 casella 1) entra **in corso, non finito**: nessun test lo importa, nessuna casella scritta. Il
+`.bak` lasciato dal `sed` di stanotte in C3 è stato tolto dopo aver letto la riga che il `sed` aveva cambiato. Restano aperte per il
+fondatore: il ripensamento 48 h (chiavi `rimborso_cosa_torna`/`rimborso_ripensamento`, produzione fase83 + index.html) e il
+centesimo degli sconti (fase59) + i due punti di fase72 (righe 196/200) non uccidibili senza riscrittura: un giro solo, «autorizzato».
+**La CI della PR #161 (`5d5675e`) ha trovato 4 rossi nella suite intera, tutti guardie che hanno fatto il loro mestiere sulle
+righe di produzione nuove:** `test_dati_reali` (la copia a mano della versione del contratto in `collaudi/dati_realistici.py`,
+che per scelta non importa dal motore: aggiornata a 2026-09-07), `test_guida_operativa` (cercava `<title>` alla lettera: ora
+`<title` porta `data-i18n`), `test_occhio_fondatore` ×2 (il cricchetto delle parole ferme pretende che i tetti scendano quando
+il debito scende: `commissioni` 1→0, `guida-operativa` 1→0, `host` 3→0, totale 10→5). Nessuna riga di produzione toccata dalla cura.
+**7 SETTEMBRE, sera — LA SECONDA CONSEGNA DELLA CHAT A: i 132 sopravvissuti dei Blocchi 4 e 7 hanno tutti la loro guardia, e il
+pannello host ha un «saldo stimato»** (ramo `integra-A2-2026-09-07` sopra quello di C, rete `corsia_A_2026-09-07\lavoro_A_2.patch`
+sha256 `f8f4faaa…`, 13 file: 11 `test_fase*.py`, `test_pipeline_ci.py`, `collaudi/esame_pannello_soldi.py`; zero `fase*.py`, undici
+moduli byte-identici): **128 punti uccisi** con una guardia vista rossa ciascuno, **4 sopravvivono per costruzione e restano
+sopravvissuti senza dichiarazione** (fase72:196 e :200 primo confronto di `_proietta` con `dv == 0`; fase106:59 `prezzo_base > 0`
+che la riga 60 assorbe; fase125:24 `v >= 0` dove solo lo zero differisce e risponde 0 in entrambi): prova per casi in
+`consegna_A_2.txt`, la strada è la riscrittura della riga ridondante con «autorizzato». `collaudi/esame_pannello_soldi.py` (Blocco 7
+casella 2, «il pannello dice sempre la verità sui suoi soldi»): sistema vero, Stripe finto, due host, mastro su file letto con SQL
+come secondo conto: 20 passi su 21 verdi (mastro = rotta = cassaforte = netto + tassa; A non vede B; 401 senza token) e **UN
+rilievo vero, la casella resta ROSSA col motivo e non è scritta**: `/api/host/metriche` `revenue_cents` CRESCE per un hold MAI
+pagato (20000 → 40000): fase58:583 somma `unita_occupate × prezzo` sul calendario e l'hold occupa le notti prima di pagare; ed è
+il lordo ospite mentre il mastro accanto dice 16400. **Decisioni del fondatore sui soldi, in un giro solo («autorizzato»):**
+(1) revenue del pannello dai soli pagati, oppure hold esclusi dal calendario, oppure casella riscritta (fase83:9644-9670 /
+fase58); (2) lo sconto in un passo con un arrotondamento in fase59 (il centesimo); (3) le 4 righe ridondanti sopra;
+(4) fase98:91: `PAGAMENTO_BPS=0` esplicito dall'ambiente porta la tariffa tecnica a zero senza rumore — la guardia pinna il
+comportamento di oggi, «anche lo zero ripiega?» è una riga di produzione; (5) il ripensamento 48 h. Caricatore 6644.
 
 **📏 5 SETTEMBRE, 02:3x — IL METRO RIPARATO: le impronte non dipendono più dai fine riga (ramo `metro-fine-riga`
 su `2a3d6d7`, parola del fondatore «ripara»):** lo stesso Blocco 1 leggeva 6 su 6 in B2 e **0 su 6** in un albero
@@ -1676,9 +1741,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 18def89
+CONSEGNE AGGIORNATE A: 6c67368
 
-SUITE ATTUALE: Ran 6399 test
+SUITE ATTUALE: Ran 6648 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

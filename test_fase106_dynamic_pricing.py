@@ -1,7 +1,8 @@
 """Test Fase 106 - Dynamic pricing. Puro, deterministico, cents interi."""
+import dataclasses
 import unittest
 
-from fase106_dynamic_pricing import (PoliticaPrezzo, calcola_prezzo,
+from fase106_dynamic_pricing import (PoliticaPrezzo, _bps, calcola_prezzo,
                                      crea_politica_prezzo)
 
 
@@ -176,6 +177,58 @@ class TestFattoreTemporale(unittest.TestCase):
                             "a macchina sana il confine dei 2 giorni deve farsi sentire")
         self.assertNotEqual(prezzo(59, self.POLITICA), prezzo(60, self.POLITICA),
                             "a macchina sana il confine dei 60 giorni deve farsi sentire")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════════════
+# I 5 PUNTI SOPRAVVISSUTI DELLA NOTTE FRA IL 6 E IL 7 SETTEMBRE 2026 (Giudice, Blocco 4)
+# ═══════════════════════════════════════════════════════════════════════════════════════
+
+class TestI5PuntiSopravvissutiDellaNotteDel7Settembre(unittest.TestCase):
+    """Il Giudice (giudice_notte_blocchi_4_7) ha trovato 5 punti in cui il guasto passa e i
+    test restano verdi: il filtro dei bps (un booleano che passa per 1 bps manda
+    l'occupazione nella fascia BASSA e sconta il prezzo), le due soglie di occupazione sul
+    valore ESATTO, il `frozen`, e il filtro del prezzo base (che la riga sotto assorbe:
+    vedi consegna). UNA guardia per punto, vista ROSSA col mutante iniettato con
+    l'editor."""
+
+    # ── riga 16: un bps booleano o di tipo storto ripiega sul valore di serie ──────
+    def test_riga16_un_occupazione_BOOLEANA_o_storta_e_neutra_non_una_fascia_bassa(self):
+        self.assertEqual(5000, _bps(True, 5000))
+        self.assertEqual(5000, _bps("abc", 5000))
+        self.assertEqual(8000, _bps(8000, 5000))
+        for cattivo in (True, False, "abc", None, 3.5):
+            r = calcola_prezzo(10000, occupazione_bps=cattivo, data="", giorni_all_arrivo=30)
+            self.assertEqual(10000, r["fattori"]["occupazione"],
+                             "occupazione %r ha cambiato il prezzo" % (cattivo,))
+
+    # ── riga 19: la politica e' IMMUTABILE ─────────────────────────────────────────
+    def test_riga19_PoliticaPrezzo_e_congelata(self):
+        p = PoliticaPrezzo()
+        with self.assertRaises(dataclasses.FrozenInstanceError):
+            p.cap_bps = 99999
+
+    # ── riga 59: prezzo base zero o negativo -> prospetto a zero ───────────────────
+    def test_riga59_un_prezzo_base_ZERO_o_NEGATIVO_da_un_prospetto_a_zero(self):
+        for cattivo in (0, -1, True, "100", None):
+            r = calcola_prezzo(cattivo)
+            self.assertEqual({"prezzo_cents": 0, "base_cents": 0, "fattori": {}}, r,
+                             "prezzo base %r ha prodotto un prezzo" % (cattivo,))
+        self.assertEqual(1, calcola_prezzo(1, data="", giorni_all_arrivo=30)["base_cents"])
+
+    # ── righe 66 · 68: le soglie di occupazione scattano sul valore ESATTO ─────────
+    def test_riga66_la_soglia_ALTA_scatta_sull_esatto_80_per_cento(self):
+        pol = PoliticaPrezzo()
+        alta = calcola_prezzo(10000, occupazione_bps=pol.soglia_alta, data="", giorni_all_arrivo=30)
+        self.assertEqual(pol.occ_alta_bps, alta["fattori"]["occupazione"], "80% esatto non e' alta")
+        sotto = calcola_prezzo(10000, occupazione_bps=pol.soglia_alta - 1, data="", giorni_all_arrivo=30)
+        self.assertEqual(10000, sotto["fattori"]["occupazione"])
+
+    def test_riga68_la_soglia_BASSA_scatta_sull_esatto_30_per_cento(self):
+        pol = PoliticaPrezzo()
+        bassa = calcola_prezzo(10000, occupazione_bps=pol.soglia_bassa, data="", giorni_all_arrivo=30)
+        self.assertEqual(pol.occ_bassa_bps, bassa["fattori"]["occupazione"], "30% esatto non e' bassa")
+        sopra = calcola_prezzo(10000, occupazione_bps=pol.soglia_bassa + 1, data="", giorni_all_arrivo=30)
+        self.assertEqual(10000, sopra["fattori"]["occupazione"])
 
 
 if __name__ == "__main__":

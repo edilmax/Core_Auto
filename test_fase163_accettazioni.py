@@ -205,5 +205,63 @@ class TestIntegrazioneHTTP(unittest.TestCase):
         self.assertEqual(s, 401)
 
 
+class TestLaLinguaCheFaFedeSTAnelTESTOFIRMATO(unittest.TestCase):
+    """⛔ L'HOST FIRMA L'INGLESE, E CIO' CHE RESTA FIRMATO E' L'ITALIANO.
+
+    `doc_sha256()` (fase163:389-391) calcola l'impronta VINCOLANTE su versione + testo
+    ITALIANO. Un host tedesco o giapponese riceve l'inglese (`documento_corrente` ripiega
+    su "en"), lo legge, lo firma -- e l'oggetto firmato e' un testo che non ha letto.
+
+    Che l'italiano faccia fede E' DETTO, ma in due posti che non sono il contratto:
+      · il campo `lingua_che_fa_fede` della risposta API (fase163:406);
+      · una riga di contorno della pagina (deploy/contratto-host.html:72-73).
+    ⇒ Nessuno dei due e' **il testo firmato**: sono contorno, non contratto. Il testo che
+    l'impronta vincola, e che l'ART. 15 sottopone ad approvazione specifica ai sensi degli
+    artt. 1341-1342 c.c., NON contiene nessuna clausola sulla lingua. I Termini per
+    l'ospite invece ce l'hanno, dentro il testo servito (`fase185`, art. 12: «Questi
+    Termini sono forniti in piu' lingue per comodita'. In caso di divergenza fa fede la
+    versione ITALIANA.»). Il modello esiste gia': manca solo qui.
+
+    ⚠️ Perche' ADESSO: `CONTRATTO_HOST_VERSIONE` entra nell'impronta firmata, quindi
+    aggiungere la clausola obbliga ogni host a rifirmare. Oggi gli host firmati sono ZERO:
+    costa niente. Dopo il primo, costa una campagna di rifirma.
+    """
+
+    def test_la_clausola_sulla_lingua_e_DENTRO_il_testo_di_OGNI_lingua(self):
+        # ⛔ Il denominatore si ricava dal codice: se domani il contratto avesse 8 lingue,
+        # questa guardia le pretende tutte e otto senza che nessuno la riscriva.
+        mancanti = []
+        for lang, testo in CONTRATTO_HOST.items():
+            t = testo.upper()
+            if not (("FA FEDE" in t) or ("PREVAIL" in t) or ("BINDING" in t)):
+                mancanti.append(lang)
+        self.assertEqual(
+            mancanti, [],
+            "il testo FIRMATO non dice quale lingua fa fede, in: %s. "
+            "E' detto solo nel contorno (API + pagina), che non e' cio' che viene firmato. "
+            "Modello da copiare: fase185, art. 12 dei Termini." % (mancanti,))
+
+    def test_la_lingua_che_fa_fede_NON_e_una_copia_a_mano(self):
+        """Lo stesso fatto scritto a mano in piu' posti: e' la malattia gia' pagata.
+
+        `fase185` ha la costante `LINGUA_CHE_FA_FEDE`. `fase163:406` scrive "it" a mano
+        invece di importarla. Due copie dello stesso fatto in due moduli: il giorno che una
+        cambia, l'altra mente e nessuno se ne accorge -- e' esattamente cio' che accadde il
+        2026-08-21 con la soglia della politica rigida (30 giorni scritti giusti nella
+        tendina dell'host e sbagliati nella pagina dell'ospite).
+        """
+        from fase185_testi_legali import LINGUA_CHE_FA_FEDE
+        dichiarata = documento_corrente("en")["lingua_che_fa_fede"]
+        self.assertEqual(
+            dichiarata, LINGUA_CHE_FA_FEDE,
+            "fase163 dichiara %r, fase185.LINGUA_CHE_FA_FEDE vale %r: due copie a mano "
+            "dello stesso fatto." % (dichiarata, LINGUA_CHE_FA_FEDE))
+        # E la lingua che fa fede dev'essere una di quelle in cui il contratto ESISTE:
+        # dichiarare che fa fede una lingua che non serviamo sarebbe una promessa vuota.
+        self.assertIn(dichiarata, CONTRATTO_HOST,
+                      "si dichiara che fa fede %r, ma il contratto non esiste in quella "
+                      "lingua: %s" % (dichiarata, sorted(CONTRATTO_HOST)))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -475,6 +475,192 @@ dichiara. Ma la conseguenza non è scritta da nessuna parte: la finestra cieca s
 morto?» **non è di 15 minuti, è di oltre due ore**. L'ultimo miglio — un servizio dedicato tipo
 UptimeRobot — richiede un account che apre il fondatore, e resta **non fatto e non coperto**.
 
+### 🧬 I 132 SOPRAVVISSUTI DEI BLOCCHI 4 E 7 HANNO LA GUARDIA, E IL PANNELLO HOST CONTA COME INCASSO UN HOLD MAI PAGATO — 7 settembre, chat A (albero Core_Auto_A3, ramo `blocco3-accessi-A` su `16d7da2`); integrata da B (albero B2, ramo `integra-A2-2026-09-07`)
+
+**Rete:** `corsia_A_2026-09-07\lavoro_A_2.patch` (sha256 `f8f4faaa…`, 13 file: 11 `test_fase*.py`, `test_pipeline_ci.py`,
+`collaudi/esame_pannello_soldi.py`), consegna `consegna_A_2.txt` sezioni E-I. Undici `fase*.py` byte-identici (sha256
+prima = dopo per ognuno). Conflitto additivo in `test_pipeline_ci.py` risolto con l'editor.
+
+**1. I 132 sopravvissuti della notte del Giudice sui Blocchi 4 e 7** (fase88 52, fase72 30, fase70 13, fase78 7,
+fase75 6, fase69 6, fase98 5, fase106 5, fase109 4, fase125 2, fase115 2): **128 uccisi** con una guardia nel test
+dedicato, ognuna vista rossa col mutante del Giudice iniettato con l'editor e ripristino byte-identico (registri
+`test_faseNN_ROSSO_*.log`). **4 sopravvivono per costruzione e restano sopravvissuti, nessuna dichiarazione di
+equivalenza (B6):** fase72:196 e :200 (primo confronto di `_proietta`: il mutante cambia solo `dv == 0`, e con `dv == 0`
+`proiettato == attuale`, quindi tutte le strade finiscono in `None`; e `predici_guasti` scarta `dv == 0` alla riga 180),
+fase106:59 (`prezzo_base > 0` → `>= 0`: la riga 60 `if base == 0` assorbe), fase125:24 (`v >= 0` → `v > 0`: l'unico
+ingresso che differisce è 0 e risponde 0 in entrambi). Prova per casi nella consegna, guardie che documentano la
+promessa: la strada per chiuderli è la riscrittura della riga ridondante («autorizzato»), in un giro solo con fase59.
+Due cose trovate per strada: fase98:91 accetta `PAGAMENTO_BPS=0` esplicito dall'ambiente e porta la tariffa tecnica a
+zero senza rumore (la guardia pinna il comportamento di oggi; «anche lo zero ripiega?» è una decisione sui soldi);
+fase109:48, il temporaneo di `_scrivi` nasce nella cartella corrente (la guardia legge il `dir=` con un mock su
+`tempfile.mkstemp`).
+
+**2. `collaudi/esame_pannello_soldi.py` — Blocco 7, casella 2 «il pannello dice sempre la verità sui suoi soldi (nessun
+saldo stimato)».** Sistema vero in cartella temporanea, Stripe finto, DUE host, il mastro su file letto con SQL come
+secondo conto: 20 passi su 21 verdi (mastro = rotta = cassaforte = netto + tassa, 16400; hold solo `in_attesa`;
+rimborsata `trattenuto`; A non vede B; 401 senza token). **Il rilievo, e la casella resta ROSSA col motivo (non
+scritta):** `/api/host/metriche` `revenue_cents` CRESCE per un hold MAI pagato (20000 → 40000): fase58:583 somma
+`unita_occupate × prezzo` sul calendario, e l'hold occupa le notti prima di pagare; ed è il lordo ospite, mentre il
+mastro accanto dice 16400. È un «saldo stimato» alla lettera. Strade (decisione del fondatore: soldi, righe fase83
+9644-9670 / fase58): revenue dai soli pagati · hold esclusi dal calendario · casella riscritta. D18 completo:
+precondizioni, `--con-guasto` (hold marcato maturato: 5 rossi, uscita 1; con `--scrivi` FERMO uscita 2), `--autoprova`
+13 casi, `NON_GUARDA` 6; guardie `TestLEsameDelPannelloSoldiNonPuoBARARE` (6) viste rosse con 5 guasti nell'attrezzo;
+**ambiente intatto misurato** (`UPLOAD_DIR` e `ProviderStripe._fetch_reale` salvati e rimessi anche se il banco
+esplode): la lezione della CI di stamattina applicata prima di consegnare.
+
+**Cura di B prima di spingere:** bandit segnalava 2 B106 e poi 1 B105 sul test di fase88 (`line_token="LINE-1"` come
+argomento, poi la costante chiamata `LINE_TOKEN`): il valore sta in `CANALE_LINE`, e il cricchetto torna 548/548;
+ruff 677/686. Caricatore **6644**. Undici moduli di test + la classe nuova verdi uno per uno. Blocco 7: 0 su 2.
+
+### 📜 LA CLAUSOLA SULLA LINGUA ENTRA NEL TESTO CHE L'HOST FIRMA, E LE ULTIME 5 PAROLE CONGELATE NON ERANO TRADUZIONI — 7 settembre, chat C (albero Core_Auto_C3, ramo `testi-lancio-C` su `18def89`); integrata da B (albero B2, ramo `integra-C-2026-09-07`, «se è la cosa giusta autorizzato» del fondatore)
+
+**Rete:** `corsia_C_2026-09-07\lavoro_C_finale_con_host_da_solo.patch` (sha256 `f60553cb…`, 6 file: tre attrezzi nuovi,
+la scheda, due file di test), applicata sopra il ramo di A; conflitto additivo in `test_pipeline_ci.py` (A e C hanno
+aggiunto classi in coda) risolto con l'editor tenendo tutte e due. Consegna: `consegna_C.txt` sezioni A-I + addendum,
+`fascicolo_avvocato.txt` (6 domande).
+
+**1. `collaudi/esame_cifre_pubbliche.py` — Blocco 4, casella 1 «ogni cifra pubblica coincide col motore».** Non conta da
+sé: riusa l'uscita di `audit_millimetrico.py` (78 confronti) e la trasforma in una casella con precondizioni, autoprova
+nelle due direzioni, `NON_GUARDA`, `--con-guasto` che non scrive. Rilanciato da B con `--scrivi` sul testo di master:
+VERDE, denominatore 78 → `python collaudi/scheda.py --blocco 4` = 1 su 3. Guardia `TestLEsameDelleCifrePubblicheNonPuoBARARE`
+(5) in `test_pipeline_ci.py`.
+
+**2. `collaudi/esame_testi_congelati.py` — Blocco 6, casella 1 «nessun testo resta congelato in italiano».** Riusa il
+criterio di `occhio_del_fondatore.esamina` (9 pagine vere × 8 lingue = denominatore 72; 5 gusci esclusi perché
+renderizzati dal JS). **Il numero «~1034 parole» era vecchio: misurato, sono 5**, in 3 pagine — e nessuna delle cinque
+era prosa italiana: tre NOMI PROPRI in minuscolo in un menu a tendina di `host.html` (`booking` `airbnb` `expedia`: il
+criterio dell'occhio usa la minuscola per distinguere la prosa dai nomi), un `<title>` già in inglese (`commissioni.html`)
+e uno in italiano (`guida-operativa.html`). Riparazione, non dizionario: i marchi scritti come si scrivono (`Booking`
+`Airbnb` `Expedia`, con `value="booking"` ecc. esplicito così l'API riceve gli stessi valori di prima: fase69 li
+normalizza in minuscolo comunque); i due `<title>` marcati `data-i18n="tit"` con la chiave nelle 8 lingue dentro il
+dizionario `TR` che le due pagine già usano (`apply()` scrive `textContent`/`innerHTML` su ogni `[data-i18n]`, e
+`querySelectorAll` prende anche il `<head>`). L'esame da ROSSO «5 parole in 3 pagine» a VERDE 72 (registri
+`esame_testi_congelati_prima.log` / `_dopo.log`) → `scheda.py --blocco 6` = 1 su 2. **Rilievo scritto e non riparato:**
+i `<title>` del sito sono in lingue miste (`diventa-host.html` inglese, `contratto-host.html` italiano). Guardia
+`TestLEsameDeiTestiCongelatiNonPuoBARARE` (6).
+
+**3. La clausola sulla lingua nel contratto host (produzione, `fase163_accettazioni.py`).** C aveva prima esagerato il
+difetto («l'host non lo sa») e si è corretta con la misura: l'host È informato dal contorno (`contratto-host.html:72-73`
+«testo che fa fede: italiano», campo `lingua_che_fa_fede` nella risposta API). Il difetto vero: **la clausola non era nel
+TESTO FIRMATO** — `doc_sha256()` vincola versione + testo italiano, e né `_IT` né `_EN` dicevano quale lingua fa fede; i
+Termini per l'ospite lo fanno bene (art. 12 dentro il testo). E lo stesso fatto era scritto a mano in sei posti
+(fase185 costante, fase163:406 copia, due righe in contratto-host.html, privacy.html, termini.html). D20 nell'ordine:
+guardia `TestLaLinguaCheFaFedeSTAnelTESTOFIRMATO` in `test_fase163_accettazioni.py` vista ROSSA sul codice di produzione
+(«il testo FIRMATO non dice quale lingua fa fede, in: ['it', 'en']», `C_test_fase163_accettazioni.log`) e verificata
+capace di dire verde (clausola iniettata in memoria); poi, con l'«autorizzato» del fondatore, **ART. 16 — LINGUA** in coda
+a `_IT` e `_EN` (fa fede l'italiano, il testo su cui è calcolata l'impronta del documento sottoscritto) e
+`CONTRATTO_HOST_VERSIONE` da `2026-08-10` a **`2026-09-07`** (ogni host rifirma al login: oggi 0 host firmati, costo
+zero); guardia verde, 21/21 (`C_test_fase163_VERDE.log`). Il secondo test della classe (la costante di fase185 e la copia
+di fase163 coincidono) è latente e dichiarato: passa oggi, serve il giorno in cui una delle due copie cambia. ⚠️ Per
+l'avvocato (nel fascicolo): se l'ART. 16 vada aggiunto all'elenco dell'ART. 15 (approvazione specifica ex artt.
+1341-1342 c.c.) — per un host che non legge l'italiano è plausibilmente onerosa.
+
+**4. `collaudi/esame_host_da_solo.py` — Blocco 7 casella 1, IN CORSO, non finito.** Entra come file, nessun test lo
+importa, nessuna casella scritta. Misurato da C prima di fermarsi: il viaggio dell'host passa tutti i 14 passi dalle
+rotte vere (registrazione con 3 spunte, pubblica col token e 401 senza, calendario, prenotazione, Stripe finto conferma,
+ospite conferma, maturato 0 → 18000 nel pannello). Trappola da tenere: con `stripe_secret_key` vuota il payout matura
+senza pagamento, quindi chiave finta e provider sostituito sono obbligatori. La chat C di stanotte si è fermata alle
+02:1x per una violazione di B2 (un `sed -i.bak` su questo file) e ha fatto la cosa giusta; la riga cambiata dal `sed` era
+una sola (`ATTESI` → `len(PASSI_ATTESI)`), letta, e il `.bak` è stato tolto da B.
+
+**5. Le chiavi del rimborso in 8 lingue** (`rimborso_cosa_torna`, `rimborso_ripensamento`, con segnaposto `{ore}`
+`{giorni}` e la strada «`applicaTraduzioni` sostituisce, il server manda `num` accanto a `ui`», `GIORNI_MIN_RIPENSAMENTO`
+da promuovere a costante) restano nella consegna: produzione fase83 + `index.html`, SOLO dopo la risposta del fondatore
+sul ripensamento 48 h (comunicarlo com'è o restringerlo).
+
+**Numeri (misurati sull'albero di C sopra la cura di A):** caricatore **6504**; ruff 680/686 e bandit 548/548, nessuna
+segnalazione nuova; i tre moduli di test toccati verdi uno per uno.
+
+### 🚪 BLOCCO 3 A 3 SU 3, TRE MODULI DI SICUREZZA CHE NON AVEVANO TEST, E IL CENTESIMO DEGLI SCONTI — notte fra il 6 e il 7 settembre, chat A (albero Core_Auto_A3, ramo `blocco3-accessi-A` su `18def89`); integrata da B il 7 settembre (albero B2, ramo `integra-A-2026-09-07` da `ae69c1f`)
+
+**Il mandato (porta del lancio, decisione del fondatore del 6 settembre sera):** la chat A fa attrezzi e guardie del
+Blocco 3, mai produzione, mai commit; B integra. **Rete:** `corsia_A_2026-09-07\lavoro_A.patch` (sha256 `ad2dc32d…`),
+13 file, tutti `test_*.py`, `collaudi/esame_*.py` e `collaudi/scheda.json`; i `fase*.py` toccati dalle guardie sono
+byte-identici (sha256 prima = dopo per ognuno, registri nella stessa cartella). Consegna: `consegna_A.txt`.
+
+**1. `collaudi/esame_accessi.py` — l'attrezzo delle tre caselle del Blocco 3** (modello `esame_produzione.py`; le
+caselle si trovano per TESTO). Le rotte si **enumerano dal codice** (`RouterHTTP._instrada`: 129 esatte, 2 prefissi,
+più quelle servite fuori dal router), mai da una lista a mano: la lista a mano di `mappa_scoperta.py` nominava
+`/api/host/logout`, che non esiste (l'uscita è `/api/gate/logout`) — l'ha trovato la guardia al primo giro. Tre
+misure: (a) ogni rotta NON GET chiamata sul router vero (sistema in cartella temporanea) senza credenziali e con
+corpo `{}` → 401/403, salvo 5 rotte che rispondono 200 a vuoto per progetto e 28 pubbliche, ognuna col motivo letto
+nel codice; (b) la matrice dei permessi sulle 84 rotte riservate su tre assi: senza credenziali in locale, con le
+credenziali di un ALTRO host registrato davvero (l'host B chiama 21 rotte con l'annuncio, l'id e l'email di A: rosso
+se la risposta nomina A), senza credenziali sul sito vero; (c) nessuna sonda negativa riceve 404, un indirizzo
+inventato DEVE rispondere 404, e la lista a mano di `verifica_produzione.p3` sta dentro le rotte del codice. D18: 7
+precondizioni che fermano, `--autoprova` 17 casi nelle due direzioni, `NON_GUARDA` stampato, `--con-guasto` che non
+scrive mai (uscita 2). Guardia `test_esame_accessi.py` (14) vista rossa col guasto iniettato con l'editor, ripristino
+byte-identico. **Rilanciato da B il 7 settembre sul testo delle caselle di master** (la casella 1 era stata riscritta
+con la #159, e la scheda si aggancia al testo): `--scrivi` → **VERDE 3/3 den 59 · 6/6 den 169 · 6/6 den 89**,
+`python collaudi/scheda.py --blocco 3` = **3 su 3**; la riga scritta da A sul testo vecchio è stata tolta dalla scheda.
+⚠️ Il sito vivo riceve ~90 sonde negative dall'IP di chi lancia: nel registro del server compaiono righe `RATE-LIMIT
+… lockout` e `BUNKER: accesso NEGATO`. Sono le sonde, non un attacco. **Non esaminato (dichiarato dall'attrezzo):**
+l'asse «altro host» sul sito vivo (servono due conti veri), la matrice per ruolo fra operatori admin (fase192), una
+sessione bunker vera da un IP sbagliato, i prefissi `/api/catalogo/` e `/api/recensioni/`, cosa fanno le rotte DOPO la
+porta.
+
+**2. I tre moduli che il Giudice non poteva giudicare** perché senza test dedicato — ora ce l'hanno:
+`test_fase179_rate_limit` (11: l'ottavo fallimento blocca e il settimo no, raddoppio con tetto, finestra, sfratto LRU,
+parametri assurdi), `test_fase180_bunker` (17: TOTP contro il vettore RFC 6238 App. B come giudice esterno, sessione
+legata all'IP che scade nel secondo esatto, logout che revoca solo la sua sessione), `test_fase192_admin_accounts`
+(11: matrice ruolo × azione, stesso errore a password sbagliata e a email inesistente, revoca all'istante). Sei mutanti
+a mano visti rossi; la larghezza vera la dirà il Giudice nella prossima notte sul Blocco 3.
+
+**3. I 42 sopravvissuti della notte sul Blocco 3** (fase64 8, fase80 3, fase127 14, fase143 17): 32 guardie in coda ai
+dedicati, **42 su 42 punti visti rossi** col mutante del Giudice iniettato con l'editor, ripristino byte-identico,
+**zero dichiarazioni di equivalenza** (B6). Trovato per strada e non riparato (nessun difetto di produzione): in fase127
+e fase143 i rami «ISOLATA/ISOLATO» col DB rotto non erano mai stati eseguiti da un test (D19); ora una connessione che
+esplode dopo lo schema li attraversa e rispondono fail-closed come dichiarato.
+
+**4. Blocco 4, `collaudi/esame_prezzi.py` — le relazioni metamorfiche sul motore VERO** (`fase59_concierge.quota`,
+tariffe lette da `main_casavip.py`, Hypothesis 300 casi a relazione; D25: Chen, Cheung, Yiu 1998; Segura et al. 2016).
+R1 raddoppiare le notti raddoppia il listino · R1b la quota fissa non raddoppia · R3 conservazione · R4 monotonia:
+verdi. **R2 «l'ordine degli sconti non cambia il totale»: ROSSA sul motore vero.** fase59 applica lo sconto lungo
+(righe 296-302) e poi il −12% non rimborsabile (305-310), ognuno con divisione intera `// 10000`: nell'ordine inverso
+il totale differisce di un centesimo in una parte dei casi, nei due versi (26 notti da 1,00 €, sconto 28,02%: 16,48
+contro 16,47; 7 notti da 11.557,29 €, sconto 0,01%: 71.185,79 contro 71.185,80). È matematica, non l'attrezzo:
+l'autoprova lo riproduce su un motore finto con la stessa aritmetica e tace su uno che sconta in un passo. Chi ci
+perde: nessuno per più di un centesimo a prenotazione; ma la casella letta alla lettera non può diventare verde finché
+o il testo dice «nell'ordine dichiarato», o il motore calcola gli sconti in UN passo con UN arrotondamento (riga di
+produzione, «autorizzato», poi rimisura del Blocco 2: cambia l'impronta). **Decisione del fondatore, aperta.** Guardia
+`TestLEsameDeiPrezziNonPuoBARARE` (5) in `test_pipeline_ci.py`, vista rossa col guasto nell'attrezzo. La casella NON è
+scritta nella scheda.
+
+**5. Blocco 4, `collaudi/esame_parita.py` — «costa SEMPRE meno che sulle OTA» è NON MISURABILE dal codice.** Misurato
+col `grep`, non a memoria: `fase125_confronto_guest` è chiamato da una sola riga (fase83:7684) e mostra all'ospite un
+«prezzo OTA» che non viene da nessuna OTA (il nostro +15% markup, +14% guest fee, +4% DCC: percentuali fisse, quindi
+«da noi costa meno» è vero per costruzione e non misura niente); `fase190_rate_parity` è DORMIENTE (0 riferimenti in
+fase81/83/main, nessun ranking lo legge); la clausola di parità non è nel contratto (0 righe in fase163 e in
+`deploy/*.html`) e l'host non dichiara nessun prezzo OTA. L'attrezzo misura lo stesso ciò che si può (P1 il confronto
+mostrato non mente contro di noi, P2 confini di `e_violazione`, P3 fase190 in memoria: verdi, 300 casi l'una) e tiene
+la casella rossa col motivo; la guardia `test_OGGI_I_TRE_FATTI_SONO_NO_LETTI_DAI_FILE` diventa rossa il giorno in cui
+uno dei tre fatti cambia: è il segnale «rimisura», non un difetto. **Difetto latente scritto, non riparato:**
+`fase190.crea_gestore_rate_parity(":memory:")` apre una connessione nuova a ogni chiamata (fase190:183-185) e in
+memoria ogni connessione è un archivio vuoto → «no such table: parity_reports» alla prima segnalazione; il modulo ha
+già `_ConnCondivisa` e la fabbrica non lo usa. Modulo dormiente, mai eseguito da un test (D19). Guardia
+`TestLEsameDellaParitaNonPuoBARARE` (5), vista rossa col guasto. La casella NON è scritta nella scheda.
+
+**6. La CI ha bocciato il primo commit, e aveva ragione (ferrea 8: il verde locale è un indizio).** Su `2c60533`
+`qualita` rosso per 5 segnalazioni nuove di ruff e 9 di bandit nei file di A (chiuse nel codice nuovo, mai assorbite
+nel cricchetto: `_g` al posto di `_g_`, una variabile morta, importazioni non usate, il sottoprocesso nel test sostituito
+dalla chiamata in-processo come già fa `test_pipeline_ci`, le password di prova in costanti come in
+`test_marca_temporale_server`). E `full-suite` rosso con **23 test** di `test_marca_temporale_server`,
+`test_qualifica_catena` e `test_rotte_ostile`, tutti `503 marca_temporale_non_attiva`: `esame_accessi.sistema_locale()`
+scriveva `MARCA_TEMPORALE=0` nell'ambiente per costruire il sistema di prova e non lo rimetteva; nella suite intera, che
+gira in un processo solo, la marca restava spenta per tutti i test dopo di lui in ordine alfabetico. Un attrezzo che
+misura non deve cambiare la macchina a chi viene dopo (D18): il valore di prima si rimette subito dopo `crea_sistema`
+(fase81 lo legge lì; alle richieste il server guarda l'archivio, non l'ambiente). Guardia
+`test_il_sistema_locale_rimette_MARCA_TEMPORALE_com_era` vista rossa col guasto rimesso con l'editor — 1 rosso da sola, 14
+nella catena `test_esame_accessi` → `test_marca_temporale_server` nello stesso processo — ripristino byte-identico
+(sha256 `8d8783fd…` prima e dopo), poi 51 test verdi sui quattro moduli insieme. Il `test_pipeline_ci` locale non poteva
+vederlo: quei tre moduli non ne fanno parte.
+
+**Numeri dell'integrazione (misurati in B2 sul ramo, non sommati):** caricatore da fermo **6491** dopo la cura (6490 al
+primo commit; master `ae69c1f` dichiarava 6395); i 10 moduli/classi toccati rilanciati uno per uno, uscita 0 su tutti; README 153 moduli / **421**
+file di test (erano 417). Zero righe di produzione. Il Giudice sui Blocchi 4 e 7 nella stessa notte (in B3, registro
+`corsia_B_2026-09-05\giudice_notte_blocchi_4_7.log`): 414 provati, 282 uccisi, **132 sopravvissuti**, 0 non
+determinabili, 5 moduli fuori produzione dichiarati (fase43, 44, 45, 189, 190): sono il lavoro della chat A del 7.
+
 ### ⏰ BLOCCO 1, LA CASELLA «OGNI ORA»: I CINQUE INVARIANTI GIRANO IN PRODUZIONE OGNI ORA, NON UNA VOLTA AL GIORNO — 6 settembre, chat B (albero Core_Auto_B3, ramo `casella14-invarianti-ogni-ora` su `0f6ccb9`, «autorizzato» del fondatore)
 
 **Il fondatore:** *«finiamo oggi tutto? autorizzato»*. **Cosa c'era (misurato):** il tick del Guardiano in

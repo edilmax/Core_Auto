@@ -297,5 +297,56 @@ class TestGliOTTOPUNTITrovatiDalGiudice(unittest.TestCase):
                          "l'anzianita' dichiarata non e' quella ricevuta")
 
 
+# ═══════════════════════════════════════════════════════════════════════════════════════
+# I 5 PUNTI SOPRAVVISSUTI DELLA NOTTE FRA IL 6 E IL 7 SETTEMBRE 2026 (Giudice, Blocco 4)
+# ═══════════════════════════════════════════════════════════════════════════════════════
+
+class TestI5PuntiSopravvissutiDellaNotteDel7Settembre(unittest.TestCase):
+    """Il Giudice (giudice_notte_blocchi_4_7) ha trovato 5 punti in cui il guasto passa e i
+    test restano verdi. Quattro stanno in `commissione_bps_lancio`, che nessun test
+    chiamava DIRETTAMENTE (solo attraverso `stato_scaglione`): i bordi 90 e 365 giorni,
+    il giorno ZERO, e i tipi storti. Il quinto e' il lettore della tariffa dall'ambiente.
+    UNA guardia per punto, vista ROSSA col mutante iniettato con l'editor."""
+
+    # ── riga 91: la tariffa letta dall'ambiente ────────────────────────────────────
+    def test_riga91_un_valore_d_ambiente_NEGATIVO_torna_il_ripiego_e_uno_zero_esplicito_vale_zero(self):
+        """⚠️ Pinna il comportamento di OGGI: `PAGAMENTO_BPS=0` scritto sul server vale
+        DAVVERO zero (e' leggibile, non e' «illeggibile»). Se il fondatore decidera' che
+        anche lo zero esplicito deve ripiegare, questa guardia diventa rossa apposta."""
+        from fase98_policy_commissione import _intero_bps_env
+        self.assertEqual(500, _intero_bps_env("-1", 500), "un negativo NON ripiega")
+        self.assertEqual(500, _intero_bps_env(None, 500))
+        self.assertEqual(500, _intero_bps_env("abc", 500))
+        self.assertEqual(500, _intero_bps_env("", 500))
+        self.assertEqual(0, _intero_bps_env("0", 500), "lo zero esplicito e' stato scartato")
+        self.assertEqual(700, _intero_bps_env(" 700 ", 500))
+
+    # ── riga 143: il giorno ZERO e' dentro la promozione; i tipi storti no ─────────
+    def test_riga143_il_giorno_ZERO_della_registrazione_e_a_commissione_zero(self):
+        from fase98_policy_commissione import commissione_bps_lancio
+        self.assertEqual(0, commissione_bps_lancio(0), "il giorno stesso della registrazione paga")
+
+    def test_riga143_un_anzianita_di_tipo_storto_va_a_regime_senza_esplodere(self):
+        from fase98_policy_commissione import LANCIO_BPS_REGIME, commissione_bps_lancio
+        for cattivo in ("abc", None, 3.5, -1, True, False, [], "90"):
+            self.assertEqual(LANCIO_BPS_REGIME, commissione_bps_lancio(cattivo),
+                             "anzianita' %r non e' andata a regime" % (cattivo,))
+
+    # ── righe 148 · 150: i due bordi della rampa, sul giorno ESATTO ────────────────
+    def test_riga148_al_giorno_90_ESATTO_finisce_la_promozione(self):
+        from fase98_policy_commissione import (LANCIO_BPS_FASE1, LANCIO_GIORNI_GRATIS,
+                                               commissione_bps_lancio)
+        self.assertEqual(0, commissione_bps_lancio(LANCIO_GIORNI_GRATIS - 1))
+        self.assertEqual(LANCIO_BPS_FASE1, commissione_bps_lancio(LANCIO_GIORNI_GRATIS),
+                         "il giorno %d e' ancora a commissione zero" % LANCIO_GIORNI_GRATIS)
+
+    def test_riga150_al_giorno_365_ESATTO_si_va_a_regime(self):
+        from fase98_policy_commissione import (LANCIO_BPS_FASE1, LANCIO_BPS_REGIME,
+                                               LANCIO_GIORNI_FASE1, commissione_bps_lancio)
+        self.assertEqual(LANCIO_BPS_FASE1, commissione_bps_lancio(LANCIO_GIORNI_FASE1 - 1))
+        self.assertEqual(LANCIO_BPS_REGIME, commissione_bps_lancio(LANCIO_GIORNI_FASE1),
+                         "il giorno %d e' ancora in fase 1" % LANCIO_GIORNI_FASE1)
+
+
 if __name__ == "__main__":
     unittest.main()

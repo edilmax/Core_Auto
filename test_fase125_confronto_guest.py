@@ -1,7 +1,8 @@
 """Test Fase 125 - Confronto OTA risparmio guest. Puro, cents/bps interi."""
+import dataclasses
 import unittest
 
-from fase125_confronto_guest import PoliticaConfrontoGuest, confronta_guest
+from fase125_confronto_guest import PoliticaConfrontoGuest, _i, confronta_guest
 
 
 class TestConfrontoGuest(unittest.TestCase):
@@ -42,6 +43,32 @@ class TestConfrontoGuest(unittest.TestCase):
         c = confronta_guest(9999, valuta_diversa=True)
         for v in c.values():
             self.assertIsInstance(v, int)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════════════
+# I 2 PUNTI SOPRAVVISSUTI DELLA NOTTE FRA IL 6 E IL 7 SETTEMBRE 2026 (Giudice, Blocco 4)
+# ═══════════════════════════════════════════════════════════════════════════════════════
+
+class TestI2PuntiSopravvissutiDellaNotteDel7Settembre(unittest.TestCase):
+    """Il Giudice (giudice_notte_blocchi_4_7) ha trovato 2 punti: il `frozen` della
+    politica e il filtro `_i` sullo zero. Il secondo (`v >= 0` -> `v > 0`) cambia SOLO
+    l'ingresso 0, e per 0 entrambe le versioni rispondono 0: la guardia documenta il
+    contratto ma non puo' ucciderlo (vedi consegna)."""
+
+    def test_riga15_PoliticaConfrontoGuest_e_congelata(self):
+        p = PoliticaConfrontoGuest()
+        with self.assertRaises(dataclasses.FrozenInstanceError):
+            p.nostra_guest_fee_bps = 5000
+        self.assertEqual(hash(PoliticaConfrontoGuest()), hash(p))
+
+    def test_riga24_il_filtro_degli_interi_azzera_negativi_booleani_e_tipi_storti(self):
+        self.assertEqual(0, _i(0))
+        self.assertEqual(0, _i(-1))
+        self.assertEqual(0, _i(True))
+        self.assertEqual(0, _i("5"))
+        self.assertEqual(5, _i(5))
+        self.assertEqual(0, confronta_guest(-100)["ota_totale_cents"])
+        self.assertEqual(0, confronta_guest(True)["ota_totale_cents"])
 
 
 if __name__ == "__main__":

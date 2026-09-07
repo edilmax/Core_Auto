@@ -43,19 +43,19 @@ TETTO = {
     "admin.html": 0,
     "annullato.html": 1,
     "bunker.html": 0,
-    "commissioni.html": 1,
+    "commissioni.html": 0,
     "contratto-host.html": 1,
     "diventa-host.html": 0,
     "grazie.html": 1,
-    "guida-operativa.html": 1,
-    "host.html": 3,
+    "guida-operativa.html": 0,
+    "host.html": 0,
     "index.html": 0,
     "kit-marketing.html": 0,
     "privacy.html": 1,
     "termini.html": 1,
 }
 
-TOTALE_OGGI = 10
+TOTALE_OGGI = 5
 
 
 class TestNessunPassoIndietro(unittest.TestCase):
