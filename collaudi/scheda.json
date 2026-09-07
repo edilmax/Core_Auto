@@ -76,6 +76,17 @@
   "motivo": "",
   "quando": "2026-09-07T18:26:40"
  },
+ "63e1e98393ea": {
+  "blocco": 10,
+  "comando": "python collaudi/esame_legacy.py --casella uscite --scrivi",
+  "commit": "a48ccc4",
+  "condizione": "ogni modulo qui dentro ha UNA delle tre uscite: serve e si collauda · e' spento e si dice come si accende · e' estraneo e SI TOGLIE",
+  "denominatore": 21,
+  "esito": false,
+  "impronta": "12b493b5fae6",
+  "motivo": "[uscite] fase25_brain: NESSUNA USCITA (non raggiunto, senza riga «come si accende», ma ha ancora test (test_fase25_brain.py) e voce nel registro: morto che si collauda e si documenta senza dire come si accende | raggiunto=False test=True voce=True accensione=False usato_vivo=-); [uscite] fase27_proposte: NESSUNA USCITA (non raggiunto, senza riga «come si accende», ma ha ancora test (test_fase27_proposte.py) e voce nel registro: morto che si collauda e si documenta senza dire come si accende | raggiunto=False test=True voce=True accensione=False usato_vivo=-); [uscite] fase30_llm: NESSUNA USCIT",
+  "quando": "2026-09-07T21:42:36"
+ },
  "6bb68f1abf5b": {
   "blocco": 3,
   "comando": "python collaudi/esame_accessi.py --casella matrice --scrivi",
@@ -119,6 +130,17 @@
   "impronta": "16b54b3dfa6e",
   "motivo": "",
   "quando": "2026-09-07T16:45:06"
+ },
+ "a36e3373da1d": {
+  "blocco": 8,
+  "comando": "python collaudi/esame_sentinella.py --scrivi",
+  "commit": "a48ccc4",
+  "condizione": "una sentinella ESTERNA (non nostra) si accorge se il sito muore",
+  "denominatore": 7,
+  "esito": false,
+  "impronta": "1e861914e310",
+  "motivo": "[sveglia] nelle ultime 24 ore il buco massimo fra due giri e' sotto i 60 minuti (promessa del file: ~15) (giri nelle 24 ore: 7, buco massimo 333 minuti)",
+  "quando": "2026-09-07T21:42:40"
  },
  "a6c9694a48f1": {
   "blocco": 2,
@@ -218,6 +240,17 @@
   "impronta": "0624129adf38",
   "motivo": "",
   "quando": "2026-09-06T19:24:20"
+ },
+ "f132bc4f619c": {
+  "blocco": 10,
+  "comando": "python collaudi/esame_legacy.py --casella prova --scrivi",
+  "commit": "a48ccc4",
+  "condizione": "⛔ non si cancella niente prima di aver dimostrato che nulla di vivo lo usa",
+  "denominatore": 20,
+  "esito": true,
+  "impronta": "12b493b5fae6",
+  "motivo": "",
+  "quando": "2026-09-07T21:42:36"
  },
  "f5d22a937896": {
   "blocco": 2,

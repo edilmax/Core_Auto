@@ -382,6 +382,14 @@ class TestAvvioDaZero(unittest.TestCase):
         cls.app = Prodotto(cls.dati)
         cls.addClassCleanup(cls.app.spegni)
         cls.app.attendi()
+        # L'archivio dei feed iCal lo crea il TICK di fase203 in un thread parallelo al server
+        # (fase83 `_tick_ical`, `archivio_di`): con `coverage run` quel thread perde la gara con
+        # la sonda di salute e la foto usciva senza `ical_feed.db` (CI su a48ccc4, job
+        # copertura, mentre full-suite era verde sullo stesso commit). Si aspetta QUEL file,
+        # con un tetto, prima della foto: e' l'accensione che lo crea, solo in un altro filo.
+        scadenza = time.time() + 20
+        while time.time() < scadenza and not os.path.exists(os.path.join(cls.dati, "ical_feed.db")):
+            time.sleep(0.1)
         # FOTO SUBITO DOPO L'ACCENSIONE, prima che una qualsiasi richiesta tocchi i file:
         # senza questa, l'esito dipenderebbe dall'ORDINE dei test (la sonda /api/health/db
         # apre ogni archivio e cosi' lo CREA). Un test che dipende dall'ordine e' un

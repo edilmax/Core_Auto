@@ -432,6 +432,28 @@ attrezzi in `test_pipeline_ci.py` (6 + 6 + 4), viste rosse; la guardia dei censi
 giro (una regex contava `urlopen(` in un commento: riscritta sull'albero sintattico, sbaglio S6). Caricatore **6661**;
 ruff 677/686, bandit 548/548.
 
+**Nella stessa PR, la quinta rete di A e una cura di test.** `collaudi/esame_legacy.py` (Blocco 10): per ognuno dei 21
+moduli del blocco misura in quale delle tre uscite sta — «serve e si collauda» (raggiunto da `main_casavip.py` o dai
+moduli vivi, e con test), «spento e si dice come si accende» (una riga nella tabella «COSTRUITO ma SPENTO» di questo
+registro), «estraneo e si toglie» (zero chiamanti vivi, zero test, zero voce). Esito: fase164 e fase165 servono; **18
+moduli non stanno in nessuna uscita** (non raggiunti da main, ma con test e voce, e nessuna riga nella tabella dello
+spento) → casella 1 ROSSA 3/21, decisione del fondatore fra accensione scritta e rimozione; casella 2 VERDE 20/20: le
+18 prove di rimozione sono pulite (nulla di vivo li nomina: né main, né moduli vivi, né Dockerfile/compose/deploy/
+workflow; si nominano fra loro nei grappoli 25/28/30/31/33 e 49-56), e l'attrezzo NON cancella niente — una guardia
+sull'albero sintattico pretende che non abbia chiamate che tolgono file (ferrea 5). `collaudi/esame_sentinella.py`
+(Blocco 8 casella 3): legge l'API pubblica di GitHub senza credenziali; la sentinella esiste
+(`.github/workflows/sentinella.yml`, cron ogni 15 minuti a minuti dispari, `curl /api/health`, email di GitHub), 465
+giri in storia con 34 rossi, ma **nelle ultime 24 ore solo 7 giri e un buco massimo di 333 minuti**: «ogni 15 minuti»
+è ciò che il file dichiara, non ciò che succede (GitHub non promette il cron). Casella ROSSA 5/7. Misure di B sul VPS
+per la stessa casella: watchdog da cron ogni 10 minuti, registro fresco nel volume dei dati, `TELEGRAM_*` presenti;
+il giro rosso 462 delle 00:06Z non ha lasciato traccia sul server (watchdog OK alle 00:00 e 00:10, zero riavvii) →
+rete di GitHub, non il sito; e la catena dell'allarme resta quella già scritta in memoria: l'email di GitHub non la
+legge nessuno, il canale vivo è Telegram del watchdog. **Cura di test:** `TestAvvioDaZero` in
+`test_avvio_e_ripristino.py` fotografava la cartella subito dopo la sonda di salute, ma `ical_feed.db` lo crea il tick
+di fase203 in un thread parallelo (`fase83._tick_ical` → `archivio_di`): sotto `coverage run` il thread perdeva la
+gara e il job `copertura` era rosso su `a48ccc4` mentre `full-suite` era verde sullo stesso commit; il test ora aspetta
+quel file con un tetto di 20 s. Caricatore **6668**.
+
 ### 🧬 I 132 SOPRAVVISSUTI DEI BLOCCHI 4 E 7 HANNO LA GUARDIA, E IL PANNELLO HOST CONTA COME INCASSO UN HOLD MAI PAGATO — 7 settembre, chat A (albero Core_Auto_A3, ramo `blocco3-accessi-A` su `16d7da2`); integrata da B (albero B2, ramo `integra-A2-2026-09-07`)
 
 **Rete:** `corsia_A_2026-09-07\lavoro_A_2.patch` (sha256 `f8f4faaa…`, 13 file: 11 `test_fase*.py`, `test_pipeline_ci.py`,

@@ -186,6 +186,24 @@ decidono da soli; nessuna pubblicazione illecita in atto, la decisione sta nel p
 `giurisdizioni_consentite("email")` da fase154, «autorizzato») → **Blocco 9 = 1 su 2**; `esame_pannello_soldi.py` in A2.
 Difetto scritto e non riparato: fase83:614 normalizza «xx» a «en» prima di fase185, così `tradotto` dice vero per una lingua
 sconosciuta. Caricatore **6661**.
+**Poi, stessa PR #163, la quinta rete di A (`lavoro_A_5.patch` sha `1532f3bd…`) e una cura di test:** `collaudi/esame_legacy.py`
+(Blocco 10: casella «ogni modulo ha UNA delle tre uscite» ROSSA 3/21 — fase164 e fase165 SERVONO, raggiunti e con test; gli altri 18
+non sono raggiunti da `main_casavip.py` ma hanno test e voce nel registro e **nessuna riga nella tabella «COSTRUITO ma SPENTO»**:
+nessuna delle tre uscite, decisione del fondatore fra accensione scritta e rimozione; casella «non si cancella niente prima di aver
+dimostrato» VERDE 20/20: le 18 prove di rimozione sono pulite, nulla di vivo li nomina, si nominano solo fra loro e nei test/registro/
+piano; l'attrezzo non ha nessuna chiamata che toglie file, guardia sull'albero sintattico) → **Blocco 10 = 1 su 2**;
+`collaudi/esame_sentinella.py` (Blocco 8 casella 3, legge l'API pubblica di GitHub senza credenziali: la sentinella esiste,
+`.github/workflows/sentinella.yml`, cron ogni 15 minuti, 465 giri, ma nelle ultime 24 ore solo 7 giri con un buco massimo di 333
+minuti: il limite che il file dichiara è un numero, non un fatto) → casella ROSSA 5/7 col motivo, **Blocco 8 = 0 su 3**. Misurato
+sul VPS da B alle 18:4x per quella casella: il watchdog gira ogni 10 minuti da cron e scrive fresco in
+`/var/lib/docker/volumes/bookinvip_casavip_data/_data/watchdog.log`; le quattro variabili `TELEGRAM_*` sono presenti in
+`.env.casavip`; il giro 462 rosso della sentinella alle 00:06Z del 7/9 non ha lasciato traccia sul server (watchdog «OK» alle 00:00 e
+alle 00:10; nessun riavvio dei container), quindi era la rete di GitHub, non il sito; dalle 00:10 alle 08:50 il watchdog ha gridato
+25 volte «la CI su master è ROSSA» per un rosso già smentito: è il difetto che la chat del watchdog ha curato in `Core_Auto_A` (ramo
+`corsia-a-watchdog`, non ancora unito). **Cura di test:** `test_avvio_e_ripristino.TestAvvioDaZero` fotografava la cartella dati
+subito dopo la sonda di salute, ma `ical_feed.db` lo crea il tick di fase203 in un thread parallelo: sotto `coverage run` il thread
+perdeva la gara (job `copertura` rosso su `a48ccc4` mentre `full-suite` era verde sullo stesso commit); ora il test aspetta quel
+file con un tetto di 20 s prima della foto. Caricatore **6668**.
 
 **📏 5 SETTEMBRE, 02:3x — IL METRO RIPARATO: le impronte non dipendono più dai fine riga (ramo `metro-fine-riga`
 su `2a3d6d7`, parola del fondatore «ripara»):** lo stesso Blocco 1 leggeva 6 su 6 in B2 e **0 su 6** in un albero
@@ -1758,9 +1776,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 39448a0
+CONSEGNE AGGIORNATE A: a48ccc4
 
-SUITE ATTUALE: Ran 6661 test
+SUITE ATTUALE: Ran 6668 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

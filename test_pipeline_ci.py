@@ -12722,5 +12722,161 @@ class TestLEsameDelMarketingNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
         self.assertTrue(all(isinstance(r, str) and r.strip() for r in esame.NON_GUARDA))
 
 
+class TestLEsameDelLegacyNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
+    """⛔ D18 PUNTO 4 PER `collaudi/esame_legacy.py`, l'attrezzo delle caselle 1 e 2 del Blocco 10 («ogni
+    modulo ha UNA delle tre uscite»; «non si cancella niente prima di aver dimostrato che nulla di vivo lo
+    usa»), chat A 2026-09-07. Qui si pretende che: la funzione delle uscite sia pura e dica UNA uscita sola
+    per i cinque fatti (e nessuna nei casi ambigui); il lettore della sezione «COSTRUITO ma SPENTO» legga
+    davvero la PRIMA colonna (un numero in un'altra sezione non conta); la prova dei riferimenti distingua
+    PRODUZIONE VIVA da FUORI su una cartella costruita a mano (un docker-compose dello stack vecchio che
+    nomina il modulo e' VIVO; un test e' FUORI); l'attrezzo NON contenga chiamate che tolgono file (albero
+    sintattico: os.remove/unlink/rmdir/shutil.rmtree/move/rename); col guasto non scriva mai; testi non
+    ricopiati.
+
+    ⛔ IL RILIEVO che l'esame tiene fermo: 18 moduli del blocco sono MORTI (non raggiunti da main_casavip.py)
+    ma hanno ancora test e voce nel registro e NESSUNA riga che dica come si accendono: nessuna delle tre
+    uscite. La casella «uscite» e' ROSSA finche' qualcuno decide (accensione scritta, o rimozione)."""
+
+    def _esame(self):
+        return self._carica("esame_legacy.py", "_esame_legacy_sotto_guardia")
+
+    def test_LE_TRE_USCITE_SONO_UNA_FUNZIONE_PURA_DEI_CINQUE_FATTI(self):
+        esame = self._esame()
+        u = esame.USCITE
+
+        def f(**kw):
+            base = {"raggiunto": False, "collaudato": [], "voce": False, "accensione": False, "usato_vivo": []}
+            base.update(kw)
+            return esame.uscita(base)[0]
+        self.assertEqual(f(raggiunto=True, collaudato=["t"]), u[0])
+        self.assertIsNone(f(raggiunto=True))
+        self.assertEqual(f(accensione=True, collaudato=["t"], voce=True), u[1])
+        self.assertEqual(f(), u[2])
+        self.assertIsNone(f(usato_vivo=["docker-compose.tavolavip.yml"]))
+        self.assertIsNone(f(collaudato=["t"], voce=True))
+        self.assertIsNone(f(voce=True))
+        riuscita, righe = esame.autoprova()
+        self.assertTrue(riuscita, righe)
+
+    def test_IL_LETTORE_DEL_REGISTRO_E_LA_PROVA_DEI_RIFERIMENTI_LEGGONO_DAVVERO(self):
+        esame = self._esame()
+        reg = "## 1) vivi\n| 25 | fase25_brain.py |\n## 2) COSTRUITO ma SPENTO — come si ACCENDE\n| Fase | Cosa |\n|---|---|\n| **46** | x |\n| 92 | y |\n## 3) altro\n| 55 | z |\n"
+        self.assertEqual(esame.righe_di_accensione(reg), {"46", "92"})
+        self.assertEqual(esame.righe_di_accensione("niente sezione"), set())
+        d = tempfile.mkdtemp()
+        try:
+            def scrivi(nome, testo):
+                p = os.path.join(d, nome)
+                os.makedirs(os.path.dirname(p), exist_ok=True)
+                with io.open(p, "w", encoding="utf-8") as fh:
+                    fh.write(testo)
+            scrivi("fase901_morto.py", "X = 1\n")
+            scrivi("fase902_vivo.py", "import fase901_morto\n")
+            scrivi("fase903_morto_che_lo_cita.py", "import fase901_morto\n")
+            scrivi("main_casavip.py", "import fase902_vivo\n")
+            scrivi("docker-compose.tavolavip.yml", "command: python -m fase901_morto\n")
+            scrivi("test_fase901_morto.py", "import fase901_morto\n")
+            scrivi("REGISTRO_INGEGNERIA.md", "`fase901_morto.py` e' il cervello\n")
+            scrivi("collaudi/piano.py", "'fase901_morto'\n")
+            scrivi("deploy/watchdog.sh", "echo fase901_mortox\n")            # fase901_mortox: NON e' la parola intera
+            vivo, fuori = esame.riferimenti("fase901_morto", {"fase902_vivo"}, d)
+            self.assertIn("fase902_vivo.py", vivo)
+            self.assertIn("docker-compose.tavolavip.yml", vivo)
+            self.assertNotIn("main_casavip.py", vivo)
+            self.assertNotIn("deploy/watchdog.sh", vivo)
+            self.assertEqual(sorted(fuori), ["REGISTRO_INGEGNERIA.md", "collaudi/piano.py", "fase903_morto_che_lo_cita.py",
+                                             "test_fase901_morto.py"])
+            self.assertEqual(esame.test_dedicato("fase901_morto", d), ["test_fase901_morto.py"])
+            self.assertEqual(esame.test_dedicato("fase902_vivo", d), [])
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_L_ATTREZZO_NON_HA_NESSUNA_CHIAMATA_CHE_TOGLIE_FILE(self):
+        import ast
+        with io.open(os.path.join(QUI, "collaudi", "esame_legacy.py"), encoding="utf-8") as f:
+            albero = ast.parse(f.read())
+        vietate = {"remove", "unlink", "rmdir", "rmtree", "move", "rename", "replace", "removedirs"}
+        trovate = [n.func.attr for n in ast.walk(albero) if isinstance(n, ast.Call)
+                   and isinstance(n.func, ast.Attribute) and n.func.attr in vietate]
+        self.assertEqual(trovate, [], "l'attrezzo che promette di non cancellare chiama %r" % (trovate,))
+        self.assertNotIn("shutil", [n.names[0].name for n in albero.body if isinstance(n, ast.Import)])
+
+    def test_COL_GUASTO_DENTRO_NON_SCRIVE_MAI_E_I_TESTI_NON_SONO_RICOPIATI(self):
+        esame = self._esame()
+        vera_registra = esame.scheda.registra
+        scritture = []
+        try:
+            esame.scheda.registra = lambda *a, **k: scritture.append((a, k))
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(esame.main(["--con-guasto", "--scrivi"]), 2)
+                self.assertEqual(esame.main(["--con-guasto", "--casella", "prova", "--scrivi"]), 2)
+            self.assertEqual(scritture, [])
+        finally:
+            esame.scheda.registra = vera_registra
+        with io.open(os.path.join(QUI, "collaudi", "esame_legacy.py"), encoding="utf-8") as f:
+            sorgente = f.read()
+        for casella in esame.MARCHE:
+            self.assertNotIn(esame.condizione(casella), sorgente)
+        self.assertTrue(all(isinstance(r, str) and r.strip() for r in esame.NON_GUARDA))
+
+
+class TestLEsameDellaSentinellaNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
+    """⛔ D18 PUNTO 4 PER `collaudi/esame_sentinella.py`, l'attrezzo della casella «una sentinella ESTERNA
+    (non nostra) si accorge se il sito muore» (Blocco 8), chat A 2026-09-07. Niente rete: letture costruite
+    o da file. Si pretende che il giudizio gridi su una sentinella addormentata (ultimo giro vecchio, buchi
+    di ore, mai un rosso, repository fermo) e taccia su quella sveglia; che `--da-file` giudichi senza rete e
+    scriva l'esito vero; che col guasto non scriva mai; che il testo non sia ricopiato.
+
+    ⛔ IL RILIEVO che l'esame tiene fermo (misurato il 2026-09-07 dall'API pubblica): il workflow promette un
+    giro ogni ~15 minuti e GitHub ne esegue ~7 al giorno, con buchi di oltre 5 ore: la sentinella si accorge
+    che il sito muore, ma con ore di ritardo. La casella e' ROSSA col motivo finche' e' cosi'."""
+
+    def _esame(self):
+        return self._carica("esame_sentinella.py", "_esame_sentinella_sotto_guardia")
+
+    def test_IL_GIUDIZIO_GRIDA_SULLA_SENTINELLA_ADDORMENTATA_E_TACE_SU_QUELLA_SVEGLIA(self):
+        esame = self._esame()
+        riuscita, righe = esame.autoprova()
+        self.assertTrue(riuscita, righe)
+        self.assertFalse(esame.giudica([])[0])
+        self.assertFalse(esame.giudica([("altro", "x", True, "")])[0])
+        self.assertEqual(esame.giudica([(s, "p", True, "") for s in esame.SITUAZIONI])[0], True)
+
+    def test_DA_FILE_GIUDICA_SENZA_RETE_E_SCRIVE_L_ESITO_VERO(self):
+        esame = self._esame()
+        vera_registra = esame.scheda.registra
+        scritture = []
+
+        def _registra_finta(*a, **k):
+            scritture.append(k)
+            return {"blocco": 8, "esito": k.get("esito"), "denominatore": k.get("denominatore"), "impronta": "finta"}
+        d = tempfile.mkdtemp()
+        try:
+            esame.scheda.registra = _registra_finta
+            sveglia, dorme = os.path.join(d, "sveglia.json"), os.path.join(d, "dorme.json")
+            with io.open(sveglia, "w", encoding="utf-8") as f:
+                json.dump(esame.letture_finte(), f)
+            with io.open(dorme, "w", encoding="utf-8") as f:
+                json.dump(esame.letture_finte(buco=300, n=8), f)
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(esame.main(["--da-file", sveglia, "--scrivi"]), 0)
+                self.assertEqual(esame.main(["--da-file", dorme, "--scrivi"]), 1)
+                self.assertEqual(esame.main(["--con-guasto", "--scrivi"]), 2)
+            self.assertEqual([s["esito"] for s in scritture], [True, False])
+            self.assertIn("buco massimo", scritture[1]["motivo"] or "")
+        finally:
+            esame.scheda.registra = vera_registra
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_IL_TESTO_DELLA_CASELLA_NON_E_RICOPIATO_E_NON_GUARDA_E_DICHIARATO(self):
+        esame = self._esame()
+        testo = esame.condizione()
+        self.assertIn("non nostra", testo)
+        with io.open(os.path.join(QUI, "collaudi", "esame_sentinella.py"), encoding="utf-8") as f:
+            self.assertNotIn(testo, f.read())
+        self.assertTrue(all(isinstance(r, str) and r.strip() for r in esame.NON_GUARDA))
+        self.assertTrue(esame.workflow_letto())
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
