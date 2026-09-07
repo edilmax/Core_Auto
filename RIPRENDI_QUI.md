@@ -131,6 +131,23 @@ nell'ambiente e non lo rimetteva, e nella suite intera (un processo solo) spegne
 valore di prima si rimette subito dopo `crea_sistema`; guardia `test_il_sistema_locale_rimette_MARCA_TEMPORALE_com_era` vista
 ROSSA col guasto rimesso con l'editor (1 rosso da sola, 14 nella catena esame → marca), ripristino byte-identico, poi verde.
 Il test_pipeline_ci locale non poteva vederlo: non contiene quei tre moduli.
+**7 SETTEMBRE, pomeriggio — LA CONSEGNA DELLA CHAT C ENTRA IN MASTER, con due righe di produzione «autorizzato»** (ramo
+`integra-C-2026-09-07` sopra quello di A, rete `corsia_C_2026-09-07\lavoro_C_finale_con_host_da_solo.patch` sha256 `f60553cb…`,
+conflitto additivo in `test_pipeline_ci.py` risolto con l'editor tenendo le classi di A e di C; parola del fondatore: «se è la
+cosa giusta autorizzato», 16:4x): `collaudi/esame_cifre_pubbliche.py` (Blocco 4 casella 1: 78 confronti dall'uscita dell'audit
+millimetrico, VERDE, riscritta sul testo di master) e `collaudi/esame_testi_congelati.py` (Blocco 6 casella 1: criterio dell'occhio
+del fondatore, 9 pagine vere × 8 lingue) → `scheda.py --blocco 4` = **1 su 3**, `--blocco 6` = **1 su 2**. **Produzione (a):**
+`fase163_accettazioni.py`, ART. 16 «LINGUA» in coda al contratto host in it e en (fa fede l'italiano, il testo su cui è calcolata
+l'impronta firmata) e `CONTRATTO_HOST_VERSIONE` 2026-08-10 → **2026-09-07** (oggi 0 host firmati: costa zero); D20 nell'ordine:
+la guardia di C `TestLaLinguaCheFaFedeSTAnelTESTOFIRMATO` vista ROSSA sul codice di produzione («il testo FIRMATO non dice quale
+lingua fa fede, in: ['it', 'en']»), poi la riga, poi 21/21 verdi. **Produzione (b), sotto `deploy/`:** i tre marchi in
+`host.html` scritti come si scrivono (`Booking` `Airbnb` `Expedia`, con `value` esplicito così l'API riceve gli stessi valori di
+prima) e i due `<title>` di `commissioni.html` e `guida-operativa.html` marcati `data-i18n="tit"` con la chiave nelle 8 lingue nel
+dizionario che la pagina già usa (non un modello nuovo): la casella dei testi congelati da ROSSO «5 parole in 3 pagine» a VERDE.
+`esame_host_da_solo.py` (Blocco 7 casella 1) entra **in corso, non finito**: nessun test lo importa, nessuna casella scritta. Il
+`.bak` lasciato dal `sed` di stanotte in C3 è stato tolto dopo aver letto la riga che il `sed` aveva cambiato. Restano aperte per il
+fondatore: il ripensamento 48 h (chiavi `rimborso_cosa_torna`/`rimborso_ripensamento`, produzione fase83 + index.html) e il
+centesimo degli sconti (fase59) + i due punti di fase72 (righe 196/200) non uccidibili senza riscrittura: un giro solo, «autorizzato».
 
 **📏 5 SETTEMBRE, 02:3x — IL METRO RIPARATO: le impronte non dipendono più dai fine riga (ramo `metro-fine-riga`
 su `2a3d6d7`, parola del fondatore «ripara»):** lo stesso Blocco 1 leggeva 6 su 6 in B2 e **0 su 6** in un albero
@@ -1703,9 +1720,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: ae69c1f
+CONSEGNE AGGIORNATE A: 3f09eb9
 
-SUITE ATTUALE: Ran 6491 test
+SUITE ATTUALE: Ran 6504 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

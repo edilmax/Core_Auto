@@ -12142,5 +12142,164 @@ class TestLEsameDellaParitaNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
             esame.scheda.registra = vera_registra
 
 
+class TestLEsameDelleCifrePubblicheNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
+    """⛔ D18 PUNTO 4 PER `collaudi/esame_cifre_pubbliche.py`, l'attrezzo che scrive la prima
+    casella del Blocco 4 («ogni cifra pubblica coincide col motore»).
+
+    Quell'esame non confronta le cifre da se': ESEGUE `audit_millimetrico.py` e giudica la sua
+    uscita. Qui non si esegue l'audit: si mettono davanti al GIUDIZIO uscite costruite -- sane e
+    storte -- e si pretende che dica verde solo su quelle sane.
+
+    ⛔ IL CASO CHE CONTA DAVVERO e' l'uscita VUOTA. Un audit che non confronta niente esce con
+    codice 0 e non stampa nessun `[!!]`: chi guardasse solo «zero discrepanze» lo leggerebbe come
+    un verde perfetto. E' il verde piu' pericoloso che conosciamo, ed e' il motivo per cui il
+    denominatore non e' un numero scritto a mano ma il CONTEGGIO delle righe di esito.
+
+    💡 Misurato il 2026-09-06: l'audit fa **78** confronti mentre le chiamate `ok(...)` scritte
+    nel sorgente sono **47** (alcune stanno in cicli). Chi avesse contato a mano avrebbe scritto
+    47 e il denominatore avrebbe mentito **restando plausibile** -- per questo il conteggio si
+    fa sull'uscita, non sul codice.
+    """
+
+    def _esame(self):
+        return self._carica("esame_cifre_pubbliche.py", "_esame_cifre_sotto_guardia")
+
+    def test_IL_GIUDIZIO_DICE_VERDE_SOLO_SU_USCITE_SANE(self):
+        e = self._esame()
+        sana = "  [OK] a\n  [OK] b\n  [OK] c\nVERDETTO: 0 DISCREPANZE\n"
+        verde, den, motivo = e.giudica(0, sana)
+        self.assertTrue(verde, motivo)
+        self.assertEqual(den, 3, "il denominatore dev'essere CONTATO dalle righe di esito")
+
+        storte = {
+            "una discrepanza vera":
+                (1, "  [OK] a\n  [!!] b   atteso=1 trovato=2\nVERDETTO: 1 DISCREPANZE\n"),
+            "uscita VUOTA (non ha guardato niente)": (0, ""),
+            "solo intestazione, zero confronti": (0, "AUDIT MILLIMETRICO\n" + "=" * 40 + "\n"),
+            "troncata: nessuna riga VERDETTO": (0, "  [OK] a\n  [OK] b\n"),
+            "verdetto che non concorda col dettaglio":
+                (0, "  [OK] a\n  [!!] b   atteso=1 trovato=2\nVERDETTO: 0 DISCREPANZE\n"),
+            "zero discrepanze ma codice d'uscita 1":
+                (1, "  [OK] a\nVERDETTO: 0 DISCREPANZE\n"),
+        }
+        for nome, (codice, uscita) in storte.items():
+            verde, den, motivo = e.giudica(codice, uscita)
+            self.assertFalse(verde, "ha detto VERDE su un'uscita storta: %s" % nome)
+            self.assertTrue(motivo, "rosso senza motivo su: %s" % nome)
+
+    def test_UN_AUDIT_CHE_NON_GUARDA_NIENTE_NON_E_UN_VERDE(self):
+        """La condizione da sola, perche' e' quella che regge tutto il resto."""
+        e = self._esame()
+        verde, den, motivo = e.giudica(0, "VERDETTO: 0 DISCREPANZE\n")
+        self.assertFalse(verde, "zero confronti dichiarati verdi: e' il verde cieco")
+        self.assertEqual(den, 0)
+        self.assertIn("NIENTE", motivo.upper())
+
+    def test_LA_CASELLA_NON_E_RICOPIATA_A_MANO(self):
+        """Il testo della casella si legge dal piano: una copia a mano spunterebbe un'altra
+        casella il giorno che il piano cambia (costato il 2026-08-21)."""
+        e = self._esame()
+        from piano import BLOCCHI
+        atteso = [b for b in BLOCCHI if b["ordine"] == e.BLOCCO][0]["finito_quando"][e.INDICE_CASELLA]
+        self.assertEqual(e.testo_della_casella(), atteso)
+        sorgente = io.open(os.path.join(QUI, "collaudi", "esame_cifre_pubbliche.py"),
+                           encoding="utf-8").read()
+        corpo = sorgente.split('"""', 2)[-1]          # fuori dal docstring
+        self.assertNotIn("ogni cifra pubblica coincide", corpo,
+                         "il testo della casella e' ricopiato nel corpo dell'attrezzo")
+
+    def test_LAUTOPROVA_DELLATTREZZO_PASSA(self):
+        """L'attrezzo dichiara di sapersi provare nelle due direzioni: lo si verifica."""
+        e = self._esame()
+        self.assertEqual(e.autoprova(), 0, "l'autoprova dell'esame non distingue i casi")
+
+    def test_DICHIARA_COSA_NON_GUARDA(self):
+        e = self._esame()
+        self.assertTrue(e.NON_GUARDA, "D18 punto 3: deve dichiarare cosa non ha esaminato")
+        self.assertGreaterEqual(len(e.NON_GUARDA), 3)
+
+
+class TestLEsameDeiTestiCongelatiNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
+    """⛔ D18 PUNTO 4 PER `collaudi/esame_testi_congelati.py`, l'attrezzo che scrive la prima
+    casella del Blocco 6 («ZERO parole ferme in italiano»).
+
+    Non esegue l'occhio del fondatore: mette davanti al GIUDIZIO uscite costruite. I due casi
+    che contano non sono le parole ferme -- quelle si vedono -- ma i due VERDI CIECHI:
+      · **zero pagine lette**: nessuna riga, nessuna parola ferma, quindi «tutto a posto»;
+      · **solo gusci**: tutte le pagine escluse, quindi zero ferme su zero pagine vere.
+    Sono i due modi in cui questo esame potrebbe dire verde senza aver guardato il sito.
+
+    ⛔ E la casella si trova per SOTTOSTRINGA, non per indice: il testo completo e' cambiato il
+    2026-09-06 (conteneva «restano ~1034 parole», un numero vecchio di settimane e falso: le
+    parole ferme misurate quel giorno erano 5). Un attrezzo agganciato all'indice o al testo
+    intero avrebbe smesso di trovare la sua casella senza dirlo. Qui due corrispondenze = si
+    ferma, perche' spuntare la casella sbagliata e' peggio che non spuntarne nessuna.
+    """
+
+    def _esame(self):
+        return self._carica("esame_testi_congelati.py", "_esame_testi_sotto_guardia")
+
+    def _uscita(self, vere=(0, 0), gusci=1, totale=True):
+        return self._esame()._finta(vere, gusci, totale)
+
+    def test_IL_GIUDIZIO_DICE_VERDE_SOLO_SU_UN_SITO_TRADOTTO(self):
+        e = self._esame()
+        verde, den, motivo = e.giudica(0, self._uscita((0, 0), 1), n_lingue=8)
+        self.assertTrue(verde, motivo)
+        self.assertEqual(den, 16, "denominatore = pagine VERE x lingue, i gusci non contano")
+
+        storte = {
+            "una parola ferma": (1, self._uscita((1, 0), 1)),
+            "troncata, nessun totale": (0, self._uscita((0, 0), 1, totale=False)),
+            "zero ferme ma codice 1": (1, self._uscita((0, 0), 1)),
+        }
+        for nome, (codice, uscita) in storte.items():
+            verde, _, motivo = e.giudica(codice, uscita, n_lingue=8)
+            self.assertFalse(verde, "ha detto VERDE su: %s" % nome)
+            self.assertTrue(motivo, "rosso senza motivo su: %s" % nome)
+
+    def test_I_DUE_VERDI_CIECHI_SONO_ROSSI(self):
+        """Zero pagine, e solo gusci: nessuna parola ferma, e nessuna misura."""
+        e = self._esame()
+        for nome, uscita in (("nessuna pagina", ""), ("solo gusci", self._uscita((), 2))):
+            verde, den, motivo = e.giudica(0, uscita, n_lingue=8)
+            self.assertFalse(verde, "verde cieco accettato: %s" % nome)
+            self.assertEqual(den, 0, "denominatore non zero su: %s" % nome)
+            self.assertTrue(motivo)
+
+    def test_I_GUSCI_LI_MARCA_LOCCHIO_NON_UN_ELENCO_A_MANO(self):
+        """Il giorno che una pagina smette di essere un guscio deve tornare a contare.
+
+        Se l'esclusione fosse un elenco di nomi scritto qui dentro, resterebbe esclusa per
+        sempre e nessuno se ne accorgerebbe: un punto cieco permanente creato per comodita'.
+        """
+        e = self._esame()
+        con_guscio = e.pagine("  x.html    1    0    1   -- guscio: il testo arriva dal server\n")
+        self.assertTrue(con_guscio[0][4], "non riconosce l'etichetta dell'occhio")
+        senza = e.pagine("  x.html    1    0    1   OK\n")
+        self.assertFalse(senza[0][4], "marca come guscio una pagina che l'occhio non ha marcato")
+        verde, den, _ = e.giudica(0, "  x.html    1    0    1   OK\n"
+                                     "parole visibili che restano in italiano su TUTTO il sito: 1\n",
+                                  n_lingue=8)
+        self.assertFalse(verde, "la stessa pagina, senza l'etichetta, deve tornare a contare")
+
+    def test_LA_CASELLA_SI_TROVA_PER_SOTTOSTRINGA_E_DEVE_ESSERE_UNA_SOLA(self):
+        e = self._esame()
+        una = [{"ordine": e.BLOCCO, "finito_quando": ["x " + e.MARCA + " y", "altro"]}]
+        self.assertIn(e.MARCA, e.testo_della_casella(una))
+        for nome, blocchi in (
+                ("nessuna", [{"ordine": e.BLOCCO, "finito_quando": ["testo vecchio", "altro"]}]),
+                ("due", [{"ordine": e.BLOCCO, "finito_quando": ["a " + e.MARCA, "b " + e.MARCA]}])):
+            with self.assertRaises(LookupError, msg="doveva fermarsi: %s" % nome):
+                e.testo_della_casella(blocchi)
+
+    def test_LAUTOPROVA_DELLATTREZZO_PASSA(self):
+        self.assertEqual(self._esame().autoprova(), 0)
+
+    def test_DICHIARA_COSA_NON_GUARDA(self):
+        e = self._esame()
+        self.assertGreaterEqual(len(e.NON_GUARDA), 3, "D18 punto 3")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

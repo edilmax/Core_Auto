@@ -27,7 +27,7 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 # Bump questa versione a OGNI modifica sostanziale del testo -> gli host dovranno ri-accettare.
-CONTRATTO_HOST_VERSIONE = "2026-08-10"
+CONTRATTO_HOST_VERSIONE = "2026-09-07"
 
 # ── TESTO DEL CONTRATTO (it = lingua che fa fede) ─────────────────────────────
 _IT = """CONTRATTO HOST BOOKINVIP — Versione {VER}
@@ -164,6 +164,11 @@ Art. 7 (penale per disintermediazione), Art. 8 (penali, storno e rivalsa), Art. 
 indennizzo), Art. 10 (limitazione di responsabilita' di BookinVIP), Art. 11 (sospensione e
 risoluzione), Art. 13 (modifiche unilaterali con nuova accettazione), Art. 14 (foro competente).
 
+ART. 16 — LINGUA.
+Il presente Contratto e' fornito in piu' lingue per comodita' dell'Host. In caso di divergenza
+fra le versioni FA FEDE la versione ITALIANA, che e' il testo su cui e' calcolata l'impronta del
+documento sottoscritto.
+
 Accettando, l'Host dichiara di aver letto e compreso l'intero contratto e di accettarlo.
 """
 
@@ -273,6 +278,11 @@ specific approval checkbox, the Host expressly approves: Art. 6 (withholding/set
 (anti-circumvention penalty), Art. 8 (penalties, reversal, recourse), Art. 9 (indemnification),
 Art. 10 (limitation of liability), Art. 11 (suspension and termination), Art. 13 (unilateral
 changes), Art. 14 (jurisdiction).
+
+ART. 16 — LANGUAGE.
+This Agreement is provided in several languages for the Host's convenience. In case of any
+discrepancy the ITALIAN version PREVAILS, and it is the text on which the fingerprint of the
+signed document is computed.
 
 By accepting, the Host declares having read and understood the entire agreement and accepts it.
 """
