@@ -204,6 +204,18 @@ alle 00:10; nessun riavvio dei container), quindi era la rete di GitHub, non il 
 subito dopo la sonda di salute, ma `ical_feed.db` lo crea il tick di fase203 in un thread parallelo: sotto `coverage run` il thread
 perdeva la gara (job `copertura` rosso su `a48ccc4` mentre `full-suite` era verde sullo stesso commit); ora il test aspetta quel
 file con un tetto di 20 s prima della foto. Caricatore **6668**.
+**🚀 7 SETTEMBRE, 19:54Z — DEPLOY DI master `b51d74d` col pulsante (parola del fondatore: «deploy», 21:5x locali; atteso scritto
+prima in `corsia_B_2026-09-07\atteso_deploy_b51d74d.txt`):** backup delle 18:40Z verificato (26 archivi, gzip ok, «SQLite format 3»,
+sha256 OK); `:prec` ri-agganciato alla viva `19f85904…`, `PRE_DEPLOY_20260907_195154.commit` = a60a246; scambio staccato sul VPS
+(`/root/deploy_scambio_20260907.log`, origin/master = HEAD = b51d74d, SCAMBIO FATTO 19:54:38Z, USCITA=0); verifica: app e backup
+healthy, `money_path_pronto True, avvisi []`, nessuna `PAGAMENTO_`, VPS `b51d74d`, viva `18859bd5…` ≠ prec, INVARIANTI ARCHIVI giro
+0 + «GUARDIANO: nessuno stato anomalo», 0 Traceback; sonde / 200 · /api/health 200 · /api/bunker/invarianti 403;
+`verifica_produzione` P1-P6 OK; `esame_produzione` (senza --scrivi) VERDE 9/9 den 14. **Effetti visibili misurati:**
+`/api/legale/contratto-host` in it e en serve la versione **2026-09-07** con «ART. 16» nel testo; `commissioni.html` e
+`guida-operativa.html` hanno `<title data-i18n="tit">`; `host.html` nel contenitore ha `<option value="booking">Booking`. Ritorno se
+servisse: `sh /root/deploy_pulsante.sh indietro` (→ 19f85904). **Il codice che GIRA è `b51d74d`**; la riparazione del consenso
+«"false"» (PR #163) NON è ancora in produzione: servirà un secondo deploy dopo l'unione. Registri: `deploy_b51d74d_{1_paracadute,
+1c_backup,2_scambio,3_verifica,4_effetti}.log`, `verifica_produzione_dopo_deploy_b51d74d.log`, `esame_produzione_dopo_deploy_b51d74d.log`.
 
 **📏 5 SETTEMBRE, 02:3x — IL METRO RIPARATO: le impronte non dipendono più dai fine riga (ramo `metro-fine-riga`
 su `2a3d6d7`, parola del fondatore «ripara»):** lo stesso Blocco 1 leggeva 6 su 6 in B2 e **0 su 6** in un albero

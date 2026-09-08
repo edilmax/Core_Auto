@@ -489,7 +489,15 @@ class TestCalendarioHost(_BaseHost):
                % (_giorno(10).replace("-", ""), _giorno(13).replace("-", "")))
         st, out = self.chiama("POST", "/api/host/ical",
                               {"alloggio_id": self.slug, "ical": ics}, atteso=200)
-        self.assertEqual(out, {"eventi": 1, "giorni_bloccati": 3})
+        # ⛔ LA FORMA E' CRESCIUTA IL 2026-09-07, e resta un confronto ESATTO apposta: se
+        # domani un campo sparisce, questo test lo vede. I due valori storici sono
+        # l'ORACOLO (1 evento -> 3 notti) e non cambiano; gli altri sei sono nati col feed
+        # nei due versi. `anomalia` e' il piu' importante: e' la stringa che dice all'host
+        # che il suo calendario si e' svuotato, e una risposta che tace su quello sarebbe
+        # l'osservabile debole della regola ferrea 9.
+        self.assertEqual(out, {"eventi": 1, "giorni_bloccati": 3, "riaperte": 0,
+                               "tenute_da_altri": 0, "mano_dell_host": 0, "occupate": 0,
+                               "eco_ignorata": False, "anomalia": ""})
         riga = self.sis.inventario.stato_giorno(self.slug, _giorno(11))
         self.assertEqual(riga["unita_totali"], 0)      # data presa sull'OTA: bloccata QUI
 

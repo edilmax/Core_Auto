@@ -65,6 +65,17 @@
   "motivo": "",
   "quando": "2026-09-07T18:26:41"
  },
+ "555972b586e3": {
+  "blocco": 2,
+  "comando": "python collaudi/esame_feed_due_versi.py --scrivi",
+  "commit": "a1dcf97",
+  "condizione": "il feed esterno vale nei due versi: una notte chiusa da un feed si riapre quando sparisce da QUEL feed (e da nessun altro), con lo stato di prima, e solo se l'host non l'ha toccata nel frattempo; i blocchi esterni sono oggetti con origine, non sovrascritture dell'inventario; l'eco del nostro calendario riesportato dall'OTA non chiude le nostre notti; un feed che passa da N eventi a zero non riapre niente e diventa un'anomalia",
+  "denominatore": 14,
+  "esito": true,
+  "impronta": "6927427232b8",
+  "motivo": "",
+  "quando": "2026-09-07T23:20:28"
+ },
  "5c447a0ee514": {
   "blocco": 5,
   "comando": "python collaudi/esame_legale.py --casella spunte --scrivi",
@@ -211,13 +222,13 @@
  "ec84faaea398": {
   "blocco": 2,
   "comando": "python collaudi/esame_prenotazioni.py --scrivi",
-  "commit": "fcdc665",
+  "commit": "a1dcf97",
   "condizione": "la macchina a stati copre cancellazioni, modifiche, no-show e sovra-affitto",
   "denominatore": 34,
   "esito": true,
-  "impronta": "0624129adf38",
+  "impronta": "6927427232b8",
   "motivo": "",
-  "quando": "2026-09-06T19:23:56"
+  "quando": "2026-09-07T23:20:58"
  },
  "eec63adbaf5b": {
   "blocco": 3,
@@ -233,13 +244,13 @@
  "f10f35b6a7b3": {
   "blocco": 2,
   "comando": "python collaudi/esame_ical.py --scrivi",
-  "commit": "fcdc665",
+  "commit": "a1dcf97",
   "condizione": "iCal ha una difesa dal RITARDO 15 min-2 ore (oggi: zero, e' la finestra delle prenotazioni fantasma)",
   "denominatore": 24,
   "esito": true,
-  "impronta": "0624129adf38",
+  "impronta": "6927427232b8",
   "motivo": "",
-  "quando": "2026-09-06T19:24:20"
+  "quando": "2026-09-07T23:21:26"
  },
  "f132bc4f619c": {
   "blocco": 10,
@@ -255,12 +266,12 @@
  "f5d22a937896": {
   "blocco": 2,
   "comando": "python collaudi/esame_gare.py --scrivi",
-  "commit": "fcdc665",
+  "commit": "a1dcf97",
   "condizione": "il blocco atomico regge sotto gara (misurato: 10 giri x 24 agenti, 1 conferma)",
   "denominatore": 51,
   "esito": true,
-  "impronta": "0624129adf38",
+  "impronta": "6927427232b8",
   "motivo": "",
-  "quando": "2026-09-06T19:24:16"
+  "quando": "2026-09-07T23:21:16"
  }
 }

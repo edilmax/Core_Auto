@@ -403,6 +403,143 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🔁 IL FEED ESTERNO VALEVA IN UN VERSO SOLO, E IL NOSTRO CALENDARIO SI CHIUDEVA DA SÉ — 7 settembre, corsia B2 (Blocco 2, casella 5: misurata ROSSA, riparata, ora VERDE 14 su 14)
+
+**Cosa è stato creato.** `collaudi/esame_feed_due_versi.py` — l'esame della quinta casella del
+Blocco 2, **STATO: acceso**, nessuna dipendenza nuova. Banco vero e non finto: un
+`ChannelManager` (fase58) su SQLite in memoria, il sincronizzatore vero (`fase82.sincronizza`)
+e, per l'eco, il nostro esportatore vero (`fase135.genera_ical`). Date **relative a oggi**, mai
+cablate. `--autoprova` verde nelle due direzioni; `--scrivi` registra **anche il rosso**.
+
+**Perché la casella è una sola ma chiede cinque cose** (testo letto da `piano.py`, mai
+ricopiato): riapertura mirata con lo stato di prima · solo se l'host non l'ha toccata ·
+blocchi esterni come **oggetti con un'origine** · l'**eco** del nostro calendario · il feed che
+passa **da N a zero**.
+
+**L'ESITO: 🔴 ROSSA, 8 passi rossi su 11 esaminati.** Non sono opinioni, sono le misure:
+
+```
+riapertura     il feed chiude la notte                    OK     (2,12000) -> (0,0)
+riapertura     la notte si RIAPRE quando l'evento sparisce ROSSO  resta (0,0)
+riapertura     torna con lo STATO DI PRIMA                ROSSO  atteso (2,12000), trovato (0,0)
+mano host      la notte toccata dall'host non si riapre   ROSSO  NON ESEGUITO: manca la premessa (S7)
+origine        sa DA QUALE feed sta bloccando             ROSSO  sincronizza(inventario, alloggio_id, ical_testo)
+origine        la notte RICORDA chi l'ha bloccata         ROSSO  colonne: ... nessuna origine
+origine        il blocco esterno non CANCELLA lo stato    ROSSO  prezzo 12000 -> 0
+eco            il nostro feed porta il nostro PRODID      OK     -//BookinVIP//iCalBidirezionale//IT
+eco            il nostro calendario NON chiude le nostre  ROSSO  notte nostra -> (0,0)
+da N a zero    un feed vuoto non riapre niente            OK     ⚠️ verde per il motivo SBAGLIATO
+da N a zero    il salto a ZERO diventa un'anomalia        ROSSO  {'eventi': 0, 'giorni_bloccati': 0}
+```
+
+🔴 **IL PIÙ GRAVE È L'ECO, ed è un anello che si chiude su di noi.** `fase135` esporta le
+nostre notti occupate; l'OTA legge quel feed e lo **ripubblica**; `fase82.sincronizza` lo
+rilegge e **chiude le nostre stesse notti**. Misurato: dopo aver dato in pasto al
+sincronizzatore il feed generato dal **nostro** esportatore, la nostra notte passa a `(0, 0)`.
+Il PRODID nostro c'è ed è riconoscibile — `-//BookinVIP//iCalBidirezionale//IT` — ma
+**nessuno lo guarda**. Oggi non fa danno perché l'import è a senso unico e manuale; diventa un
+guasto il giorno in cui un host collega davvero i due versi, cioè lo scopo per cui `fase135`
+esiste.
+
+⛔ **E LA RIAPERTURA È IMPOSSIBILE PER COSTRUZIONE, non "non implementata".**
+`fase82.sincronizza` scrive `imposta_disponibilita(unita_totali=0, prezzo_netto_cents=0)`
+**sopra** la riga dell'inventario: il prezzo dell'host (12000) diventa 0 e **lo stato di prima
+non esiste più da nessuna parte**. Anche volendo riaprire, non c'è niente a cui tornare. È il
+punto 3 della casella — «oggetti con origine, non sovrascritture» — e non è una raffinatezza:
+è la condizione che rende possibili le altre due.
+
+⚖️ **Un passo verde che dichiaro come NON valido, invece di incassarlo.** «Un feed vuoto non
+riapre niente» risulta OK, ma per il motivo sbagliato: non riapre niente perché **non riapre
+mai niente**. Scritto nel dettaglio del passo, così non finisce fra i verdi buoni.
+
+**LA RIPARAZIONE** (parola del fondatore, testuale: *«b e autorizzata a autorizzarvi , lo
+autorizzata io comunicate e fate quello che vi dice e ragionamento massimo»*, 2026-09-07).
+
+**L'idea, in una riga:** un blocco esterno smette di essere una **sovrascrittura** e diventa un
+**oggetto con un'origine**; la riga dell'inventario ne è la *proiezione*. Una proiezione si
+può disfare, una sovrascrittura no.
+
+- `fase58_channel_manager.py` — due tabelle nuove. `blocchi_esterni(alloggio, giorno, **feed**)`:
+  la chiave porta il feed, perché senza «sparisce da QUEL feed e da nessun altro» non è
+  nemmeno esprimibile. `inventario_prima_del_blocco(alloggio, giorno, …)`: lo stato dell'host
+  messo da parte alla prima chiusura e rimesso quando molla l'**ultimo** feed. Più
+  `feed_applica` (tutto in **una transazione sola**: fra il «togli il blocco» e il «rimetti lo
+  stato di prima» non deve passare nessuno, perché quello è l'istante in cui uno prenota),
+  `feed_giorni`, `chi_chiude` e `stato_prima_del_blocco` — le ultime due esistono perché una
+  difesa che non si può interrogare è indistinguibile da una rotta (D19).
+- `fase82_ical_sync.py` — `sincronizza(..., feed_id=None)`; il filtro dell'**eco** (`e_nostro`,
+  sul PRODID); l'anomalia **da N a zero**.
+- `fase203_ical_orologio.py` — una riga: passa `feed_id=url_breve(url)` (stabile, e **senza** il
+  segreto dell'URL Airbnb).
+
+🩹 **UN DIFETTO CHE HO INTRODOTTO IO, E CHE MI HA TROVATO UN COLLAUDO CHE ESISTEVA GIÀ.**
+`feed_applica` scriveva diritto nel database e **non avvisava lo specchio della vetrina**:
+l'inventario diceva il vero e il sito continuava ad attirare con «da 80 EUR» su una notte che
+non si comprava più. È il **modo di rompersi numero 2** — «il pezzo è perfetto e non è
+collegato» — commesso mentre riparavo un difetto di cablaggio. L'ha preso
+`test_prezzo_vetrina_e_cassa.test_L_ICAL_CHE_BLOCCA_LA_NOTTE_ECONOMICA_ALZA_LA_VETRINA`, che
+usa il sincronizzatore **vero** invece di imitarlo: se l'avesse imitato non avrebbe visto
+niente. Riparato avvisando lo specchio **dopo** il COMMIT e solo se qualcosa è cambiato.
+
+🛡️ **DUE RETI CHE NON C'ERANO NELLA PRIMA STESURA, e nascono dalla stessa domanda: «e se
+questa cosa nuova non funziona, chi paga?»**
+1. `feed_applica` **crea da sé** le due tabelle se mancano: una base dati nata prima di oggi
+   non le ha, e chi la usa non rilancia per forza `inizializza_schema`. Senza, il primo feed su
+   un database vecchio avrebbe sollevato «no such table», il sincronizzatore l'avrebbe isolato,
+   e le notti occupate sulle OTA avrebbero smesso di chiudersi **in silenzio**.
+2. Se `feed_applica` fallisce lo stesso, `sincronizza` **ripiega sul verso vecchio e blocca
+   comunque**, dichiarandolo nel risultato. Fra i due modi di sbagliare non c'è partita: una
+   notte chiusa di troppo si riapre a mano, una notte lasciata aperta si vende **due volte**.
+
+**Misure, dopo:** l'esame passa **14 su 14** (erano 8 rossi su 11) e `--autoprova` resta capace
+di gridare; `test_fase82` + `test_fase58` + `test_fase135` + `test_fase203` = **129 test, uscita
+0**; lo specchio del prezzo **7 test, uscita 0**.
+
+🧾 **LA SUITE INTERA HA BOCCIATO CINQUE COSE, E NESSUNA ERA UNA REGRESSIONE: erano guardie che
+chiedevano di DICHIARARE.** `Ran 6663 tests`, uscita 1, cinque caduti — e vale la pena leggerli
+uno per uno perché sono il motivo per cui la regola ferrea 6 non fa sconti:
+- **tre** dal contratto congelato di `fase58`: due tabelle nuove che nessuno aveva dichiarato.
+  Aggiunte a `COLONNE`, `UNICI`, `CHECK`, `FK` — e `inventario_prima_del_blocco.prezzo_netto_cents`
+  a **`DENARO`**, perché *è* denaro: è il prezzo dell'host tenuto da parte, e se un giorno
+  diventasse un numero con la virgola il ripristino restituirebbe un prezzo diverso da quello
+  che l'host aveva messo.
+  ⛔ E la guardia è stata più severa di così: dichiarata la tabella, ha preteso che l'esercizio
+  la **riempisse** — *«è vuota dopo l'esercizio: il controllo sui tipi non starebbe verificando
+  niente»*. Ha ragione, ed è S7 in forma pura: un controllo senza premessa non è verde. Ho
+  esteso `esercita()` con un blocco esterno vero, su una notte **libera** (sulle due già
+  occupate `feed_applica` si ferma da solo, fail-safe: una notte già venduta da noi non la
+  chiude un calendario).
+- **due** sulla forma esatta della risposta di `/api/host/ical`: i valori erano giusti
+  (`giorni_bloccati` 3 e 2 — il blocco funziona), erano cresciuti i campi. Aggiornate tenendo il
+  confronto **esatto**: i due valori storici restano l'oracolo, gli altri sei sono il contratto
+  nuovo, e se domani uno sparisce quei test se ne accorgono.
+
+🏁 **E HO CHIUSO LA GARA CHE TENEVA ROSSA MASTER E BLOCCAVA L'UNIONE DI TUTTI** (segnalata dalla
+corsia A, `test_avvio_e_ripristino.TestAvvioDaZero`). Il messaggio conteneva già la diagnosi e
+nessuno l'aveva letto fino in fondo: *«tabelle mancanti ['ical_feed'] (presenti: [])»* — il
+**file c'era**, mancava la **tabella dentro**. E il test aspettava
+`os.path.exists("ical_feed.db")`: ma SQLite crea il file quando si **apre la connessione**, e la
+`CREATE TABLE` arriva un momento dopo. L'attesa finiva nella fessura in mezzo, e la foto scattava
+lì. Spiega anche l'intermittenza misurata dalla corsia A — stesso commit, giro `push` verde e
+giro `schedule` rosso: la fessura è di millisecondi, quindi la gara si vince quasi sempre.
+⚠️ **Quell'attesa era stata messa il giorno prima per riparare esattamente questa gara**, e ha
+aspettato il **contenitore invece del contenuto**: ha *spostato* la fessura invece di chiuderla.
+💡 **La regola che ne resta, e vale oltre questo caso: si aspetta la CONDIZIONE CHE IL TEST POI
+VERIFICA.** Ogni altra attesa è una condizione che si può soddisfare **senza che la cosa vera sia
+successa** — cioè un verde per il motivo sbagliato, in agguato. Ora `_tutte_le_tabelle_ci_sono`
+aspetta che ogni archivio atteso abbia le **sue tabelle**, salta gli `SCHEMI_PIGRI` (spenti in
+collaudo, nascono vuoti per costruzione) e **non apre mai un file che non c'è** — `connect` su un
+percorso assente lo *creerebbe*, e creare un archivio per andare a vedere se è nato sarebbe
+misurare la propria ombra.
+
+⚠️ **IL PREZZO, dichiarato: ho toccato tre moduli del Blocco 2 e l'impronta è cambiata**
+(`0624129adf38` → `6927427232b8`), quindi le altre quattro caselle sono scadute **da sole** —
+ed è il meccanismo che funziona, non un guasto. Rimisurate e tornate verdi: prenotazioni
+(34), gare (51), iCal (24). **Resta fuori la MUTAZIONE**, che è un giro lungo: non la lancio
+adesso perché la corsia C sta per toccare `fase59_concierge.py`, che è in questo stesso blocco
+e la farebbe scadere di nuovo. Si rifà **dopo** che quella riparazione è entrata: rifarla due
+volte sarebbe buttare via ore per lo stesso numero.
+
 ### ✅ UN CONSENSO NEGATO ERA ARCHIVIATO COME DATO: `bool("false")` È VERO — 7 settembre, sera, trovato dalla chat A (`collaudi/esame_legale.py`), riparato da B (albero B2, ramo `integra-A3-2026-09-07`, «autorizzato tutto quello che nuoce va riparato con logica» del fondatore)
 
 **Cosa c'era (misurato):** `fase83_server.py`, registrazione host (riga 8771) e ri-accettazione (8909) giudicavano le tre

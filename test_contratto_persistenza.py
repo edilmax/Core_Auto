@@ -737,14 +737,41 @@ class TestContrattoInventarioFase58(BaseContratto, unittest.TestCase):
             "idem_key TEXT PK1", "alloggio_id TEXT NOT NULL", "tipo TEXT NOT NULL",
             "esito TEXT NOT NULL", "check_in TEXT", "check_out TEXT", "origine TEXT",
             "ts TEXT NOT NULL"),
+        # ── IL FEED ESTERNO NEI DUE VERSI (2026-09-07, Blocco 2 casella 5) ──────────
+        # ⛔ IL FEED STA NELLA CHIAVE, e non e' un dettaglio di modellazione: senza,
+        # «la notte si riapre quando sparisce da QUEL feed e da NESSUN ALTRO» non e'
+        # esprimibile. Due calendari possono chiudere la stessa notte, e il primo che
+        # molla non deve riaprirla -- quella e' la notte venduta due volte.
+        "blocchi_esterni": (
+            "alloggio_id TEXT NOT NULL PK1", "giorno TEXT NOT NULL PK2",
+            "feed_id TEXT NOT NULL PK3", "visto_ts TEXT NOT NULL"),
+        # ⛔ LO STATO DELL'HOST PRIMA DEL PRIMO BLOCCO ESTERNO. Fino al 2026-09-07 il
+        # blocco esterno scriveva `unita_totali=0, prezzo_netto_cents=0` SOPRA la riga
+        # dell'inventario: il prezzo dell'host spariva, e riaprire diventava impossibile
+        # per costruzione -- non «non implementato», impossibile: non restava niente a
+        # cui tornare. Qui la riga di prima si mette da parte, una volta sola.
+        "inventario_prima_del_blocco": (
+            "alloggio_id TEXT NOT NULL PK1", "giorno TEXT NOT NULL PK2",
+            "unita_totali INTEGER NOT NULL", "prezzo_netto_cents INTEGER NOT NULL",
+            "chiuso INTEGER NOT NULL", "min_notti INTEGER NOT NULL",
+            "salvato_ts TEXT NOT NULL"),
     }
     INDICI = {"ix_movimenti_blocchi": "CREATE INDEX ix_movimenti_blocchi ON "
                                       "movimenti(alloggio_id, tipo, esito, check_in)"}
-    UNICI = {"inventario": ("pk(alloggio_id, giorno)",), "movimenti": ("pk(idem_key)",)}
-    CHECK = {"inventario": (), "movimenti": ()}
-    FK = {"inventario": (), "movimenti": ()}
+    UNICI = {"inventario": ("pk(alloggio_id, giorno)",), "movimenti": ("pk(idem_key)",),
+             "blocchi_esterni": ("pk(alloggio_id, giorno, feed_id)",),
+             "inventario_prima_del_blocco": ("pk(alloggio_id, giorno)",)}
+    CHECK = {"inventario": (), "movimenti": (), "blocchi_esterni": (),
+             "inventario_prima_del_blocco": ()}
+    FK = {"inventario": (), "movimenti": (), "blocchi_esterni": (),
+          "inventario_prima_del_blocco": ()}
     TRIGGER = {}
-    DENARO = ("inventario.prezzo_netto_cents",)
+    # ⛔ La seconda e' DENARO davvero: e' il prezzo dell'host tenuto da parte, e se un
+    # giorno diventasse un numero con la virgola il ripristino restituirebbe un prezzo
+    # diverso da quello che l'host aveva messo. Dichiararla qui e' cio' che la fa entrare
+    # nel controllo «le colonne di denaro sono INTERE».
+    DENARO = ("inventario.prezzo_netto_cents",
+              "inventario_prima_del_blocco.prezzo_netto_cents")
 
     def costruisci(self, percorso):
         from fase58_channel_manager import crea_channel_manager
@@ -758,17 +785,33 @@ class TestContrattoInventarioFase58(BaseContratto, unittest.TestCase):
         blocco = archivio.blocca("trastevere-attico-vista", "2026-08-10", "2026-08-12",
                                  idem_key="idem_2f7c9a11")
         stato = archivio.stato_giorno("trastevere-attico-vista", "2026-08-10")
+        # ⛔ IL BLOCCO ESTERNO SI ESERCITA SU UNA NOTTE LIBERA, e il giorno diverso non e'
+        # pigrizia: sulle due notti qui sopra c'e' gia' un'occupazione vera, e li'
+        # `feed_applica` si ferma da solo (fail-safe: una notte gia' venduta da noi non la
+        # chiude un calendario). Esercitandolo li' la tabella resterebbe vuota, e una
+        # tabella di denaro vuota non fa verificare NIENTE al controllo sui tipi -- che e'
+        # esattamente quello che questa guardia pretende, e ha ragione.
+        archivio.imposta_disponibilita("trastevere-attico-vista", "2026-08-12",
+                                       unita_totali=1, prezzo_netto_cents=9900)
+        archivio.feed_applica("trastevere-attico-vista", "airbnb", ["2026-08-12"])
+        messo_da_parte = archivio.stato_prima_del_blocco("trastevere-attico-vista",
+                                                         "2026-08-12") or {}
         return {"blocco_ok": blocco.ok,
                 "prezzo": stato["prezzo_netto_cents"], "min_notti": stato["min_notti"],
                 "occupate": stato["unita_occupate"],
                 "ancora_disponibile": archivio.disponibile("trastevere-attico-vista",
                                                            "2026-08-10", "2026-08-12"),
                 "giorni_a_calendario": len(archivio.calendario(
-                    "trastevere-attico-vista", "2026-08-10", "2026-08-12"))}
+                    "trastevere-attico-vista", "2026-08-10", "2026-08-12")),
+                "chi_chiude_il_12": archivio.chi_chiude("trastevere-attico-vista",
+                                                        "2026-08-12"),
+                "prezzo_del_12_messo_da_parte": messo_da_parte.get("prezzo_netto_cents")}
 
     def atteso_esercizio(self):
         return {"blocco_ok": True, "prezzo": 18500, "min_notti": 2, "occupate": 1,
-                "ancora_disponibile": False, "giorni_a_calendario": 2}
+                "ancora_disponibile": False, "giorni_a_calendario": 2,
+                "chi_chiude_il_12": ["airbnb"],
+                "prezzo_del_12_messo_da_parte": 9900}
 
 
 # ===========================================================================
