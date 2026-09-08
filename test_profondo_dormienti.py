@@ -388,7 +388,12 @@ class TestIcalBidirezionaleAcceso(_BaseDormienti):
         s, e = self.g("POST", "/api/host/ical",
                       {"alloggio_id": SLUG, "ical": self.ics}, self.tk)
         self.assertEqual(s, 200, e)
-        self.assertEqual(e, {"eventi": 1, "giorni_bloccati": 2})
+        # La forma della risposta e' cresciuta col feed nei due versi (2026-09-07). Resta
+        # un confronto ESATTO: l'oracolo e' «1 evento -> 2 notti bloccate», e gli altri
+        # campi sono il contratto nuovo -- se uno sparisce, questo test se ne accorge.
+        self.assertEqual(e, {"eventi": 1, "giorni_bloccati": 2, "riaperte": 0,
+                             "tenute_da_altri": 0, "mano_dell_host": 0, "occupate": 0,
+                             "eco_ignorata": False, "anomalia": ""})
         s, q = self.g("POST", "/api/concierge/quote",
                       {"alloggio_id": SLUG, "check_in": self.b_da.isoformat(),
                        "check_out": self.b_a.isoformat(), "party": PARTY})

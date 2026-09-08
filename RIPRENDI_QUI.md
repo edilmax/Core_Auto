@@ -169,6 +169,53 @@ il lordo ospite mentre il mastro accanto dice 16400. **Decisioni del fondatore s
 fase58); (2) lo sconto in un passo con un arrotondamento in fase59 (il centesimo); (3) le 4 righe ridondanti sopra;
 (4) fase98:91: `PAGAMENTO_BPS=0` esplicito dall'ambiente porta la tariffa tecnica a zero senza rumore — la guardia pinna il
 comportamento di oggi, «anche lo zero ripiega?» è una riga di produzione; (5) il ripensamento 48 h. Caricatore 6644.
+**7 SETTEMBRE, sera — TERZA E QUARTA CONSEGNA DELLA CHAT A + UNA RIGA DI PRODUZIONE «autorizzato»: un consenso NEGATO non è più
+un consenso** (ramo `integra-A3-2026-09-07` sopra A2; reti `lavoro_A_3.patch` sha `b9b4faa2…` e il delta `lavoro_A_4.patch`
+sha `f545bf3b…`; parola del fondatore alle 18:2x: «autorizzato tutto quello che nuoce va riparato con logica»). **Produzione:**
+`fase83_server.py` righe 8771 e 8909, registrazione e ri-accettazione dell'host giudicavano le tre spunte con `bool(v)`, e per
+Python `bool("false")` è vero: un client che mandava `"accetta_clausole": "false"` otteneva 201 e la prova firmata archiviava
+`vessatorie: True`. Ora vale solo il booleano `True`. D20 nell'ordine: guardia `test_un_consenso_NEGATO_come_stringa_non_e_un_consenso`
+in `test_fase83_server` vista ROSSA sul codice di produzione (`201 != 422 … 'vessatorie': True`, registro
+`consenso_falso_ROSSO_prima.log`), poi le due righe, poi verde e i 108 del dedicato verdi. **Quattro attrezzi nuovi di A, tutti
+rilanciati `--scrivi` qui:** `esame_legale.py` (Blocco 5: spunte 36/36 VERDE dopo la riparazione, lingue 43/43) → **Blocco 5 = 2 su 3**
+(la terza è l'avvocato); `esame_plausibilita.py` (riusa `plausibilita.py`, 24/24 sul sito vivo ma su DUE annunci di prova: dirà
+qualcosa quando ci saranno annunci veri; `--dati=CARTELLA` per gli archivi veri) → **Blocco 6 = 2 su 2, CHIUSO**;
+`esame_marketing.py` (Blocco 9: «possa fermarlo» 26/26 VERDE, 10 canali contati dall'albero sintattico ognuno con l'interruttore;
+«giurisdizioni le decide fase154» ROSSA 5/8 col motivo: 0 import di produzione di fase154, fase89 cablato su `("US",)` e fase95
+decidono da soli; nessuna pubblicazione illecita in atto, la decisione sta nel posto sbagliato — strada: fase89 legge
+`giurisdizioni_consentite("email")` da fase154, «autorizzato») → **Blocco 9 = 1 su 2**; `esame_pannello_soldi.py` in A2.
+Difetto scritto e non riparato: fase83:614 normalizza «xx» a «en» prima di fase185, così `tradotto` dice vero per una lingua
+sconosciuta. Caricatore **6661**.
+**Poi, stessa PR #163, la quinta rete di A (`lavoro_A_5.patch` sha `1532f3bd…`) e una cura di test:** `collaudi/esame_legacy.py`
+(Blocco 10: casella «ogni modulo ha UNA delle tre uscite» ROSSA 3/21 — fase164 e fase165 SERVONO, raggiunti e con test; gli altri 18
+non sono raggiunti da `main_casavip.py` ma hanno test e voce nel registro e **nessuna riga nella tabella «COSTRUITO ma SPENTO»**:
+nessuna delle tre uscite, decisione del fondatore fra accensione scritta e rimozione; casella «non si cancella niente prima di aver
+dimostrato» VERDE 20/20: le 18 prove di rimozione sono pulite, nulla di vivo li nomina, si nominano solo fra loro e nei test/registro/
+piano; l'attrezzo non ha nessuna chiamata che toglie file, guardia sull'albero sintattico) → **Blocco 10 = 1 su 2**;
+`collaudi/esame_sentinella.py` (Blocco 8 casella 3, legge l'API pubblica di GitHub senza credenziali: la sentinella esiste,
+`.github/workflows/sentinella.yml`, cron ogni 15 minuti, 465 giri, ma nelle ultime 24 ore solo 7 giri con un buco massimo di 333
+minuti: il limite che il file dichiara è un numero, non un fatto) → casella ROSSA 5/7 col motivo, **Blocco 8 = 0 su 3**. Misurato
+sul VPS da B alle 18:4x per quella casella: il watchdog gira ogni 10 minuti da cron e scrive fresco in
+`/var/lib/docker/volumes/bookinvip_casavip_data/_data/watchdog.log`; le quattro variabili `TELEGRAM_*` sono presenti in
+`.env.casavip`; il giro 462 rosso della sentinella alle 00:06Z del 7/9 non ha lasciato traccia sul server (watchdog «OK» alle 00:00 e
+alle 00:10; nessun riavvio dei container), quindi era la rete di GitHub, non il sito; dalle 00:10 alle 08:50 il watchdog ha gridato
+25 volte «la CI su master è ROSSA» per un rosso già smentito: è il difetto che la chat del watchdog ha curato in `Core_Auto_A` (ramo
+`corsia-a-watchdog`, non ancora unito). **Cura di test:** `test_avvio_e_ripristino.TestAvvioDaZero` fotografava la cartella dati
+subito dopo la sonda di salute, ma `ical_feed.db` lo crea il tick di fase203 in un thread parallelo: sotto `coverage run` il thread
+perdeva la gara (job `copertura` rosso su `a48ccc4` mentre `full-suite` era verde sullo stesso commit); ora il test aspetta quel
+file con un tetto di 20 s prima della foto. Caricatore **6668**.
+**🚀 7 SETTEMBRE, 19:54Z — DEPLOY DI master `b51d74d` col pulsante (parola del fondatore: «deploy», 21:5x locali; atteso scritto
+prima in `corsia_B_2026-09-07\atteso_deploy_b51d74d.txt`):** backup delle 18:40Z verificato (26 archivi, gzip ok, «SQLite format 3»,
+sha256 OK); `:prec` ri-agganciato alla viva `19f85904…`, `PRE_DEPLOY_20260907_195154.commit` = a60a246; scambio staccato sul VPS
+(`/root/deploy_scambio_20260907.log`, origin/master = HEAD = b51d74d, SCAMBIO FATTO 19:54:38Z, USCITA=0); verifica: app e backup
+healthy, `money_path_pronto True, avvisi []`, nessuna `PAGAMENTO_`, VPS `b51d74d`, viva `18859bd5…` ≠ prec, INVARIANTI ARCHIVI giro
+0 + «GUARDIANO: nessuno stato anomalo», 0 Traceback; sonde / 200 · /api/health 200 · /api/bunker/invarianti 403;
+`verifica_produzione` P1-P6 OK; `esame_produzione` (senza --scrivi) VERDE 9/9 den 14. **Effetti visibili misurati:**
+`/api/legale/contratto-host` in it e en serve la versione **2026-09-07** con «ART. 16» nel testo; `commissioni.html` e
+`guida-operativa.html` hanno `<title data-i18n="tit">`; `host.html` nel contenitore ha `<option value="booking">Booking`. Ritorno se
+servisse: `sh /root/deploy_pulsante.sh indietro` (→ 19f85904). **Il codice che GIRA è `b51d74d`**; la riparazione del consenso
+«"false"» (PR #163) NON è ancora in produzione: servirà un secondo deploy dopo l'unione. Registri: `deploy_b51d74d_{1_paracadute,
+1c_backup,2_scambio,3_verifica,4_effetti}.log`, `verifica_produzione_dopo_deploy_b51d74d.log`, `esame_produzione_dopo_deploy_b51d74d.log`.
 
 **📏 5 SETTEMBRE, 02:3x — IL METRO RIPARATO: le impronte non dipendono più dai fine riga (ramo `metro-fine-riga`
 su `2a3d6d7`, parola del fondatore «ripara»):** lo stesso Blocco 1 leggeva 6 su 6 in B2 e **0 su 6** in un albero
@@ -1741,9 +1788,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 5a977d9
+CONSEGNE AGGIORNATE A: 15b9b73
 
-SUITE ATTUALE: Ran 6670 test
+SUITE ATTUALE: Ran 6694 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

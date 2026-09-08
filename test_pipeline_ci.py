@@ -62,8 +62,10 @@ Le 23.436 righe e i 6.488 rami coincidono con i numeri dichiarati nel commento d
 `copertura`: la misura del job e' quella vera, non una cifra ricordata a memoria.
 """
 
+import contextlib
 import datetime
 import io
+import json
 import os
 import re
 import shutil
@@ -12429,6 +12431,451 @@ class TestLEsameDelPannelloSoldiNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
         self.assertTrue(all(isinstance(r, str) and r.strip() for r in esame.NON_GUARDA))
         riuscita, righe = esame.autoprova()
         self.assertTrue(riuscita, righe)
+
+
+class TestLEsameLegaleNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
+    """⛔ D18 PUNTO 4 PER `collaudi/esame_legale.py`, l'attrezzo delle caselle 1 e 2 del Blocco 5
+    («le 3 spunte obbligatorie sono bloccate lato browser E rifiutate 422 lato server»; «termini e
+    privacy sono leggibili in tutte le lingue dichiarate»), chat A 2026-09-07.
+
+    Qui NON si avvia il sistema locale: si mette il GIUDIZIO davanti a passi costruiti, per casella; si
+    pretende che coi guasti dentro non scriva mai; che il lettore delle lingue dichiarate nelle pagine
+    legga davvero (e legga OTTO lingue dai file veri); che ogni marca trovi UNA casella e una marca
+    ambigua fermi l'esame; che i testi delle caselle non siano ricopiati nel sorgente.
+
+    ⛔ IL RILIEVO che l'esame tiene fermo: il server giudica le spunte con `bool(v)`, quindi le stringhe
+    "false" e "0" passano per consenso e l'account nasce con le clausole segnate approvate. Finche' e'
+    cosi' la casella «spunte» e' ROSSA col suo motivo: non si aggira."""
+
+    def _esame(self):
+        return self._carica("esame_legale.py", "_esame_legale_sotto_guardia")
+
+    def test_IL_GIUDIZIO_DICE_VERDE_SOLO_CON_LE_SITUAZIONI_INTERE_PER_OGNI_CASELLA(self):
+        esame = self._esame()
+        for casella, situazioni in esame.SITUAZIONI.items():
+            verde, motivi, den = esame.giudica(esame.passi_finti(casella), situazioni)
+            self.assertTrue(verde, motivi)
+            self.assertEqual(den, 2 * len(situazioni))
+            for s in situazioni:
+                self.assertFalse(esame.giudica(esame.passi_finti(casella, rossi=(s,)), situazioni)[0],
+                                 "%s: con un rosso in «%s» ha detto VERDE" % (casella, s))
+                self.assertFalse(esame.giudica(esame.passi_finti(casella, senza=(s,)), situazioni)[0],
+                                 "%s: con «%s» non misurata ha detto VERDE" % (casella, s))
+            self.assertFalse(esame.giudica([], situazioni)[0])
+            self.assertFalse(esame.giudica(esame.passi_finti(casella) + [("altro", "x", True, "")], situazioni)[0])
+
+    def test_COL_GUASTO_DENTRO_NON_SCRIVE_MAI(self):
+        esame = self._esame()
+        vera_registra = esame.scheda.registra
+        scritture = []
+        try:
+            esame.scheda.registra = lambda *a, **k: scritture.append((a, k))
+            self.assertEqual(esame.main(["--con-guasto", "--scrivi"]), 2)
+            self.assertEqual(esame.main(["--con-guasto", "--casella", "lingue", "--scrivi"]), 2)
+            self.assertEqual(scritture, [])
+        finally:
+            esame.scheda.registra = vera_registra
+
+    def test_IL_LETTORE_DELLE_LINGUE_DICHIARATE_LEGGE_DAVVERO(self):
+        esame = self._esame()
+        self.assertEqual(esame.lingue_dichiarate_in("const LINGUE = [['it','a'],\n ['ja','b']];"), ("it", "ja"))
+        self.assertEqual(esame.lingue_dichiarate_in("const LINGUE = [];"), ())
+        self.assertEqual(esame.lingue_dichiarate_in("niente qui"), ())
+        fonti = esame.lingue_dichiarate()
+        self.assertEqual(sorted(fonti), ["deploy/privacy.html", "deploy/termini.html", "fase185.LINGUE",
+                                         "fase61.LINGUE_SUPPORTATE"])
+        for nome, lista in fonti.items():
+            self.assertEqual(len(set(lista)), 8, "%s dichiara %r" % (nome, lista))
+
+    def test_OGNI_MARCA_TROVA_UNA_CASELLA_E_UNA_MARCA_AMBIGUA_FERMA_L_ESAME(self):
+        esame = self._esame()
+        self.assertIn("422", esame.condizione("spunte"))
+        self.assertIn("lingue dichiarate", esame.condizione("lingue"))
+        vere = dict(esame.MARCHE)
+        try:
+            esame.MARCHE["ambigua"] = "e"                      # sta in piu' di una casella del blocco
+            with self.assertRaises(RuntimeError):
+                esame.condizione("ambigua")
+            esame.MARCHE["assente"] = "questa frase non esiste nel piano"
+            with self.assertRaises(RuntimeError):
+                esame.condizione("assente")
+        finally:
+            esame.MARCHE.clear()
+            esame.MARCHE.update(vere)
+
+    def test_I_TESTI_DELLE_CASELLE_NON_SONO_RICOPIATI_A_MANO(self):
+        esame = self._esame()
+        with io.open(os.path.join(QUI, "collaudi", "esame_legale.py"), encoding="utf-8") as f:
+            sorgente = f.read()
+        for casella in esame.MARCHE:
+            self.assertNotIn(esame.condizione(casella), sorgente)
+
+    def test_L_ESAME_DICHIARA_COSA_NON_HA_GUARDATO_E_SA_PROVARSI(self):
+        esame = self._esame()
+        self.assertTrue(getattr(esame, "NON_GUARDA", ()))
+        self.assertTrue(all(isinstance(r, str) and r.strip() for r in esame.NON_GUARDA))
+        riuscita, righe = esame.autoprova()
+        self.assertTrue(riuscita, righe)
+
+
+class TestLEsameDellaPlausibilitaNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
+    """⛔ D18 PUNTO 4 PER `collaudi/esame_plausibilita.py`, l'attrezzo della casella «ogni numero mostrato
+    ha senso nel mondo vero (modo di rompersi 10)» (Blocco 6), chat A 2026-09-07. RIUSA plausibilita.py
+    (D10): qui si pretende che il giudizio sui numeri MOSTRATI gridi sullo yen x100 e taccia su quello
+    giusto, che zero annunci NON sia verde, che `--da-file` giudichi senza rete e scriva l'esito vero,
+    che `--dati` faccia girare davvero i controlli di plausibilita.py su una cartella costruita a mano con
+    un x100 dentro, che col guasto non scriva mai, e che il testo della casella non sia ricopiato.
+    Nessuna rete: le letture sono costruite o lette da file."""
+
+    def _esame(self):
+        return self._carica("esame_plausibilita.py", "_esame_plausibilita_sotto_guardia")
+
+    def test_IL_GIUDIZIO_SUI_NUMERI_MOSTRATI_GRIDA_SULLO_YEN_X100_E_TACE_SU_QUELLO_GIUSTO(self):
+        esame = self._esame()
+        sano = esame.annuncio_finto(prezzo_notte_cents=18000, valuta="JPY")
+        self.assertTrue(all(ok for _n, ok, _d in esame.giudica_annuncio(sano["elenco"], sano["dettaglio"])))
+        x100 = esame.annuncio_finto(prezzo_notte_cents=1800000, valuta="JPY")
+        rossi = [n for n, ok, _d in esame.giudica_annuncio(x100["elenco"], x100["dettaglio"]) if not ok]
+        self.assertEqual(len(rossi), 1, rossi)
+        self.assertIn("prezzo a notte in banda", rossi[0])
+        riuscita, righe = esame.autoprova()
+        self.assertTrue(riuscita, righe)
+
+    def test_ZERO_ANNUNCI_E_UN_TOTALE_CHE_NON_TORNA_NON_SONO_VERDI(self):
+        esame = self._esame()
+        for letture in ({"annunci": [], "totale_dichiarato": 0},
+                        {"annunci": [esame.annuncio_finto()], "totale_dichiarato": 3}):
+            del esame.PASSI[:]
+            with contextlib.redirect_stdout(io.StringIO()):
+                esame.misura_mostrati(letture)
+            self.assertFalse(esame.giudica(esame.PASSI)[0])
+        self.assertFalse(esame.giudica([])[0])
+        self.assertFalse(esame.giudica([("altro", "x", True, "")])[0])
+
+    def test_DA_FILE_GIUDICA_SENZA_RETE_E_SCRIVE_L_ESITO_VERO(self):
+        esame = self._esame()
+        vera_registra = esame.scheda.registra
+        scritture = []
+
+        def _registra_finta(*a, **k):
+            scritture.append(k)
+            return {"blocco": 6, "esito": k.get("esito"), "denominatore": k.get("denominatore"),
+                    "impronta": "finta", "motivo": k.get("motivo")}
+        d = tempfile.mkdtemp()
+        try:
+            esame.scheda.registra = _registra_finta
+            sano, x100 = os.path.join(d, "sano.json"), os.path.join(d, "x100.json")
+            with io.open(sano, "w", encoding="utf-8") as f:
+                json.dump({"annunci": [esame.annuncio_finto()], "totale_dichiarato": 1}, f)
+            with io.open(x100, "w", encoding="utf-8") as f:
+                json.dump({"annunci": [esame.annuncio_finto(prezzo_notte_cents=1800000, valuta="JPY")],
+                           "totale_dichiarato": 1}, f)
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(esame.main(["--da-file", sano, "--scrivi"]), 0)
+                self.assertEqual(esame.main(["--da-file", x100, "--scrivi"]), 1)
+            self.assertEqual([s["esito"] for s in scritture], [True, False])
+            self.assertIn("prezzo a notte in banda", scritture[1]["motivo"] or "")
+        finally:
+            esame.scheda.registra = vera_registra
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_DATI_FA_GIRARE_DAVVERO_I_CONTROLLI_DI_PLAUSIBILITA_SUGLI_ARCHIVI(self):
+        import sqlite3
+        esame = self._esame()
+        d = tempfile.mkdtemp()
+        try:
+            con = sqlite3.connect(os.path.join(d, "catalogo.db"))
+            con.execute("CREATE TABLE alloggi (slug TEXT, titolo TEXT, citta TEXT, prezzo_notte_cents INTEGER, "
+                        "valuta TEXT, capacita INTEGER, stato TEXT)")
+            con.execute("INSERT INTO alloggi VALUES ('zen-shibuya','Zen House','Tokyo',180000000,'JPY',2,'pubblicato')")
+            con.commit()
+            con.close()
+            del esame.PASSI[:]
+            with contextlib.redirect_stdout(io.StringIO()):
+                esame.misura_archivi(d)
+            rossi = [n for s, n, ok, _d in esame.PASSI if s == "archivi" and not ok]
+            self.assertTrue(any("prezzi degli alloggi" in n for n in rossi), rossi)
+            self.assertTrue(any("righe esaminate" not in n for n in rossi))
+            self.assertGreater(esame.plausibilita.CONTA["righe"], 0)
+            del esame.PASSI[:]
+            with contextlib.redirect_stdout(io.StringIO()):
+                esame.misura_archivi(os.path.join(d, "non-esiste"))
+            self.assertFalse(esame.giudica(esame.PASSI, ("archivi",))[0])
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_COL_GUASTO_DENTRO_NON_SCRIVE_MAI(self):
+        esame = self._esame()
+        vera_registra = esame.scheda.registra
+        scritture = []
+        try:
+            esame.scheda.registra = lambda *a, **k: scritture.append((a, k))
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(esame.main(["--con-guasto", "--scrivi"]), 2)
+            self.assertEqual(scritture, [])
+        finally:
+            esame.scheda.registra = vera_registra
+
+    def test_IL_TESTO_DELLA_CASELLA_NON_E_RICOPIATO_A_MANO_E_NON_GUARDA_E_DICHIARATO(self):
+        esame = self._esame()
+        testo = esame.condizione()
+        self.assertIn("modo di rompersi 10", testo)
+        with io.open(os.path.join(QUI, "collaudi", "esame_plausibilita.py"), encoding="utf-8") as f:
+            self.assertNotIn(testo, f.read())
+        self.assertTrue(getattr(esame, "NON_GUARDA", ()))
+        self.assertTrue(all(isinstance(r, str) and r.strip() for r in esame.NON_GUARDA))
+
+
+class TestLEsameDelMarketingNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
+    """⛔ D18 PUNTO 4 PER `collaudi/esame_marketing.py`, l'attrezzo delle caselle 1 e 2 del Blocco 9
+    («nessun canale pubblica senza che una persona possa fermarlo»; «si pubblica SOLO dove e' lecito»),
+    chat A 2026-09-07. Qui si pretende che il censimento dei canali con la rete legga davvero (un modulo
+    finto con `urlopen` entra, uno con la rete solo in un commento no, e un modulo in SOLO_LETTURA rientra
+    se ha un metodo di uscita); che il censimento dei chiamanti di fase154 usi l'albero sintattico (un
+    commento non e' un import); che ogni canale con la rete abbia la sua riga nella tabella (fail-closed);
+    che col guasto non scriva mai; che il giudizio dica verde solo con le situazioni intere; che i testi non
+    siano ricopiati.
+
+    ⛔ IL RILIEVO che l'esame tiene fermo: fase154 (le leggi) ha ZERO chiamanti di produzione e fase89/fase95
+    decidono i paesi da soli: la casella «giurisdizioni» e' ROSSA col motivo finche' e' cosi'."""
+
+    def _esame(self):
+        return self._carica("esame_marketing.py", "_esame_marketing_sotto_guardia")
+
+    def test_IL_GIUDIZIO_DICE_VERDE_SOLO_CON_LE_SITUAZIONI_INTERE_PER_OGNI_CASELLA(self):
+        esame = self._esame()
+        for casella, situazioni in esame.SITUAZIONI.items():
+            self.assertTrue(esame.giudica(esame.passi_finti(casella), situazioni)[0])
+            for s in situazioni:
+                self.assertFalse(esame.giudica(esame.passi_finti(casella, rossi=(s,)), situazioni)[0])
+                self.assertFalse(esame.giudica(esame.passi_finti(casella, senza=(s,)), situazioni)[0])
+            self.assertFalse(esame.giudica([], situazioni)[0])
+        riuscita, righe = esame.autoprova()
+        self.assertTrue(riuscita, righe)
+
+    def test_I_CENSIMENTI_LEGGONO_DAVVERO_IL_SORGENTE(self):
+        esame = self._esame()
+        d = tempfile.mkdtemp()
+        try:
+            vera_radice = esame.RADICE
+            esame.RADICE = d
+            with io.open(os.path.join(d, "fase901_finto.py"), "w", encoding="utf-8") as f:
+                f.write("import urllib.request\ndef pubblica(p):\n    return urllib.request.urlopen(p)\n")
+            with io.open(os.path.join(d, "fase902_commento.py"), "w", encoding="utf-8") as f:
+                f.write("# urlopen( solo nel commento\nimport fase154_giurisdizioni_marketing\nX = 1\n")
+            with io.open(os.path.join(d, "fase903_lettore.py"), "w", encoding="utf-8") as f:
+                f.write("import urllib.request\ndef cerca():\n    return urllib.request.urlopen('x')\n")
+            with io.open(os.path.join(d, "fase904_finto_lettore_che_pubblica.py"), "w", encoding="utf-8") as f:
+                f.write("import urllib.request\ndef invia():\n    return urllib.request.urlopen('x')\n")
+            with io.open(os.path.join(d, "main_casavip.py"), "w", encoding="utf-8") as f:
+                f.write("# fase154_giurisdizioni_marketing citato in un commento, non importato\n")
+            vera_lettura = dict(esame.SOLO_LETTURA)
+            esame.SOLO_LETTURA.clear()
+            esame.SOLO_LETTURA.update({"fase903_lettore": "legge", "fase904_finto_lettore_che_pubblica": "dice di leggere"})
+            try:
+                self.assertEqual(esame.canali_con_la_rete(("fase901_finto", "fase902_commento", "fase903_lettore",
+                                                           "fase904_finto_lettore_che_pubblica")),
+                                 ["fase901_finto", "fase904_finto_lettore_che_pubblica"])
+                self.assertEqual(esame.chiamanti_di_fase154(), ["fase902_commento"])
+            finally:
+                esame.SOLO_LETTURA.clear()
+                esame.SOLO_LETTURA.update(vera_lettura)
+                esame.RADICE = vera_radice
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+        # sui file VERI: ogni canale con la rete ha la sua riga (fail-closed) e fase96 legge soltanto
+        canali = esame.canali_con_la_rete()
+        self.assertGreaterEqual(len(canali), 10, canali)
+        self.assertEqual([c for c in canali if c not in esame.INTERRUTTORI], [])
+        self.assertNotIn("fase96_fonte_osm", canali)
+        self.assertIn("fase89_jurisdiction_outreach", esame.decisori_di_paese())
+
+    def test_COL_GUASTO_DENTRO_NON_SCRIVE_MAI(self):
+        esame = self._esame()
+        vera_registra = esame.scheda.registra
+        scritture = []
+        try:
+            esame.scheda.registra = lambda *a, **k: scritture.append((a, k))
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(esame.main(["--con-guasto", "--scrivi"]), 2)
+                self.assertEqual(esame.main(["--con-guasto", "--casella", "interruttore", "--scrivi"]), 2)
+            self.assertEqual(scritture, [])
+        finally:
+            esame.scheda.registra = vera_registra
+
+    def test_I_TESTI_DELLE_CASELLE_NON_SONO_RICOPIATI_E_OGNI_MARCA_TROVA_UNA_CASELLA(self):
+        esame = self._esame()
+        with io.open(os.path.join(QUI, "collaudi", "esame_marketing.py"), encoding="utf-8") as f:
+            sorgente = f.read()
+        for casella in esame.MARCHE:
+            testo = esame.condizione(casella)
+            self.assertNotIn(testo, sorgente)
+        self.assertIn("fase154", esame.condizione("giurisdizioni"))
+        vere = dict(esame.MARCHE)
+        try:
+            esame.MARCHE["ambigua"] = "pubblica"
+            with self.assertRaises(RuntimeError):
+                esame.condizione("ambigua")
+        finally:
+            esame.MARCHE.clear()
+            esame.MARCHE.update(vere)
+        self.assertTrue(all(isinstance(r, str) and r.strip() for r in esame.NON_GUARDA))
+
+
+class TestLEsameDelLegacyNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
+    """⛔ D18 PUNTO 4 PER `collaudi/esame_legacy.py`, l'attrezzo delle caselle 1 e 2 del Blocco 10 («ogni
+    modulo ha UNA delle tre uscite»; «non si cancella niente prima di aver dimostrato che nulla di vivo lo
+    usa»), chat A 2026-09-07. Qui si pretende che: la funzione delle uscite sia pura e dica UNA uscita sola
+    per i cinque fatti (e nessuna nei casi ambigui); il lettore della sezione «COSTRUITO ma SPENTO» legga
+    davvero la PRIMA colonna (un numero in un'altra sezione non conta); la prova dei riferimenti distingua
+    PRODUZIONE VIVA da FUORI su una cartella costruita a mano (un docker-compose dello stack vecchio che
+    nomina il modulo e' VIVO; un test e' FUORI); l'attrezzo NON contenga chiamate che tolgono file (albero
+    sintattico: os.remove/unlink/rmdir/shutil.rmtree/move/rename); col guasto non scriva mai; testi non
+    ricopiati.
+
+    ⛔ IL RILIEVO che l'esame tiene fermo: 18 moduli del blocco sono MORTI (non raggiunti da main_casavip.py)
+    ma hanno ancora test e voce nel registro e NESSUNA riga che dica come si accendono: nessuna delle tre
+    uscite. La casella «uscite» e' ROSSA finche' qualcuno decide (accensione scritta, o rimozione)."""
+
+    def _esame(self):
+        return self._carica("esame_legacy.py", "_esame_legacy_sotto_guardia")
+
+    def test_LE_TRE_USCITE_SONO_UNA_FUNZIONE_PURA_DEI_CINQUE_FATTI(self):
+        esame = self._esame()
+        u = esame.USCITE
+
+        def f(**kw):
+            base = {"raggiunto": False, "collaudato": [], "voce": False, "accensione": False, "usato_vivo": []}
+            base.update(kw)
+            return esame.uscita(base)[0]
+        self.assertEqual(f(raggiunto=True, collaudato=["t"]), u[0])
+        self.assertIsNone(f(raggiunto=True))
+        self.assertEqual(f(accensione=True, collaudato=["t"], voce=True), u[1])
+        self.assertEqual(f(), u[2])
+        self.assertIsNone(f(usato_vivo=["docker-compose.tavolavip.yml"]))
+        self.assertIsNone(f(collaudato=["t"], voce=True))
+        self.assertIsNone(f(voce=True))
+        riuscita, righe = esame.autoprova()
+        self.assertTrue(riuscita, righe)
+
+    def test_IL_LETTORE_DEL_REGISTRO_E_LA_PROVA_DEI_RIFERIMENTI_LEGGONO_DAVVERO(self):
+        esame = self._esame()
+        reg = "## 1) vivi\n| 25 | fase25_brain.py |\n## 2) COSTRUITO ma SPENTO — come si ACCENDE\n| Fase | Cosa |\n|---|---|\n| **46** | x |\n| 92 | y |\n## 3) altro\n| 55 | z |\n"
+        self.assertEqual(esame.righe_di_accensione(reg), {"46", "92"})
+        self.assertEqual(esame.righe_di_accensione("niente sezione"), set())
+        d = tempfile.mkdtemp()
+        try:
+            def scrivi(nome, testo):
+                p = os.path.join(d, nome)
+                os.makedirs(os.path.dirname(p), exist_ok=True)
+                with io.open(p, "w", encoding="utf-8") as fh:
+                    fh.write(testo)
+            scrivi("fase901_morto.py", "X = 1\n")
+            scrivi("fase902_vivo.py", "import fase901_morto\n")
+            scrivi("fase903_morto_che_lo_cita.py", "import fase901_morto\n")
+            scrivi("main_casavip.py", "import fase902_vivo\n")
+            scrivi("docker-compose.tavolavip.yml", "command: python -m fase901_morto\n")
+            scrivi("test_fase901_morto.py", "import fase901_morto\n")
+            scrivi("REGISTRO_INGEGNERIA.md", "`fase901_morto.py` e' il cervello\n")
+            scrivi("collaudi/piano.py", "'fase901_morto'\n")
+            scrivi("deploy/watchdog.sh", "echo fase901_mortox\n")            # fase901_mortox: NON e' la parola intera
+            vivo, fuori = esame.riferimenti("fase901_morto", {"fase902_vivo"}, d)
+            self.assertIn("fase902_vivo.py", vivo)
+            self.assertIn("docker-compose.tavolavip.yml", vivo)
+            self.assertNotIn("main_casavip.py", vivo)
+            self.assertNotIn("deploy/watchdog.sh", vivo)
+            self.assertEqual(sorted(fuori), ["REGISTRO_INGEGNERIA.md", "collaudi/piano.py", "fase903_morto_che_lo_cita.py",
+                                             "test_fase901_morto.py"])
+            self.assertEqual(esame.test_dedicato("fase901_morto", d), ["test_fase901_morto.py"])
+            self.assertEqual(esame.test_dedicato("fase902_vivo", d), [])
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_L_ATTREZZO_NON_HA_NESSUNA_CHIAMATA_CHE_TOGLIE_FILE(self):
+        import ast
+        with io.open(os.path.join(QUI, "collaudi", "esame_legacy.py"), encoding="utf-8") as f:
+            albero = ast.parse(f.read())
+        vietate = {"remove", "unlink", "rmdir", "rmtree", "move", "rename", "replace", "removedirs"}
+        trovate = [n.func.attr for n in ast.walk(albero) if isinstance(n, ast.Call)
+                   and isinstance(n.func, ast.Attribute) and n.func.attr in vietate]
+        self.assertEqual(trovate, [], "l'attrezzo che promette di non cancellare chiama %r" % (trovate,))
+        self.assertNotIn("shutil", [n.names[0].name for n in albero.body if isinstance(n, ast.Import)])
+
+    def test_COL_GUASTO_DENTRO_NON_SCRIVE_MAI_E_I_TESTI_NON_SONO_RICOPIATI(self):
+        esame = self._esame()
+        vera_registra = esame.scheda.registra
+        scritture = []
+        try:
+            esame.scheda.registra = lambda *a, **k: scritture.append((a, k))
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(esame.main(["--con-guasto", "--scrivi"]), 2)
+                self.assertEqual(esame.main(["--con-guasto", "--casella", "prova", "--scrivi"]), 2)
+            self.assertEqual(scritture, [])
+        finally:
+            esame.scheda.registra = vera_registra
+        with io.open(os.path.join(QUI, "collaudi", "esame_legacy.py"), encoding="utf-8") as f:
+            sorgente = f.read()
+        for casella in esame.MARCHE:
+            self.assertNotIn(esame.condizione(casella), sorgente)
+        self.assertTrue(all(isinstance(r, str) and r.strip() for r in esame.NON_GUARDA))
+
+
+class TestLEsameDellaSentinellaNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
+    """⛔ D18 PUNTO 4 PER `collaudi/esame_sentinella.py`, l'attrezzo della casella «una sentinella ESTERNA
+    (non nostra) si accorge se il sito muore» (Blocco 8), chat A 2026-09-07. Niente rete: letture costruite
+    o da file. Si pretende che il giudizio gridi su una sentinella addormentata (ultimo giro vecchio, buchi
+    di ore, mai un rosso, repository fermo) e taccia su quella sveglia; che `--da-file` giudichi senza rete e
+    scriva l'esito vero; che col guasto non scriva mai; che il testo non sia ricopiato.
+
+    ⛔ IL RILIEVO che l'esame tiene fermo (misurato il 2026-09-07 dall'API pubblica): il workflow promette un
+    giro ogni ~15 minuti e GitHub ne esegue ~7 al giorno, con buchi di oltre 5 ore: la sentinella si accorge
+    che il sito muore, ma con ore di ritardo. La casella e' ROSSA col motivo finche' e' cosi'."""
+
+    def _esame(self):
+        return self._carica("esame_sentinella.py", "_esame_sentinella_sotto_guardia")
+
+    def test_IL_GIUDIZIO_GRIDA_SULLA_SENTINELLA_ADDORMENTATA_E_TACE_SU_QUELLA_SVEGLIA(self):
+        esame = self._esame()
+        riuscita, righe = esame.autoprova()
+        self.assertTrue(riuscita, righe)
+        self.assertFalse(esame.giudica([])[0])
+        self.assertFalse(esame.giudica([("altro", "x", True, "")])[0])
+        self.assertEqual(esame.giudica([(s, "p", True, "") for s in esame.SITUAZIONI])[0], True)
+
+    def test_DA_FILE_GIUDICA_SENZA_RETE_E_SCRIVE_L_ESITO_VERO(self):
+        esame = self._esame()
+        vera_registra = esame.scheda.registra
+        scritture = []
+
+        def _registra_finta(*a, **k):
+            scritture.append(k)
+            return {"blocco": 8, "esito": k.get("esito"), "denominatore": k.get("denominatore"), "impronta": "finta"}
+        d = tempfile.mkdtemp()
+        try:
+            esame.scheda.registra = _registra_finta
+            sveglia, dorme = os.path.join(d, "sveglia.json"), os.path.join(d, "dorme.json")
+            with io.open(sveglia, "w", encoding="utf-8") as f:
+                json.dump(esame.letture_finte(), f)
+            with io.open(dorme, "w", encoding="utf-8") as f:
+                json.dump(esame.letture_finte(buco=300, n=8), f)
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(esame.main(["--da-file", sveglia, "--scrivi"]), 0)
+                self.assertEqual(esame.main(["--da-file", dorme, "--scrivi"]), 1)
+                self.assertEqual(esame.main(["--con-guasto", "--scrivi"]), 2)
+            self.assertEqual([s["esito"] for s in scritture], [True, False])
+            self.assertIn("buco massimo", scritture[1]["motivo"] or "")
+        finally:
+            esame.scheda.registra = vera_registra
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_IL_TESTO_DELLA_CASELLA_NON_E_RICOPIATO_E_NON_GUARDA_E_DICHIARATO(self):
+        esame = self._esame()
+        testo = esame.condizione()
+        self.assertIn("non nostra", testo)
+        with io.open(os.path.join(QUI, "collaudi", "esame_sentinella.py"), encoding="utf-8") as f:
+            self.assertNotIn(testo, f.read())
+        self.assertTrue(all(isinstance(r, str) and r.strip() for r in esame.NON_GUARDA))
+        self.assertTrue(esame.workflow_letto())
 
 
 if __name__ == "__main__":

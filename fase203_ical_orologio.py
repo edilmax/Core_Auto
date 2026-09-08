@@ -259,7 +259,12 @@ def rileggi(archivio: ArchivioFeed, inventario: Any, alloggio_id: str, *,
         t0 = time.perf_counter()
         try:
             testo = scarica(url, timeout=timeout, fetch=fetch)
-            r = sincronizza(inventario, alloggio_id, testo)
+            # ⛔ L'IDENTITA' DEL FEED VIAGGIA COL SINCRONIZZATORE (2026-09-07): un alloggio
+            # puo' avere piu' calendari, e senza dire QUALE feed sta parlando la riapertura
+            # mirata -- «si riapre quando sparisce da QUEL feed e da nessun altro» -- non e'
+            # esprimibile. Si passa `url_breve`, che e' stabile e NON porta il segreto
+            # dell'URL (Airbnb): la stessa forma che finisce nel registro.
+            r = sincronizza(inventario, alloggio_id, testo, feed_id=url_breve(url))
             ms = int((time.perf_counter() - t0) * 1000)
             eventi = int(r.get("eventi", 0))
             bloccati = int(r.get("giorni_bloccati", 0))

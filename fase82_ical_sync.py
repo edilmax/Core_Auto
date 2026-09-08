@@ -106,29 +106,149 @@ def _giorni(check_in: str, check_out: str) -> List[str]:
             for i in range((co - ci).days)]
 
 
-def sincronizza(inventario: Any, alloggio_id: str, ical_testo: Any) -> Dict[str, int]:
-    """Blocca nell'inventario (fase58) tutti i giorni occupati dell'iCal (unita_totali=0
-    -> non disponibile). Idempotente. Ritorna {eventi, giorni_bloccati}."""
-    eventi = analizza_ical(ical_testo)
-    giorni_bloccati = 0
-    giorni_visti = set()
-    for ci, co in eventi:
+MARCA_NOSTRA = "//BookinVIP//"     # come si riconosce un feed uscito da casa nostra
+FEED_UNICO = "(feed unico)"        # identita' di ripiego per chi non ne passa una
+
+
+def prodid(testo: Any) -> str:
+    """Il PRODID dichiarato dal calendario, o stringa vuota. Serve a riconoscere l'ECO."""
+    if not isinstance(testo, str):
+        return ""
+    for riga in _srotola(testo):
+        chiave, _, valore = riga.partition(":")
+        if chiave.split(";")[0].strip().upper() == "PRODID":
+            return valore.strip()
+    return ""
+
+
+def e_nostro(testo: Any) -> bool:
+    """⛔ L'ECO. `fase135` esporta le nostre notti occupate; l'OTA ripubblica quel
+    calendario; se lo rileggessimo chiuderemmo le NOSTRE stesse notti, e ogni giro ne
+    chiuderebbe altre. Un anello che si stringe da solo. Il nostro PRODID e' li' apposta:
+    fino al 2026-09-07 c'era e non lo guardava nessuno (misurato: la nostra notte passava
+    a (0, 0) dando in pasto al sincronizzatore il feed del nostro esportatore).
+    ⚠️ Il legame fra questa marca e il PRODID di fase135 e' CONTROLLATO, non sperato: la
+    guardia sta in `collaudi/esame_feed_due_versi.py` (sezione «eco»), perche' fase135
+    importa questo modulo e importarlo al contrario sarebbe un anello di import."""
+    return MARCA_NOSTRA in prodid(testo)
+
+
+def giorni_occupati(ical_testo: Any) -> List[str]:
+    """I giorni coperti dagli eventi del feed, senza doppioni e in ordine."""
+    visti = set()
+    for ci, co in analizza_ical(ical_testo):
         try:
-            giorni = _giorni(ci, co)
+            visti.update(_giorni(ci, co))
         except (ValueError, TypeError):
             continue
+    return sorted(visti)
+
+
+def sincronizza(inventario: Any, alloggio_id: str, ical_testo: Any,
+                feed_id: Optional[str] = None) -> Dict[str, Any]:
+    """Allinea l'inventario (fase58) a QUESTO feed, **nei due versi**.
+
+    Prima del 2026-09-07 questa funzione andava in un verso solo: scriveva
+    `unita_totali=0, prezzo_netto_cents=0` SOPRA la riga dell'inventario. Tre conseguenze,
+    tutte misurate: una notte chiusa da un calendario non si riapriva mai piu'; il prezzo
+    dell'host spariva, quindi non esisteva piu' niente a cui tornare; e non si sapeva
+    QUALE feed l'avesse chiusa, percio' con due calendari «si riapre quando sparisce da
+    quel feed e da nessun altro» non era nemmeno esprimibile.
+
+    Adesso il blocco esterno e' un OGGETTO con un'origine (`fase58.feed_applica`) e la
+    riga dell'inventario ne e' la proiezione. Ritorna {eventi, giorni_bloccati, ...} --
+    le due chiavi storiche restano e vogliono dire quello di prima, cosi' nessun chiamante
+    cambia.
+    """
+    fid = str(feed_id).strip() if isinstance(feed_id, str) and feed_id.strip() else FEED_UNICO
+    aid = str(alloggio_id)
+
+    if e_nostro(ical_testo):
+        logger.warning("ical_sync: feed IGNORATO, e' il nostro calendario riesportato "
+                       "(alloggio=%s feed=%s prodid=%s)", aid, fid, prodid(ical_testo))
+        return {"eventi": 0, "giorni_bloccati": 0, "riaperte": 0, "tenute_da_altri": 0,
+                "mano_dell_host": 0, "occupate": 0, "eco_ignorata": True,
+                "anomalia": ""}
+
+    eventi = analizza_ical(ical_testo)
+    giorni = giorni_occupati(ical_testo)
+
+    if not hasattr(inventario, "feed_applica"):
+        # RIPIEGO per un inventario che non conosce i blocchi esterni: si comporta come
+        # prima (un verso solo). Dichiarato, non silenzioso: chi lo usa lo legge nel
+        # risultato e sa che la riapertura li' non c'e'.
+        bloccati = 0
         for g in giorni:
-            if g in giorni_visti:
-                continue
-            giorni_visti.add(g)
             try:
-                # unita_totali=0 -> giorno non disponibile; non scende mai sotto
-                # l'occupato reale (fase58 fail-safe)
-                if inventario.imposta_disponibilita(str(alloggio_id), g,
-                                                    unita_totali=0,
+                if inventario.imposta_disponibilita(aid, g, unita_totali=0,
                                                     prezzo_netto_cents=0):
-                    giorni_bloccati += 1
+                    bloccati += 1
             except Exception:
                 logger.warning("ical_sync: blocco giorno %s fallito (isolato)", g,
                                exc_info=True)
-    return {"eventi": len(eventi), "giorni_bloccati": giorni_bloccati}
+        return {"eventi": len(eventi), "giorni_bloccati": bloccati, "riaperte": 0,
+                "tenute_da_altri": 0, "mano_dell_host": 0, "occupate": 0,
+                "eco_ignorata": False, "anomalia": "",
+                "un_verso_solo": "l'inventario non conosce i blocchi esterni"}
+
+    try:
+        prima = list(inventario.feed_giorni(aid, fid))
+    except Exception:
+        prima = []
+
+    # ⛔ DA N A ZERO. Un feed che ieri portava eventi e oggi ne porta zero quasi mai vuol
+    # dire «l'host ha liberato tutto»: vuol dire URL scaduto, autenticazione caduta, OTA
+    # che risponde una pagina vuota con 200. Riaprire tutto su quel silenzio e' il modo
+    # migliore per vendere due volte la stessa notte. Quindi: non si tocca NIENTE, e si
+    # dichiara un'anomalia che qualcuno a valle deve leggere.
+    if prima and not giorni:
+        logger.error("ical_sync | codice: feed_azzerato | sottocodice: da_%d_a_zero | "
+                     "messaggio: il feed teneva %d notti e adesso non porta nessun evento: "
+                     "NON riapro niente (alloggio=%s feed=%s)",
+                     len(prima), len(prima), aid, fid)
+        return {"eventi": 0, "giorni_bloccati": len(prima), "riaperte": 0,
+                "tenute_da_altri": 0, "mano_dell_host": 0, "occupate": 0,
+                "eco_ignorata": False,
+                "anomalia": "feed_azzerato: teneva %d notti, adesso zero eventi. Non ho "
+                            "riaperto niente: un feed vuoto e' quasi sempre un feed rotto,"
+                            " e riaprire su un silenzio vende due volte la stessa notte"
+                            % len(prima)}
+
+    try:
+        r = inventario.feed_applica(aid, fid, giorni)
+    except Exception:
+        # ⛔ SI RIPIEGA SUL VERSO VECCHIO, non si esce a mani vuote. Fra i due modi di
+        # sbagliare qui non c'e' partita: una notte chiusa di troppo si riapre a mano, una
+        # notte lasciata aperta si vende DUE VOLTE -- e la seconda vendita la paghiamo noi,
+        # con l'ospite davanti a una porta occupata. Quindi: blocca comunque, e dichiara
+        # nel risultato che la riapertura in questo giro non c'e' stata.
+        logger.error("ical_sync | codice: feed_applica_fallita | sottocodice: ripiego_un_verso "
+                     "| messaggio: blocco comunque le notti occupate, nessuna riapertura "
+                     "(alloggio=%s feed=%s)", aid, fid, exc_info=True)
+        bloccati = 0
+        for g in giorni:
+            try:
+                if inventario.imposta_disponibilita(aid, g, unita_totali=0,
+                                                    prezzo_netto_cents=0):
+                    bloccati += 1
+            except Exception:
+                logger.warning("ical_sync: blocco giorno %s fallito (isolato)", g,
+                               exc_info=True)
+        return {"eventi": len(eventi), "giorni_bloccati": bloccati, "riaperte": 0,
+                "tenute_da_altri": 0, "mano_dell_host": 0, "occupate": 0,
+                "eco_ignorata": False,
+                "anomalia": "feed_applica non ha funzionato: ho bloccato le notti nel verso "
+                            "vecchio e NON ho riaperto niente. Meglio una notte chiusa di "
+                            "troppo che la stessa notte venduta due volte"}
+
+    occupate = int(r.get("occupate", 0))
+    return {"eventi": len(eventi),
+            # storico: quante notti questo feed tiene chiuse adesso (non «quante ne ho
+            # chiuse in questo giro»): ri-sincronizzare lo stesso feed da lo stesso numero
+            "giorni_bloccati": max(0, len(giorni) - occupate),
+            "riaperte": int(r.get("riaperte", 0)),
+            "tenute_da_altri": int(r.get("tenute_da_altri", 0)),
+            "mano_dell_host": int(r.get("mano_dell_host", 0)),
+            "occupate": occupate,
+            "eco_ignorata": False,
+            "anomalia": ""}
