@@ -92,9 +92,38 @@ if [ "$REMOTO" != "1" ]; then
       #    presenta cosi', non come `failure`: e' il caso vero del 1 settembre. Giudicare
       #    solo su `failure` avrebbe reso questo allarme muto proprio sull'incidente che
       #    lo motiva. `skipped` e `neutral` invece non sono rossi (zap gira a settimana).
-      rossi="$(printf '%s' "$J" | grep -o '"conclusion": "[a-z_]*"' \
-               | grep -cvE '"(success|skipped|neutral)"')"
-      if [ "$rossi" -gt 0 ]; then CI=ko; else CI=ok; fi
+      # ⛔⛔ E SI GUARDA SOLO L'ULTIMO TENTATIVO DI OGNI CONTROLLO, non tutti quanti.
+      #    GitHub elenca sotto lo stesso commit OGNI giro di OGNI controllo: e' il suo
+      #    storico, non un errore. Contandoli tutti, un rosso gia' smentito grida per
+      #    sempre, e l'unica cosa che lo zittisce e' un commit nuovo -- cioe' il guardiano
+      #    non puo' piu' tornare sereno da solo, qualunque cosa faccia la macchina.
+      #    MISURATO il 2026-09-07 su `ae69c1f`: la sentinella esterna fallisce alle
+      #    00:06:18 per un buco di rete e RIPASSA alle 04:39:01; il guardiano ha gridato
+      #    ogni 10 minuti dalle 04:50 alle 08:50 -- circa VENTICINQUE allarmi per un
+      #    guasto risolto da ore, col messaggio «c'e' un difetto che nessuno sta vedendo»,
+      #    cioe' mandando a cercare una cosa che non c'era. Un falso allarme e' grave
+      #    quanto uno mancato (ferrea 10): insegna a ignorare il segnale, e il giorno che
+      #    suona per un guasto vero e' gia' stato declassato a rumore.
+      # 🔑 DECIDE L'ORA (`started_at`), NON L'ORDINE nella lista: GitHub non promette
+      #    nessun ordine, e appoggiarcisi funzionerebbe oggi per poi sbagliare in silenzio
+      #    il giorno che cambia. A parita' d'ora vince il ROSSO: nel dubbio si grida.
+      # ⛔ E non si legge il JSON col `grep` (leggere una cosa per un'altra): lo legge
+      #    `$PY`, lo stesso interprete che questo script cerca gia' piu' sopra -- nessuna
+      #    dipendenza nuova. Se `$PY` manca o esplode, il verdetto e' `cieco`, MAI `ok`:
+      #    chi non riesce a giudicare non ha il diritto di dire «tutto bene» (sbaglio S7).
+      rossi="$(printf '%s' "$J" | "$PY" -c 'import sys,json
+d=json.load(sys.stdin)
+buoni=("success","skipped","neutral")
+ultimi={}
+for r in d.get("check_runs",[]):
+    n=r.get("name"); q=r.get("started_at") or ""; c=r.get("conclusion")
+    if n not in ultimi or q > ultimi[n][0]:
+        ultimi[n]=(q,[c])
+    elif q == ultimi[n][0]:
+        ultimi[n][1].append(c)
+print(sum(1 for q,cs in ultimi.values() if any(c not in buoni for c in cs)))' 2>/dev/null)"
+      if [ -z "$rossi" ]; then CI=cieco
+      elif [ "$rossi" -gt 0 ]; then CI=ko; else CI=ok; fi
     fi
   fi
 fi
