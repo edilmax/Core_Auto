@@ -15,8 +15,11 @@ Invarianti:
 import hashlib
 import json
 import os
+import shlex
 import shutil
 import sqlite3
+import subprocess  # nosec B404 - esegue una shell POSIX su righe di uno script NOSTRO, mai input esterno
+import sys
 import tempfile
 import time
 import unittest
@@ -835,7 +838,6 @@ class TestUnROSSOGIASUPERATONonPuoGRIDAREPERSEMPRE(unittest.TestCase):
         cosa che dice quale tentativo e' l'ULTIMO: l'ordine nella lista non lo dice, e
         fidarsene sarebbe una premessa non dichiarata che un giorno cade in silenzio.
         """
-        import json
         return json.dumps({"check_runs": [
             {"name": n, "status": "completed", "conclusion": c, "started_at": q}
             for n, c, q in tentativi]})
@@ -857,9 +859,6 @@ class TestUnROSSOGIASUPERATONonPuoGRIDAREPERSEMPRE(unittest.TestCase):
         lancia, e non e' quello che credi: senza questa prova la guardia sarebbe diventata
         rossa parlando dello script, mentre il guasto era nel suo stesso attrezzo (S3).
         """
-        import os
-        import shutil
-        import subprocess
         candidate = []
         trovata = shutil.which("sh")
         if trovata:
@@ -876,16 +875,22 @@ class TestUnROSSOGIASUPERATONonPuoGRIDAREPERSEMPRE(unittest.TestCase):
             candidate.append(trovata)
 
         for c in candidate:
-            if not os.path.exists(c):
-                continue
-            try:
-                p = subprocess.run([c, "-c", "printf pronta"], capture_output=True,
-                                   text=True, timeout=20)
-            except Exception:
-                continue
-            if p.returncode == 0 and p.stdout.strip() == "pronta":
+            if os.path.exists(c) and self._risponde_pronta(c):
                 return c
         return None
+
+    def _risponde_pronta(self, shell):
+        """True solo se quel binario ESEGUE davvero e risponde quello che ci si aspetta.
+
+        ⛔ Non basta che il file esista: `C:\\Windows\\system32\\bash.EXE` esiste, si lancia,
+        e non e' una shell. La domanda non e' «c'e' qualcosa?» ma «c'e' LA cosa?».
+        """
+        try:
+            p = subprocess.run(  # nosec B603 - nessuna shell=True, comando costante  # noqa: S603
+                [shell, "-c", "printf pronta"], capture_output=True, text=True, timeout=20)
+        except (OSError, subprocess.SubprocessError):
+            return False
+        return p.returncode == 0 and p.stdout.strip() == "pronta"
 
     def _righe_che_giudicano(self):
         """Le righe DELLO SCRIPT che trasformano la risposta di GitHub in ko/ok."""
@@ -902,9 +907,6 @@ class TestUnROSSOGIASUPERATONonPuoGRIDAREPERSEMPRE(unittest.TestCase):
 
     def _giudizio_dello_script(self, tentativi):
         """Esegue quelle righe con una risposta finta e restituisce il verdetto (ko/ok)."""
-        import shlex
-        import subprocess
-        import sys
         sh = self._shell_posix()
         # ⛔ QUI NON SI SALTA. Un `skipTest` perche' «manca la shell» sarebbe un test che si
         #    assolve da solo per una condizione che riguarda proprio cio' che deve
@@ -922,8 +924,24 @@ class TestUnROSSOGIASUPERATONonPuoGRIDAREPERSEMPRE(unittest.TestCase):
         # shell -- che su Windows e su Linux non e' lo stesso (sbaglio S11).
         programma = ("PY=%s\nJ=\"$(cat)\"\n" % shlex.quote(sys.executable.replace("\\", "/"))
                      + blocco + '\nprintf "%s" "$CI"\n')
-        p = subprocess.run([sh, "-c", programma], input=self._risposta_github(tentativi),
-                           capture_output=True, text=True)
+        # ⛔ QUESTO `nosec` NON SI TOGLIE, E QUI C'E' IL PERCHE' (chiesto dalla corsia B il
+        #    2026-09-08: «fra sei mesi qualcuno lo trovera' e vorra' toglierlo»).
+        #    La regola di casa e' giusta -- se un sottoprocesso non compra niente, non si
+        #    apre, e il `nosec` sarebbe permanente per nulla (vedi `test_pipeline_ci.py`,
+        #    dove il TextTestRunner in-processo ha sostituito un sottoprocesso inutile).
+        #    Qui pero' compra l'unica cosa che Python non sa fare: ESEGUIRE UNA SHELL POSIX.
+        #    Le due alternative sono tutt'e due peggio del rilievo:
+        #      · riscrivere in Python la logica di `watchdog.sh` -> una SECONDA copia del
+        #        criterio, cioe' due giudici e nessuno che sappia quale credere: e'
+        #        esattamente la malattia che questa guardia esiste per curare;
+        #      · cercare parole nel file -> un commento la soddisferebbe (sbaglio S6, gia'
+        #        pagato con `server_tokens`).
+        #    Nessuna `shell=True`, comando in lista, e il programma eseguito sono righe
+        #    ESTRATTE dal nostro stesso script piu' una risposta finta costruita qui dentro:
+        #    nessun input esterno tocca questa chiamata.
+        p = subprocess.run(  # nosec B603 - vedi il blocco qui sopra  # noqa: S603
+            [sh, "-c", programma], input=self._risposta_github(tentativi),
+            capture_output=True, text=True)
         self.assertEqual(p.returncode, 0, "le righe estratte non girano: %s" % p.stderr)
         verdetto = p.stdout.strip()
         self.assertNotEqual(verdetto, "cieco",
