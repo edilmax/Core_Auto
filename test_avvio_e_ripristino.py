@@ -117,6 +117,40 @@ TABELLE_ATTESE = {
 SCHEMI_PIGRI = ("geocache.db", "poicache.db", "marche.db")
 
 
+def _tutte_le_tabelle_ci_sono(cartella):
+    """L'accensione ha finito? Vero solo quando OGNI archivio atteso ha le SUE tabelle.
+
+    ⛔ NON APRE MAI UN FILE CHE NON C'E', e la riga `os.path.exists` prima della `connect`
+    e' la parte piu' delicata di questa funzione: `sqlite3.connect` su un percorso assente
+    lo CREA, e chi chiama questa attesa scatta subito dopo la fotografia della cartella --
+    creare un archivio per andare a vedere se e' nato sarebbe misurare la propria ombra.
+
+    Gli `SCHEMI_PIGRI` chiedono solo il file: il loro componente in collaudo e' spento (niente
+    rete, niente marca temporale), quindi nascono vuoti per costruzione e aspettare le loro
+    tabelle vorrebbe dire aspettare per sempre.
+    """
+    for nome, attese in TABELLE_ATTESE.items():
+        percorso = os.path.join(cartella, nome)
+        if not os.path.exists(percorso):
+            return False
+        if nome in SCHEMI_PIGRI:
+            continue
+        try:
+            con = sqlite3.connect(percorso)
+            try:
+                presenti = {r[0] for r in con.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'")}
+            finally:
+                con.close()
+        except sqlite3.Error:
+            # L'archivio e' nato ma qualcuno ci sta ancora scrivendo lo schema: non e' un
+            # esito, e' «non ancora». Si riprova finche' c'e' tempo.
+            return False
+        if not set(attese) <= presenti:
+            return False
+    return True
+
+
 # ─────────────────────────── attrezzi ───────────────────────────
 def _porta_libera():
     s = socket.socket()
@@ -382,6 +416,25 @@ class TestAvvioDaZero(unittest.TestCase):
         cls.app = Prodotto(cls.dati)
         cls.addClassCleanup(cls.app.spegni)
         cls.app.attendi()
+        # L'archivio dei feed iCal lo crea il TICK di fase203 in un thread parallelo al server
+        # (fase83 `_tick_ical`, `archivio_di`): con `coverage run` quel thread perde la gara con
+        # la sonda di salute e la foto usciva senza le tabelle di `ical_feed.db` (CI su
+        # a48ccc4, job copertura, mentre full-suite era verde sullo stesso commit).
+        #
+        # ⛔ SI ASPETTA LA TABELLA, NON IL FILE, e qui c'e' una lezione pagata due volte.
+        # La prima riparazione (2026-09-07) aspettava che ESISTESSE `ical_feed.db`, e ha
+        # SPOSTATO la fessura invece di chiuderla: SQLite crea il file nell'istante in cui si
+        # apre la connessione, la `CREATE TABLE` arriva un momento DOPO. L'attesa finiva nel
+        # mezzo e la foto usciva con il file presente e la tabella assente -- che e' esattamente
+        # cio' che master ha stampato l'08/09: «tabelle mancanti ['ical_feed'] (presenti: [])».
+        # E spiega l'intermittenza: stesso commit, giro `push` verde e giro `schedule` rosso,
+        # perche' la fessura e' di millisecondi e la gara si vince quasi sempre.
+        # 💡 La regola che ne resta: si aspetta la CONDIZIONE CHE IL TEST POI VERIFICA. Ogni
+        # altra attesa e' una condizione che si puo' soddisfare senza che la cosa vera sia
+        # successa -- cioe' un verde per il motivo sbagliato, in agguato.
+        scadenza = time.time() + 20
+        while time.time() < scadenza and not _tutte_le_tabelle_ci_sono(cls.dati):
+            time.sleep(0.1)
         # FOTO SUBITO DOPO L'ACCENSIONE, prima che una qualsiasi richiesta tocchi i file:
         # senza questa, l'esito dipenderebbe dall'ORDINE dei test (la sonda /api/health/db
         # apre ogni archivio e cosi' lo CREA). Un test che dipende dall'ordine e' un

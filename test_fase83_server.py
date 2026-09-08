@@ -733,6 +733,35 @@ class TestSelfServiceHost(unittest.TestCase):
         self.assertEqual(c["errore"], "consensi_mancanti")
         self.assertIn("accetta_termini", c["mancanti"])
 
+    def test_un_consenso_NEGATO_come_stringa_non_e_un_consenso(self):
+        """Trovato dalla chat A il 2026-09-07 (`collaudi/esame_legale.py`): le spunte erano
+        giudicate con `bool(v)`, e per Python `bool("false")` e `bool("0")` sono VERI. Un
+        client che manda `"accetta_clausole": "false"` otteneva 201, l'account nasceva e la
+        prova firmata archiviava `vessatorie: True`: un consenso NEGATO registrato come dato.
+        Il browser nostro manda booleani veri: la porta la apriva solo chi chiama l'API a mano,
+        ma la prova firmata e' quella che si porta davanti a un giudice. Vale solo `True`."""
+        for falso in ("false", "0", "no", 1, "true"):
+            s, c = self.r.gestisci("POST", "/api/host/registrazione", body=json.dumps(
+                {"email": "falso@b.it", "password": "passwordlunga", "accetta_termini": True,
+                 "accetta_clausole": falso, "accetta_privacy": True}))
+            self.assertEqual(s, 422, "accetta_clausole=%r ha risposto %s %s" % (falso, s, c))
+            self.assertEqual(c["errore"], "consensi_mancanti")
+            self.assertIn("accetta_clausole", c["mancanti"])
+        # e nessun account e' nato da quei tentativi
+        s, c = self.r.gestisci("POST", "/api/host/login", body=json.dumps(
+            {"email": "falso@b.it", "password": "passwordlunga"}))
+        self.assertNotEqual(s, 200, c)
+        # stessa regola alla ri-accettazione
+        s, c = self.r.gestisci("POST", "/api/host/registrazione", body=json.dumps(
+            {"email": "vero@b.it", "password": "passwordlunga", "accetta_termini": True,
+             "accetta_clausole": True, "accetta_privacy": True}))
+        self.assertEqual(s, 201, c)
+        h = {"X-Host-Token": c["token"]}
+        s, c = self.r.gestisci("POST", "/api/host/riaccetta", headers=h, body=json.dumps(
+            {"accetta_termini": True, "accetta_clausole": "false", "accetta_privacy": True}))
+        self.assertEqual(s, 422, c)
+        self.assertIn("accetta_clausole", c.get("mancanti", []))
+
 
 class TestOnboarding(unittest.TestCase):
     def setUp(self):

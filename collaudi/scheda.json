@@ -54,6 +54,50 @@
   "motivo": "",
   "quando": "2026-09-05T01:58:18"
  },
+ "506a24febc87": {
+  "blocco": 6,
+  "comando": "python collaudi/esame_plausibilita.py --scrivi",
+  "commit": "39448a0",
+  "condizione": "ogni numero mostrato ha senso nel mondo vero (modo di rompersi 10)",
+  "denominatore": 24,
+  "esito": true,
+  "impronta": "198b6c89a289",
+  "motivo": "",
+  "quando": "2026-09-07T18:26:41"
+ },
+ "555972b586e3": {
+  "blocco": 2,
+  "comando": "python collaudi/esame_feed_due_versi.py --scrivi",
+  "commit": "a1dcf97",
+  "condizione": "il feed esterno vale nei due versi: una notte chiusa da un feed si riapre quando sparisce da QUEL feed (e da nessun altro), con lo stato di prima, e solo se l'host non l'ha toccata nel frattempo; i blocchi esterni sono oggetti con origine, non sovrascritture dell'inventario; l'eco del nostro calendario riesportato dall'OTA non chiude le nostre notti; un feed che passa da N eventi a zero non riapre niente e diventa un'anomalia",
+  "denominatore": 14,
+  "esito": true,
+  "impronta": "6927427232b8",
+  "motivo": "",
+  "quando": "2026-09-07T23:20:28"
+ },
+ "5c447a0ee514": {
+  "blocco": 5,
+  "comando": "python collaudi/esame_legale.py --casella spunte --scrivi",
+  "commit": "39448a0",
+  "condizione": "le 3 spunte obbligatorie sono bloccate lato browser E rifiutate 422 lato server",
+  "denominatore": 36,
+  "esito": true,
+  "impronta": "2fa799ea69f9",
+  "motivo": "",
+  "quando": "2026-09-07T18:26:40"
+ },
+ "63e1e98393ea": {
+  "blocco": 10,
+  "comando": "python collaudi/esame_legacy.py --casella uscite --scrivi",
+  "commit": "a48ccc4",
+  "condizione": "ogni modulo qui dentro ha UNA delle tre uscite: serve e si collauda · e' spento e si dice come si accende · e' estraneo e SI TOGLIE",
+  "denominatore": 21,
+  "esito": false,
+  "impronta": "12b493b5fae6",
+  "motivo": "[uscite] fase25_brain: NESSUNA USCITA (non raggiunto, senza riga «come si accende», ma ha ancora test (test_fase25_brain.py) e voce nel registro: morto che si collauda e si documenta senza dire come si accende | raggiunto=False test=True voce=True accensione=False usato_vivo=-); [uscite] fase27_proposte: NESSUNA USCITA (non raggiunto, senza riga «come si accende», ma ha ancora test (test_fase27_proposte.py) e voce nel registro: morto che si collauda e si documenta senza dire come si accende | raggiunto=False test=True voce=True accensione=False usato_vivo=-); [uscite] fase30_llm: NESSUNA USCIT",
+  "quando": "2026-09-07T21:42:36"
+ },
  "6bb68f1abf5b": {
   "blocco": 3,
   "comando": "python collaudi/esame_accessi.py --casella matrice --scrivi",
@@ -64,6 +108,17 @@
   "impronta": "01970b37c064",
   "motivo": "",
   "quando": "2026-09-07T12:54:38"
+ },
+ "7d0c5b891c14": {
+  "blocco": 5,
+  "comando": "python collaudi/esame_legale.py --casella lingue --scrivi",
+  "commit": "39448a0",
+  "condizione": "termini e privacy sono leggibili in tutte le lingue dichiarate",
+  "denominatore": 43,
+  "esito": true,
+  "impronta": "2fa799ea69f9",
+  "motivo": "",
+  "quando": "2026-09-07T18:26:40"
  },
  "813b9082642c": {
   "blocco": 1,
@@ -87,6 +142,17 @@
   "motivo": "",
   "quando": "2026-09-07T16:45:06"
  },
+ "a36e3373da1d": {
+  "blocco": 8,
+  "comando": "python collaudi/esame_sentinella.py --scrivi",
+  "commit": "a48ccc4",
+  "condizione": "una sentinella ESTERNA (non nostra) si accorge se il sito muore",
+  "denominatore": 7,
+  "esito": false,
+  "impronta": "1e861914e310",
+  "motivo": "[sveglia] nelle ultime 24 ore il buco massimo fra due giri e' sotto i 60 minuti (promessa del file: ~15) (giri nelle 24 ore: 7, buco massimo 333 minuti)",
+  "quando": "2026-09-07T21:42:40"
+ },
  "a6c9694a48f1": {
   "blocco": 2,
   "comando": "python collaudi/mutazione_prodotto.py --modulo fase34_prenotazioni.py fase36_booking_api.py fase58_channel_manager.py fase59_concierge.py fase62_predictive_noshow.py fase67_coda_intelligente.py fase71_commitment.py fase82_ical_sync.py fase111_cancellazione.py fase135_ical_bidirezionale.py fase152_notifiche_prenotazione.py fase187_fuso_orario.py fase203_ical_orologio.py --tetto 150 --minuti 600 --killer test_fase58_channel_manager test_fase59_concierge test_fase62_predictive_noshow test_fase67_coda_intelligente test_fase82_ical_sync test_fase111_cancellazione test_fase135_ical_bidirezionale test_fase152_notifiche_prenotazione test_fuso_alloggio test_fase203_ical_orologio",
@@ -109,6 +175,17 @@
   "motivo": "",
   "quando": "2026-09-05T01:58:18"
  },
+ "d4e612aafcd1": {
+  "blocco": 9,
+  "comando": "python collaudi/esame_marketing.py --casella giurisdizioni --scrivi",
+  "commit": "39448a0",
+  "condizione": "si pubblica SOLO dove e' lecito (le giurisdizioni le decide fase154)",
+  "denominatore": 8,
+  "esito": false,
+  "impronta": "dac198979bc0",
+  "motivo": "[chiamanti] almeno un modulo di produzione importa fase154 (albero sintattico) (chiamanti=[]); [decisori] fase89_jurisdiction_outreach decide un paese: passa da fase154 (non importa fase154); [decisori] fase95_outreach_email decide un paese: passa da fase154 (non importa fase154)",
+  "quando": "2026-09-07T18:26:42"
+ },
  "d70ecb7a31cc": {
   "blocco": 1,
   "comando": "python collaudi/esame_rimborsi.py --scrivi",
@@ -119,6 +196,17 @@
   "impronta": "bb8bae0cf2dc",
   "motivo": "",
   "quando": "2026-09-05T01:59:44"
+ },
+ "df0678e71e35": {
+  "blocco": 9,
+  "comando": "python collaudi/esame_marketing.py --casella interruttore --scrivi",
+  "commit": "39448a0",
+  "condizione": "nessun canale pubblica senza che una persona possa fermarlo",
+  "denominatore": 26,
+  "esito": true,
+  "impronta": "dac198979bc0",
+  "motivo": "",
+  "quando": "2026-09-07T18:26:42"
  },
  "e0c5eaf17028": {
   "blocco": 6,
@@ -134,13 +222,13 @@
  "ec84faaea398": {
   "blocco": 2,
   "comando": "python collaudi/esame_prenotazioni.py --scrivi",
-  "commit": "fcdc665",
+  "commit": "a1dcf97",
   "condizione": "la macchina a stati copre cancellazioni, modifiche, no-show e sovra-affitto",
   "denominatore": 34,
   "esito": true,
-  "impronta": "0624129adf38",
+  "impronta": "6927427232b8",
   "motivo": "",
-  "quando": "2026-09-06T19:23:56"
+  "quando": "2026-09-07T23:20:58"
  },
  "eec63adbaf5b": {
   "blocco": 3,
@@ -156,23 +244,34 @@
  "f10f35b6a7b3": {
   "blocco": 2,
   "comando": "python collaudi/esame_ical.py --scrivi",
-  "commit": "fcdc665",
+  "commit": "a1dcf97",
   "condizione": "iCal ha una difesa dal RITARDO 15 min-2 ore (oggi: zero, e' la finestra delle prenotazioni fantasma)",
   "denominatore": 24,
   "esito": true,
-  "impronta": "0624129adf38",
+  "impronta": "6927427232b8",
   "motivo": "",
-  "quando": "2026-09-06T19:24:20"
+  "quando": "2026-09-07T23:21:26"
+ },
+ "f132bc4f619c": {
+  "blocco": 10,
+  "comando": "python collaudi/esame_legacy.py --casella prova --scrivi",
+  "commit": "a48ccc4",
+  "condizione": "⛔ non si cancella niente prima di aver dimostrato che nulla di vivo lo usa",
+  "denominatore": 20,
+  "esito": true,
+  "impronta": "12b493b5fae6",
+  "motivo": "",
+  "quando": "2026-09-07T21:42:36"
  },
  "f5d22a937896": {
   "blocco": 2,
   "comando": "python collaudi/esame_gare.py --scrivi",
-  "commit": "fcdc665",
+  "commit": "a1dcf97",
   "condizione": "il blocco atomico regge sotto gara (misurato: 10 giri x 24 agenti, 1 conferma)",
   "denominatore": 51,
   "esito": true,
-  "impronta": "0624129adf38",
+  "impronta": "6927427232b8",
   "motivo": "",
-  "quando": "2026-09-06T19:24:16"
+  "quando": "2026-09-07T23:21:16"
  }
 }

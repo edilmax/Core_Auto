@@ -169,11 +169,43 @@ class ChannelManager:
                 # dei movimenti. idem_key e' gia' PK -> il check "rilasciato" resta O(1).
                 con.execute("CREATE INDEX IF NOT EXISTS ix_movimenti_blocchi ON "
                             "movimenti(alloggio_id, tipo, esito, check_in)")
+                # ── IL FEED ESTERNO NEI DUE VERSI (Blocco 2, casella 5) ──────────────
+                # ⛔ UNA RIGA PER (giorno, FEED), non per giorno: senza il feed nella
+                # chiave, «si riapre quando sparisce da QUEL feed e da NESSUN ALTRO» non
+                # e' nemmeno esprimibile -- due calendari possono chiudere la stessa
+                # notte, e chi sparisce per primo non deve riaprirla.
+                con.execute("""
+                    CREATE TABLE IF NOT EXISTS blocchi_esterni (
+                        alloggio_id TEXT NOT NULL,
+                        giorno TEXT NOT NULL,
+                        feed_id TEXT NOT NULL,
+                        visto_ts TEXT NOT NULL,
+                        PRIMARY KEY (alloggio_id, giorno, feed_id))""")
+                # ⛔ LO STATO DELL'HOST PRIMA DEL PRIMO BLOCCO ESTERNO. Fino al
+                # 2026-09-07 il blocco esterno scriveva `unita_totali=0,
+                # prezzo_netto_cents=0` SOPRA la riga dell'inventario: il prezzo
+                # dell'host spariva, e con lui l'unica cosa a cui si sarebbe potuto
+                # tornare. Riaprire non era «non implementato»: era IMPOSSIBILE per
+                # costruzione. Qui la riga di prima si mette da parte, una volta sola,
+                # e si rimette quando l'ultimo feed molla la notte.
+                con.execute("""
+                    CREATE TABLE IF NOT EXISTS inventario_prima_del_blocco (
+                        alloggio_id TEXT NOT NULL,
+                        giorno TEXT NOT NULL,
+                        unita_totali INTEGER NOT NULL,
+                        prezzo_netto_cents INTEGER NOT NULL,
+                        chiuso INTEGER NOT NULL,
+                        min_notti INTEGER NOT NULL,
+                        salvato_ts TEXT NOT NULL,
+                        PRIMARY KEY (alloggio_id, giorno))""")
         finally:
             con.close()
 
     def cancella_alloggio(self, alloggio_id: Any) -> int:
-        """CANCELLAZIONE TOTALE inventario+movimenti di un alloggio (oblio/pulizia)."""
+        """CANCELLAZIONE TOTALE di un alloggio (oblio/pulizia): inventario, movimenti, e
+        anche i BLOCCHI ESTERNI con il loro stato messo da parte -- se restassero, un
+        alloggio ricreato con lo stesso identificativo si troverebbe addosso le notti
+        chiuse da un calendario di prima e nessuno saprebbe da dove vengono."""
         if not (isinstance(alloggio_id, str) and alloggio_id):
             return 0
         con = self._apri()
@@ -181,6 +213,9 @@ class ChannelManager:
             with con:
                 cur = con.execute("DELETE FROM inventario WHERE alloggio_id=?", (alloggio_id,))
                 con.execute("DELETE FROM movimenti WHERE alloggio_id=?", (alloggio_id,))
+                con.execute("DELETE FROM blocchi_esterni WHERE alloggio_id=?", (alloggio_id,))
+                con.execute("DELETE FROM inventario_prima_del_blocco WHERE alloggio_id=?",
+                            (alloggio_id,))
             # `max`, non `rowcount and rowcount > 0` (2026-09-05, «autorizzato»): -1 («non so»
             # di sqlite) e 0 valgono 0, e non c'e' un confronto che un altro mascheri.
             return max(0, cur.rowcount)
@@ -447,6 +482,221 @@ class ChannelManager:
                 "SELECT * FROM inventario WHERE alloggio_id=? AND giorno BETWEEN ? AND ?",
                 (str(alloggio_id), da, a)).fetchall()
             return {r["giorno"]: dict(r) for r in rows}
+        finally:
+            con.close()
+
+    # ── IL FEED ESTERNO NEI DUE VERSI (Blocco 2, casella 5) ────────────────────────
+    # Un blocco esterno NON e' una sovrascrittura dell'inventario: e' un OGGETTO con
+    # un'origine (quale feed) che vive in `blocchi_esterni`. La riga dell'inventario
+    # resta la PROIEZIONE di quegli oggetti sullo stato dell'host -- e la proiezione si
+    # puo' disfare, la sovrascrittura no. Il percorso che decide se una notte e'
+    # prenotabile (`disponibile`, `blocca`, `calendario`) NON cambia di una riga: legge
+    # l'inventario come ha sempre fatto.
+
+    def feed_giorni(self, alloggio_id: Any, feed_id: Any) -> List[str]:
+        """I giorni che QUESTO feed tiene chiusi adesso. Lista vuota su input invalido."""
+        if not (isinstance(alloggio_id, str) and alloggio_id.strip()):
+            return []
+        if not (isinstance(feed_id, str) and feed_id.strip()):
+            return []
+        con = self._apri()
+        try:
+            rows = con.execute(
+                "SELECT giorno FROM blocchi_esterni WHERE alloggio_id=? AND feed_id=? "
+                "ORDER BY giorno", (alloggio_id, feed_id)).fetchall()
+            return [r["giorno"] for r in rows]
+        finally:
+            con.close()
+
+    def stato_prima_del_blocco(self, alloggio_id: Any,
+                               giorno: Any) -> Optional[Dict[str, Any]]:
+        """Lo stato che l'host aveva su quella notte PRIMA che un feed la chiudesse, o
+        `None` se nessun feed la tiene chiusa.
+
+        ⛔ NON e' diagnostica ornamentale (D19): una difesa che non si puo' interrogare e'
+        indistinguibile da una difesa rotta, e questa si accorgerebbe del guasto solo il
+        giorno in cui una notte torna libera al prezzo sbagliato. Da qui un collaudo -- e
+        una persona -- vedono che lo stato di prima esiste davvero, mentre la notte e'
+        ancora chiusa."""
+        if not (isinstance(alloggio_id, str) and alloggio_id.strip()):
+            return None
+        if _data_iso(giorno) is None:
+            return None
+        con = self._apri()
+        try:
+            r = con.execute("SELECT * FROM inventario_prima_del_blocco WHERE "
+                            "alloggio_id=? AND giorno=?",
+                            (alloggio_id, giorno)).fetchone()
+            return dict(r) if r else None
+        finally:
+            con.close()
+
+    def chi_chiude(self, alloggio_id: Any, giorno: Any) -> List[str]:
+        """Quali feed tengono chiusa QUESTA notte, adesso. Vuota se nessuno.
+
+        E' la domanda «un blocco esterno e' un oggetto con un'origine?» fatta alla
+        macchina invece che a una colonna: chi legge non deve sapere dove sono scritti."""
+        if not (isinstance(alloggio_id, str) and alloggio_id.strip()):
+            return []
+        if _data_iso(giorno) is None:
+            return []
+        con = self._apri()
+        try:
+            rows = con.execute("SELECT feed_id FROM blocchi_esterni WHERE alloggio_id=? "
+                               "AND giorno=? ORDER BY feed_id",
+                               (alloggio_id, giorno)).fetchall()
+            return [r["feed_id"] for r in rows]
+        finally:
+            con.close()
+
+    def feed_applica(self, alloggio_id: Any, feed_id: Any,
+                     giorni: Any) -> Dict[str, Any]:
+        """Sostituisce l'insieme dei giorni chiusi da QUESTO feed e proietta il risultato.
+
+        Ritorna, e ogni voce e' un numero che si puo' controllare:
+          chiusi           notti chiuse adesso da questo feed
+          riaperte         notti tornate allo stato di PRIMA (nessun altro feed le teneva)
+          tenute_da_altri  sparite da questo feed ma chiuse da un altro -> restano chiuse
+          mano_dell_host   sparite da questo feed, ma l'host le aveva toccate -> non tocco
+          occupate         non chiudibili: c'e' gia' un'occupazione vera (fail-safe fase58)
+
+        ⛔ TUTTO IN UNA TRANSAZIONE SOLA: fra il «togli il blocco» e il «rimetti lo stato
+        di prima» non deve poter passare nessuno, altrimenti esiste un istante in cui la
+        notte e' libera al prezzo sbagliato -- e quello e' l'istante in cui qualcuno
+        prenota.
+        """
+        vuoto = {"chiusi": 0, "riaperte": 0, "tenute_da_altri": 0,
+                 "mano_dell_host": 0, "occupate": 0}
+        if not (isinstance(alloggio_id, str) and alloggio_id.strip()):
+            return vuoto
+        if not (isinstance(feed_id, str) and feed_id.strip()):
+            return vuoto
+        if not isinstance(giorni, (list, tuple, set, frozenset)):
+            return vuoto
+        voluti = sorted({g for g in giorni
+                         if isinstance(g, str) and _data_iso(g) is not None})
+        ora = datetime.datetime.now().isoformat(timespec="seconds")
+        esito = dict(vuoto)
+        con = self._apri()
+        try:
+            # ⛔ LE TABELLE SI ASSICURANO QUI, e non e' ridondanza con `inizializza_schema`.
+            # Una base dati NATA PRIMA del 2026-09-07 non le ha, e chi la usa non rilancia
+            # `inizializza_schema` per forza. Senza questa riga il primo feed su un database
+            # vecchio solleverebbe «no such table», il sincronizzatore lo isolerebbe, e le
+            # notti occupate su un'OTA smetterebbero di chiudersi **in silenzio**: cioe' la
+            # stessa notte venduta due volte. Costa una CREATE IF NOT EXISTS.
+            con.execute("CREATE TABLE IF NOT EXISTS blocchi_esterni ("
+                        "alloggio_id TEXT NOT NULL, giorno TEXT NOT NULL, "
+                        "feed_id TEXT NOT NULL, visto_ts TEXT NOT NULL, "
+                        "PRIMARY KEY (alloggio_id, giorno, feed_id))")
+            con.execute("CREATE TABLE IF NOT EXISTS inventario_prima_del_blocco ("
+                        "alloggio_id TEXT NOT NULL, giorno TEXT NOT NULL, "
+                        "unita_totali INTEGER NOT NULL, prezzo_netto_cents INTEGER NOT NULL, "
+                        "chiuso INTEGER NOT NULL, min_notti INTEGER NOT NULL, "
+                        "salvato_ts TEXT NOT NULL, PRIMARY KEY (alloggio_id, giorno))")
+            con.execute("BEGIN IMMEDIATE")
+            prima = {r["giorno"] for r in con.execute(
+                "SELECT giorno FROM blocchi_esterni WHERE alloggio_id=? AND feed_id=?",
+                (alloggio_id, feed_id)).fetchall()}
+            spariti = sorted(prima - set(voluti))
+            for g in voluti:
+                con.execute(
+                    "INSERT INTO blocchi_esterni (alloggio_id, giorno, feed_id, visto_ts) "
+                    "VALUES (?,?,?,?) ON CONFLICT(alloggio_id, giorno, feed_id) "
+                    "DO UPDATE SET visto_ts=excluded.visto_ts",
+                    (alloggio_id, g, feed_id, ora))
+            for g in spariti:
+                con.execute("DELETE FROM blocchi_esterni WHERE alloggio_id=? AND "
+                            "giorno=? AND feed_id=?", (alloggio_id, g, feed_id))
+
+            for g in sorted(set(voluti) | set(spariti)):
+                restano = con.execute(
+                    "SELECT COUNT(*) AS n FROM blocchi_esterni WHERE alloggio_id=? AND "
+                    "giorno=?", (alloggio_id, g)).fetchone()["n"]
+                riga = con.execute(
+                    "SELECT * FROM inventario WHERE alloggio_id=? AND giorno=?",
+                    (alloggio_id, g)).fetchone()
+                if restano:
+                    if riga is not None and riga["unita_occupate"] > 0:
+                        # FAIL-SAFE storico di fase58: non si scende MAI sotto l'occupato
+                        # vero. Una notte gia' venduta da noi non la chiude un calendario.
+                        esito["occupate"] += 1
+                        continue
+                    if riga is not None and riga["unita_totali"] == 0 \
+                            and riga["prezzo_netto_cents"] == 0:
+                        continue                       # gia' chiusa: niente da fare
+                    stato = {
+                        "unita_totali": riga["unita_totali"] if riga else 0,
+                        "prezzo_netto_cents": riga["prezzo_netto_cents"] if riga else 0,
+                        "chiuso": riga["chiuso"] if riga else 0,
+                        "min_notti": riga["min_notti"] if riga else 1,
+                    }
+                    con.execute(
+                        "INSERT INTO inventario_prima_del_blocco (alloggio_id, giorno, "
+                        "unita_totali, prezzo_netto_cents, chiuso, min_notti, salvato_ts) "
+                        "VALUES (?,?,?,?,?,?,?) ON CONFLICT(alloggio_id, giorno) DO NOTHING",
+                        (alloggio_id, g, stato["unita_totali"],
+                         stato["prezzo_netto_cents"], int(stato["chiuso"]),
+                         stato["min_notti"], ora))
+                    con.execute(
+                        "INSERT INTO inventario (alloggio_id, giorno, unita_totali, "
+                        "unita_occupate, prezzo_netto_cents, chiuso, min_notti, "
+                        "aggiornato_ts) VALUES (?,?,0,?,0,?,?,?) "
+                        "ON CONFLICT(alloggio_id, giorno) DO UPDATE SET "
+                        "unita_totali=0, prezzo_netto_cents=0, aggiornato_ts=excluded.aggiornato_ts",
+                        (alloggio_id, g, riga["unita_occupate"] if riga else 0,
+                         int(stato["chiuso"]), stato["min_notti"], ora))
+                    esito["chiusi"] += 1
+                    continue
+
+                salvato = con.execute(
+                    "SELECT * FROM inventario_prima_del_blocco WHERE alloggio_id=? AND "
+                    "giorno=?", (alloggio_id, g)).fetchone()
+                if salvato is None:
+                    continue
+                # ⛔ «...e solo se l'host non l'ha toccata nel frattempo». Come lo si sa
+                # senza chiedere all'host: la riga deve essere ANCORA quella che abbiamo
+                # scritto noi (0 unita', 0 prezzo). Se e' diversa, l'ha cambiata lui dopo
+                # il blocco, e la sua mano vince sempre sul nostro ripristino.
+                if riga is None or riga["unita_totali"] != 0 \
+                        or riga["prezzo_netto_cents"] != 0:
+                    esito["mano_dell_host"] += 1
+                else:
+                    con.execute(
+                        "UPDATE inventario SET unita_totali=?, prezzo_netto_cents=?, "
+                        "chiuso=?, min_notti=?, aggiornato_ts=? WHERE alloggio_id=? AND "
+                        "giorno=?",
+                        (salvato["unita_totali"], salvato["prezzo_netto_cents"],
+                         int(salvato["chiuso"]), salvato["min_notti"], ora,
+                         alloggio_id, g))
+                    esito["riaperte"] += 1
+                con.execute("DELETE FROM inventario_prima_del_blocco WHERE alloggio_id=? "
+                            "AND giorno=?", (alloggio_id, g))
+
+            for g in spariti:
+                restano = con.execute(
+                    "SELECT COUNT(*) AS n FROM blocchi_esterni WHERE alloggio_id=? AND "
+                    "giorno=?", (alloggio_id, g)).fetchone()["n"]
+                if restano:
+                    esito["tenute_da_altri"] += 1
+            con.execute("COMMIT")
+            # ⛔ LO SPECCHIO VA AVVISATO, e me l'ha insegnato un collaudo che esisteva gia'.
+            # Chiudere una notte scrivendo diretto nel database e non dirlo alla vetrina e'
+            # il modo di rompersi numero 2 -- «il pezzo e' perfetto e non e' collegato»:
+            # l'inventario diceva il vero e il sito continuava ad attirare con «da 80 EUR»
+            # su una notte che non si comprava piu'. L'ha preso
+            # `test_prezzo_vetrina_e_cassa.test_L_ICAL_CHE_BLOCCA_LA_NOTTE_ECONOMICA_ALZA_LA_VETRINA`.
+            # DOPO il COMMIT e solo se qualcosa e' cambiato: dentro la transazione il
+            # ricalcolo leggerebbe uno stato non ancora scritto.
+            if esito["chiusi"] or esito["riaperte"]:
+                self._avvisa_lo_specchio(alloggio_id)
+            return esito
+        except Exception:
+            try:
+                con.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
+            raise
         finally:
             con.close()
 

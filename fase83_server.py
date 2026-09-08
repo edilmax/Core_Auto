@@ -8768,7 +8768,7 @@ class RouterHTTP:
         mancanti = [k for k, v in (("accetta_termini", dati.get("accetta_termini")),
                                    ("accetta_clausole", dati.get("accetta_clausole")),
                                    ("accetta_privacy", dati.get("accetta_privacy")))
-                    if not bool(v)]
+                    if v is not True]   # solo il booleano vero: "false" e "0" sono consensi NEGATI
         if mancanti:
             return 422, {"errore": "consensi_mancanti", "mancanti": mancanti}
         try:
@@ -8906,7 +8906,7 @@ class RouterHTTP:
         mancanti = [k for k, v in (("accetta_termini", dati.get("accetta_termini")),
                                    ("accetta_clausole", dati.get("accetta_clausole")),
                                    ("accetta_privacy", dati.get("accetta_privacy")))
-                    if not bool(v)]
+                    if v is not True]   # solo il booleano vero: "false" e "0" sono consensi NEGATI
         if mancanti:
             return 422, {"errore": "consensi_mancanti", "mancanti": mancanti}
         # CANALI OPZIONALI (Line/WeChat) compilati male -> errore CHIARO sul campo, e la
