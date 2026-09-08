@@ -86,6 +86,7 @@ class ConfigCasaVIP:
     db_deposito: str = ":memory:"      # deposito cauzionale: hold sulla carta (fase149)
     db_garanzia: str = ":memory:"      # escrow di garanzia (soldi all'host solo se conforme)
     db_pendenti: str = ":memory:"      # pagamenti in attesa (hold prima del pagamento)
+    db_eventi_stripe: str = ":memory:"  # eventi del webhook (fase204): si scrivono PRIMA di rispondere
     db_tassa_comunale: str = ":memory:"  # ledger riscossioni tassa di soggiorno (rendicontazione)
     db_payout: str = ":memory:"        # dashboard payout host (incassi attesi per valuta/stato)
     db_finanza: str = ":memory:"       # financial controller (fase177): giornale+note+debiti
@@ -143,6 +144,7 @@ class SistemaCasaVIP:
     deposito: Any = None
     garanzia: Any = None
     pagamenti_pendenti: Any = None
+    eventi_stripe: Any = None
     tassa_comunale: Any = None
     payout: Any = None
     accettazioni: Any = None
@@ -395,6 +397,16 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
     pagamenti_pendenti.inizializza_schema()
     componenti.append("pagamenti_pendenti(162)")
 
+    # L'archivio degli eventi del webhook (fase204): si scrive PRIMA di rispondere, perche'
+    # un 2xx e' il punto di non ritorno -- Stripe non riprova mai piu'. Lo schema nasce qui,
+    # all'accensione, e non al primo uso: un archivio che nasce pigro e' un archivio che una
+    # macchina appena accesa non ha (ed e' il difetto che ha fatto cadere master oggi su
+    # `ical_feed.db`, con la stessa forma).
+    from fase204_eventi_stripe import crea_archivio_eventi
+    eventi_stripe = crea_archivio_eventi(cfg.db_eventi_stripe)
+    eventi_stripe.inizializza_schema()
+    componenti.append("eventi_stripe(204)")
+
     from fase147_tassa_comunale import crea_tassa_comunale
     tassa_comunale = crea_tassa_comunale(cfg.db_tassa_comunale)
     tassa_comunale.inizializza_schema()
@@ -619,7 +631,8 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
                           messaggistica=messaggistica, referral=referral,
                           notificatore_prenotazione=notificatore_prenotazione,
                           domanda=domanda, partner=partner, deposito=deposito, garanzia=garanzia,
-                          pagamenti_pendenti=pagamenti_pendenti, tassa_comunale=tassa_comunale,
+                          pagamenti_pendenti=pagamenti_pendenti, eventi_stripe=eventi_stripe,
+                          tassa_comunale=tassa_comunale,
                           payout=payout, accettazioni=accettazioni, marche=marche, stripe=provider,
                           connect=_connect, carta=_carta, geocoder=geocoder, checkin=checkin,
                           poi_provider=poi_provider, credito_usati=credito_usati,

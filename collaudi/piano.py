@@ -157,6 +157,12 @@ BLOCCHI = (
         "perche": "un guasto qui toglie soldi veri a una persona vera: e' l'unico blocco "
                   "dove un difetto non si puo' rimediare con una correzione",
         "moduli": (
+            # 2026-09-08 (mezza casella 7, «autorizzato»): l'archivio degli eventi del webhook.
+            # Un 2xx e' il punto di non ritorno -- Stripe non riprova mai piu' -- quindi
+            # l'evento si scrive PRIMA di rispondere, e se non si riesce a scriverlo la
+            # risposta NON e' 2xx. Entra qui, e l'impronta del blocco cambia: le caselle gia'
+            # verdi si rimisurano coi loro attrezzi, non si riportano a mano.
+            "fase204_eventi_stripe",
             "fase15_idempotency", "fase17_money", "fase35_pagamenti",
             "fase65_split_payment", "fase85_pagamenti_stripe", "fase87_stripe_webhook",
             "fase99_multicurrency", "fase101_stripe_connect", "fase102_motore_autonomo",
