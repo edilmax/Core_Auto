@@ -2108,7 +2108,7 @@ class RouterHTTP:
         if metodo == "POST" and path == "/api/mcp":
             return self._mcp(body)
         if metodo == "POST" and path == "/api/payments/webhook":
-            return self._webhook_stripe(body, headers)
+            return self._webhook_stripe_registrato(body, headers)
         if metodo == "POST" and path == "/api/marketing/campagna":
             return self._marketing_campagna(body, headers)
         if metodo == "GET" and path == "/api/tassa":
@@ -7968,6 +7968,56 @@ class RouterHTTP:
             return 404, {"errore": "conto_inesistente"}
         return 200, st
 
+    @staticmethod
+    def _id_evento(body):
+        """L'identificativo dell'evento (`evt_...`) letto dal corpo. "" se non c'e'.
+
+        ⛔ Si legge col parser JSON e non col `grep`: cercare `"id"` in una stringa
+        prenderebbe il primo `id` che capita -- quello dell'oggetto dentro l'evento, non
+        quello dell'evento. Sarebbe leggere una cosa per un'altra.
+        """
+        try:
+            d = json.loads(body or "{}")
+        except Exception:
+            return ""
+        if not isinstance(d, dict):
+            return ""
+        e = d.get("id")
+        return e if isinstance(e, str) and e.strip() else ""
+
+    def _webhook_stripe_registrato(self, body, headers):
+        """UN SOLO PUNTO D'USCITA, perche' «gestito» si dice una volta sola.
+
+        `_webhook_stripe` ha molte uscite (una per tipo di evento, piu' i rami d'errore):
+        segnare l'evento come elaborato dentro ognuna vorrebbe dire ripetere la stessa riga
+        in una decina di punti, e la decima verrebbe dimenticata. Qui si guarda cio' che quel
+        gestore ha RISPOSTO, che e' l'unica cosa che Stripe legge davvero.
+
+        ⛔ SI SEGNA SOLO SU 2xx, e non e' pignoleria: 2xx e' esattamente cio' che dice a
+        Stripe «non riprovare». Segnare «elaborato» su una risposta che invece chiede il
+        ritentativo renderebbe invisibile proprio l'evento che sta per tornare.
+        ⚠️ E il fallimento del segnale NON cambia la risposta: l'evento e' stato gestito
+        davvero, e negare adesso un 2xx gia' guadagnato farebbe rifare a Stripe un lavoro
+        gia' fatto. Resta «da elaborare» nell'archivio, che e' un'imprecisione visibile --
+        molto meglio di un doppio addebito.
+        """
+        esito = self._webhook_stripe(body, headers)
+        try:
+            stato = int(esito[0])
+        except Exception:
+            return esito
+        if not (200 <= stato < 300):
+            return esito
+        archivio = getattr(self._sys, "eventi_stripe", None)
+        evt = self._id_evento(body)
+        if archivio is not None and evt:
+            try:
+                archivio.segna_elaborato(evt)
+            except Exception:
+                logger.warning("evento %s gestito ma non segnato nell'archivio (ignorato)",
+                               evt.replace("\n", " "), exc_info=True)
+        return esito
+
     def _webhook_stripe(self, body, headers):
         """Webhook Stripe (conferma pagamento): verifica la FIRMA sul body GREZZO prima di
         credere all'evento. GATED dal webhook secret."""
@@ -7979,6 +8029,32 @@ class RouterHTTP:
         ok, tipo, dati = gestisci_webhook(body or "", sig, secret)
         if not ok:
             return 400, {"errore": "firma_non_valida"}
+
+        # ⛔ L'EVENTO SI SCRIVE PRIMA DI FARE QUALUNQUE COSA (fase204), e DOPO la firma --
+        #    mai prima: un corpo non verificato non entra in nessun archivio.
+        #    Il motivo e' che il 2xx e' il punto di non ritorno: Stripe lo legge come
+        #    «gestito» e non riprova MAI piu'. Se qui non si riesce a registrare l'evento,
+        #    l'unica risposta onesta e' NON-2xx, cosi' Stripe lo riporta.
+        #    ⛔ E il valore di ritorno di `salva` si GUARDA: e' dichiarato `-> bool` e dice
+        #    False anche quando non ha salvato niente. Ignorarlo renderebbe «non salvato»
+        #    indistinguibile da «salvato» -- il difetto che questo stesso gestore ha gia'
+        #    pagato quattro volte («un booleano che nessuno legge non e' un esito»).
+        _archivio = getattr(self._sys, "eventi_stripe", None)
+        _evt = self._id_evento(body)
+        if _archivio is not None and _evt:
+            try:
+                _registrato = _archivio.salva(_evt, tipo=tipo, corpo_json=body or "")
+            except Exception:
+                _registrato = False
+                logger.error("evento %s NON registrato: archivio in errore",
+                             _evt.replace("\n", " "), exc_info=True)
+            if not _registrato:
+                return 503, {"errore": "evento_non_registrato", "sottocodice": "archivio"}
+        elif _archivio is not None:
+            # ⚠️ WARNING e non ERROR, e il livello e' parte della riparazione: un evento
+            #    senza `id` e' malformato, non un nostro guasto, e gridare a ogni consegna
+            #    trasformerebbe l'allarme in posta quotidiana che nessuno legge (ferrea 10).
+            logger.warning("evento senza identificativo: non registrabile, si prosegue")
         # ⛔ QUI SI RACCOGLIE IL MOTIVO PER CUI UN ESITO NON E' STATO APPLICATO. Stripe legge
         # 2xx come «gestito» e non riprova MAI piu': un 2xx su un esito perso non e' un
         # errore di forma, e' cio' che rende la perdita DEFINITIVA. Resta "" quando non c'e'
@@ -9641,6 +9717,7 @@ class RouterHTTP:
             return 403, {"errore": "non_tuo"}
         try:
             if alloggio is not None:
+                slugs_metriche = [alloggio]
                 inv = self._sys.inventario.metriche(alloggio_id=alloggio, da=da, a=a)
                 pren = self._sys.inventario.elenco_prenotazioni(alloggio_id=alloggio, limit=500)
             else:
@@ -9648,6 +9725,7 @@ class RouterHTTP:
                 slugs = [al.get("slug") for al in
                          (self._sys.catalogo.alloggi_host(hid, limit=200) if hid else [])
                          if isinstance(al, dict) and al.get("slug")]
+                slugs_metriche = list(slugs)
                 inv = {"revenue_cents": 0, "notti_totali": 0, "notti_occupate": 0,
                        "giorni": 0, "occupazione_bps": 0}
                 pren = []
@@ -9664,8 +9742,32 @@ class RouterHTTP:
             logger.error("host metriche: eccezione ISOLATA", exc_info=True)
             return 503, {"errore": "service_unavailable"}
         attive = sum(1 for p in pren if not p["rimborsato"])
+        # ⛔ LA REVENUE NON SI PRENDE PIU' DALL'OCCUPAZIONE (2026-09-08). `inventario.metriche`
+        #    la calcola come SUM(unita_occupate x prezzo_netto): un hold MAI PAGATO occupa la
+        #    stanza, quindi entrava nel guadagno. Era un saldo STIMATO -- esattamente cio' che
+        #    la casella «il pannello dice sempre la verita' sui suoi soldi» vieta -- e l'host
+        #    lo avrebbe scoperto quando il bonifico non fosse arrivato. La fiducia di un host
+        #    si rompe una volta sola.
+        #    ⚠️ `inv["revenue_cents"]` resta com'e' e serve ancora: e' il valore dell'occupazione,
+        #    e come misura dell'occupazione e' giusto che conti gli hold. Cambia CHI lo chiama
+        #    «guadagno»: qui sotto no.
+        #    ⚠️ E il tetto delle prenotazioni lette e' 500 (sopra): oltre quel numero la somma
+        #    sarebbe MUTA e piu' bassa del vero. `revenue_parziale` lo dichiara invece di
+        #    tacere -- un taglio silenzioso su un numero di soldi e' il peggiore dei difetti.
+        # ⛔ NON si somma prenotazione per prenotazione, e il perche' e' costato un giro:
+        #    `_revenue_prenotazione` somma il CALENDARIO DELL'ALLOGGIO nell'intervallo di UNA
+        #    prenotazione. Va bene per mostrare quella riga; per AGGREGARE no, perche' due
+        #    soggiorni che si sovrappongono contano gli stessi giorni due volte. Misurato sui
+        #    dati veri (`test_dati_reali`): 131000 invece di 75500 sulla finestra 1-11
+        #    settembre, cioe' un numero PIU' GRANDE del vero -- lo stesso difetto che si sta
+        #    riparando, in un'altra forma.
+        # 🔑 Si parte dal numero dell'inventario, che la finestra la rispetta perche' filtra i
+        #    GIORNI, e si toglie solo cio' che gli hold NON PAGATI hanno aggiunto.
+        revenue = max(0, inv["revenue_cents"] - self._soldi_hold_non_pagati(slugs_metriche, da, a))
         out = {
-            "revenue_cents": inv["revenue_cents"],
+            "revenue_cents": revenue,
+            "valore_occupato_cents": inv["revenue_cents"],
+            "revenue_parziale": len(pren) >= 500,
             "occupazione_bps": inv["occupazione_bps"],
             "notti_occupate": inv["notti_occupate"],
             "notti_totali": inv["notti_totali"],
@@ -9682,13 +9784,133 @@ class RouterHTTP:
     def _valuta_sys(self) -> str:
         return getattr(getattr(self._sys, "config", None), "valuta", "EUR")
 
-    def _revenue_prenotazione(self, p: Dict[str, Any]) -> int:
-        if p.get("rimborsato"):
+    def _hold_non_pagato(self, p: Dict[str, Any]) -> bool:
+        """True se questa prenotazione occupa la stanza ma NON e' stata pagata.
+
+        ⛔ PERCHE' ESISTE. `inventario` sa se una stanza e' occupata, non se qualcuno ha
+        pagato: la sua tabella ha `unita_occupate` e `prezzo_netto_cents`, e nient'altro.
+        Chi calcola i soldi guardando l'occupazione sta stimando, e un saldo stimato e'
+        esattamente cio' che la casella «il pannello dice sempre la verita' sui suoi soldi»
+        vieta. La domanda «e' stata pagata?» ha una risposta sola, e sta nei pendenti.
+
+        ⛔ IL COLLEGAMENTO E' alloggio + DATE, e non la chiave. Misurato prima di scriverlo:
+        `elenco_prenotazioni` restituisce `idem_key`, che e' la firma del token del preventivo
+        (`fase59_concierge.py`: `idem = token.split(".")[-1]`), mentre i pendenti sono indicizzati
+        sul `riferimento` della prenotazione. Sono due cose diverse: unirle su quella chiave
+        avrebbe dato zero corrispondenze **in silenzio**, cioe' un filtro che non filtra niente
+        e un numero che sembra riparato.
+
+        ⚠️ E NEL DUBBIO NON SI TOGLIE. Se il pendente non si trova, o l'archivio non risponde,
+        la prenotazione NON viene esclusa: togliere soldi da un pannello per un dato che non
+        siamo riusciti a leggere sarebbe far sparire un incasso vero. Si sbaglia dalla parte di
+        mostrare cio' che l'occupazione dice, non dalla parte di cancellare.
+        """
+        pp = getattr(self._sys, "pagamenti_pendenti", None)
+        alloggio = str(p.get("alloggio_id") or "")
+        if pp is None or not alloggio or not hasattr(pp, "attivi_per_alloggio"):
+            return False
+        try:
+            for riga in pp.attivi_per_alloggio(alloggio):
+                if (str(riga.get("check_in") or "") == str(p.get("check_in") or "")
+                        and str(riga.get("check_out") or "") == str(p.get("check_out") or "")):
+                    return True
+        except Exception:
+            logger.warning("pendenti non leggibili: la revenue resta quella "
+                           "dell'occupazione (ISOLATO)", exc_info=True)
+            return False
+        return False
+
+    def _soldi_hold_non_pagati(self, slugs: Any, da: Any = None, a: Any = None) -> int:
+        """Quanto hanno aggiunto alla revenue dell'inventario gli hold MAI pagati, in [da, a).
+
+        Si sottrae a `inventario.metriche()['revenue_cents']`, che conta
+        SUM(unita_occupate x prezzo_netto): un hold occupa, quindi e' li' dentro.
+
+        ⛔ PERCHE' NON SI SOMMANO INVECE LE PRENOTAZIONI PAGATE. Perche' il calendario da'
+        il prezzo per GIORNO dell'alloggio, non per prenotazione: due soggiorni che si
+        sovrappongono conterebbero gli stessi giorni due volte. Misurato: 131000 invece di
+        75500 sui dati veri. Partire dal numero dell'inventario e togliere evita il
+        doppio conteggio, e conserva la finestra -- che l'inventario rispetta filtrando i
+        GIORNI, mentre una somma per prenotazione la ignorerebbe.
+
+        ⚠️ Due hold sulle stesse notti si tolgono TUTT'E DUE, ed e' giusto: l'inventario
+        aveva contato due unita' occupate, non una.
+        ⚠️ E se i pendenti non si leggono si toglie ZERO: il pannello resta col numero
+        dell'occupazione. Sbagliare mostrando qualcosa in piu' e' meno grave che cancellare
+        un incasso vero per un dato che non siamo riusciti a leggere.
+        """
+        pp = getattr(self._sys, "pagamenti_pendenti", None)
+        lista = [s for s in (slugs or []) if isinstance(s, str) and s]
+        if pp is None or not lista:
             return 0
         try:
-            cal = self._sys.inventario.calendario(p.get("alloggio_id", ""),
-                                                  p.get("check_in", ""),
-                                                  p.get("check_out", ""))
+            if hasattr(pp, "attivi_multi"):
+                per_slug = pp.attivi_multi(lista)          # UNA sola interrogazione
+            else:
+                per_slug = {s: pp.attivi_per_alloggio(s) for s in lista}
+        except Exception:
+            logger.warning("pendenti non leggibili: la revenue resta quella "
+                           "dell'occupazione (ISOLATO)", exc_info=True)
+            return 0
+        totale = 0
+        for slug, righe in (per_slug or {}).items():
+            for r in righe or []:
+                ci, co = str(r.get("check_in") or ""), str(r.get("check_out") or "")
+                if isinstance(da, str) and da:
+                    ci = max(ci, da)
+                if isinstance(a, str) and a:
+                    co = min(co, a)
+                if not ci or not co or ci >= co:
+                    continue                                # l'hold cade fuori dalla finestra
+                totale += self._soldi_del_periodo(slug, ci, co)
+        return totale
+
+    def _soldi_del_periodo(self, slug: Any, ci: str, co: str) -> int:
+        """Somma i prezzi delle notti [ci, co) di un alloggio. 0 se il calendario non risponde.
+
+        ⛔ Sta in una funzione a se' e non in un `try/except: continue` dentro il ciclo: un
+        `except` largo che inghiotte e prosegue non sbaglia mai e non misura mai, e lo
+        segnala anche `bandit` (B112). Qui il fallimento ha un valore -- zero -- invece di
+        essere un salto invisibile.
+        """
+        try:
+            cal = self._sys.inventario.calendario(slug, ci, co)
+        except Exception:
+            logger.warning("calendario non leggibile per %s (ISOLATO)",
+                           str(slug).replace("\n", " "), exc_info=True)
+            return 0
+        return sum(g.get("prezzo_netto_cents", 0) for g in cal
+                   if isinstance(g.get("prezzo_netto_cents"), int))
+
+    def _revenue_prenotazione(self, p: Dict[str, Any], da: Any = None, a: Any = None) -> int:
+        """I soldi di UNA prenotazione, limitati alla finestra [da, a) se c'e'.
+
+        ⛔ LA FINESTRA NON E' UN DETTAGLIO. `/api/host/metriche` accetta `da`/`a`, e il
+        calcolo vecchio (SUM sull'inventario) le rispettava perche' filtrava i GIORNI. Una
+        somma per PRENOTAZIONE le ignorerebbe: un soggiorno a cavallo del periodo entrerebbe
+        tutto intero. Misurato il 2026-09-08 da `test_dati_reali` sui dati veri: 131000
+        invece di 75500 sulla finestra 1-11 settembre -- cioe' un numero PIU' GRANDE del
+        vero, che e' esattamente il difetto che si stava riparando, in un'altra forma.
+        """
+        if p.get("rimborsato"):
+            return 0
+        # ⛔ UN HOLD MAI PAGATO NON E' UN INCASSO. Occupa la stanza, quindi l'occupazione lo
+        #    conta -- ed e' giusto che la conti, la stanza non e' vendibile. Ma il pannello
+        #    dei SOLDI no: mostrarlo come guadagno e' un saldo stimato, e l'host lo scopre
+        #    quando il bonifico non arriva. La fiducia di un host si rompe una volta sola.
+        if self._hold_non_pagato(p):
+            return 0
+        ci, co = str(p.get("check_in") or ""), str(p.get("check_out") or "")
+        # Le date sono ISO (AAAA-MM-GG): il confronto fra stringhe e' l'ordine vero, e non
+        # serve convertirle. La finestra e' semi-aperta [da, a), come nell'inventario.
+        if isinstance(da, str) and da:
+            ci = max(ci, da)
+        if isinstance(a, str) and a:
+            co = min(co, a)
+        if not ci or not co or ci >= co:
+            return 0          # il soggiorno cade tutto fuori dalla finestra
+        try:
+            cal = self._sys.inventario.calendario(p.get("alloggio_id", ""), ci, co)
             return sum(g.get("prezzo_netto_cents", 0) for g in cal
                        if isinstance(g.get("prezzo_netto_cents"), int))
         except Exception:

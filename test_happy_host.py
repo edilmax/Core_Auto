@@ -568,6 +568,51 @@ class TestPrenotazioniHost(_BaseHost):
                          out["notti_occupate"] * 10000 // out["notti_totali"])
         self.assertEqual(out["revenue_cents"], 60000)  # 2 notti x 30000 netti
 
+    def test_la_revenue_NON_conta_un_hold_mai_pagato(self):
+        """IL PANNELLO NON MOSTRA COME INCASSATO CIO' CHE NESSUNO HA PAGATO.
+
+        ⛔ Difetto vero, misurato il 2026-09-08 da `collaudi/esame_pannello_soldi.py` (passo
+        «[stima] revenue NON cresce per un hold MAI pagato»): `inventario.metriche` calcolava
+        la revenue come SUM(unita_occupate x prezzo_netto), e un hold OCCUPA la stanza --
+        quindi entrava nel guadagno. Era un saldo STIMATO, cioe' esattamente cio' che la
+        casella «il pannello dice sempre la verita' sui suoi soldi» vieta. L'host lo avrebbe
+        scoperto quando il bonifico non fosse arrivato, e la fiducia di un host si rompe una
+        volta sola.
+
+        ⚠️ L'occupazione invece DEVE contarlo, e infatti qui si pretende che la stanza
+        risulti occupata: la stanza non e' vendibile. Cambia solo chi chiama quel valore
+        «guadagno». Le due cose viaggiano insieme apposta -- se un domani qualcuno
+        «riparasse» togliendo l'hold anche dall'occupazione, questa guardia lo prende.
+        """
+        st, prima = self.chiama("GET", "/api/host/metriche", atteso=200)
+        self._prenota(self.slug, off=1, notti=2)          # hold: prenotato e MAI pagato
+        st, dopo = self.chiama("GET", "/api/host/metriche", atteso=200)
+        self.assertEqual(
+            dopo["revenue_cents"], prima["revenue_cents"],
+            "la revenue e' cresciuta per una prenotazione che nessuno ha pagato: e' un "
+            "saldo stimato (prima=%s dopo=%s)" % (prima["revenue_cents"], dopo["revenue_cents"]))
+        self.assertGreater(
+            dopo["notti_occupate"], prima["notti_occupate"],
+            "l'hold non risulta nemmeno occupare la stanza: allora il difetto e' un altro, "
+            "e questa guardia sta misurando una macchina diversa da quella che crede")
+
+    def test_ma_la_revenue_CRESCE_quando_la_prenotazione_e_pagata(self):
+        """L'altra direzione, ed e' quella che rende utile la prima.
+
+        ⛔ Senza, la riparazione piu' comoda passerebbe: «la revenue e' sempre zero» renderebbe
+        verde la guardia qui sopra e cieco il pannello. Un numero che non sale mai non e' un
+        numero prudente: e' un numero rotto nell'altro verso.
+        """
+        st, prima = self.chiama("GET", "/api/host/metriche", atteso=200)
+        rif, _b = self._prenota(self.slug, off=1, notti=2)
+        self._paga(rif)
+        st, dopo = self.chiama("GET", "/api/host/metriche", atteso=200)
+        self.assertGreater(
+            dopo["revenue_cents"], prima["revenue_cents"],
+            "la prenotazione e' stata PAGATA e la revenue non e' salita (prima=%s dopo=%s): "
+            "il pannello sta nascondendo un incasso vero" % (prima["revenue_cents"],
+                                                             dopo["revenue_cents"]))
+
     def test_metriche_avanzate_kpi(self):
         rif, b = self._prenota(self.slug, off=1, notti=2)
         self._paga(rif)

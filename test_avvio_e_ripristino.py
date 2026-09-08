@@ -89,6 +89,13 @@ TABELLE_ATTESE = {
     "checkin.db": {"checkin"},
     "coda.db": {"coda", "liberazioni"},
     "credito_usati.db": {"crediti_usati"},
+    # Aggiunto il 2026-09-08 con `fase204_eventi_stripe`: gli eventi del webhook si scrivono
+    # PRIMA di rispondere, perche' un 2xx e' il punto di non ritorno (Stripe non riprova mai
+    # piu'). ⛔ E questo inventario ha fatto il suo mestiere: il primo giro della suite e'
+    # andato ROSSO qui e in `main_casavip` perche' l'archivio nasceva ma NESSUNO gli aveva
+    # dato un percorso vero -- sarebbe vissuto in RAM e sparito a ogni riavvio, cioe' il modo
+    # di rompersi n.1 (dati effimeri), su un archivio che serve a non perdere i pagamenti.
+    "eventi_stripe.db": {"eventi_stripe"},
     # Aggiunto il 2026-07-31: il deposito cauzionale (fase149) e' stato CABLATO il 2026-07-30,
     # cioe' il giorno DOPO che questo inventario e' stato scritto. Il test lo ha colto da solo
     # («in piu': ['deposito.db']») -- ed e' esattamente il suo mestiere. Nome della tabella

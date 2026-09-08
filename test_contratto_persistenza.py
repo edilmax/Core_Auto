@@ -1520,6 +1520,56 @@ class TestContrattoKycFase143(BaseContratto, unittest.TestCase):
 
 
 # ===========================================================================
+# 16-bis. EVENTI STRIPE (fase204) — l'evento si scrive PRIMA di rispondere
+# ===========================================================================
+class TestContrattoEventiStripeFase204(BaseContratto, unittest.TestCase):
+    """Il patrimonio qui non sono soldi: e' la PROVA di averli ricevuti.
+
+    Un 2xx dice a Stripe «gestito, non riprovare»: se questo archivio si perde, si perde la
+    sola memoria di quali eventi sono arrivati -- e nessuno li riporta. Per questo lo schema
+    si congela, invece di finire fra gli scoperti.
+    """
+    ETICHETTA = "fase204 eventi del webhook Stripe (ricevuto / gestito)"
+    COLONNE = {
+        "eventi_stripe": ("evt_id TEXT PK1", "tipo TEXT NOT NULL", "corpo_json TEXT NOT NULL",
+                          "stato TEXT NOT NULL", "tentativi INTEGER NOT NULL",
+                          "ricevuto_ts INTEGER NOT NULL", "elaborato_ts INTEGER NOT NULL"),
+    }
+    INDICI = {"ix_eventi_stato": "CREATE INDEX ix_eventi_stato ON eventi_stripe(stato, "
+                                 "ricevuto_ts)"}
+    UNICI = {"eventi_stripe": ("pk(evt_id)",)}
+    CHECK = {"eventi_stripe": ()}
+    FK = {"eventi_stripe": ()}
+    TRIGGER = {}
+    DENARO = ()
+
+    def costruisci(self, percorso):
+        from fase204_eventi_stripe import crea_archivio_eventi
+        return crea_archivio_eventi(percorso, orologio=lambda: ORA)
+
+    def esercita(self, archivio):
+        primo = archivio.salva("evt_1a2b3c", tipo="checkout.session.completed",
+                               corpo_json='{"id":"evt_1a2b3c"}')
+        # Stripe consegna piu' volte apposta: un evento gia' presente non e' un errore e
+        # non si duplica. La domanda e' «c'e'?», non «l'ho scritto io adesso?».
+        ripetuto = archivio.salva("evt_1a2b3c", tipo="checkout.session.completed")
+        archivio.salva("evt_da_fare", tipo="identity.verification_session.verified")
+        archivio.segna_elaborato("evt_1a2b3c")
+        return {"primo": primo, "ripetuto": ripetuto,
+                "esiste": archivio.esiste("evt_1a2b3c"),
+                "elaborato": archivio.elaborato("evt_1a2b3c"),
+                "non_elaborato": archivio.elaborato("evt_da_fare"),
+                "mai_visto": archivio.esiste("evt_mai_arrivato"),
+                "vuoto_non_si_salva": archivio.salva(""),
+                "pendenti": [r["evt_id"] for r in archivio.pendenti()]}
+
+    def atteso_esercizio(self):
+        return {"primo": True, "ripetuto": True, "esiste": True, "elaborato": True,
+                "non_elaborato": False, "mai_visto": False, "vuoto_non_si_salva": False,
+                "pendenti": ["evt_da_fare"]}
+
+
+# ===========================================================================
 # 17. DEPOSITO CAUZIONALE (fase149) — la pre-autorizzazione sulla carta
 # ===========================================================================
 class TestContrattoDepositoFase149(BaseContratto, unittest.TestCase):
@@ -1807,6 +1857,7 @@ class TestOgniArchivioHaIlSuoContratto(unittest.TestCase):
         "db_split": "TestContrattoSplitFase65",
         "db_messaggi": "TestContrattoMessaggisticaFase113",
         "db_kyc": "TestContrattoKycFase143",
+        "db_eventi_stripe": "TestContrattoEventiStripeFase204",
     }
     # ancora SCOPERTI, per iscritto (onda 2 del contratto di persistenza): recensioni,
     # viral loop, marche temporali RFC 3161, check-in digitale, crediti single-use e le
@@ -1850,13 +1901,20 @@ class TestOgniArchivioHaIlSuoContratto(unittest.TestCase):
             self.assertGreater(len(classe.COLONNE), 0,
                                "%s non congela nessuna tabella" % nome)
 
-    def test_i_diciassette_archivi_sono_tutti_esercitati(self):
-        """Nessuna classe puo' congelare uno schema senza provare che ci si scrive."""
+    def test_i_diciotto_archivi_sono_tutti_esercitati(self):
+        """Nessuna classe puo' congelare uno schema senza provare che ci si scrive.
+
+        ⛔ IL NUMERO E' CABLATO APPOSTA e va alzato a mano quando ne nasce uno: e' cio' che
+        obbliga chi aggiunge un archivio a passare di qui. Da 17 a 18 il 2026-09-08 con
+        `fase204_eventi_stripe` (gli eventi del webhook), che protegge la PROVA di aver
+        ricevuto un pagamento: se quell'archivio si perde, nessuno riporta gli eventi,
+        perche' a Stripe abbiamo gia' risposto 2xx.
+        """
         contratti = sorted(n for n, o in globals().items()
                            if isinstance(o, type) and issubclass(o, BaseContratto)
                            and o is not BaseContratto)
-        self.assertEqual(len(contratti), 17,
-                         "attesi 17 contratti di persistenza, trovati %d: %r"
+        self.assertEqual(len(contratti), 18,
+                         "attesi 18 contratti di persistenza, trovati %d: %r"
                          % (len(contratti), contratti))
         for nome in contratti:
             classe = globals()[nome]
