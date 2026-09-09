@@ -216,6 +216,116 @@ healthy, `money_path_pronto True, avvisi []`, nessuna `PAGAMENTO_`, VPS `b51d74d
 servisse: `sh /root/deploy_pulsante.sh indietro` (→ 19f85904). **Il codice che GIRA è `b51d74d`**; la riparazione del consenso
 «"false"» (PR #163) NON è ancora in produzione: servirà un secondo deploy dopo l'unione. Registri: `deploy_b51d74d_{1_paracadute,
 1c_backup,2_scambio,3_verifica,4_effetti}.log`, `verifica_produzione_dopo_deploy_b51d74d.log`, `esame_produzione_dopo_deploy_b51d74d.log`.
+**🔁 8 SETTEMBRE, mattina — BLOCCO 2, CASELLA 5: IL FEED ESTERNO VALE NEI DUE VERSI** (commit `c326105` di un'altra chat B nello
+stesso albero, poi fusione `e48b342` con master; PR #163 **UNITA alle 14:42Z dell'8/9 → master `bfad2ce`**, CI su `e48b342` 16
+controlli, 15 success + zap skipped, gate success; la CI su `c326105` non era MAI partita: una PR in conflitto non fa girare i job):
+un blocco esterno è un OGGETTO CON UN'ORIGINE (`fase58.blocchi_esterni`, `inventario_prima_del_blocco`, `feed_applica` in una
+transazione), la notte si riapre quando sparisce da QUEL feed e da nessun altro, con lo stato di prima; `fase82` filtra l'eco del
+nostro PRODID; `fase203` passa il `feed_id`. Attrezzo `collaudi/esame_feed_due_versi.py` (ROSSO 8/11 prima, VERDE 14/14 dopo).
+`python collaudi/scheda.py --blocco 2` = **4 su 5**: la casella 4 (mutazione) era misurata sull'impronta `0624129adf38` e il
+blocco ora ha `6927427232b8` → **va rimisurata col giro unico del Giudice** (lista fissa nel `.ps1`, di notte, ~8 h).
+**🏁 8 SETTEMBRE, pomeriggio — BLOCCO 7, CASELLA 1: UN HOST SI ISCRIVE, CARICA E INCASSA DA SOLO** (ramo `integra-A6-2026-09-08`
+da `bfad2ce`, rete `corsia_A_2026-09-07\lavoro_A_6.patch` sha256 `f6d2ff68…` della chat A, delta `git apply -p2 --3way`, 2 file,
+`esame_host_da_solo.py` byte-identico all'albero A3 per `git hash-object`; zero `fase*.py`): `collaudi/esame_host_da_solo.py`
+(nato in C, finito da A) percorre dalle ROTTE VERE i 17 passi — registrazione con le tre spunte, annuncio, pubblicazione, ospite
+che paga con lo Stripe finto, webhook, conferma, il ramo AUTO-RILASCIO (secondo ospite paga, nessuno conferma, `auto_rilascia` +
+`_trasferisci_all_host` come nel tick di fase83) e `/api/host/payout` col maturato 36000 = 18000 + 18000; `--con-guasto` (chiave
+Stripe vuota) ROSSO 4 passi su 17 senza scrivere; `--autoprova` verde; 4 guardie `TestLEsameDellHostDaSoloNonPuoBARARE` viste
+rosse da A (ripristino byte-identico). Rilanciato qui: verde 17/17, `--scrivi` → `scheda.py --blocco 7` = **1 su 2** (impronta
+`f59dead49141`). Dichiarato dall'attrezzo: non fa il KYC, non guarda le pagine, non misura la fatica. Registri
+`corsia_B_2026-09-08\host_da_solo_*_B2.log`. **Consegnata e NON integrata:** `lavoro_A_7.patch` (sha256 `bcf45426…`,
+`test_revenue_pannello_host.py`: le DUE strade del revenue viste rosse sul codice di oggi) — entra solo con la riga di produzione
+che il fondatore sceglie (decisione 1 qui sotto), togliendo la classe dell'altra strada.
+**🚀 8 SETTEMBRE, 15:29Z — DEPLOY DI master `bfad2ce` col pulsante (parola del fondatore alle 17:2x locali: «QUELLO CHE VA FATTO,
+AUTORIZZATO» — per la D21 punto 4 «autorizzato» è il via per il VPS; atteso scritto prima in `corsia_B_2026-09-08\atteso_deploy_bfad2ce.txt`):**
+backup delle 13:54:45Z verificato (26 archivi, 26 su 26 gzip + sha256 + «SQLite format 3»); paracadute: `:prec` ri-agganciato alla viva
+`18859bd5…` (prima puntava a `19f85904…`, quella del 6/9), `PRE_DEPLOY_20260908_152828.commit` = 5a977d9; scambio staccato sul VPS
+(`/root/deploy_scambio_20260908.log`, fast-forward 5a977d9..bfad2ce, SCAMBIO FATTO 15:29:29Z); verifica: app e backup healthy,
+`money_path_pronto True, avvisi []`, nessuna `PAGAMENTO_`, VPS `bfad2ce`, viva `2ee132fb…` ≠ prec, INVARIANTI ARCHIVI giro 0 (26
+archivi, 0 violazioni) + «GUARDIANO: nessuno stato anomalo», 0 Traceback; sonde / 200 · /api/health 200 · /api/bunker/invarianti 403;
+`verifica_produzione` P1-P6 OK; `esame_produzione` (senza --scrivi) VERDE 9/9 den 14. **Effetto visibile misurato sul sito vero:**
+`POST /api/host/registrazione` con `"accetta_clausole":"false"` → **422** `{"errore": "consensi_mancanti", "mancanti":
+["accetta_clausole"]}` (prima del deploy: 201). **Il codice che GIRA è `bfad2ce`**: consenso «"false"», feed iCal nei due versi,
+watchdog curato (0 feed salvati in produzione: il tick iCal tace, ed è giusto). Ritorno se servisse: `sh /root/deploy_pulsante.sh
+indietro` (→ 18859bd5 = b51d74d). Registri `corsia_B_2026-09-08\deploy_bfad2ce_{1_paracadute,1c_backup,2_scambio_avvio,3_verifica,
+4_sonde}.log`, `verifica_produzione_dopo_deploy_bfad2ce.log`, `esame_produzione_dopo_deploy_bfad2ce.log`.
+**LE 7 DECISIONI DEL FONDATORE, chieste in un messaggio solo l'8/9 alle 16:5x, ancora senza risposta:** (1) revenue del
+pannello host con un hold non pagato: dai soli pagati (fase83) / hold fuori dal calendario del revenue (fase58) / casella riscritta;
+(2) il centesimo degli sconti: sconto in un passo in fase59 / casella «nell'ordine dichiarato»; (3) le 4 righe ridondanti
+(fase72:196/200, fase106:59, fase125:24): riscrivere / restano sopravvissute; (4) `PAGAMENTO_BPS=0` esplicito (fase98:91): anche
+lo zero ripiega e lo scrive / resta pinnato; (5) ripensamento 48 h: comunicarlo com'è in 8 lingue / restringerlo; (6) fase89 legge
+le giurisdizioni da fase154 / casella riscritta; (7) i 18 moduli legacy: riga «COSTRUITO ma SPENTO» / rimozione / uno per uno.
+**(8) NUOVA, dalla guardia D20 della chat A (`test_fase83_server.TestUnEventoUnpaidNonConfermaIlPagamento`, ROSSA sul codice di
+produzione, rete `lavoro_A_11.patch`, NON integrata finché non c'è la riparazione):** un `checkout.session.completed` firmato con
+`payment_status: "unpaid"` (metodi asincroni: SEPA, bonifico) viene CONFERMATO come pagato da fase83 `_webhook_stripe`, che crede al
+contenuto dell'evento e non rilegge la sessione da Stripe; `checkout.session.async_payment_succeeded` non è gestito. Strada: confermare
+solo con `payment_status == "paid"` riletto dall'API (docs.stripe.com/checkout/fulfillment) e gestire l'evento asincrono («autorizzato»;
+da coordinare con la riscrittura del gestore in `fase204_eventi_stripe.py` in corso in un altro albero).
+**🏁 8 SETTEMBRE, sera — BLOCCO 8: DUE CASELLE SU TRE SCRITTE DALLE MACCHINE SUI DATI VERI DEL VPS** (ramo
+`integra-A8-A9-A12-2026-09-08` sopra il ramo A_6, reti della chat A `lavoro_A_8.patch` sha256 `a832756e…`, `lavoro_A_9.patch` `719a4700…`,
+`lavoro_A_12.patch` `1f0a0660…`, delta `git apply -p2`, attrezzi byte-identici all'albero A3; zero `fase*.py`): **casella 2 «il deploy
+passa sempre dal protocollo D17, mai a mano»** — `collaudi/esame_deploy.py` legge il testo del pulsante (le quattro tappe, il ri-aggancio di
+`:prec`, il `PRE_DEPLOY_*.commit`, `docker compose` v2), le tracce di ogni scambio (5 scambi, 35 punti di ritorno, ognuno con un
+`PRE_DEPLOY` scritto prima), il paracadute (`:prec` == la viva dell'ultimo `prima` e ≠ la viva di oggi) e il «niente a mano» (status di
+produzione vuoto sul VPS, 0 commit solo sul VPS, HEAD in origin/master, compose v2, v1 segnaposto bloccato), da un file di letture prese
+in sola lettura sul VPS a riposo (`corsia_B_2026-09-08\letture_vps_deploy.txt`, formato nel docstring, ogni campo col suo comando):
+**VERDE 37/37** → casella scritta. Il primo giro con le letture vere era **ROSSO 2/36**, e aveva ragione: gli scambi del 5/9 e dell'8/9
+non hanno la riga `USCITA=` perché il pulsante non la scriveva da sé e chi lo lanciava con `nohup` doveva ricordarsi l'eco (ferrea 7 dal
+lato che si rompe). Cura fuori repo, sul VPS: `/root/deploy_pulsante.sh` v2 = v1 + `trap 'echo "USCITA=$?"' EXIT` dopo `set -eu` (sha256
+`79eee539…`, v1 `e958ec51…` conservata accanto; provato: tappa sconosciuta → `USCITA=2`, verifica → `USCITA=0`); i due registri storici
+restano com'erano e l'esame li giudica «riusciti PER COSTRUZIONE senza codice d'uscita» solo se c'è «SCAMBIO FATTO», `set -eu` nel testo
+del pulsante e la data del registro precede `pulsante_scrive_uscita_dal` (misurata: `2026-09-08T15:52:20Z`); un registro dopo quella data
+senza `USCITA=` è ROSSO (guardia nelle due direzioni). Limite dichiarato nelle letture: il paracadute del deploy iCal del 5/9 14:22Z non
+ha un registro su disco. **Casella 1 «il salvataggio è stato RIPRISTINATO e letto»** — `collaudi/esame_backup.py` su un backup VERO
+scaricato dal volume del VPS (`backup_20260908-135445\`, 53 file): nome, gzip letto fino in fondo, sha256 == `.sha256`, manifesto dello
+stesso timbro che elenca tutti i 22 archivi di `TABELLE_ATTESE` (letti dall'albero sintattico di `test_avvio_e_ripristino`), gunzip in
+una cartella temporanea, 16 byte «SQLite format 3\0», apertura `mode=ro`, `PRAGMA integrity_check` == ok, tabelle attese lette (COUNT +
+prima riga), tempo sotto il tetto, temporanea cancellata: **VERDE 19/19** su `finanza` (e su `viral`, registro `esame_backup_viral_giro1.log`)
+→ casella scritta. `python collaudi/scheda.py --blocco 8` = **2 su 3** (impronta `1e861914e310`); manca la sentinella esterna (chat A al
+lavoro, con la decisione dell'account esterno per il fondatore). Guardie: `TestLEsameDelDeployNonPuoBARARE` (7) e
+`TestLEsameDelBackupNonPuoBARARE` (5), tutte viste rosse da A con ripristino byte-identico; 16/16 verdi qui.
+**Casella 3 «una sentinella ESTERNA si accorge se il sito muore» — attrezzo esteso, casella ancora ROSSA e decisione (9) del fondatore**
+(rete `lavoro_A_13.patch` sha256 `af127f44…`, stesso ramo): `collaudi/esame_sentinella.py` ora pretende un **monitor esterno non nostro**
+su `/api/health` con intervallo ≤ 5 min, non in pausa, 24 h senza buchi > 15 min, ultimo controllo < 15 min, un contatto d'allarme e
+almeno un «giù» in storia; la sentinella di GitHub resta seconda linea (si stampa, non decide). Fonti (D25): docs.github.com «schedule»
+(«can be delayed during periods of high loads … some queued jobs may be dropped», minimo 5 min: GitHub non può essere la sentinella a
+5 minuti per costruzione), uptimerobot.com/pricing + api/v2 (Free: 50 monitor, 5 min, chiave di sola lettura, senza carta), betterstack.com
+(Free: 10 monitor, 30 s; accettato via `--da-file`). `--monitor uptimerobot` legge `getMonitors` con `UPTIMEROBOT_API_KEY` (precondizione
+rossa se manca; mai stampata: la guardia lo pretende). **(9) Decisione del fondatore, 5 minuti e zero costi:** registrarsi su
+uptimerobot.com (Free), monitor HTTP(s) su `https://bookinvip.com/api/health` ogni 5 min con allarme alla sua email, «Create Read-Only API
+Key», chiave messa SOLO nella variabile d'ambiente della macchina che lancia l'esame (mai nel repository, mai in chat); dopo 24 h
+`python collaudi/esame_sentinella.py --monitor uptimerobot` e, se verde, `--scrivi`. Stasera l'esame dal vivo non si è potuto rifare:
+l'API di GitHub tronca la pagina dei giri (`IncompleteRead(884736 bytes read)`, due volte, anche per A): la casella resta scritta com'era
+il 7/9 (ROSSA 5/7), non si riscrive con letture vecchie.
+**🗂️ 9 SETTEMBRE, mattina — LE CARTELLE SUL DESKTOP SONO DUE, NON DODICI (parola del fondatore: «la vera cartella è
+Core_Auto, l'originale», «fai la cosa giusta»):** dodici cartelle `Core_Auto*` di cui **sette già unite in master e vuote**, e il
+fondatore non sapeva più quale aprire. Misurato per ognuna (`git log -1`, `git status --porcelain`, `merge-base --is-ancestor
+origin/master`): **tutti i commit di tutte le cartelle erano già su GitHub dentro master**; contava solo il lavoro non committato.
+Ogni cartella con modifiche è stata salvata come rete (`git diff --binary HEAD`, verificata con `git apply --check -R` sulla
+cartella d'origine, esito 0) in `Core_Auto_GUARDIE_PRONTE\rimosse_2026-09-09\` con `NOTA.txt` (ramo, HEAD, conteggio, sha256
+di ogni rete); poi `git worktree remove --force` su dieci cartelle (A, A2, A3, B, B2, C, C3, C4, INT, PULITO). **Reti che
+contengono lavoro NON in master e da decidere:** `Core_Auto_INT.patch` (1846 righe, la revisione indipendente iCal della chat A
+del 5/9, cure A1-A9, tocca sei `fase*.py`: entra solo con «autorizzato»), `Core_Auto_A3.patch` (8166 righe, gli attrezzi
+`esame_*` della chat A, in parte già integrati qui byte-identici, più il revenue del pannello e i test rivisti),
+`Core_Auto_A2.patch` (invarianti in produzione del 3/9, forse superato da fase202) e `Core_Auto_B.patch` (le 8 caselle della
+porta dei soldi in `piano.py`, master ne ha già 14). **Stato finale:** `Core_Auto` = **master `3ab352a`** pulito (ramo
+`note-coordinamento-ce` lasciato, `git checkout master` + `pull --ff-only`); `Core_Auto_B3` = il Blocco 8 non committato.
+🔑 **Regola da oggi:** `Core_Auto` è la sola cartella completa e resta sempre su master pulito; ogni chat al lavoro ha UNA
+cartella, che si toglie il giorno stesso in cui il suo ramo è unito; mai più di tre cartelle in tutto.
+**🔀 9 SETTEMBRE, 12:3x — IL BLOCCO 8 ASSORBE MASTER `3ab352a` E VA VERSO IL COMMIT (parola del fondatore, due volte:
+«committa tutto quello che va committato autorizzato», poi «commit e deploy autorizzato ogni lavoro finito va committato
+subito e deploy, vps aggiornata» — presa come via per commit, unione e VPS; regola da oggi: ogni lavoro finito si committa
+subito e si porta sul VPS):** la sessione precedente era morta col terminale senza niente in corso. Due suite lanciate qui sono
+state buttate prima della fine: la prima (12:12) è morta in 5 secondi perché figlia dello strumento che l'ha lanciata, la seconda
+(12:19, lanciata tramite il servizio di sistema, e quella regge) l'ho fermata io a 12 minuti perché master era avanti di 3 commit
+(PR #165, webhook Stripe, già sul VPS: `git rev-parse` sul server = `3ab352a`) e la regola delle corsie vuole master assorbito
+PRIMA del commit; controllo post-interruzione fatto tutte e due le volte (stessi 8 file, zero produzione, zero biglietti).
+Assorbimento con la procedura senza stash: rete `corsia_B_2026-09-09\blocco8_B3_prima_del_merge.patch` (sha256 `853659bf…`, 8
+file) + copie, `git reset --hard`, `merge --ff-only origin/master` (bfad2ce..3ab352a), `git apply -3`: sei file applicati puliti e
+IDENTICI alle copie (`cmp`), conflitti solo nei due documenti, risolti con l'editor tenendo ENTRAMBE le voci (webhook di A e
+deploy/backup di B nel registro); `git diff origin/master` non toglie nessuna riga di master salvo la nota «IN CORSO» del
+Blocco 7 che il lavoro aggiorna apposta. Conto rimisurato dal caricatore a fermo: **6711**. Suite intera sullo stato fuso in
+corso, poi commit → ramo su GitHub → unione (la fa il fondatore dal browser: `gh` non è autenticato) → deploy col pulsante.
 
 **📏 5 SETTEMBRE, 02:3x — IL METRO RIPARATO: le impronte non dipendono più dai fine riga (ramo `metro-fine-riga`
 su `2a3d6d7`, parola del fondatore «ripara»):** lo stesso Blocco 1 leggeva 6 su 6 in B2 e **0 su 6** in un albero
@@ -1788,9 +1898,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 15b9b73
+CONSEGNE AGGIORNATE A: 3ab352a
 
-SUITE ATTUALE: Ran 6694 test
+SUITE ATTUALE: Ran 6711 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

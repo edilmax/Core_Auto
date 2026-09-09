@@ -3,8 +3,9 @@ SENZA che nessuno lo aiuti».
 
     python collaudi/esame_host_da_solo.py              percorre il viaggio e MOSTRA
     python collaudi/esame_host_da_solo.py --scrivi     misura e SCRIVE nella scheda
-    python collaudi/esame_host_da_solo.py --con-guasto toglie un passo: deve gridare, e NON
-                                                       scrive mai
+    python collaudi/esame_host_da_solo.py --con-guasto monta il sistema con la chiave Stripe VUOTA
+                                                       (la trappola: il payout matura senza che
+                                                       nessuno paghi): deve gridare, e NON scrive mai
     python collaudi/esame_host_da_solo.py --autoprova  si vede gridare e tacere, senza montare
                                                        il sistema (D18 punto 2)
 
@@ -25,6 +26,15 @@ cerchiamo, non un ostacolo da aggirare.
   8  Stripe conferma il pagamento         POST /api/payments/webhook       (firma vera)
   9  l'ospite conferma il soggiorno       POST /api/garanzia/conferma
  10  l'host VEDE i suoi soldi             GET  /api/host/payout            (con il SUO token)
+ 11  un SECONDO ospite prenota e paga     quote -> book -> webhook (stesse rotte)
+ 12  NESSUNO conferma: allo sblocco la garanzia va all'host da sola (AUTO-RILASCIO): si chiamano
+     le stesse due funzioni che il giro orario di fase83 (avvia_server, `_tick_garanzia`) chiama
+     -- `garanzia.auto_rilascia(dettagli=True, salta_se=...)` e `router._trasferisci_all_host` --
+     perche' quel giro e' scritto dentro il server e non e' una rotta; l'orologio e' quello della
+     garanzia (`ora_ts` = lo sblocco), non un'attesa di 24 ore
+ 13  l'host vede ENTRAMBI gli incassi     GET  /api/host/payout            (con il SUO token)
+
+(finito dalla chat A il 2026-09-07: i passi 11-13, il guasto vero, il FERMO, l'ambiente intatto, la guardia)
 
 ⛔ IL PASSO 4 SI FA COL **TOKEN DELL'HOST**, MAI CON LA CHIAVE GLOBALE `X-Host-Key`. La casella
    dice «senza che nessuno lo aiuti»: pubblicare con la chiave d'amministrazione sarebbe
@@ -109,9 +119,10 @@ def testo_della_casella(blocchi=None):
 # --------------------------------------------------------------------------------------
 #  IL VIAGGIO — ogni passo e' (nome, riuscito, dettaglio)
 # --------------------------------------------------------------------------------------
-def percorri(salta=None):
-    """Percorre il viaggio dalle rotte vere. `salta` = nome di un passo da NON eseguire
-    (serve a `--con-guasto`: un passo tolto deve far cadere il giudizio)."""
+def percorri(salta=None, chiave_stripe="sk"):
+    """Percorre il viaggio dalle rotte vere. `salta` = nome di un passo da NON eseguire (serve alle
+    guardie: un passo tolto deve far cadere il giudizio). `chiave_stripe=""` e' la trappola misurata
+    il 2026-09-06 (`--con-guasto`): senza chiave il cancello del pagamento si spegne."""
     import fase85_pagamenti_stripe as _stripe
     from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
     from fase83_server import crea_router
@@ -136,7 +147,7 @@ def percorri(salta=None):
             db_catalogo=d + "/c.db", db_inventario=d + "/i.db", db_registro_host=d + "/r.db",
             db_accettazioni=d + "/acc.db", db_pendenti=d + "/p.db", db_payout=d + "/pay.db",
             db_garanzia=d + "/g.db", db_tassa_comunale=d + "/t.db",
-            commissione_bps=1000, psp_bps=0, stripe_secret_key="sk",
+            commissione_bps=1000, psp_bps=0, stripe_secret_key=chiave_stripe,
             stripe_webhook_secret=WH, stripe_success_url="https://x/ok",
             stripe_cancel_url="https://x/no"))
         r = crea_router(sis, host_key="hk", admin_key="ak", base_url="https://bookinvip.com")
@@ -214,6 +225,41 @@ def percorri(salta=None):
         visto = any((v or {}).get("maturato") for v in (pay or {}).get("payout", {}).values())
         p("10 l'host VEDE i suoi soldi dal pannello", s == 200 and visto,
           "http %s %s" % (s, json.dumps((pay or {}).get("payout"))))
+
+        # ── il ramo AUTO-RILASCIO: un secondo ospite paga e nessuno conferma ──────────────
+        s, q2 = g("POST", "/api/concierge/quote",
+                  {"alloggio_id": "casa", "check_in": "2026-11-20",
+                   "check_out": "2026-11-22", "party": 2})
+        s2, b2 = g("POST", "/api/concierge/book",
+                   {"quote_token": (q2 or {}).get("quote_token"), "email": "secondo@esame.it"})
+        rif2 = (b2 or {}).get("riferimento") or ""
+        pl2 = json.dumps({"type": "checkout.session.completed",
+                          "data": {"object": {"id": "cs_esame2", "payment_intent": "pi_esame2",
+                                              "metadata": {"riferimento": rif2}}}})
+        s3, _ = r.gestisci("POST", "/api/payments/webhook", {}, pl2,
+                           {"Stripe-Signature": firma_di_test(pl2, WH, int(time.time()))})
+        p("11 un SECONDO ospite prenota e paga", s == 200 and s2 in (200, 201) and s3 == 200 and rif2,
+          "http %s/%s/%s" % (s, s2, s3))
+        aperta = [x for x in sis.garanzia.aperte() if x.get("prenotazione_id") == rif2]
+        sblocco = int(aperta[0]["sblocco_auto_ts"]) if aperta else None
+        pp = sis.pagamenti_pendenti
+
+        def _rimborsata(_rif):                   # la stessa prevenzione del giro orario di fase83
+            i = pp.info(_rif) if pp is not None else None
+            return bool(i) and i.get("stato") in ("rimborsato", "cancellata_host")
+        rilasciate = sis.garanzia.auto_rilascia(ora_ts=(sblocco + 60) if sblocco else 10 ** 10,
+                                                dettagli=True, salta_se=_rimborsata) or []
+        mia = [x for x in rilasciate if x.get("prenotazione_id") == rif2]
+        for x in mia:
+            r._trasferisci_all_host(x["prenotazione_id"], x["host_riceve_cents"])
+        p("12 nessuno conferma: allo sblocco la garanzia va all'host da sola (auto-rilascio)",
+          bool(mia) and (sis.garanzia.stato(rif2) or {}).get("stato") == "rilasciato",
+          "sblocco=%s rilasciate=%d stato=%s" % (sblocco, len(mia), (sis.garanzia.stato(rif2) or {}).get("stato")))
+        s, pay2 = g("GET", "/api/host/payout", None, HT)
+        voce = ((pay2 or {}).get("payout") or {}).get("EUR", {})
+        totale = sum(int(voce.get(k) or 0) for k in ("maturato", "in_transito", "pagato"))
+        p("13 l'host vede ENTRAMBI gli incassi dal pannello", s == 200 and totale == 36000,
+          "http %s %s" % (s, json.dumps((pay2 or {}).get("payout"))))
         return passi
     finally:
         _stripe.ProviderStripe._fetch_reale = originale
@@ -244,6 +290,9 @@ PASSI_ATTESI = (
     "8-bis dopo il pagamento il maturato e' > 0",
     "9 l'ospite conferma il soggiorno",
     "10 l'host VEDE i suoi soldi dal pannello",
+    "11 un SECONDO ospite prenota e paga",
+    "12 nessuno conferma: allo sblocco la garanzia va all'host da sola (auto-rilascio)",
+    "13 l'host vede ENTRAMBI gli incassi dal pannello",
 )
 
 
@@ -333,6 +382,10 @@ def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     if "--autoprova" in argv:
         return autoprova()
+    if "--con-guasto" in argv and "--scrivi" in argv:
+        print("⛔ FERMO: `--con-guasto` non scrive. Serve a vedere l'esame gridare; registrare quel")
+        print("   rosso metterebbe nella scheda un cancello del pagamento spento apposta.")
+        return 2
 
     print("=" * 92)
     try:
@@ -350,17 +403,25 @@ def main(argv=None):
         print("\n⛔ PRECONDIZIONI NON SODDISFATTE: mi fermo e NON scrivo nella scheda.")
         return 2
 
-    salta = None
-    if "--con-guasto" in argv:
-        salta = "8 Stripe conferma il pagamento"
-        print("\n⚠️  --con-guasto: tolgo il passo «%s». Deve gridare, e NON scrivere." % salta)
+    con_guasto = "--con-guasto" in argv
+    if con_guasto:
+        print("\n⚠️  --con-guasto: monto il sistema con la chiave Stripe VUOTA (la trappola del 2026-09-06).")
+        print("   Deve gridare al passo 7-ter, e NON scrivere.")
 
+    ambiente_prima = dict(os.environ)
     print("\nIL VIAGGIO, dalle rotte vere")
-    passi = percorri(salta=salta)
+    try:
+        passi = percorri(chiave_stripe="" if con_guasto else "sk")
+    except Exception as e:                                   # noqa: BLE001 - un viaggio rotto e' un rosso
+        passi = [("il viaggio e' ESPLOSO", False, "%s: %s" % (type(e).__name__, e))]
     for nome, ok, dett in passi:
         print("  %-46s %-3s %s" % (nome[:46], "OK" if ok else "NO", dett[:34]))
+    intatto = dict(os.environ) == ambiente_prima
+    print("  %-46s %-3s" % ("(l'ambiente os.environ e' identico a prima)", "OK" if intatto else "NO"))
 
     verde, denominatore, motivo = giudica(passi)
+    if not intatto:
+        verde, motivo = False, "l'ambiente (os.environ) e' cambiato durante il viaggio"
     print("")
     print("MISURA")
     print("  passi percorsi (il denominatore) : %d su %d attesi" % (denominatore, len(PASSI_ATTESI)))
@@ -375,9 +436,6 @@ def main(argv=None):
         print("  · %s" % r_)
 
     if "--scrivi" in argv:
-        if salta:
-            print("\n⛔ --con-guasto NON scrive mai nella scheda.")
-            return 1
         print("\nSCRITTURA NELLA SCHEDA")
         riga = scheda.registra(testo_della_casella(), esito=verde, denominatore=denominatore,
                                comando=COMANDO, ordine=BLOCCO, motivo=motivo or None)

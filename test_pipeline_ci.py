@@ -12857,16 +12857,82 @@ class TestLEsameDellaSentinellaNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
             with io.open(sveglia, "w", encoding="utf-8") as f:
                 json.dump(esame.letture_finte(), f)
             with io.open(dorme, "w", encoding="utf-8") as f:
-                json.dump(esame.letture_finte(buco=300, n=8), f)
+                json.dump(esame.letture_finte(buco=300, n=8, esterno=None), f)
             with contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(esame.main(["--da-file", sveglia, "--scrivi"]), 0)
                 self.assertEqual(esame.main(["--da-file", dorme, "--scrivi"]), 1)
                 self.assertEqual(esame.main(["--con-guasto", "--scrivi"]), 2)
             self.assertEqual([s["esito"] for s in scritture], [True, False])
             self.assertIn("buco massimo", scritture[1]["motivo"] or "")
+            self.assertIn("monitor", scritture[1]["motivo"] or "")
         finally:
             esame.scheda.registra = vera_registra
             shutil.rmtree(d, ignore_errors=True)
+
+    def test_IL_MONITOR_ESTERNO_DECIDE_E_LA_CHIAVE_NON_SI_STAMPA(self):
+        """Dal 2026-09-08 (chat A col mandato di B): la casella e' VERDE solo con un monitor ESTERNO (non GitHub) su
+        bookinvip.com/api/health, intervallo <= 5 min, non in pausa, 24 ore senza buchi > 15 min, ultimo controllo
+        < 15 min, con contatto d'allarme e almeno un «giu'» in storia; con quello, i giri radi di GitHub non decidono.
+        Senza, ROSSA col motivo. La chiave di sola lettura si legge dall'ambiente e non compare mai nell'uscita."""
+        esame = self._esame()
+        oggi = dict(buco=333, n=8, minuti_fa=40)
+
+        def _verde(let):
+            del esame.PASSI[:]
+            with contextlib.redirect_stdout(io.StringIO()):
+                esame.misura(let)
+            return esame.giudica(esame.PASSI)
+        self.assertTrue(_verde(esame.letture_finte(**oggi))[0])
+        verde, motivi, _ = _verde(esame.letture_finte(esterno=None, **oggi))
+        self.assertFalse(verde)
+        self.assertTrue(any("serve un conto" in m for m in motivi), motivi)
+        for nome, est in (("ogni 10 minuti", esame.monitor_finto(intervallo=600, buco=10, n=144)),
+                          ("in pausa", esame.monitor_finto(stato="pausa")),
+                          ("buco di 40 minuti", esame.monitor_finto(salto=(300, 40))),
+                          ("ultimo di 30 minuti fa", esame.monitor_finto(ultimo=30)),
+                          ("senza contatto", esame.monitor_finto(contatti=0)),
+                          ("altro indirizzo", esame.monitor_finto(url="https://bookinvip.com/"))):
+            self.assertFalse(_verde(esame.letture_finte(esterno=est, **oggi))[0], nome)
+        self.assertTrue(_verde(esame.letture_finte(push_giorni=70))[0])
+        self.assertFalse(_verde(esame.letture_finte(push_giorni=70, esterno=None))[0])
+        # la chiave: precondizione rossa senza; con la chiave e l'API finta, l'uscita non la contiene mai
+        vera_post, vero_environ = esame._post_json, dict(os.environ)
+        chiave = "ur-chiave-di-prova-000"
+        ts = int(esame.ADESSO_FINTO.timestamp())
+        risposta = {"stat": "ok", "monitors": [{"friendly_name": "salute", "url": "https://" + esame.SALUTE, "interval": 300, "status": 2,
+                                                "response_times": [{"datetime": ts - 60 * (2 + 5 * i)} for i in range(288)],
+                                                "logs": [{"type": 1, "datetime": ts - 86400}], "alert_contacts": [{"id": "1"}]}]}
+        chiamate = []
+
+        def _post_finta(url, dati):
+            chiamate.append((url, dict(dati)))
+            return 200, risposta
+        d = tempfile.mkdtemp()
+        try:
+            percorso = os.path.join(d, "letture.json")
+            with io.open(percorso, "w", encoding="utf-8") as f:
+                json.dump(esame.letture_finte(esterno=None, **oggi), f)
+            uscita = io.StringIO()
+            with contextlib.redirect_stdout(uscita):
+                self.assertEqual(esame.main(["--monitor", "uptimerobot", "--da-file", percorso]), 2)   # senza chiave: FERMO
+                self.assertEqual(esame.main(["--monitor", "altro", "--da-file", percorso]), 2)
+            self.assertIn("UPTIMEROBOT_API_KEY", uscita.getvalue())
+            esame._post_json = _post_finta
+            os.environ[esame.VARIABILE_CHIAVE] = chiave
+            uscita = io.StringIO()
+            with contextlib.redirect_stdout(uscita):
+                self.assertEqual(esame.main(["--monitor", "uptimerobot", "--da-file", percorso]), 0)
+            self.assertEqual(len(chiamate), 1)
+            self.assertEqual(chiamate[0][0], esame.API_UPTIMEROBOT)
+            self.assertEqual(chiamate[0][1].get("api_key"), chiave)
+            self.assertNotIn(chiave, uscita.getvalue())
+            self.assertIn("mai stampata", uscita.getvalue())
+        finally:
+            esame._post_json = vera_post
+            os.environ.clear()
+            os.environ.update(vero_environ)
+            shutil.rmtree(d, ignore_errors=True)
+        self.assertEqual(dict(os.environ), vero_environ)
 
     def test_IL_TESTO_DELLA_CASELLA_NON_E_RICOPIATO_E_NON_GUARDA_E_DICHIARATO(self):
         esame = self._esame()
@@ -12876,6 +12942,405 @@ class TestLEsameDellaSentinellaNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
             self.assertNotIn(testo, f.read())
         self.assertTrue(all(isinstance(r, str) and r.strip() for r in esame.NON_GUARDA))
         self.assertTrue(esame.workflow_letto())
+
+
+class TestLEsameDellHostDaSoloNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
+    """⛔ D18 PUNTO 4 PER `collaudi/esame_host_da_solo.py` (Blocco 7 casella 1: «un host si iscrive,
+    carica un annuncio e incassa SENZA che nessuno lo aiuti»), scritto dalla chat C e finito dalla chat A
+    il 2026-09-07. Qui NON si monta il sistema: si mette il GIUDIZIO davanti a viaggi costruiti (intero,
+    accorciato, rinominato, un passo caduto); si pretende che il CONTRATTO del viaggio nomini il ramo
+    dell'auto-rilascio e il cancello del pagamento (7-ter: il maturato e' ZERO prima del webhook); che
+    col guasto (chiave Stripe vuota, la trappola del 2026-09-06) non scriva mai; che la casella si trovi
+    per sottostringa e UNA sola; che il testo non sia ricopiato."""
+
+    def _esame(self):
+        return self._carica("esame_host_da_solo.py", "_esame_host_da_solo_sotto_guardia")
+
+    def test_IL_GIUDIZIO_DICE_VERDE_SOLO_SUL_VIAGGIO_INTERO_E_RIUSCITO(self):
+        esame = self._esame()
+        completo = [(n, True, "") for n in esame.PASSI_ATTESI]
+        self.assertTrue(esame.giudica(completo)[0])
+        self.assertEqual(esame.giudica(completo)[1], len(esame.PASSI_ATTESI))
+        self.assertFalse(esame.giudica(completo[:-1])[0])
+        self.assertFalse(esame.giudica(completo[:-1] + [(esame.PASSI_ATTESI[-1] + "!", True, "")])[0])
+        self.assertFalse(esame.giudica(completo[:-1] + [(esame.PASSI_ATTESI[-1], False, "http 500")])[0])
+        self.assertFalse(esame.giudica([])[0])
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(esame.autoprova(), 0)
+
+    def test_IL_CONTRATTO_DEL_VIAGGIO_NOMINA_L_AUTO_RILASCIO_E_IL_CANCELLO_DEL_PAGAMENTO(self):
+        esame = self._esame()
+        nomi = " | ".join(esame.PASSI_ATTESI)
+        self.assertIn("auto-rilascio", nomi)
+        self.assertIn("maturato e' ZERO", nomi)
+        self.assertIn("SUO token", nomi)
+        self.assertIn("senza autenticazione NON pubblica", nomi)
+        self.assertGreaterEqual(len(esame.PASSI_ATTESI), 17)
+        import inspect
+        self.assertIn("chiave_stripe", inspect.signature(esame.percorri).parameters)
+
+    def test_COL_GUASTO_DENTRO_NON_SCRIVE_MAI(self):
+        esame = self._esame()
+        vera_registra = esame.scheda.registra
+        scritture = []
+        try:
+            esame.scheda.registra = lambda *a, **k: scritture.append((a, k))
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(esame.main(["--con-guasto", "--scrivi"]), 2)
+            self.assertEqual(scritture, [])
+        finally:
+            esame.scheda.registra = vera_registra
+
+    def test_LA_CASELLA_SI_TROVA_UNA_SOLA_E_IL_TESTO_NON_E_RICOPIATO(self):
+        esame = self._esame()
+        testo = esame.testo_della_casella()
+        self.assertIn("nessuno lo aiuti", testo)
+        with self.assertRaises(LookupError):
+            esame.testo_della_casella([{"ordine": esame.BLOCCO, "finito_quando": ["a", "b"]}])
+        with io.open(os.path.join(QUI, "collaudi", "esame_host_da_solo.py"), encoding="utf-8") as f:
+            self.assertNotIn(testo, f.read())
+        self.assertTrue(all(isinstance(r, str) and r.strip() for r in esame.NON_GUARDA))
+
+
+class TestLEsameDelDeployNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
+    """⛔ D18 PUNTO 4 PER `collaudi/esame_deploy.py`, l'attrezzo della casella «il deploy passa sempre dal
+    protocollo D17, mai a mano» (Blocco 8), chat A 2026-09-08. Niente rete e niente ssh: la parte «documento»
+    legge DEPLOY.md e deploy/protocollo_d17.sh di QUESTO albero, le tre situazioni del VPS (pulsante, tracce,
+    a mano) arrivano da un file di letture costruito o consegnato da chi legge il server.
+
+    Si pretende che il giudizio gridi su un deploy a mano (scambio senza punto di ritorno, USCITA diversa da 0,
+    :prec uguale alla viva cioe' nessun ritorno, :prec che non e' la viva di prima, file di produzione modificato
+    fuori git, un commit solo sul VPS, compose v1 installato) e taccia su quello dal pulsante; che senza letture
+    le tre situazioni restino NON misurate (S7) e la casella sia rossa; che `--da-file` scriva l'esito vero;
+    che col guasto non scriva mai; che il testo della casella non sia ricopiato; che `os.environ` resti intatto.
+
+    ⛔ IL CRITERIO SUL PARACADUTE, deciso fra le chat A e B il 2026-09-08 (D12): dopo uno scambio riuscito `:prec`
+    DEVE restare l'immagine che girava PRIMA (= la viva registrata dal `prima` di quel deploy) ed essere DIVERSA
+    dalla viva di oggi; si riaggancia alla viva SOLO nel `prima` del deploy successivo (DEPLOY.md §3 [1b],
+    protocollo_d17.sh [2z]). Un esame che pretendesse `:prec == viva` a riposo griderebbe a ogni deploy riuscito
+    (regola ferrea 10, falso allarme)."""
+
+    def _esame(self):
+        return self._carica("esame_deploy.py", "_esame_deploy_sotto_guardia")
+
+    def test_IL_GIUDIZIO_GRIDA_SUL_DEPLOY_A_MANO_E_TACE_SU_QUELLO_DAL_PULSANTE(self):
+        esame = self._esame()
+        riuscita, righe = esame.autoprova()
+        self.assertTrue(riuscita, righe)
+        self.assertGreaterEqual(len(righe), 13)
+        self.assertFalse(esame.giudica([])[0])
+        self.assertFalse(esame.giudica([("altro", "x", True, "")])[0])
+        self.assertEqual(esame.giudica([(s, "p", True, "") for s in esame.SITUAZIONI])[0], True)
+        self.assertEqual(esame.SITUAZIONI, ("documento", "pulsante", "tracce", "a_mano"))
+
+    def test_IL_PARACADUTE_A_RIPOSO_E_LA_VIVA_DI_PRIMA_NON_QUELLA_DI_OGGI(self):
+        esame = self._esame()
+        sane = esame.letture_finte()
+        self.assertNotEqual(sane["immagini"]["prec"], sane["immagini"]["viva"])
+        self.assertEqual(sane["immagini"]["prec"], sane["paracadute"][-1]["viva"])
+        for let, atteso, motivo in (
+                (sane, True, ""),
+                (esame.letture_finte(immagini__prec=sane["immagini"]["viva"]), False, "DIVERSA dalla viva"),
+                (esame.letture_finte(immagini__prec="sha256:altra"), False, "PRIMA dell'ultimo scambio")):
+            del esame.PASSI[:]
+            with contextlib.redirect_stdout(io.StringIO()):
+                esame.misura_tracce(let)
+            verde, motivi, _ = esame.giudica(esame.PASSI, situazioni=("tracce",))
+            self.assertEqual(verde, atteso, motivi)
+            self.assertIn(motivo, " | ".join(motivi))
+
+    def test_UN_REGISTRO_STORICO_SENZA_USCITA_E_PER_COSTRUZIONE_UNO_NUOVO_RESTA_ROSSO(self):
+        """Deciso fra A e B il 2026-09-08 (D12): due registri di scambio sul VPS (5/9 e 8/9) hanno «SCAMBIO FATTO» ma
+        nessuna riga «USCITA=» (il pulsante non la scriveva da se': lo fa dal v2 con `trap ... EXIT`). Un registro
+        PRECEDENTE a `pulsante_scrive_uscita_dal`, con «SCAMBIO FATTO» e `set -eu` nel pulsante, e' riuscito per
+        costruzione ed e' etichettato; uno DOPO quella data, o senza la data nelle letture, o con un pulsante senza
+        `set -eu`, resta ROSSO. Un numero non misurato non si scrive a posteriori (D22), ma gridare per sempre su due
+        file che nessuno puo' cambiare e' un falso allarme (ferrea 10)."""
+        esame = self._esame()
+        pulsante = "#!/bin/sh\nset -eu\ntrap 'echo \"USCITA=$?\"' EXIT\ncase \"$1\" in\n scambio) echo \"SCAMBIO FATTO\";;\nesac\n"
+        vecchio = {"file": "/root/deploy_scambio_20260905.log", "quando": "2026-09-05T14:23:34Z", "scambio_fatto": True, "uscita": None}
+        nuovo = {"file": "/root/deploy_scambio_20260909.log", "quando": "2026-09-09T10:00:00Z", "scambio_fatto": True, "uscita": None}
+        pre = [{"file": "/root/PRE_DEPLOY_20260905_142239.commit", "quando": "2026-09-05T14:22:39Z", "commit": "3fe8a19"},
+               {"file": "/root/PRE_DEPLOY_20260909_095800.commit", "quando": "2026-09-09T09:58:00Z", "commit": "ae69c1f"}]
+        casi = (
+            ("vecchio, con la data, set -eu -> per costruzione", dict(scambi=[vecchio], pre_deploy=pre, deploy_pulsante_sh=pulsante,
+                                                                     pulsante_scrive_uscita_dal="2026-09-08T15:50:00Z"), True, 1),
+            ("nuovo, dopo la data -> ROSSO", dict(scambi=[nuovo], pre_deploy=pre, deploy_pulsante_sh=pulsante,
+                                                 pulsante_scrive_uscita_dal="2026-09-08T15:50:00Z"), False, 0),
+            ("vecchio ma senza la data nelle letture -> ROSSO", dict(scambi=[vecchio], pre_deploy=pre, deploy_pulsante_sh=pulsante), False, 0),
+            ("vecchio, con la data, ma senza set -eu -> ROSSO", dict(scambi=[vecchio], pre_deploy=pre, pulsante_scrive_uscita_dal="2026-09-08T15:50:00Z"), False, 0),
+            ("vecchio senza «SCAMBIO FATTO» -> ROSSO", dict(scambi=[dict(vecchio, scambio_fatto=False)], pre_deploy=pre, deploy_pulsante_sh=pulsante,
+                                                          pulsante_scrive_uscita_dal="2026-09-08T15:50:00Z"), False, 0),
+        )
+        for nome, k, atteso, storici in casi:
+            del esame.PASSI[:]
+            with contextlib.redirect_stdout(io.StringIO()):
+                esame.misura_tracce(esame.letture_finte(**k))
+            verde, motivi, _ = esame.giudica(esame.PASSI, situazioni=("tracce",))
+            self.assertEqual(verde, atteso, "%s: %s" % (nome, motivi))
+            etichettati = [p for p in esame.PASSI if "PER COSTRUZIONE" in p[1]]
+            self.assertEqual(len(etichettati), storici, nome)
+            conteggi = [p for p in esame.PASSI if p[1].startswith("registri storici riusciti per costruzione")]
+            self.assertEqual(len(conteggi), 1 if storici else 0, nome)
+            if storici:
+                self.assertIn("1 su 1", conteggi[0][1])
+            if not atteso:
+                self.assertTrue(any("USCITA=0" in m for m in motivi), motivi)
+
+    def test_DA_FILE_GIUDICA_SENZA_RETE_SCRIVE_L_ESITO_VERO_E_COL_GUASTO_NON_SCRIVE_MAI(self):
+        esame = self._esame()
+        vera_registra = esame.scheda.registra
+        scritture = []
+
+        def _registra_finta(*a, **k):
+            scritture.append(k)
+            return {"blocco": 8, "esito": k.get("esito"), "denominatore": k.get("denominatore"), "impronta": "finta"}
+        d = tempfile.mkdtemp()
+        ambiente_prima = dict(os.environ)
+        try:
+            esame.scheda.registra = _registra_finta
+            sane, a_mano, illeggibile = (os.path.join(d, n) for n in ("sane.json", "a_mano.json", "illeggibile.json"))
+            with io.open(sane, "w", encoding="utf-8") as f:
+                json.dump(esame.letture_finte(), f)
+            with io.open(a_mano, "w", encoding="utf-8") as f:
+                json.dump(esame.letture_finte(git__status_porcelain_produzione=[" M fase83_server.py"], pre_deploy=[]), f)
+            with io.open(illeggibile, "w", encoding="utf-8") as f:
+                f.write("{questo non e' json")
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(esame.main(["--da-file", sane, "--scrivi"]), 0)
+                self.assertEqual(esame.main(["--da-file", a_mano, "--scrivi"]), 1)
+                self.assertEqual(esame.main(["--da-file", illeggibile]), 1)
+                self.assertEqual(esame.main([]), 1)
+                self.assertEqual(esame.main(["--con-guasto"]), 1)
+                self.assertEqual(esame.main(["--con-guasto", "--scrivi"]), 2)
+                self.assertEqual(esame.main(["--da-file", sane, "--con-guasto", "--scrivi"]), 2)
+            self.assertEqual([s["esito"] for s in scritture], [True, False])
+            self.assertIn("git status --porcelain", scritture[1]["motivo"] or "")
+            self.assertIn("fase83_server.py", scritture[1]["motivo"] or "")
+            self.assertIn("PRE_DEPLOY", scritture[1]["motivo"] or "")
+            self.assertEqual(scritture[0]["denominatore"], 28)
+            self.assertEqual(dict(os.environ), ambiente_prima)
+        finally:
+            esame.scheda.registra = vera_registra
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_SENZA_LA_CASELLA_NEL_PIANO_SI_FERMA_E_NON_SCRIVE(self):
+        esame = self._esame()
+        vera_registra, veri_blocchi = esame.scheda.registra, esame.BLOCCHI
+        scritture = []
+        try:
+            esame.scheda.registra = lambda *a, **k: scritture.append((a, k))
+            esame.BLOCCHI = [b for b in veri_blocchi if b["ordine"] != esame.BLOCCO]
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(esame.main(["--scrivi"]), 2)
+            self.assertEqual(scritture, [])
+        finally:
+            esame.scheda.registra, esame.BLOCCHI = vera_registra, veri_blocchi
+
+    def test_IL_DOCUMENTO_DI_QUESTO_ALBERO_DICE_LE_TAPPE_GIUSTE_E_MAI_LA_V1(self):
+        esame = self._esame()
+        del esame.PASSI[:]
+        with contextlib.redirect_stdout(io.StringIO()):
+            esame.misura_documento()
+        verde, motivi, den = esame.giudica(esame.PASSI, situazioni=("documento",))
+        self.assertTrue(verde, motivi)
+        self.assertEqual(den, 8)
+        self.assertEqual(esame.compose_v1_nei_comandi("docker compose -f docker-compose.casavip.yml up -d\n"), [])
+        self.assertEqual(esame.compose_v1_nei_comandi("  sudo docker-compose up -d\n"), ["sudo docker-compose up -d"])
+
+    def test_IL_TESTO_DELLA_CASELLA_NON_E_RICOPIATO_E_NON_GUARDA_E_DICHIARATO(self):
+        esame = self._esame()
+        testo = esame.condizione()
+        self.assertIn("mai a mano", testo)
+        with io.open(os.path.join(QUI, "collaudi", "esame_deploy.py"), encoding="utf-8") as f:
+            self.assertNotIn(testo, f.read())
+        self.assertTrue(all(isinstance(r, str) and r.strip() for r in esame.NON_GUARDA))
+        self.assertGreaterEqual(len(esame.NON_GUARDA), 5)
+
+
+class TestLEsameDelBackupNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
+    """⛔ D18 PUNTO 4 PER `collaudi/esame_backup.py`, l'attrezzo della casella «il salvataggio e' stato RIPRISTINATO
+    e letto, non solo prodotto» (Blocco 8), chat A 2026-09-08. Niente rete: il backup vero lo scarica chi legge il VPS;
+    qui si costruisce un backup come lo fa deploy/backup_casavip.sh (db + .gz + .sha256 + MANIFEST del giro) e si mette
+    il giudizio davanti a quello sano e a quelli rotti (impronta che non torna, pagina azzerata nella copia, tabella
+    attesa assente, manifesto di un altro giro o a pezzi, un gz che non e' un database, nome fuori formato).
+
+    Si pretende: che il ripristino sia REALE (gunzip in una cartella temporanea, «SQLite format 3\\0», `mode=ro`,
+    `PRAGMA integrity_check`, COUNT e prima riga di ogni tabella attesa) e cronometrato; che TABELLE_ATTESE venga
+    dall'albero sintattico di test_avvio_e_ripristino.py e non da una copia; che senza i tre file si FERMI (2) e non
+    scriva; che col guasto non scriva mai; che `--scrivi` registri l'esito vero; che la cartella temporanea sparisca e
+    `os.environ` resti intatto; che il testo della casella non sia ricopiato. Metodo dalle fonti lette (Google SRE
+    «Data Integrity»: what matters is recovery; sqlite.org fileformat/pragma/uri)."""
+
+    def _esame(self):
+        return self._carica("esame_backup.py", "_esame_backup_sotto_guardia")
+
+    def test_IL_GIUDIZIO_GRIDA_SUL_BACKUP_ROTTO_E_TACE_SU_QUELLO_SANO(self):
+        esame = self._esame()
+        riuscita, righe = esame.autoprova()
+        self.assertTrue(riuscita, righe)
+        self.assertGreaterEqual(len(righe), 10)
+        self.assertFalse(esame.giudica([])[0])
+        self.assertFalse(esame.giudica([("altro", "x", True, "")])[0])
+        self.assertEqual(esame.giudica([(s, "p", True, "") for s in esame.SITUAZIONI])[0], True)
+        self.assertEqual(esame.SITUAZIONI, ("archivio", "ripristino", "contenuto", "tempo"))
+
+    def test_IL_RIPRISTINO_E_REALE_IN_SOLA_LETTURA_E_LA_COPIA_SPARISCE(self):
+        esame = self._esame()
+        attese = esame.tabelle_attese()
+        self.assertIn("viral.db", attese)
+        self.assertIn("finanza.db", attese)
+        self.assertTrue(all(isinstance(v, set) and v for v in attese.values()))
+        d = tempfile.mkdtemp()
+        try:
+            archivio, sha_file, manifesto = esame.backup_finto(d, attese=attese, righe=7)
+            with io.open(sha_file, encoding="utf-8") as f:
+                self.assertRegex(f.read(), r"^[0-9a-f]{64}  viral-20260908-031500\.db\.gz\n$")
+            del esame.PASSI[:]
+            with contextlib.redirect_stdout(io.StringIO()):
+                esame.misura_tutto(archivio, sha_file, manifesto, attese)
+            verde, motivi, den = esame.giudica(esame.PASSI)
+            self.assertTrue(verde, motivi)
+            self.assertEqual(den, 18)
+            nomi = " | ".join(p[1] for p in esame.PASSI)
+            for pezzo in ("SQLite format 3", "SOLA LETTURA", "integrity_check", "si legge", "cronometrato", "cancellata"):
+                self.assertIn(pezzo, nomi)
+            letture = [p for p in esame.PASSI if p[0] == "contenuto" and p[1].endswith("si legge")]
+            self.assertEqual(sorted(p[1] for p in letture), sorted("«%s» si legge" % t for t in attese["viral.db"]))
+            self.assertTrue(all(p[3] == "7 righe" for p in letture), letture)
+            self.assertTrue(all(p[2] for p in esame.PASSI if p[0] == "tempo"))
+            self.assertEqual(sorted(os.listdir(d)), sorted(os.path.basename(x) for x in (archivio, sha_file, manifesto)))
+            # la pagina azzerata vive nella COPIA: l'archivio originale resta byte-identico
+            prima = esame.sha256_di(archivio)
+            del esame.PASSI[:]
+            with contextlib.redirect_stdout(io.StringIO()):
+                esame.misura_tutto(archivio, sha_file, manifesto, attese, con_guasto=True)
+            self.assertFalse(esame.giudica(esame.PASSI)[0])
+            self.assertEqual(esame.sha256_di(archivio), prima)
+            self.assertIn("malformed", " | ".join(p[3] for p in esame.PASSI if not p[2]))
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_INTEGRITY_CHECK_VIENE_ESEGUITO_DAVVERO_IN_SOLA_LETTURA_E_IL_SUO_ESITO_DECIDE(self):
+        """Modo di rompersi 4 (il controllo che non controlla), preso il 2026-09-08 sul primo giro col guasto: un
+        `integrity_check` sostituito da «ok» NON faceva arrossire nessuna guardia, perche' la pagina azzerata del
+        --con-guasto la vede anche la lettura delle righe. Qui il pragma si PRETENDE eseguito (sulla connessione
+        aperta con `mode=ro`) e il suo esito si PRETENDE usato: una corruzione che solo lui riporta deve dare rosso."""
+        esame = self._esame()
+        vero_sqlite3 = esame.sqlite3
+        registro, connessioni = [], []
+
+        class _Conn:
+            def __init__(self, vera, finto):
+                self._vera, self._finto = vera, finto
+
+            def execute(self, sql, *a):
+                registro.append(sql)
+                if sql.strip().upper().startswith("PRAGMA INTEGRITY_CHECK") and self._finto is not None:
+                    finto = self._finto
+                    return type("_R", (), {"fetchall": lambda _s: [(x,) for x in finto]})()
+                return self._vera.execute(sql, *a)
+
+            def __getattr__(self, nome):
+                return getattr(self._vera, nome)
+
+            def __enter__(self):
+                return self._vera.__enter__()
+
+            def __exit__(self, *a):
+                return self._vera.__exit__(*a)
+
+        def _modulo_finto(finto):
+            def _connect(*a, **k):
+                connessioni.append((a, k))
+                return _Conn(vero_sqlite3.connect(*a, **k), finto)
+            return type("_sqlite3", (), {"connect": staticmethod(_connect)})
+
+        d = tempfile.mkdtemp()
+        try:
+            attese = esame.tabelle_attese()
+            archivio, sha_file, manifesto = esame.backup_finto(d, attese=attese)
+            esame.sqlite3 = _modulo_finto(None)
+            del esame.PASSI[:]
+            with contextlib.redirect_stdout(io.StringIO()):
+                esame.misura_tutto(archivio, sha_file, manifesto, attese)
+            self.assertTrue(esame.giudica(esame.PASSI)[0], esame.PASSI)
+            self.assertEqual(sum(1 for s in registro if s.strip().upper().startswith("PRAGMA INTEGRITY_CHECK")), 1, registro)
+            in_sola_lettura = [(a, k) for a, k in connessioni if a and "mode=ro" in str(a[0]) and k.get("uri") is True]
+            self.assertEqual(len(in_sola_lettura), 1, connessioni)
+            self.assertTrue(str(in_sola_lettura[0][0][0]).startswith("file:"))
+            esame.sqlite3 = _modulo_finto(["*** in database main ***", "Page 3: never used"])
+            del esame.PASSI[:]
+            with contextlib.redirect_stdout(io.StringIO()):
+                esame.misura_tutto(archivio, sha_file, manifesto, attese)
+            verde, motivi, _ = esame.giudica(esame.PASSI)
+            self.assertFalse(verde)
+            self.assertEqual(len(motivi), 1, motivi)
+            self.assertIn("integrity_check", motivi[0])
+            self.assertIn("never used", motivi[0])
+        finally:
+            esame.sqlite3 = vero_sqlite3
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_SENZA_I_TRE_FILE_SI_FERMA_E_COL_GUASTO_NON_SCRIVE_MAI_E_SCRIVI_REGISTRA_L_ESITO_VERO(self):
+        esame = self._esame()
+        vera_registra = esame.scheda.registra
+        scritture = []
+
+        def _registra_finta(*a, **k):
+            scritture.append(k)
+            return {"blocco": 8, "esito": k.get("esito"), "denominatore": k.get("denominatore"), "impronta": "finta"}
+        d = tempfile.mkdtemp()
+        ambiente_prima = dict(os.environ)
+        try:
+            esame.scheda.registra = _registra_finta
+            os.makedirs(os.path.join(d, "sano"))
+            os.makedirs(os.path.join(d, "rotto"))
+            sano = esame.backup_finto(os.path.join(d, "sano"))
+            rotto = esame.backup_finto(os.path.join(d, "rotto"), tabelle=["crediti"])
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(esame.main([]), 2)
+                self.assertEqual(esame.main(["--scrivi"]), 2)
+                self.assertEqual(esame.main(["--con-guasto", "--scrivi"]), 2)
+                self.assertEqual(esame.main(["--con-guasto"]), 1)
+                self.assertEqual(esame.main(["--file", sano[0], "--sha", sano[1], "--manifest", sano[2]]), 0)
+                self.assertEqual(esame.main(["--file", sano[0], "--sha", sano[1], "--manifest", sano[2], "--con-guasto", "--scrivi"]), 2)
+                self.assertEqual(esame.main(["--file", sano[0], "--sha", sano[1], "--manifest", sano[2], "--scrivi"]), 0)
+                self.assertEqual(esame.main(["--file", rotto[0], "--sha", rotto[1], "--manifest", rotto[2], "--scrivi"]), 1)
+            self.assertEqual([s["esito"] for s in scritture], [True, False])
+            self.assertEqual(scritture[0]["denominatore"], 19)
+            self.assertIn("referral_codici", scritture[1]["motivo"] or "")
+            self.assertEqual(dict(os.environ), ambiente_prima)
+        finally:
+            esame.scheda.registra = vera_registra
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_TABELLE_ATTESE_VIENE_DALL_ALBERO_SINTATTICO_E_IL_TESTO_DELLA_CASELLA_NON_E_RICOPIATO(self):
+        esame = self._esame()
+        d = tempfile.mkdtemp()
+        try:
+            finto = os.path.join(d, "f.py")
+            with io.open(finto, "w", encoding="utf-8") as f:
+                f.write("# TABELLE_ATTESE = {'a.db': {'t'}}\nX = 1\n")
+            with self.assertRaises(LookupError):
+                esame.tabelle_attese(finto)
+            with io.open(finto, "w", encoding="utf-8") as f:
+                f.write("TABELLE_ATTESE = {'a.db': set()}\n")
+            with self.assertRaises(ValueError):
+                esame.tabelle_attese(finto)
+            with io.open(finto, "w", encoding="utf-8") as f:
+                f.write("TABELLE_ATTESE = {'a.db': {'t', 'u'}}\n")
+            self.assertEqual(esame.tabelle_attese(finto), {"a.db": {"t", "u"}})
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+        testo = esame.condizione()
+        self.assertIn("RIPRISTINATO", testo)
+        with io.open(os.path.join(QUI, "collaudi", "esame_backup.py"), encoding="utf-8") as f:
+            sorgente = f.read()
+        self.assertNotIn(testo, sorgente)
+        self.assertNotIn("'viral.db': {", sorgente)
+        self.assertTrue(all(isinstance(r, str) and r.strip() for r in esame.NON_GUARDA))
+        self.assertGreaterEqual(len(esame.NON_GUARDA), 5)
 
 
 if __name__ == "__main__":

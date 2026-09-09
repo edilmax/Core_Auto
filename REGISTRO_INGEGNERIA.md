@@ -500,6 +500,104 @@ soddisferebbe il conteggio»): il numero direbbe di più e la macchina non sapre
 più. Rifatta con un banco **più piccolo** — nessun host, nessun alloggio, nessuna
 prenotazione — perché queste guardie non guardano l'elaborazione, solo la ricezione.
 
+### 🛬 IL DEPLOY E IL BACKUP MISURATI SUI DATI VERI DEL SERVER — 8 settembre, chat A → corsia B (Blocco 8: caselle 1 e 2 VERDI, scritte dalle macchine)
+
+**Cosa è stato creato.** Due esami nuovi in `collaudi/`, **STATO: accesi**, nessuna dipendenza nuova, zero
+righe di produzione, scritti dalla chat A e integrati da B (reti `lavoro_A_8/9/12.patch`, byte-identici
+all'albero A3 per `git hash-object`).
+
+`esame_deploy.py` — «il deploy passa sempre dal protocollo D17, mai a mano». Non tocca il VPS: legge un
+file di **letture** (`--da-file`, formato JSON nel docstring con accanto a ogni campo il comando di sola
+lettura che lo produce) che B prende sul server **a riposo**: il testo di `/root/deploy_pulsante.sh`, i
+registri di ogni scambio, i `PRE_DEPLOY_*.commit`, i paracadute (dai registri locali di B), le tre
+immagini (viva, `:prec`, `:latest`), lo stato di git sul VPS, la versione di compose. Tre famiglie di passi:
+**pulsante** (le quattro tappe esistono, `:prec` viene ri-agganciato alla viva e lo script si ferma se non
+coincide, scrive il punto di ritorno, usa `docker compose` v2), **tracce** (ogni scambio ha «SCAMBIO
+FATTO» con `USCITA=0` e un `PRE_DEPLOY` scritto prima entro 180 minuti; `:prec` di oggi == la viva
+dell'ultimo `prima` ed è **diversa** dalla viva di oggi: il ritorno esiste), **a mano** (status di
+produzione vuoto, zero commit solo sul VPS, HEAD in `origin/master`, v1 di compose = segnaposto e
+`apt` candidate «(none)»). Denominatore 37 con le letture dell'8/9.
+
+**Il rosso che ha avuto ragione, e la cura.** Primo giro con le letture vere: **ROSSO 2/36** — gli scambi
+del 5/9 e dell'8/9 avevano «SCAMBIO FATTO» ma nessuna riga `USCITA=`. Il pulsante non la scriveva da sé:
+la scriveva chi lo lanciava, con l'eco dopo il comando, e chi lo lanciava con `nohup` (B, due volte) se n'è
+dimenticato. È la regola ferrea 7 vista dal lato in cui si rompe: un codice d'uscita affidato alla mano
+di chi lancia non è una misura. Cura **fuori dal repository, sul VPS**: `/root/deploy_pulsante.sh` v2 =
+v1 + una riga, `trap 'echo "USCITA=$?"' EXIT` subito dopo `set -eu` (sha256 `79eee539…`; v1 `e958ec51…`
+conservata in `/root/deploy_pulsante_v1_fino_20260908.sh`), provata nelle due direzioni (tappa
+sconosciuta → `USCITA=2`; `verifica` → `USCITA=0`). I due registri storici **non si toccano** (un numero
+non misurato non si scrive a posteriori, D22): l'esame li giudica «riusciti PER COSTRUZIONE senza codice
+d'uscita» — e lo dichiara nel rapporto, «2 su 5» — **solo** se c'è «SCAMBIO FATTO» (con `set -eu` è
+l'ultima riga del ramo e non può stamparsi dopo un errore) e la data del registro precede il campo
+misurato `pulsante_scrive_uscita_dal` (`date -u -r /root/deploy_pulsante.sh` = 2026-09-08T15:52:20Z);
+un registro **dopo** quella data senza `USCITA=` resta ROSSO. Criterio deciso fra A e B col codice davanti
+(D12), guardia vista rossa nelle due direzioni. Secondo giro: **VERDE 37/37**, casella scritta. ⚠️ E
+sull'aggancio del paracadute A ha avuto ragione su B: dopo uno scambio riuscito `:prec` **deve** restare
+l'immagine di prima (è il ritorno); si ri-aggancia alla viva nel `prima` del deploy successivo. Il
+criterio «grida finché non lo ri-agganci» avrebbe gridato a ogni deploy riuscito (ferrea 10).
+
+`esame_backup.py` — «il salvataggio è stato RIPRISTINATO e letto, non solo prodotto». Dato un archivio
+vero (`--file <db.gz> --sha <.sha256> --manifest <MANIFEST.txt>`, scaricati dal volume del VPS): nome nel
+formato, gzip letto **fino in fondo**, sha256 == `.sha256`, manifesto dello stesso timbro che lo elenca e
+che elenca **tutti** i 22 archivi di `TABELLE_ATTESE` (letti dall'albero sintattico di
+`test_avvio_e_ripristino.py`, non ricopiati); poi il **ripristino**: gunzip in una cartella temporanea, i
+16 byte «SQLite format 3\0», dimensione di pagina potenza di 2, apertura `file:…?mode=ro`, `PRAGMA
+integrity_check` == `ok`; il **contenuto**: le tabelle attese di quel db esistono e si leggono (COUNT +
+prima riga); il **tempo** (tetto 120 s) e la temporanea cancellata. Su `finanza-20260908-135445.db.gz`
+e su `viral`: **VERDE 19/19**, casella scritta. Lezione di A nella guardia: con quattro guardie il
+guasto «integrity_check non eseguito» non arrossiva nulla (la pagina azzerata la vede anche la lettura
+delle righe): la quinta registra `connect`/`execute` e pretende il pragma eseguito in `mode=ro` **e** il
+suo esito usato. Fonti (D25): sqlite.org (pragma, fileformat, uri), Google SRE «Data Integrity».
+
+**Nelle due direzioni, entrambi.** `--con-guasto` grida senza scrivere (deploy: PRE_DEPLOY assente,
+`:prec` ≠ viva di prima, `:prec` == viva di oggi; backup: sha 0000…, «database disk image is malformed»,
+tabella inventata); `--con-guasto --scrivi` si FERMA (uscita 2); `--autoprova` verde (deploy 16 casi,
+backup 9); senza letture/senza file → FERMO. Guardie `TestLEsameDelDeployNonPuoBARARE` (7) e
+`TestLEsameDelBackupNonPuoBARARE` (5), viste rosse da A col guasto messo con l'editor e ripristino
+byte-identico. `python collaudi/scheda.py --blocco 8` = **2 su 3** sull'impronta `1e861914e310`.
+
+**E la terza casella, con l'attrezzo pronto e la decisione al fondatore.** `esame_sentinella.py` (rete
+`lavoro_A_13.patch`) ora sa leggere un **monitor esterno** — UptimeRobot via `--monitor uptimerobot`
+(chiave in `UPTIMEROBOT_API_KEY`, mai stampata: la guardia lo pretende) o qualunque servizio via
+`--da-file` — e scrive VERDE solo con intervallo ≤ 5 min, 24 h senza buchi > 15 min, ultimo controllo
+< 15 min, contatto d'allarme e almeno un «giù» in storia; la sentinella di GitHub resta seconda linea,
+perché per documentazione (docs.github.com «schedule») i giri programmati «possono essere ritardati…
+alcuni scartati»: non può essere una sentinella a 5 minuti per costruzione. Il conto esterno lo apre
+il fondatore (D12). Stasera l'API di GitHub ha troncato la pagina dei giri (`IncompleteRead`) due
+volte: la casella resta quella del 7/9, non si riscrive con letture vecchie.
+
+**Cosa NON fanno (D18 punto 3).** L'esame del deploy legge il **testo** del pulsante, non ne prova le
+tappe: il funzionamento lo prova ogni deploy (le tracce) e la prova del ritorno (`indietro`) non viene
+eseguita; le letture sono di B, prese a mano con comandi dichiarati: se B le prende nella finestra fra
+un `prima` e il suo scambio, `:prec` coincide con la viva per costruzione e l'esame dice ROSSO a ragione
+su uno stato transitorio. L'esame del backup verifica **un** archivio per giro e non il ripristino
+dell'applicazione intera (quello è `test_avvio_e_ripristino`), né la copia fuori sede (`restore_offsite`).
+
+### 🏁 UN HOST SI ISCRIVE, CARICA E INCASSA DA SOLO — 8 settembre, chat A → corsia B (Blocco 7, casella 1: VERDE 17 su 17, scritta dalla macchina)
+
+**Cosa è stato finito.** `collaudi/esame_host_da_solo.py` — nato in C il 7/9 (14 passi, «in corso» nella
+voce qui sotto), **finito dalla chat A l'8/9** (rete `lavoro_A_6.patch`, delta di 227 righe) e integrato
+da B nel ramo `integra-A6-2026-09-08` da master `bfad2ce`. **STATO: acceso**, nessuna dipendenza nuova,
+zero righe di produzione. L'esame attraversa dalle **rotte vere** il viaggio intero: registrazione con
+le tre spunte, annuncio, pubblicazione (401 senza token), calendario, un ospite che paga con lo Stripe
+finto, il webhook, la conferma, il maturato nel pannello; e i **passi 11-13 nuovi**: il ramo
+dell'**auto-rilascio** — un secondo ospite paga, nessuno conferma, `garanzia.auto_rilascia(dettagli=True,
+salta_se=_rimborsata)` + `router._trasferisci_all_host` (le stesse due chiamate del `_tick_garanzia` di
+fase83), l'orologio spostato allo sblocco — e `/api/host/payout` col token mostra 36000 = 18000 + 18000.
+Denominatore 17 passi, letto dall'attrezzo. Chiamate a Stripe registrate: 4.
+
+**Nelle due direzioni.** `--con-guasto` = `stripe_secret_key=""` (la trappola trovata da C il 6/9: senza
+chiave il payout maturava senza pagamento): 4 passi su 17 falliscono, uscita 1, e con `--scrivi` si FERMA
+prima di montare (uscita 2). `--autoprova` distingue tutti i casi. Guardie: `test_pipeline_ci.TestLEsameDell
+HostDaSoloNonPuoBARARE` (4), viste rosse da A coi 4 guasti nell'attrezzo (`failures=3, errors=1`),
+ripristino byte-identico (sha256 `52a8d7a6…`). `os.environ` identico prima e dopo (riga nel rapporto).
+Rilanciato da B nell'albero fuso: verde 17/17, guardie 4/4, `--scrivi` → `scheda.py --blocco 7` = **1 su 2**
+sull'impronta `f59dead49141` (registri `corsia_B_2026-09-08\host_da_solo_*_B2.log`).
+
+**Cosa dichiara di NON fare** (D18 punto 3, stampato dall'attrezzo): non fa il KYC (l'onboarding Connect
+resta fuori), non sa se il bonifico arriva sul conto vero, non guarda le PAGINE (prova le rotte, non i
+pulsanti), non misura il tempo né la fatica: dice che il percorso **esiste**, non che sia facile.
+
 ### 🔁 IL FEED ESTERNO VALEVA IN UN VERSO SOLO, E IL NOSTRO CALENDARIO SI CHIUDEVA DA SÉ — 7 settembre, corsia B2 (Blocco 2, casella 5: misurata ROSSA, riparata, ora VERDE 14 su 14)
 
 **Cosa è stato creato.** `collaudi/esame_feed_due_versi.py` — l'esame della quinta casella del
@@ -839,7 +937,8 @@ di fase163 coincidono) è latente e dichiarato: passa oggi, serve il giorno in c
 l'avvocato (nel fascicolo): se l'ART. 16 vada aggiunto all'elenco dell'ART. 15 (approvazione specifica ex artt.
 1341-1342 c.c.) — per un host che non legge l'italiano è plausibilmente onerosa.
 
-**4. `collaudi/esame_host_da_solo.py` — Blocco 7 casella 1, IN CORSO, non finito.** Entra come file, nessun test lo
+**4. `collaudi/esame_host_da_solo.py` — Blocco 7 casella 1, IN CORSO, non finito** *(finito l'8/9: voce «UN HOST SI
+ISCRIVE, CARICA E INCASSA DA SOLO» più in alto)*. Entra come file, nessun test lo
 importa, nessuna casella scritta. Misurato da C prima di fermarsi: il viaggio dell'host passa tutti i 14 passi dalle
 rotte vere (registrazione con 3 spunte, pubblica col token e 401 senza, calendario, prenotazione, Stripe finto conferma,
 ospite conferma, maturato 0 → 18000 nel pannello). Trappola da tenere: con `stripe_secret_key` vuota il payout matura
