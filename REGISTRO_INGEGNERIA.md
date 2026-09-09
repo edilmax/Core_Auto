@@ -403,6 +403,55 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 📉 «ANDIAMO AVANTI E POI INDIETRO, NON CAPISCO» — 9 settembre, il punteggio tornava indietro quando il lavoro andava avanti
+
+**Cosa è cambiato.** `collaudi/scheda.py`: due funzioni nuove (`impronte_dei_moduli`,
+`da_rimisurare`), un aiutante (`_perche_scaduta`), un campo nuovo nello schedario
+(`impronte_moduli`), un'opzione nuova (`--rimisura`). **STATO: acceso**, nessuna dipendenza
+nuova, zero righe di produzione. Guardia:
+`test_pipeline_ci.TestUnaCasellaSCADUTADiceQUALIFileLHannoFattaScadere` (3 test).
+
+**Il difetto, e non l'ha trovato un test.** L'ha trovato il fondatore guardando il conto:
+*«non tornano i conti… è possibile che siamo fermi allo stesso punto, anzi andiamo avanti e poi
+indietro… misure vecchie invece di quelle nuove, non capisco»*. Misurato quel giorno: il
+Blocco 1 (soldi) aveva le caselle scritte il 5-6 settembre; l'8 settembre è nato
+`fase204_eventi_stripe.py`, che **appartiene a quel blocco**, e **sette misure sono scadute
+insieme**. Il Blocco 8 uguale, per `fase83_server.py` e `fase81_bootstrap_casavip.py`. ⚠️ Il
+codice era **migliorato** e il punteggio è andato **indietro**: il lavoro buono cancellava il
+punteggio.
+
+⛔ **E il messaggio non permetteva di capirlo.** Diceva *«misurata quando il codice del blocco
+aveva impronta 1e861914e310, adesso è 736625024342»*: due identità illeggibili al posto
+dell'unica cosa su cui si può agire, **quale file è cambiato**. Per rispondere al fondatore ho
+dovuto scrivere uno script apposta — cioè l'attrezzo non stava dicendo ciò che già sapeva.
+
+**Cosa NON si è fatto, e perché conta più di cosa si è fatto.** La tentazione era togliere la
+scadenza, o restringerla per casella. ⛔ Restringerla era **impraticabile**: `finito_quando` è
+letto da **una trentina** di attrezzi e da una dozzina di guardie che ci indicizzano dentro
+(`grep -rn "finito_quando"`), e cambiarne la forma li rompeva tutti. E toglierla sarebbe stato
+peggio del difetto: **la scadenza è giusta**, una misura parla del codice che ha guardato. Il
+difetto non era che scadesse: era che scadeva **in silenzio e senza spiegazione**, e rimetterla
+richiedeva di leggere il codice — quindi non lo faceva nessuno e la scheda restava vecchia per
+sempre.
+
+**La cura, in due mosse.** (1) Lo schedario registra ora **l'impronta di ogni singolo modulo**,
+e una casella scaduta dice *«SCADUTA perché sono cambiati questi file: …»* con i nomi. Sulle
+righe scritte prima dice **«QUALI moduli non si sa»** invece di inventare un colpevole (S1: il
+vuoto non è un valore) — e si corregge da sé al primo rilancio. (2) `python collaudi/scheda.py
+--rimisura` **elenca** gli attrezzi da rilanciare, separando quelli che vogliono materiale preso
+sul server (il loro comando porta un segnaposto fra `<>`), invece di farli sparire: un elenco che
+tace sulle proprie esclusioni fa sembrare «coperto» ciò che non è stato guardato (D18 punto 3).
+⛔ **Elenca e non esegue**, apposta: in quella lista ci sono giri di mutazione da **60** e da
+**600** minuti dichiarati, e lanciarli «per comodità» da un attrezzo di lettura sarebbe un gesto
+lungo deciso da chi non sapeva di deciderlo.
+
+**Nelle due direzioni.** Guardia scritta **prima** e vista **rossa** (3 test su 3: le due
+funzioni non esistevano e il motivo non nominava nessun file); poi la cura; poi verde. La prova
+centrale costruisce **a mano** una casella scaduta con un solo modulo diverso — lo stato
+«impossibile» si costruisce adesso che costa tre righe (D19) — e pretende quel nome dentro il
+motivo. ⚠️ Misurato subito dopo sul vero: **9 caselle** rilanciabili e **2** che vogliono
+materiale dal server.
+
 ### 🕵️ IL METRO DEI MODULI ERA CIECO A CHI CHIAMA PER NOME — 9 settembre, corsia unica (difetto vivo, guardia vista rossa prima)
 
 **Cosa è cambiato.** `collaudi/raggiungibilita.py`: due espressioni di ricerca nuove, una

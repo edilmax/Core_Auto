@@ -177,6 +177,111 @@ def impronta_del_blocco(ordine, radice=RADICE):
     return h.hexdigest()[:12]
 
 
+def impronte_dei_moduli(ordine, radice=RADICE):
+    """{modulo: impronta} per ogni modulo del blocco. Serve a dire QUALE e' cambiato.
+
+    ⛔⛔ PERCHE' ESISTE, ed e' una domanda del fondatore del 2026-09-09: *«andiamo avanti e
+    poi indietro, non capisco»*. Una casella scaduta diceva soltanto *«aveva impronta
+    1e861914e310, adesso e' 736625024342»* -- due identita' illeggibili al posto dell'unica
+    cosa su cui si puo' agire: **quale file e' cambiato**. Per rispondergli quel giorno ho
+    dovuto scrivere uno script apposta, cioe' l'attrezzo non stava dicendo cio' che sapeva.
+    ⚠️ Il totale (`impronta_del_blocco`) NON si ricava sommando queste: resta il criterio di
+    scadenza, e questo e' il modo di **spiegarla**. Due strumenti, due domande diverse.
+    """
+    percorso = os.path.join(QUI, "piano.py")
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("_piano_per_modulo", percorso)
+        piano = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(piano)
+        blocchi = [b for b in piano.BLOCCHI if b["ordine"] == ordine]
+        if len(blocchi) != 1:
+            return {}
+        moduli = sorted(blocchi[0].get("moduli") or ())
+    except Exception:
+        return {}
+    fuori = {}
+    for nome in moduli:
+        h = hashlib.sha256()
+        try:
+            with io.open(os.path.join(radice, nome + ".py"), "rb") as f:
+                # Stessa normalizzazione del totale: i fine riga non sono codice (D23).
+                h.update(f.read().replace(b"\r\n", b"\n"))
+        except OSError:
+            h.update(b"(assente)")
+        fuori[nome] = h.hexdigest()[:12]
+    return fuori
+
+
+def _moduli_cambiati(riga, ordine):
+    """I nomi dei moduli che sono cambiati da quando la casella e' stata scritta.
+
+    Torna `None` se non si puo' sapere: le righe scritte prima del 2026-09-09 non portano le
+    impronte dei singoli moduli, e **inventare un colpevole sarebbe peggio che tacere** (S1:
+    il vuoto non e' un valore). In quel caso il motivo resta quello vecchio, dichiarato.
+    """
+    allora = riga.get("impronte_moduli")
+    if not isinstance(allora, dict) or not allora:
+        return None
+    adesso = impronte_dei_moduli(ordine)
+    if not adesso:
+        return None
+    cambiati = [n for n in sorted(set(allora) | set(adesso))
+                if allora.get(n) != adesso.get(n)]
+    return cambiati
+
+
+def _perche_scaduta(riga, ordine, suo, ora):
+    """Il motivo della scadenza, in italiano e con i NOMI quando si sanno."""
+    cambiati = _moduli_cambiati(riga, ordine)
+    if cambiati is None:
+        return ("misurata quando il codice del blocco aveva impronta %s, adesso e' %s: quei "
+                "moduli sono cambiati sotto, e quella misura non parla piu' di questo codice. "
+                "⚠️ QUALI moduli non si sa: questa riga e' stata scritta prima che lo "
+                "schedario registrasse le impronte dei singoli file. Si rilancia l'attrezzo "
+                "(`%s`) e da li' in avanti lo dira'."
+                % (suo or "(non indicata)", ora, riga.get("comando", "?")))
+    if not cambiati:
+        return ("l'impronta del blocco non coincide (%s -> %s) ma nessun modulo risulta "
+                "cambiato: e' cambiato l'ELENCO dei moduli nel piano, oppure lo schedario "
+                "e' stato scritto a mano. Si rilancia l'attrezzo: `%s`"
+                % (suo or "(non indicata)", ora, riga.get("comando", "?")))
+    return ("SCADUTA perche' sono cambiati questi file: %s. La misura parlava del codice di "
+            "allora, non di questo. Non e' un guasto: si rilancia `%s` e la casella torna a "
+            "dire la verita' di oggi."
+            % (", ".join(cambiati), riga.get("comando", "?")))
+
+
+def da_rimisurare(schedario=None):
+    """(eseguibili, a_mano): le caselle scadute e l'attrezzo che le rimette.
+
+    ⛔ DICHIARA CIO' CHE NON PUO' FARE DA SOLO. Alcuni attrezzi vogliono materiale preso sul
+    server (le letture del deploy, un archivio di salvataggio scaricato dal volume): il loro
+    comando porta un segnaposto fra parentesi angolari. Quelli finiscono in `a_mano` invece
+    di sparire: un elenco che tace sulle proprie esclusioni fa sembrare «coperto» cio' che
+    non e' stato nemmeno guardato (D18 punto 3, sbaglio S7).
+    """
+    dati = leggi() if schedario is None else schedario
+    eseguibili, a_mano = [], []
+    for blocco in _blocchi():
+        ordine = blocco["ordine"]
+        impronta = impronta_del_blocco(ordine)
+        for testo in blocco.get("finito_quando") or ():
+            riga = dati.get(chiave(testo, ordine))
+            if not isinstance(riga, dict):
+                continue                      # mai misurata: non e' una RI-misura
+            spuntata, motivo = stato(testo, ordine, schedario=dati, impronta=impronta)
+            if spuntata:
+                continue
+            if not str(motivo).startswith(("SCADUTA", "misurata quando", "l'impronta")):
+                continue                      # rossa o senza denominatore: e' un altro caso
+            comando = str(riga.get("comando") or "")
+            voce = {"blocco": ordine, "casella": testo[:70], "comando": comando,
+                    "motivo": motivo}
+            (a_mano if ("<" in comando and ">" in comando) else eseguibili).append(voce)
+    return eseguibili, a_mano
+
+
 def commit_attuale(radice=RADICE):
     """Il commit su cui stiamo. Stringa vuota se git non risponde -- e allora nessuna
     casella si spunta, perche' senza sapere DOVE siamo una misura non e' ancorata a niente."""
@@ -230,6 +335,11 @@ def registra(testo, esito, denominatore, comando, ordine, percorso=SCHEDA, commi
         #    del repository. Col commit, sei esami in sei sessioni non potevano MAI stare
         #    spuntati insieme.
         "impronta": impronta_del_blocco(int(ordine)),
+        # ⛔ E L'IMPRONTA DI OGNI SINGOLO MODULO, dal 2026-09-09: senza, una casella scaduta
+        #    puo' solo confrontare due totali illeggibili e chi legge non sa su cosa agire.
+        #    Il fondatore ha dovuto chiedere «non capisco», e aveva ragione. Costa qualche
+        #    riga nello schedario e trasforma un'identita' in una spiegazione.
+        "impronte_moduli": impronte_dei_moduli(int(ordine)),
         # Il commit resta scritto perche' serve a CHI LEGGE (ritrovare il giro, rifarlo),
         # ma NON e' piu' lui a decidere: e' informazione, non giudizio.
         "commit": commit if commit is not None else commit_attuale(),
@@ -269,9 +379,7 @@ def stato(testo, ordine, schedario=None, impronta=None):
                        "una misura senza ancoraggio non vale")
     suo = str(riga.get("impronta") or "")
     if suo != ora:
-        return (False, "misurata quando il codice del blocco aveva impronta %s, adesso e' "
-                       "%s: quei moduli sono cambiati sotto, e quella misura non parla piu' "
-                       "di questo codice" % (suo or "(non indicata)", ora))
+        return (False, _perche_scaduta(riga, ordine, suo, ora))
     denominatore = riga.get("denominatore")
     if not isinstance(denominatore, int) or denominatore <= 0:
         return (False, "denominatore %r: l'attrezzo non ha esaminato NIENTE, quindi il suo "
@@ -342,7 +450,36 @@ def main(argv=None):
     p = argparse.ArgumentParser(add_help=True)
     p.add_argument("--blocco", type=int, default=None,
                    help="stampa solo il blocco indicato (es. --blocco 1)")
+    p.add_argument("--rimisura", action="store_true",
+                   help="elenca gli attrezzi da rilanciare per le caselle SCADUTE")
     argomenti = p.parse_args(list(argv if argv is not None else sys.argv[1:]))
+    if argomenti.rimisura:
+        # ⛔ ELENCA, NON ESEGUE. Fra questi comandi ci sono giri di mutazione da 60 e da 600
+        #    minuti: lanciarli «per comodita'» da un attrezzo di lettura sarebbe un gesto
+        #    lungo deciso da chi non sapeva di deciderlo. Chi legge sceglie e lancia.
+        eseguibili, a_mano = da_rimisurare()
+        print("=" * 78)
+        print("CASELLE SCADUTE — cosa rilanciare perche' il conto torni a dire OGGI")
+        print("=" * 78)
+        if not eseguibili and not a_mano:
+            print("  nessuna casella scaduta: il conto parla del codice di adesso")
+        visti = []
+        for v in eseguibili:
+            if v["comando"] in visti:
+                continue
+            visti.append(v["comando"])
+            print("  blocco %-2d  %s" % (v["blocco"], v["comando"]))
+        if a_mano:
+            print()
+            print("  ⛔ QUESTI NON SI POSSONO RILANCIARE DA SOLI: vogliono materiale preso")
+            print("     sul server (letture del deploy, un archivio di salvataggio vero).")
+            print("     Il segnaposto fra <> dice cosa manca.")
+            for v in a_mano:
+                print("  blocco %-2d  %s" % (v["blocco"], v["comando"]))
+        print()
+        print("  ⚠️  Un comando qui dentro puo' costare ore (i giri di mutazione dichiarano")
+        print("      i loro minuti). Questo elenco NON li esegue: li mette in fila.")
+        return 0
     return stampa(solo=argomenti.blocco)
 
 
