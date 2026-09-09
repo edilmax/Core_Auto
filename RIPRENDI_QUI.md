@@ -380,6 +380,22 @@ fotografia **prodotta da `collaudi/raggiungibilita.py`** (154 moduli, 91 usati d
 moduli creati e poi mai attivati, io non so più il perché») e dalla sua richiesta di una lista che tiene lui sul Desktop
 e spunta man mano. ⛔ Il file **lo produce un programma e si rigenera**: non è una seconda lista scritta a mano, che è
 esattamente il difetto del 22 agosto.
+**📉 9 SETTEMBRE, sera — IL PUNTEGGIO TORNAVA INDIETRO QUANDO IL LAVORO ANDAVA AVANTI, e a trovarlo è stato il
+fondatore guardando il conto** («non tornano i conti… andiamo avanti e poi indietro… non capisco»). Ogni casella
+è legata a un'impronta di **tutti** i moduli del suo blocco: ne cambia uno, si svuotano tutte. Misurato: il Blocco 1
+aveva le caselle del 5-6/9 e l'8/9 è nato `fase204_eventi_stripe.py`, **dentro quel blocco** → sette misure scadute
+insieme; il Blocco 8 per `fase83_server.py` e `fase81_bootstrap_casavip.py`. Il codice era migliorato e il punteggio
+è andato indietro. ⛔ **La scadenza NON si è tolta** (è giusta: una misura parla del codice che ha guardato) e **non
+si è ristretta per casella** (`finito_quando` lo leggono ~30 attrezzi e una dozzina di guardie che ci indicizzano
+dentro: cambiarne la forma li rompeva tutti). Curato il **come**: lo schedario registra l'impronta di **ogni singolo
+modulo** e una casella scaduta ora dice **quali file** l'hanno fatta scadere — sulle righe vecchie dice «QUALI moduli
+non si sa» invece di inventare, e si corregge al primo rilancio; e `python collaudi/scheda.py --rimisura` **elenca**
+cosa rilanciare, separando i due attrezzi che vogliono materiale dal server. Elenca e **non esegue**: dentro ci sono
+giri di mutazione da 60 e 600 minuti dichiarati. Guardia `TestUnaCasellaSCADUTADiceQUALIFileLHannoFattaScadere`
+vista rossa prima (3 su 3). **Misurato adesso: 9 caselle rilanciabili subito, 2 che vogliono il server.**
+🔑 **Quindi «15 caselle su 39» NON vuol dire che il lavoro sia fermo:** vuol dire che gran parte delle misure è
+scaduta e va rifatta. Il primo lavoro utile è rilanciare quei 9 attrezzi.
+
 **🔎 9 SETTEMBRE, 16:3x — LA FOTOGRAFIA DEI MODULI SPENTI, FATTA DA 81 AGENTI (ultracode, chiesto dal fondatore: «fai la
 fotografia dei 63 moduli con ultracode, 38 mango non c'entrano li cancelliamo?»).** Esito su
 `C:\Users\MaxDanno\Desktop\63_MODULI_SPENTI.txt`, **prodotto da un programma e rigenerabile**, mai scritto a mano.
@@ -1983,9 +1999,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 7965c13
+CONSEGNE AGGIORNATE A: da0411e
 
-SUITE ATTUALE: Ran 6714 test
+SUITE ATTUALE: Ran 6717 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

@@ -7939,6 +7939,100 @@ class TestLaRaggiungibilitaNONPuoGuardareUnIngressoSOLO(unittest.TestCase):
             % (len(ingressi), len(self.INGRESSI_VERI)))
 
 
+class TestUnaCasellaSCADUTADiceQUALIFileLHannoFattaScadere(unittest.TestCase):
+    """📉 «ANDIAMO AVANTI E POI INDIETRO, NON CAPISCO» — 9 settembre, parola del fondatore.
+
+    **Il fatto.** La scheda dei blocchi lega ogni casella a un'impronta di **tutti** i moduli
+    del suo blocco: se uno solo cambia, **tutte** le caselle di quel blocco tornano vuote.
+    Misurato quel giorno: il Blocco 1 (soldi) aveva le caselle scritte il 5-6 settembre, l'8
+    settembre e' nato `fase204_eventi_stripe.py` — che appartiene a quel blocco — e sette
+    misure sono scadute insieme. Il Blocco 8 uguale, per `fase83_server.py` e
+    `fase81_bootstrap_casavip.py`. ⚠️ Il codice era MIGLIORATO, il punteggio e' tornato
+    indietro: e' il lavoro buono che cancella il punteggio.
+
+    ⛔ **E IL MESSAGGIO NON AIUTAVA A CAPIRLO.** Diceva: *«misurata quando il codice del
+    blocco aveva impronta 1e861914e310, adesso e' 736625024342»*. Due numeri illeggibili al
+    posto dell'unica cosa che serve — **quale file e' cambiato**. Il fondatore ha dovuto
+    chiedere, e per rispondergli ho dovuto scrivere uno script apposta. Un attrezzo che
+    misura deve dire cosa NON quadra in modo che si possa agire (D18 punto 3): un'impronta e'
+    un'identita', non una spiegazione.
+
+    💡 **Perche' la cura NON e' tenere in vita la spunta vecchia.** La scadenza e' giusta: una
+    misura parla del codice che ha guardato, e se quel codice cambia non parla piu' di questo.
+    La cura e' rendere la scadenza **leggibile** (quali file) e la ri-misura **facile**
+    (`--rimisura` elenca ed esegue gli attrezzi da rilanciare). Cosi' il numero torna a
+    misurare l'avanzamento invece di misurare quanto e' passato dall'ultima volta.
+    """
+
+    def _scheda(self):
+        sys.path.insert(0, os.path.join(QUI, "collaudi"))
+        import scheda
+        return scheda
+
+    def test_LO_SCHEDARIO_REGISTRA_LIMPRONTA_DI_OGNI_MODULO(self):
+        """Senza le impronte dei singoli moduli non si puo' dire QUALE e' cambiato: si
+        possono solo confrontare due totali, che e' quello che non si capiva."""
+        s = self._scheda()
+        funzione = getattr(s, "impronte_dei_moduli", None)
+        self.assertTrue(
+            callable(funzione),
+            "`scheda.py` non espone `impronte_dei_moduli()`: senza l'impronta di OGNI modulo "
+            "una casella scaduta puo' solo dire «il totale e' cambiato», mai «e' cambiato "
+            "questo file»")
+        per_modulo = funzione(1)
+        self.assertIsInstance(per_modulo, dict)
+        self.assertNotEqual(
+            {}, per_modulo,
+            "il Blocco 1 non ha nemmeno un modulo con la sua impronta: la funzione non "
+            "guarda dove deve, e il messaggio di scadenza resterebbe muto")
+
+    def test_UNA_CASELLA_SCADUTA_NOMINA_I_MODULI_CAMBIATI(self):
+        """⛔ LA GUARDIA CHE VEDE IL DIFETTO. Si costruisce a mano una casella scaduta — lo
+        stato «impossibile» si costruisce adesso che costa tre righe (D19) — e si pretende che
+        il motivo contenga il NOME del modulo cambiato, non due impronte."""
+        s = self._scheda()
+        blocchi = s._blocchi()
+        blocco = [b for b in blocchi if b["ordine"] == 1][0]
+        testo = list(blocco["finito_quando"])[0]
+        moduli = sorted(blocco.get("moduli") or ())
+        self.assertTrue(moduli, "il Blocco 1 non dichiara moduli: la prova girerebbe a vuoto")
+        colpevole = moduli[0]
+        finto = {
+            s.chiave(testo, 1): {
+                "blocco": 1, "esito": True, "denominatore": 7, "motivo": "",
+                "comando": "python collaudi/esame_finto.py --scrivi",
+                "commit": "0000000", "quando": "2026-01-01T00:00:00",
+                "impronta": "impronta-vecchia",
+                # le impronte di allora: tutte giuste tranne una, cioe' UN file e' cambiato
+                "impronte_moduli": dict(s.impronte_dei_moduli(1), **{colpevole: "cambiata"}),
+            }
+        }
+        _spuntata, motivo = s.stato(testo, 1, schedario=finto)
+        self.assertIn(
+            colpevole, motivo,
+            "una casella scaduta non dice QUALE modulo l'ha fatta scadere. Il motivo era: "
+            "%r. Due impronte non sono una spiegazione: chi legge non puo' agire, e infatti "
+            "il 9 settembre il fondatore ha dovuto chiedere «non capisco»." % (motivo,))
+
+    def test_SI_PUO_SAPERE_COSA_RILANCIARE_SENZA_LEGGERE_IL_CODICE(self):
+        """La ri-misura dev'essere a portata di mano, altrimenti la scheda resta scaduta per
+        sempre e il numero smette di voler dire qualcosa. E deve DICHIARARE quali attrezzi non
+        puo' rilanciare da solo (quelli che vogliono materiale dal server): un elenco che tace
+        sulle proprie esclusioni fa sembrare «coperto» cio' che non e' stato guardato."""
+        s = self._scheda()
+        funzione = getattr(s, "da_rimisurare", None)
+        self.assertTrue(
+            callable(funzione),
+            "`scheda.py` non espone `da_rimisurare()`: sapere COSA rilanciare richiede di "
+            "leggere il codice, quindi non lo fa nessuno e la scheda resta vecchia")
+        eseguibili, a_mano = funzione()
+        self.assertIsInstance(eseguibili, list)
+        self.assertIsInstance(a_mano, list)
+        for voce in eseguibili + a_mano:
+            self.assertIn("comando", voce)
+            self.assertIn("blocco", voce)
+
+
 class TestUnModuloCaricatoPerNOMENonPuoRisultareMORTO(unittest.TestCase):
     """🕵️ IL METRO ERA CIECO AI MODULI CHIAMATI PER NOME — misurato il 2026-09-09.
 
