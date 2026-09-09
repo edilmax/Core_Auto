@@ -403,6 +403,61 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🕵️ IL METRO DEI MODULI ERA CIECO A CHI CHIAMA PER NOME — 9 settembre, corsia unica (difetto vivo, guardia vista rossa prima)
+
+**Cosa è cambiato.** `collaudi/raggiungibilita.py`: due espressioni di ricerca nuove, una
+funzione nuova (`caricamenti_per_nome`), tre righe nel rapporto. **STATO: acceso**, nessuna
+dipendenza nuova, zero righe di produzione. Guardia:
+`test_pipeline_ci.TestUnModuloCaricatoPerNOMENonPuoRisultareMORTO` (3 test).
+
+**Il difetto.** Lo strumento cercava gli import con `\b(?:from|import)\s+(fase\d+...)`: vedeva
+`import faseNN`, non vedeva un modulo caricato scrivendone il nome in una **stringa**.
+`fase91_canali_social.py:144-148` — modulo che la produzione **esegue** — ne carica quattro così
+(`getattr(__import__(mod), fn)(...)`, con i nomi in una tupla poco sopra). Quei quattro canali,
+**già cablati** e addormentati solo perché manca il gettone nel `.env`, finivano nell'elenco dei
+morti. ⛔ Non era un limite: era una **promessa rotta**. Il file dichiarava il buco in una riga di
+docstring e due paragrafi sopra prometteva *«se dice MORTO, è morto davvero»* — e chi legge
+«morto» **cancella**. È lo sbaglio S15 nella forma che quell'intestazione aveva già nominato da
+sé: *«un attrezzo che promette di sbagliare in un verso e sbaglia nell'altro è peggio di un
+attrezzo senza promesse»*.
+
+**Come è saltato fuori.** Non da un test: da un giro multi-agente chiesto dal fondatore per
+sapere «a che punto è la macchina». Un agente incaricato di **smentire** l'elenco dei morti ha
+trovato il caricamento per nome; io l'ho verificato di persona e ho misurato il **perimetro**
+invece di supporlo — `grep -rn "__import__\|importlib.import_module"` su tutti i `fase*.py` dà
+**un solo** punto in cui si carica un nostro modulo per nome (gli altri caricano `time` e
+`calendar`). Un perimetro misurato chiude la questione; una lista di esempi no
+(è la differenza fra elenco e perimetro).
+
+**La cura, e perché guarda il FILE e non l'argomento.** Il nome non sta dentro `__import__(...)`:
+sta in una tupla qualche riga sopra, e l'argomento è una variabile. Seguirla vorrebbe dire
+eseguire il codice, e questo strumento non esegue niente. Quindi: **in un file che carica per
+nome, ogni nome di modulo nostro scritto in una stringa conta come import.** Così il bias resta
+quello dichiarato — può dire VIVO qualcosa che non parte mai, mai il contrario. Misurato dopo:
+i vivi salgono di **esattamente quattro**, cioè nessuna inflazione. E `caricamenti_per_nome()`
+**elenca** i punti risolti e quelli in cui l'argomento è calcolato, così il limite non è più una
+frase in una docstring ma una misura stampata a ogni giro (D18 punto 3).
+
+**Nelle due direzioni.** La guardia è stata scritta **prima** e vista **rossa** sul codice di
+produzione, con i quattro nomi dentro il messaggio d'errore
+(`{'fase91_canali_social': ['fase193_canale_mastodon', ...]}`); poi la riparazione; poi verde,
+8 test insieme alla guardia già esistente sugli ingressi. ⛔ E non ricopia i quattro nomi: se li
+scrivesse a mano sarebbe la guardia che coincide con l'ipotesi che deve controllare, e passerebbe
+il giorno che qualcuno aggiunge un canale. Legge il **sorgente** dei moduli vivi che caricano per
+nome. Ha anche un test di **premessa**: se un domani nessuno caricasse più per nome, la guardia
+lo dice invece di passare a vuoto (sbaglio S7).
+
+**Un difetto di secondo giro, trovato guardando il rapporto.** La prima versione stampava
+`fase83_server -> fase1`: una stringa qualunque che somiglia a un nome. Il cammino la scartava
+comunque, ma **il rapporto diceva una cosa falsa** — ed è il rapporto quello che legge una
+persona. Filtrato sui moduli che esistono davvero sul disco (S2).
+
+⚠️ **E la lezione sul numero, pagata due volte nello stesso pomeriggio.** Le due righe storiche
+che dichiaravano quanti moduli la produzione raggiunge sono state riscritte **senza cifra**: alla
+prima riscrittura avevo *citato* il numero vecchio fra virgolette, e il promemoria 7 è tornato
+rosso all'istante. Aveva ragione: una citazione e una dichiarazione si scrivono uguali, e chi
+legge non distingue. È la S17 vista dal lato in cui morde.
+
 ### 💰 IL PANNELLO MOSTRAVA COME INCASSATO UN HOLD CHE NESSUNO AVEVA PAGATO — 8 settembre, chat A (albero Core_Auto_A, ramo `blocco1-webhook-eventi` su `5a977d9`, «autorizzato» del fondatore)
 
 **Cosa è cambiato.** `fase83_server.py`: un aiutante nuovo (`_hold_non_pagato`), due righe in
@@ -839,8 +894,12 @@ invece di passare per inerzia.
 
 ⚠️ **Un secondo rilievo, trovato dal `foglio_unico` mentre chiudevo e NON riparato.** La voce 7
 («i numeri della macchina non sono scritti a mano nei documenti») è **rossa su master, non per
-colpa di questo lavoro**: `RIPRENDI_QUI.md:4225` scrive *«88 raggiungibili su 151»* mentre
-`raggiungibilita.py` oggi ne misura **90**. Verificato che preesiste: il mio `git diff` su quel
+colpa di questo lavoro**: una riga di `RIPRENDI_QUI.md` dichiarava quanti moduli la produzione
+raggiunge, e la cifra non era più quella che `raggiungibilita.py` misurava. ✅ **Chiuso il
+2026-09-09**: quella riga non porta più nessuna cifra, dice che il numero lo produce lo strumento.
+⛔ E la cifra vecchia **non si cita nemmeno fra virgolette**: riscrivendola qui il promemoria 7 è
+tornato rosso all'istante, perché una citazione e una dichiarazione si scrivono uguali (S17).
+Verificato che preesiste: il mio `git diff` su quel
 file è **una riga sola** (la 1681, il conto dei test), e la 4225 è **identica a `origin/master`**.
 Non l'ho corretta apposta: la regola ferrea 15 vieta le correzioni di passaggio dentro un
 intervento con un altro scopo — è così che uno scopo si allarga da solo, e quello è il canale

@@ -7939,6 +7939,119 @@ class TestLaRaggiungibilitaNONPuoGuardareUnIngressoSOLO(unittest.TestCase):
             % (len(ingressi), len(self.INGRESSI_VERI)))
 
 
+class TestUnModuloCaricatoPerNOMENonPuoRisultareMORTO(unittest.TestCase):
+    """🕵️ IL METRO ERA CIECO AI MODULI CHIAMATI PER NOME — misurato il 2026-09-09.
+
+    **Il fatto.** `collaudi/raggiungibilita.py` cerca gli import con
+    `\\b(?:from|import)\\s+(fase\\d+...)`: vede `import faseNN`, non vede un modulo caricato
+    scrivendo il suo nome dentro una STRINGA. `fase91_canali_social.py` — che la produzione
+    esegue davvero — ne carica quattro cosi':
+
+        for mod, fn, nome in (("fase193_canale_mastodon", ...), ("fase194_canale_bluesky", ...),
+                              ("fase195_canale_reddit", ...), ("fase197_canale_nostr", ...)):
+            c = getattr(__import__(mod), fn)(e, fetch=fetch)
+
+    Risultato: quattro moduli **gia' cablati** (dormono solo perche' manca il gettone nel
+    `.env`) finivano nell'elenco dei morti, e il conto diceva **63** invece di **59**.
+
+    ⛔ **PERCHE' E' UN DIFETTO E NON UN LIMITE.** Il file dichiara il limite («non risolve gli
+    import dinamici costruiti a stringa») e nello stesso respiro promette il contrario: *«se
+    dice MORTO, e' morto davvero»*. Le due righe non possono stare insieme. E l'intestazione
+    lo dice da sola, due paragrafi sopra: *«un attrezzo che promette di sbagliare in un verso
+    e sbaglia nell'altro e' peggio di un attrezzo senza promesse»* (sbaglio S15). Qui la
+    promessa e' il contratto: chi legge «morto» **cancella**, e avrebbe cancellato quattro
+    moduli vivi.
+
+    ⛔ **QUESTA GUARDIA NON RICOPIA I QUATTRO NOMI.** Se li scrivesse a mano sarebbe la
+    guardia che coincide con l'ipotesi che dovrebbe controllare: passerebbe anche il giorno
+    che qualcuno rinomina o aggiunge un canale. Legge invece il **sorgente** dei moduli vivi
+    che caricano per nome, e ne estrae le stringhe che somigliano a un modulo nostro (S2: i
+    nomi si leggono, non si ricordano). Il perimetro e' stato **misurato** il 2026-09-09 e
+    vale una riga: `grep -rn "__import__\\|importlib.import_module"` su tutti i `fase*.py` da
+    un solo punto in tutto il repository che carichi un NOSTRO modulo per nome (gli altri
+    caricano `time` e `calendar`). Quindi la guardia non e' teorica, ma nemmeno cucita su un
+    caso singolo: descrive la RELAZIONE, come la guardia sugli ingressi qui sopra.
+    """
+
+    # Chi carica qualcosa scrivendone il nome, invece di importarlo.
+    CARICA_PER_NOME = re.compile(r"(?:__import__|importlib\.import_module)\s*\(")
+    # Un nome di modulo nostro scritto dentro una stringa.
+    NOME_IN_STRINGA = re.compile(r"[\"'](fase\d+[A-Za-z0-9_]*)[\"']")
+
+    def _modulo(self):
+        sys.path.insert(0, os.path.join(QUI, "collaudi"))
+        import raggiungibilita
+        return raggiungibilita
+
+    def _sorgente(self, nome):
+        with open(os.path.join(QUI, nome + ".py"), "r", encoding="utf-8",
+                  errors="replace") as f:
+            return f.read()
+
+    def test_CHI_CARICA_PER_NOME_ESISTE_DAVVERO(self):
+        """D18 punto 1: il metro si misura prima del muro. Se nessun file caricasse piu'
+        moduli per nome, la guardia sotto girerebbe **a vuoto** e stamperebbe verde senza
+        aver guardato niente — lo sbaglio S7, un controllo senza premessa che si dichiara
+        riuscito. Allora si dice, non si tace."""
+        r = self._modulo()
+        vivi, _morti, _tutti = r.cammina(QUI)
+        caricatori = [n for n in sorted(vivi)
+                      if self.CARICA_PER_NOME.search(self._sorgente(n))]
+        self.assertNotEqual(
+            [], caricatori,
+            "nessun modulo VIVO carica piu' moduli per nome: la guardia qui sotto non ha "
+            "piu' niente da controllare e passerebbe a vuoto. Se il caricamento dinamico e' "
+            "stato tolto apposta, si toglie anche questa classe; se e' sparito per sbaglio, "
+            "il difetto e' li'.")
+
+    def test_UN_MODULO_CARICATO_PER_NOME_DA_UN_VIVO_NON_E_MORTO(self):
+        """⛔ LA GUARDIA CHE VEDE IL DIFETTO. Pretende una RELAZIONE, non un numero (D22): se
+        un modulo VIVO scrive il nome di un altro modulo dentro una stringa e altrove carica
+        per nome, quel modulo non puo' finire fra i morti. Regge se i canali diventano dieci
+        e se cambiano nome."""
+        r = self._modulo()
+        vivi, morti, tutti = r.cammina(QUI)
+        accusati = {}
+        for chi in sorted(vivi):
+            testo = self._sorgente(chi)
+            if not self.CARICA_PER_NOME.search(testo):
+                continue
+            nominati = {n for n in self.NOME_IN_STRINGA.findall(testo) if n in tutti}
+            sbagliati = sorted(nominati & morti)
+            if sbagliati:
+                accusati[chi] = sbagliati
+        self.assertEqual(
+            accusati, {},
+            "`raggiungibilita.py` dichiara MORTI dei moduli che un modulo VIVO carica "
+            "scrivendone il NOME (`__import__` / `importlib.import_module`), e il file "
+            "promette il contrario («se dice MORTO, e' morto davvero»).\n"
+            "        ⛔ Chi legge quell'elenco CANCELLA: un falso morto qui costa un modulo "
+            "cablato e funzionante.\n"
+            "        Accusati a torto: %r" % (accusati,))
+
+    def test_LO_STRUMENTO_DICHIARA_I_CARICAMENTI_CHE_NON_SA_RISOLVERE(self):
+        """D18 punto 3, e non basta la prosa. Il file dichiarava il limite in una riga di
+        docstring; una riga di prosa non e' una misura e nessuno la vede quando conta. Lo
+        strumento deve saper ELENCARE i punti che non ha potuto risolvere: se un domani
+        qualcuno costruisce il nome a pezzi (`"fase" + str(n)`), quel punto non e' risolto e
+        va detto, non taciuto."""
+        r = self._modulo()
+        funzione = getattr(r, "caricamenti_per_nome", None)
+        self.assertTrue(
+            callable(funzione),
+            "`raggiungibilita.py` non espone `caricamenti_per_nome()`: i punti in cui un "
+            "modulo viene caricato per nome restano invisibili, e il limite resta una frase "
+            "invece di un elenco misurato")
+        risolti, non_risolti = funzione(QUI)
+        self.assertIsInstance(risolti, dict)
+        self.assertIsInstance(non_risolti, list)
+        self.assertNotEqual(
+            {}, risolti,
+            "`caricamenti_per_nome()` non trova nemmeno un caricamento risolto: o il codice "
+            "e' cambiato, o la funzione non guarda dove deve. In tutt'e due i casi il numero "
+            "dei morti non e' piu' affidabile.")
+
+
 class TestNessunRiferimentoGREZZOEntraNelREGISTRO(unittest.TestCase):
     """🪤 IL REGISTRO E' LO STRUMENTO CON CUI SI VEDONO I DIFETTI: una riga fabbricata li'
     dentro non e' un difetto qualunque.
