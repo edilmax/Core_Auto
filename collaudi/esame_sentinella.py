@@ -27,8 +27,31 @@ il sito muore» vuol dire QUATTRO cose misurabili:
 Denominatore = passi. Letture: API pubblica `GET /repos/<owner>/<repo>/actions/workflows/sentinella.yml/runs`
 (il repository e' pubblico: nessun gettone; se GitHub limita le richieste, e' una precondizione rossa, non un verde).
 
+⛔ DAL 2026-09-08 (chat A col mandato di B): LA CASELLA PRETENDE UN MONITOR ESTERNO VERO, non solo GitHub Actions.
+   Misurato il 7/9: GitHub esegue ~7 giri al giorno con buchi di 333 minuti, e la sua documentazione lo dichiara
+   («The schedule event can be delayed during periods of high loads ... some queued jobs may be dropped»; il minimo
+   e' 5 minuti; gli schedule si spengono dopo 60 giorni senza attivita'). Fonti lette prima (D25):
+   docs.github.com «Events that trigger workflows» §schedule (2026) · uptimerobot.com/pricing (2026: piano gratuito
+   50 monitor, «5 min. monitoring interval», API inclusa) · uptimerobot.com/api/v2 (2026: `getMonitors`, chiave
+   «Read-only ... fetching data with all the get* API endpoints», campi interval/status/logs) · betterstack.com/uptime
+   (2026: 10 monitor, «Up to 30 seconds check frequency», REST API). Scelto UptimeRobot: l'intervallo di 5 minuti e'
+   quello che la casella chiede, la chiave e' di SOLA LETTURA, zero carta; Better Stack va altrettanto bene (30 s) e
+   l'esame accetta letture di qualunque servizio nel formato `esterno` qui sotto.
+  ESTERNO    nelle letture c'e' un monitor ESTERNO (non GitHub) che guarda bookinvip.com/api/health, con INTERVALLO
+             <= 5 minuti, non in pausa; nelle ultime 24 ore i suoi controlli non hanno BUCHI > 15 minuti e l'ultimo
+             ha meno di 15 minuti; sa gridare (ha un contatto d'allarme e nella sua storia c'e' almeno un «giu'»).
+             Con un monitor esterno sano, i giri di GitHub restano la seconda linea: si stampano, non decidono.
+             SENZA monitor esterno la casella e' ROSSA col motivo (serve un conto: lo apre il fondatore, D12), e i
+             giri di GitHub decidono da soli come prima (e oggi non bastano).
+  Letture del monitor: `--monitor uptimerobot` legge `getMonitors` con la chiave di SOLA LETTURA nella variabile
+  d'ambiente UPTIMEROBOT_API_KEY (mai stampata, mai nel repository; se manca, e' una precondizione rossa), oppure
+  `--da-file` con il campo `esterno` gia' riempito:
+    "esterno": {"servizio": "uptimerobot", "nome": "...", "url": "https://bookinvip.com/api/health",
+                "intervallo_sec": 300, "stato": "up"|"down"|"pausa"|"?", "controlli": ["<ISO UTC>", ...] (ultime 24 h),
+                "giu_in_storia": 1, "contatti_allarme": 1}
+
 ⛔ D18: `precondizioni()` ferma il giro; `--autoprova` e `--con-guasto` (che non scrive mai); `NON_GUARDA`; guardia
-   `test_pipeline_ci.TestLEsameDellaSentinellaNonPuoBARARE`. `os.environ` non viene toccato.
+   `test_pipeline_ci.TestLEsameDellaSentinellaNonPuoBARARE`. `os.environ` non viene toccato (la chiave si LEGGE).
 """
 import io
 import json
@@ -36,6 +59,7 @@ import os
 import re
 import subprocess  # nosec B404 - solo `git remote get-url`, argomenti fissi
 import sys
+import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
@@ -61,15 +85,21 @@ SITUAZIONI = ("esiste", "sveglia", "grida", "non_scade")
 ULTIMO_MAX_MIN = 60
 BUCO_MAX_MIN = 60
 INATTIVITA_MAX_GIORNI = 60
+MONITOR_INTERVALLO_MAX_SEC = 5 * 60
+MONITOR_BUCO_MAX_MIN = 15
+MONITOR_ULTIMO_MAX_MIN = 15
+VARIABILE_CHIAVE = "UPTIMEROBOT_API_KEY"
+API_UPTIMEROBOT = "https://api.uptimerobot.com/v2/getMonitors"
+SALUTE = "bookinvip.com/api/health"
 PASSI = []
 
 NON_GUARDA = (
-    "se il fondatore LEGGE l'email che GitHub manda quando il giro va rosso: nessuna macchina lo puo' dire",
+    "se il fondatore LEGGE l'email che GitHub o il monitor mandano quando il sito muore: nessuna macchina lo puo' dire",
     "PERCHE' un giro e' andato rosso (sito morto, buco di rete, GitHub in ritardo): lo dicono i log di nginx sul "
     "VPS, che legge B; qui si misura solo CHE la sentinella sa gridare",
     "la testa INTERNA (deploy/watchdog.sh in cron sul VPS, Telegram): sta dentro la stanza in fiamme; B la legge",
-    "l'ultimo miglio dichiarato nel workflow stesso (UptimeRobot o simili): richiede un conto del fondatore, non "
-    "esiste e non e' coperto",
+    "il monitor esterno finche' non esiste: senza un conto (lo apre il fondatore) le letture `esterno` mancano e la "
+    "casella e' ROSSA col motivo; quando c'e', qui si legge cio' che l'API del servizio dichiara, non il servizio stesso",
     "i giri oltre i 100 piu' recenti: l'API ne serve una pagina; il buco massimo e' misurato sulle ultime 24 ore",
 )
 
@@ -137,6 +167,55 @@ def leggi_dal_vivo(repo):
             "ultimo_push": info.get("pushed_at")}
 
 
+def _post_json(url, dati):
+    if url != API_UPTIMEROBOT:
+        raise ValueError("solo l'API di UptimeRobot: %r" % (url,))
+    corpo = urllib.parse.urlencode(dati).encode("utf-8")
+    req = urllib.request.Request(url, data=corpo, headers={"Content-Type": "application/x-www-form-urlencoded",
+                                                           "Cache-Control": "no-cache", "User-Agent": "esame_sentinella"})
+    with urllib.request.urlopen(req, timeout=30) as r:  # noqa: S310  # nosec B310 - https fisso, sola lettura (getMonitors)
+        return r.status, json.loads(r.read().decode("utf-8", "replace"))
+
+
+def monitor_da_uptimerobot(risposta, adesso):
+    """Il campo `esterno` dalle righe di `getMonitors` (logs=1, response_times=1). Prende il monitor che guarda la
+    salute del sito; se non c'e', torna None. Stato: 2 = up, 8/9 = giu', 0 = pausa (api/v2)."""
+    monitor = [m for m in (risposta.get("monitors") or []) if SALUTE in str(m.get("url") or "")]
+    if not monitor:
+        return None
+    m = monitor[0]
+    stati = {2: "up", 8: "down", 9: "down", 0: "pausa", 1: "?"}
+    da = adesso - timedelta(hours=24)
+    controlli = []
+    for rt in m.get("response_times") or []:
+        try:
+            t = datetime.fromtimestamp(int(rt.get("datetime")), tz=timezone.utc)
+        except Exception:
+            continue
+        if t >= da:
+            controlli.append(t.strftime("%Y-%m-%dT%H:%M:%SZ"))
+    return {"servizio": "uptimerobot", "nome": str(m.get("friendly_name") or ""), "url": str(m.get("url") or ""),
+            "intervallo_sec": int(m.get("interval") or 0), "stato": stati.get(m.get("status"), "?"),
+            "controlli": sorted(controlli),
+            "giu_in_storia": sum(1 for lg in (m.get("logs") or []) if lg.get("type") == 1),
+            "contatti_allarme": len(m.get("alert_contacts") or [])}
+
+
+def leggi_monitor(adesso):
+    """Legge il monitor con la chiave di SOLA LETTURA in UPTIMEROBOT_API_KEY. La chiave non viene mai stampata."""
+    chiave = os.environ.get(VARIABILE_CHIAVE, "")
+    if not chiave:
+        raise RuntimeError("manca la variabile d'ambiente %s (chiave di sola lettura di UptimeRobot)" % VARIABILE_CHIAVE)
+    da = int((adesso - timedelta(hours=24)).timestamp())
+    _s, risposta = _post_json(API_UPTIMEROBOT, {
+        "api_key": chiave, "format": "json", "logs": 1, "logs_limit": 50, "alert_contacts": 1,
+        "response_times": 1, "response_times_start_date": da, "response_times_end_date": int(adesso.timestamp())})
+    if risposta.get("stat") != "ok":
+        err = risposta.get("error") or {}
+        raise RuntimeError("UptimeRobot risponde %r: %s" % (risposta.get("stat"), err.get("message") or err.get("type") or "?"))
+    return monitor_da_uptimerobot(risposta, adesso)
+
+
 def workflow_letto():
     p = os.path.join(RADICE, WORKFLOW)
     if not os.path.isfile(p):
@@ -145,58 +224,128 @@ def workflow_letto():
         return f.read()
 
 
+def _buco_massimo(tempi, adesso, ore=24):
+    """(quanti nelle ultime `ore`, buco massimo in minuti fra due istanti consecutivi, compreso quello fino ad adesso)."""
+    recenti = sorted((t for t in tempi if adesso - t <= timedelta(hours=ore)), reverse=True)
+    buchi = [(a - b).total_seconds() / 60 for a, b in zip(recenti, recenti[1:])]
+    if recenti:
+        buchi.append((adesso - recenti[0]).total_seconds() / 60)
+    return len(recenti), (max(buchi) if buchi else None)
+
+
 def misura(letture, con_guasto=False):
-    print("\n--- LA SENTINELLA: esiste, e' sveglia, sa gridare, non scade ---")
+    print("\n--- LA SENTINELLA: esiste, e' sveglia, sa gridare, non scade (monitor esterno + GitHub) ---")
     testo = workflow_letto() or ""
     passo("esiste", "il workflow %s esiste ed e' a orario (`schedule` con un `cron`)" % WORKFLOW,
           bool(testo) and re.search(r"^\s*schedule:\s*$", testo, re.M) is not None and "cron:" in testo)
-    passo("esiste", "interroga la salute del sito dall'esterno (bookinvip.com/api/health) con curl",
-          "bookinvip.com/api/health" in testo and "curl" in testo)
-    giri = list(letture.get("giri") or [])
+    passo("esiste", "interroga la salute del sito dall'esterno (%s) con curl" % SALUTE, SALUTE in testo and "curl" in testo)
     adesso = _quando(letture["adesso"]) if letture.get("adesso") else datetime.now(timezone.utc)
+
+    # IL MONITOR ESTERNO (dal 2026-09-08 e' lui che decide; senza, i giri di GitHub decidono e non bastano)
+    est = letture.get("esterno") if isinstance(letture.get("esterno"), dict) else None
+    if con_guasto:
+        est = None                                   # IL GUASTO 1: nessun monitor esterno
+    controlli = sorted((_quando(c) for c in (est or {}).get("controlli") or []), reverse=True)
+    n24, buco_m = _buco_massimo(controlli, adesso)
+    ultimo_m = (adesso - controlli[0]).total_seconds() / 60 if controlli else None
+    monitor_c_e = bool(est) and SALUTE in str(est.get("url") or "")
+    passo("esiste", "un monitor ESTERNO (non GitHub) esiste e guarda %s" % SALUTE, monitor_c_e,
+          ("%s «%s» %s" % (est.get("servizio"), est.get("nome"), est.get("url"))) if est else
+          "nessun monitor esterno nelle letture: serve un conto (UptimeRobot o Better Stack, gratuito), lo apre il fondatore")
+    fitto = monitor_c_e and 0 < int(est.get("intervallo_sec") or 0) <= MONITOR_INTERVALLO_MAX_SEC
+    passo("sveglia", "il monitor esterno controlla almeno ogni %d minuti e non e' in pausa" % (MONITOR_INTERVALLO_MAX_SEC // 60),
+          fitto and est.get("stato") != "pausa",
+          ("intervallo %s s, stato %s" % (est.get("intervallo_sec"), est.get("stato"))) if est else "nessun monitor esterno")
+    monitor_sveglio = fitto and est.get("stato") != "pausa" and buco_m is not None and buco_m <= MONITOR_BUCO_MAX_MIN \
+        and ultimo_m is not None and ultimo_m <= MONITOR_ULTIMO_MAX_MIN
+    passo("sveglia", "nelle ultime 24 ore i controlli del monitor non hanno buchi > %d minuti e l'ultimo ha meno di %d minuti"
+          % (MONITOR_BUCO_MAX_MIN, MONITOR_ULTIMO_MAX_MIN), monitor_sveglio,
+          "controlli nelle 24 ore: %d, buco massimo %s, ultimo %s" % (n24, ("%.0f min" % buco_m) if buco_m is not None else "-",
+                                                                       ("%.0f min fa" % ultimo_m) if ultimo_m is not None else "-"))
+
+    # I GIRI DI GITHUB: la seconda linea. Si stampano sempre; DECIDONO solo se il monitor esterno non c'e' o non e' sveglio.
+    giri = list(letture.get("giri") or [])
     if con_guasto:
         giri = [dict(g, quando=(_quando(g["quando"]) - timedelta(days=3)).strftime("%Y-%m-%dT%H:%M:%SZ"), esito="success") for g in giri]
     tempi = sorted((_quando(g["quando"]) for g in giri), reverse=True)
     eta = (adesso - tempi[0]).total_seconds() / 60 if tempi else None
-    passo("sveglia", "l'ultimo giro ha meno di %d minuti" % ULTIMO_MAX_MIN, eta is not None and eta <= ULTIMO_MAX_MIN,
-          "ultimo giro %s (%.0f minuti fa)" % (tempi[0].strftime("%Y-%m-%d %H:%M UTC") if tempi else "-", eta or -1))
-    ultime24 = [t for t in tempi if adesso - t <= timedelta(hours=24)]
-    buchi = [(a - b).total_seconds() / 60 for a, b in zip(ultime24, ultime24[1:])]
-    if ultime24:
-        buchi.append((adesso - ultime24[0]).total_seconds() / 60)
-    buco_max = max(buchi) if buchi else None
-    passo("sveglia", "nelle ultime 24 ore il buco massimo fra due giri e' sotto i %d minuti (promessa del file: ~15)" % BUCO_MAX_MIN,
-          buco_max is not None and buco_max <= BUCO_MAX_MIN,
-          "giri nelle 24 ore: %d, buco massimo %.0f minuti" % (len(ultime24), buco_max or -1))
+    n_giri, buco_max = _buco_massimo(tempi, adesso)
+    github_sveglio = eta is not None and eta <= ULTIMO_MAX_MIN and buco_max is not None and buco_max <= BUCO_MAX_MIN
+    passo("sveglia", "GitHub (seconda linea): ultimo giro entro %d minuti e buco massimo nelle 24 ore sotto i %d minuti%s"
+          % (ULTIMO_MAX_MIN, BUCO_MAX_MIN, " — informativo, decide il monitor" if monitor_sveglio else " — DECIDE, perche' il monitor esterno manca o non e' sveglio"),
+          github_sveglio or monitor_sveglio,
+          "ultimo giro %s (%.0f minuti fa), giri nelle 24 ore: %d, buco massimo %.0f minuti"
+          % (tempi[0].strftime("%Y-%m-%d %H:%M UTC") if tempi else "-", eta or -1, n_giri, buco_max or -1))
     verdi = sum(1 for g in giri if g.get("esito") == "success")
     rossi_recenti = sum(1 for g in giri if g.get("esito") == "failure")
     rossi = letture.get("rossi_totali")
     rossi = rossi if isinstance(rossi, int) else rossi_recenti
     if con_guasto:
-        rossi = 0                                    # IL GUASTO: una sentinella che non ha mai gridato
-    passo("grida", "nella storia c'e' almeno un giro VERDE e almeno un giro ROSSO (le due direzioni)",
-          verdi > 0 and rossi > 0, "verdi (ultimi %d): %d, rossi in storia: %d" % (len(giri), verdi, rossi))
+        rossi = 0                                    # IL GUASTO 2: una sentinella che non ha mai gridato
+    github_grida = verdi > 0 and rossi > 0
+    monitor_grida = monitor_c_e and int(est.get("contatti_allarme") or 0) > 0 and int(est.get("giu_in_storia") or 0) > 0
+    passo("grida", "il monitor esterno ha un contatto d'allarme e nella sua storia c'e' almeno un «giu'» (sa gridare)%s"
+          % ("" if monitor_c_e else " — manca il monitor: decide GitHub"),
+          monitor_grida or (not monitor_c_e and github_grida),
+          ("contatti %s, giu' in storia %s" % (est.get("contatti_allarme"), est.get("giu_in_storia"))) if est else "nessun monitor esterno")
+    passo("grida", "GitHub: nella storia c'e' almeno un giro VERDE e almeno un giro ROSSO (le due direzioni)%s"
+          % (" — informativo" if monitor_grida else " — DECIDE"), github_grida or monitor_grida,
+          "verdi (ultimi %d): %d, rossi in storia: %d" % (len(giri), verdi, rossi))
     up = letture.get("ultimo_push")
     giorni = (adesso - _quando(up)).days if up else None
-    passo("non_scade", "il repository ha avuto un push da meno di %d giorni (oltre, GitHub spegne gli schedule)" % INATTIVITA_MAX_GIORNI,
-          giorni is not None and giorni < INATTIVITA_MAX_GIORNI, "ultimo push %s (%s giorni)" % (up, giorni))
+    passo("non_scade", "GitHub: un push da meno di %d giorni (oltre, gli schedule si spengono)%s"
+          % (INATTIVITA_MAX_GIORNI, " — informativo: il monitor esterno non scade" if monitor_sveglio else " — DECIDE"),
+          (giorni is not None and giorni < INATTIVITA_MAX_GIORNI) or monitor_sveglio, "ultimo push %s (%s giorni)" % (up, giorni))
 
 
-def letture_finte(minuti_fa=5, buco=15, rossi=3, push_giorni=1, n=96):
-    adesso = datetime(2026, 9, 7, 18, 0, tzinfo=timezone.utc)
+ADESSO_FINTO = datetime(2026, 9, 7, 18, 0, tzinfo=timezone.utc)
+
+
+def monitor_finto(intervallo=300, ultimo=2, buco=5, n=288, stato="up", giu=1, contatti=1, url="https://" + SALUTE, salto=None):
+    """Un monitor esterno come lo descrive `esterno`: n controlli ogni `buco` minuti, l'ultimo `ultimo` minuti fa;
+    `salto=(da, minuti)` toglie i controlli fra `da` e `da+minuti` minuti fa (un buco)."""
+    controlli = []
+    for i in range(n):
+        m = ultimo + i * buco
+        if salto and salto[0] <= m <= salto[0] + salto[1]:
+            continue
+        controlli.append((ADESSO_FINTO - timedelta(minutes=m)).strftime("%Y-%m-%dT%H:%M:%SZ"))
+    return {"servizio": "finto", "nome": "bookinvip salute", "url": url, "intervallo_sec": intervallo, "stato": stato,
+            "controlli": sorted(controlli), "giu_in_storia": giu, "contatti_allarme": contatti}
+
+
+def letture_finte(minuti_fa=5, buco=15, rossi=3, push_giorni=1, n=96, esterno="sano"):
+    adesso = ADESSO_FINTO
     giri = [{"n": n - i, "evento": "schedule", "stato": "completed", "esito": "success",
              "quando": (adesso - timedelta(minutes=minuti_fa + i * buco)).strftime("%Y-%m-%dT%H:%M:%SZ")} for i in range(n)]
-    return {"adesso": adesso.strftime("%Y-%m-%dT%H:%M:%SZ"), "giri": giri, "rossi_totali": rossi,
-            "ultimo_push": (adesso - timedelta(days=push_giorni)).strftime("%Y-%m-%dT%H:%M:%SZ")}
+    let = {"adesso": adesso.strftime("%Y-%m-%dT%H:%M:%SZ"), "giri": giri, "rossi_totali": rossi,
+           "ultimo_push": (adesso - timedelta(days=push_giorni)).strftime("%Y-%m-%dT%H:%M:%SZ")}
+    if esterno == "sano":
+        let["esterno"] = monitor_finto()
+    elif isinstance(esterno, dict):
+        let["esterno"] = esterno
+    return let
 
 
 def autoprova():
-    casi = [("sentinella fitta, rossa una volta in storia", letture_finte(), True),
-            ("ultimo giro di due ore fa", letture_finte(minuti_fa=120), False),
-            ("giri ogni 5 ore", letture_finte(buco=300, n=8), False),
-            ("mai un rosso in storia", letture_finte(rossi=0), False),
-            ("repository fermo da 70 giorni", letture_finte(push_giorni=70), False),
-            ("nessun giro", {"adesso": "2026-09-07T18:00:00Z", "giri": [], "rossi_totali": 0, "ultimo_push": None}, False)]
+    oggi = dict(buco=333, n=8, minuti_fa=40)             # i giri di GitHub come misurati il 7/9: 7 al giorno, buchi di ore
+    casi = [("GitHub fitto + monitor sano", letture_finte(), True),
+            ("GitHub come oggi (buchi di 333 min) + monitor sano -> il monitor decide", letture_finte(esterno="sano", **oggi), True),
+            ("GitHub come oggi, NESSUN monitor esterno", letture_finte(esterno=None, **oggi), False),
+            ("GitHub fitto ma NESSUN monitor esterno", letture_finte(esterno=None), False),
+            ("monitor ogni 10 minuti", letture_finte(esterno=monitor_finto(intervallo=600, buco=10, n=144), **oggi), False),
+            ("monitor in pausa", letture_finte(esterno=monitor_finto(stato="pausa"), **oggi), False),
+            ("monitor con un buco di 40 minuti stanotte", letture_finte(esterno=monitor_finto(salto=(300, 40)), **oggi), False),
+            ("monitor il cui ultimo controllo e' di 30 minuti fa", letture_finte(esterno=monitor_finto(ultimo=30), **oggi), False),
+            ("monitor senza contatto d'allarme", letture_finte(esterno=monitor_finto(contatti=0), **oggi), False),
+            ("monitor che non e' mai andato giu' (e GitHub mai rosso)", letture_finte(esterno=monitor_finto(giu=0), rossi=0, **oggi), False),
+            ("monitor su un altro indirizzo", letture_finte(esterno=monitor_finto(url="https://bookinvip.com/"), **oggi), False),
+            ("ultimo giro GitHub di due ore fa, senza monitor", letture_finte(minuti_fa=120, esterno=None), False),
+            ("giri GitHub ogni 5 ore, senza monitor", letture_finte(buco=300, n=8, esterno=None), False),
+            ("mai un rosso GitHub in storia, senza monitor", letture_finte(rossi=0, esterno=None), False),
+            ("repository fermo da 70 giorni, senza monitor", letture_finte(push_giorni=70, esterno=None), False),
+            ("repository fermo da 70 giorni, CON monitor sano (non scade)", letture_finte(push_giorni=70), True),
+            ("nessun giro e nessun monitor", {"adesso": "2026-09-07T18:00:00Z", "giri": [], "rossi_totali": 0, "ultimo_push": None}, False)]
     righe, riuscita = [], True
     for nome, letture, atteso in casi:
         del PASSI[:]
@@ -209,15 +358,32 @@ def autoprova():
         verde, motivi, den = giudica(PASSI)
         ok = verde == atteso
         riuscita = riuscita and ok
-        righe.append("   %-46s -> %-6s (atteso %-6s) den %d%s" % (nome, "VERDE" if verde else "ROSSO",
+        righe.append("   %-66s -> %-6s (atteso %-6s) den %d%s" % (nome, "VERDE" if verde else "ROSSO",
                                                                     "VERDE" if atteso else "ROSSO", den,
                                                                     "" if ok else "   ⛔ NON E' QUELLO CHE DOVEVA DIRE: %s" % "; ".join(motivi)[:160]))
+    # il lettore della risposta di UptimeRobot, nelle due direzioni
+    ts = int(ADESSO_FINTO.timestamp())
+    risposta = {"stat": "ok", "monitors": [
+        {"friendly_name": "altro", "url": "https://example.org/", "interval": 300, "status": 2, "response_times": [], "logs": []},
+        {"friendly_name": "salute", "url": "https://" + SALUTE, "interval": 300, "status": 2,
+         "response_times": [{"datetime": ts - 60 * i, "value": 120} for i in (2, 302, 602)] + [{"datetime": ts - 30 * 3600}],
+         "logs": [{"type": 1, "datetime": ts - 86400}, {"type": 2, "datetime": ts - 86000}], "alert_contacts": [{"id": "1"}]}]}
+    est = monitor_da_uptimerobot(risposta, ADESSO_FINTO)
+    ok = (est is not None and est["url"].endswith(SALUTE) and est["intervallo_sec"] == 300 and est["stato"] == "up"
+          and len(est["controlli"]) == 3 and est["giu_in_storia"] == 1 and est["contatti_allarme"] == 1
+          and monitor_da_uptimerobot({"stat": "ok", "monitors": [risposta["monitors"][0]]}, ADESSO_FINTO) is None
+          and monitor_da_uptimerobot({"stat": "ok", "monitors": [dict(risposta["monitors"][1], status=0)]}, ADESSO_FINTO)["stato"] == "pausa")
+    riuscita = riuscita and ok
+    righe.append("   %-66s -> %s" % ("il lettore della risposta di UptimeRobot (monitor giusto, 24 ore, pausa, assente)", "OK" if ok else "⛔ ROTTO"))
     del PASSI[:]
     return riuscita, righe
 
 
-def precondizioni(con_rete=True):
+def precondizioni(con_rete=True, con_monitor=False):
     fuori = []
+    if con_monitor:
+        fuori.append(("la chiave di SOLA LETTURA del monitor e' nell'ambiente (%s), e non si stampa" % VARIABILE_CHIAVE,
+                      bool(os.environ.get(VARIABILE_CHIAVE)), "presente" if os.environ.get(VARIABILE_CHIAVE) else "assente"))
     try:
         testo = " ".join(str(condizione()).split())
         fuori.append(("la casella esiste nel piano, una sola, e parla di una sentinella non nostra", "non nostra" in testo, testo[:70]))
@@ -272,7 +438,11 @@ def main(argv=None):
         print("   rosso metterebbe nella scheda una sentinella addormentata apposta.")
         return 2
     da_file = argv[argv.index("--da-file") + 1] if "--da-file" in argv else None
-    tutte_ok, righe = precondizioni(con_rete=da_file is None)
+    monitor = argv[argv.index("--monitor") + 1] if "--monitor" in argv and argv.index("--monitor") + 1 < len(argv) else None
+    if monitor is not None and monitor != "uptimerobot":
+        print("⛔ monitor sconosciuto: %s (valido: uptimerobot; per altri servizi usa --da-file col campo `esterno`)" % monitor)
+        return 2
+    tutte_ok, righe = precondizioni(con_rete=da_file is None, con_monitor=monitor is not None)
     print("PRIMA DI MISURARE, L'ESAME MISURA SE STESSO (D18 punto 1)")
     for nome, ok, motivo in righe:
         print("  %-9s %-76s %s" % ("OK" if ok else "⛔ NO", nome, motivo))
@@ -281,7 +451,7 @@ def main(argv=None):
         _stampa_non_guarda()
         return 2
     if con_guasto:
-        print("⚠️  PASSATA COL GUASTO DENTRO: i giri spostati indietro di tre giorni, tutti verdi")
+        print("⚠️  PASSATA COL GUASTO DENTRO: nessun monitor esterno; i giri di GitHub spostati indietro di tre giorni, tutti verdi")
     ambiente_prima = dict(os.environ)
     try:
         if da_file:
@@ -292,11 +462,18 @@ def main(argv=None):
             letture = leggi_dal_vivo(repo_da_git())
             print("letture dal vivo: %s (%d giri recenti, %r in totale, %r rossi in storia)"
                   % (letture["repo"], len(letture["giri"]), letture.get("totale"), letture.get("rossi_totali")))
-            if "--salva" in argv:
-                percorso = argv[argv.index("--salva") + 1]
-                with io.open(percorso, "w", encoding="utf-8") as f:
-                    json.dump(letture, f, ensure_ascii=False, indent=1)
-                print("letture salvate in %s" % percorso)
+        if monitor == "uptimerobot":
+            letture["esterno"] = leggi_monitor(_quando(letture["adesso"]))
+            est = letture["esterno"] or {}
+            print("monitor esterno (UptimeRobot, chiave di sola lettura, mai stampata): %s"
+                  % (("«%s» %s, intervallo %s s, stato %s, %d controlli nelle 24 ore" % (est.get("nome"), est.get("url"),
+                      est.get("intervallo_sec"), est.get("stato"), len(est.get("controlli") or []))) if est
+                     else "nessun monitor su %s in questo conto" % SALUTE))
+        if "--salva" in argv:
+            percorso = argv[argv.index("--salva") + 1]
+            with io.open(percorso, "w", encoding="utf-8") as f:
+                json.dump(letture, f, ensure_ascii=False, indent=1)
+            print("letture salvate in %s" % percorso)
         misura(letture, con_guasto)
     except Exception as e:                                        # noqa: BLE001 - una lettura rotta e' un rosso
         passo("esiste", "le letture o la misura sono ESPLOSE", False, "%s: %s" % (type(e).__name__, e))

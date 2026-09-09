@@ -10,6 +10,17 @@
   "motivo": "",
   "quando": "2026-09-07T12:54:38"
  },
+ "0d485cbbe89e": {
+  "blocco": 8,
+  "comando": "python collaudi/esame_deploy.py --da-file <letture> --scrivi",
+  "commit": "bfad2ce",
+  "condizione": "il deploy passa sempre dal protocollo D17, mai a mano",
+  "denominatore": 37,
+  "esito": true,
+  "impronta": "1e861914e310",
+  "motivo": "",
+  "quando": "2026-09-08T17:59:05"
+ },
  "159ad2c8ab8f": {
   "blocco": 1,
   "comando": "python collaudi/esame_produzione.py --casella ogni-ora --scrivi",
@@ -42,6 +53,28 @@
   "impronta": "bb8bae0cf2dc",
   "motivo": "",
   "quando": "2026-09-05T02:00:19"
+ },
+ "24faa37bd025": {
+  "blocco": 7,
+  "comando": "python collaudi/esame_host_da_solo.py --scrivi",
+  "commit": "bfad2ce",
+  "condizione": "un host si iscrive, carica un annuncio e incassa SENZA che nessuno lo aiuti",
+  "denominatore": 17,
+  "esito": true,
+  "impronta": "f59dead49141",
+  "motivo": "",
+  "quando": "2026-09-08T17:10:08"
+ },
+ "3a547df3a743": {
+  "blocco": 8,
+  "comando": "python collaudi/esame_backup.py --file <db.gz> --sha <.sha256> --manifest <MANIFEST.txt> --scrivi",
+  "commit": "bfad2ce",
+  "condizione": "il salvataggio e' stato RIPRISTINATO e letto, non solo prodotto",
+  "denominatore": 19,
+  "esito": true,
+  "impronta": "1e861914e310",
+  "motivo": "",
+  "quando": "2026-09-08T17:59:05"
  },
  "50691c557e6e": {
   "blocco": 1,
