@@ -104,6 +104,36 @@ PARTENZA = INGRESSI[0]
 # 'import faseNN_x' oppure 'from faseNN_x import ...'
 RIF = re.compile(r"\b(?:from|import)\s+(fase\d+[A-Za-z0-9_]*)")
 
+# ⛔⛔ E CHI CARICA UN MODULO SCRIVENDONE IL NOME — cecita' riparata il 2026-09-09.
+# `RIF` qui sopra vede la parola `import`; non vede questo, che pero' e' un import a tutti
+# gli effetti (`fase91_canali_social.py`, righe 144-148, modulo che la produzione ESEGUE):
+#     for mod, fn, nome in (("fase193_canale_mastodon", ...), ("fase194_canale_bluesky", ...),
+#                           ("fase195_canale_reddit", ...), ("fase197_canale_nostr", ...)):
+#         c = getattr(__import__(mod), fn)(e, fetch=fetch)
+# Quei quattro finivano fra i MORTI pur essendo gia' cablati (dormono solo perche' manca il
+# gettone nel `.env`), e il conto diceva 63 invece di 59.
+# ⚠️ NON e' un limite: e' una PROMESSA ROTTA. Il file dichiarava il buco in una riga di
+# docstring e due paragrafi sopra prometteva «se dice MORTO, e' morto davvero». Le due cose
+# non stanno insieme, e la seconda e' quella su cui la gente agisce: chi legge «morto»
+# CANCELLA. E' lo sbaglio S15 nella forma che l'intestazione stessa aveva gia' nominato --
+# «un attrezzo che promette di sbagliare in un verso e sbaglia nell'altro».
+# 💡 PERCHE' SI GUARDA IL FILE E NON L'ARGOMENTO DELLA CHIAMATA. Il nome non sta dentro
+# `__import__(...)`: sta in una tupla qualche riga sopra, e l'argomento e' una variabile.
+# Seguire la variabile vorrebbe dire eseguire il codice; questo strumento non esegue niente.
+# Quindi la regola e' quella generosa, e vale SOLO nei file che caricano per nome: in un file
+# che carica per nome, ogni nome di modulo nostro scritto in una stringa conta come import.
+# Cosi' il bias resta quello dichiarato -- puo' dire VIVO qualcosa che non parte mai, mai il
+# contrario. ⚠️ Il perimetro NON e' supposto, e' misurato (2026-09-09):
+#     grep -rn "__import__\|importlib.import_module" --include="fase*.py" .
+# -> UN solo punto in tutto il repository carica un NOSTRO modulo per nome; gli altri
+# caricano `time` e `calendar`, cioe' libreria di sistema. Guardia:
+# `test_pipeline_ci.TestUnModuloCaricatoPerNOMENonPuoRisultareMORTO`, vista rossa prima.
+RIF_CARICA_PER_NOME = re.compile(r"(?:__import__|importlib\.import_module)\s*\(")
+RIF_NOME_IN_STRINGA = re.compile(r"[\"'](fase\d+[A-Za-z0-9_]*)[\"']")
+# L'argomento della chiamata, quando E' una stringa scritta li' (caso facile e frequente).
+RIF_ARGOMENTO_LETTERALE = re.compile(
+    r"(?:__import__|importlib\.import_module)\s*\(\s*[\"']([A-Za-z0-9_.]+)[\"']")
+
 
 class NessunIngresso(RuntimeError):
     """Nessuno degli ingressi dichiarati esiste: non e' un risultato, e' l'assenza di misura.
@@ -115,13 +145,66 @@ class NessunIngresso(RuntimeError):
     """
 
 
-def moduli_citati(percorso):
+def _testo(percorso):
     try:
         with open(percorso, "r", encoding="utf-8", errors="replace") as f:
-            testo = f.read()
+            return f.read()
     except OSError:
+        return None
+
+
+def moduli_citati(percorso):
+    testo = _testo(percorso)
+    if testo is None:
         return set()
-    return set(RIF.findall(testo))
+    citati = set(RIF.findall(testo))
+    # In un file che carica per nome, ogni nome di modulo nostro scritto in una stringa
+    # conta come import: e' il bias generoso applicato dove serve (vedi RIF_CARICA_PER_NOME).
+    if RIF_CARICA_PER_NOME.search(testo):
+        citati |= set(RIF_NOME_IN_STRINGA.findall(testo))
+    return citati
+
+
+def caricamenti_per_nome(radice=RADICE):
+    """(risolti, non_risolti): dove qualcuno carica un modulo scrivendone il NOME.
+
+    ⛔ ESISTE PERCHE' UN LIMITE SCRITTO IN PROSA NON E' UNA MISURA (D18 punto 3). Fino al
+    2026-09-09 questo file dichiarava «non risolve gli import dinamici costruiti a stringa»
+    in una riga di docstring: vera, invisibile, e smentita due paragrafi sopra dalla promessa
+    «se dice MORTO, e' morto davvero». Adesso i punti si CONTANO e si ELENCANO.
+
+    `risolti`     -> {file: [nostri moduli caricati per nome da quel file]}
+    `non_risolti` -> righe leggibili «file:riga argomento» per le chiamate il cui argomento
+                     NON e' una stringa scritta li'. Non sono un guasto: sono i punti in cui
+                     il nome e' stato dedotto dalle stringhe del file invece che letto dalla
+                     chiamata, e il giorno che qualcuno costruisce un nome a pezzi
+                     (`"fase" + str(n)`) quel punto compare qui invece di sparire in silenzio.
+    """
+    risolti, non_risolti = {}, []
+    nomi = [n for n in sorted(os.listdir(radice))
+            if re.fullmatch(r"fase\d+[A-Za-z0-9_]*\.py", n)] + list(INGRESSI)
+    # ⛔ SOLO I MODULI CHE ESISTONO DAVVERO (S2: i nomi si leggono dal disco, non si
+    # riconoscono a forma). Senza questo filtro il rapporto stampava `fase83_server ->
+    # fase1`, che non e' un modulo ma una stringa qualunque che somiglia a un nome: il
+    # cammino la scartava comunque (`& tutti`), ma il RAPPORTO diceva una cosa falsa -- ed
+    # e' il rapporto quello che legge una persona.
+    esistenti = {n[:-3] for n in nomi if n.endswith(".py")}
+    for nome in nomi:
+        testo = _testo(os.path.join(radice, nome))
+        if testo is None or not RIF_CARICA_PER_NOME.search(testo):
+            continue
+        nostri = sorted(set(RIF_NOME_IN_STRINGA.findall(testo)) & esistenti)
+        if nostri:
+            risolti[nome[:-3] if nome.endswith(".py") else nome] = nostri
+        for numero, riga in enumerate(testo.splitlines(), 1):
+            if not RIF_CARICA_PER_NOME.search(riga):
+                continue
+            if RIF_ARGOMENTO_LETTERALE.search(riga):
+                continue          # il nome sta nella chiamata: letto, non dedotto
+            non_risolti.append(
+                "%s:%d  %s  -> argomento calcolato; nomi dedotti dalle stringhe del file: %s"
+                % (nome, numero, riga.strip()[:70], nostri or "NESSUNO"))
+    return risolti, non_risolti
 
 
 def ingressi_veri(radice=RADICE):
@@ -196,6 +279,18 @@ def main():
     print("  I NON RAGGIUNGIBILI, in ordine:")
     for m in sorted(morti):
         print("     ", m)
+    print()
+    risolti, non_risolti = caricamenti_per_nome()
+    print("  CARICATI PER NOME (`__import__` / `import_module`), contati come vivi:")
+    if risolti:
+        for chi in sorted(risolti):
+            print("      %s -> %s" % (chi, ", ".join(risolti[chi])))
+    else:
+        print("      nessuno")
+    if non_risolti:
+        print("  ⚠️  chiamate il cui ARGOMENTO non e' scritto li' (nome dedotto dal file):")
+        for riga in non_risolti:
+            print("      %s" % riga)
     print()
     print("  ⚠️  Un modulo morto NON e' un difetto: puo' essere roba costruita e mai")
     print("      collegata, o finita e in attesa di un gettone (SPENTA, non morta -- la")

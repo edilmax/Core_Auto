@@ -326,6 +326,91 @@ IDENTICI alle copie (`cmp`), conflitti solo nei due documenti, risolti con l'edi
 deploy/backup di B nel registro); `git diff origin/master` non toglie nessuna riga di master salvo la nota «IN CORSO» del
 Blocco 7 che il lavoro aggiorna apposta. Conto rimisurato dal caricatore a fermo: **6711**. Suite intera sullo stato fuso in
 corso, poi commit → ramo su GitHub → unione (la fa il fondatore dal browser: `gh` non è autenticato) → deploy col pulsante.
+⛔ **Quella riga su `gh` era SBAGLIATA e il fondatore l'ha corretta lo stesso pomeriggio** («gh è autenticato, prima lo
+facevi tu»): `gh auth status` dice davvero «not logged into any GitHub hosts», ma la credenziale di `edilmax` sta nel
+gestore di git, e passata come `GH_TOKEN` fa funzionare `gh` con permessi di amministratore — l'unione #166 di oggi
+l'ha fatta la macchina. Il gettone si prende con `git credential fill` e **non si stampa mai** (misurata solo la
+lunghezza, 40). ⚠️ `gh auth login --with-token` con quello stesso gettone RIFIUTA («missing required scope 'read:org'»):
+lo stato resta «non autenticato» e non importa, perché `GH_TOKEN` in ambiente scavalca la verifica degli scope.
+
+**✅ 9 SETTEMBRE, 13:52Z — BLOCCO 8 CHIUSO PER INTERO: SUITE, UNIONE #166 E DEPLOY. Il VPS gira `7965c13`.**
+*(via del fondatore, sue parole: «commit e deploy autorizzato ogni lavoro finito va committato subito e deploy, vps
+aggiornata»; atteso scritto PRIMA in `corsia_B_2026-09-09\atteso_deploy_blocco8.txt`; modello e potenza dichiarati e
+impostati da lui: Opus 5, effort medium.)*
+**Suite** (albero B3, stato fuso con `3ab352a`, dalla shell giusta, staccata con l'Utilità di pianificazione):
+`Ran 6706 tests in 8787.190s` · `OK (skipped=4)` · `USCITA_DIRETTA=0`, registro
+`corsia_B_2026-09-08\suite_B3_blocco8_2026-09-09.log`. ⚠️ I **5** test in meno rispetto al caricatore (6711) hanno un
+nome: `TestRipristinoAPezziNonPassa` di `test_backup_completo.py`, che si salta **in blocco** dal `setUpClass` perché su
+Windows manca `openssl` — e su Linux lo stesso codice **fallisce invece di saltare**, quindi in CI vengono eseguiti (è
+S11/D23 punto 3 vista dal lato buono: il salto è dichiarato e il divario ha un nome, non si arrotonda).
+⛔ **Cinque suite buttate prima di questa, e il colpevole non era il codice**: la prima (12:12) è morta in 5 secondi
+perché lanciata con `Start-Process` da dentro il tool (il figlio muore col padre); le altre perché **il fondatore
+chiudeva la finestra PowerShell che si apriva da sola, non sapendo cosa fosse** — l'ha detto lui («continua ad aprirsi
+powershell e io la chiudo?»). Zero tracce in Defender, Malwarebytes, registro eventi e Utilità di pianificazione: la
+causa non era misurabile dalla macchina. Cura: titolo e striscione «NON CHIUDERE» nel lanciatore
+(`corsia_B_2026-09-09\lancia_suite_B3.ps1`), attività **interattiva** (`/IT`) con le fermate per batteria disattivate, e
+**dirlo prima**. Dopo ogni interruzione il controllo post-giro ha dato sempre lo stesso esito: 8 file, zero produzione,
+nessun biglietto aperto.
+**Commit** `a387dac` (8 file, +1936/-60, zero righe di produzione). Il gancio `commit-msg` ha respinto il primo
+messaggio perché conteneva `«` `»`: questo repository tiene i messaggi in ASCII puro. **CI su `a387dac`: 16 controlli,
+15 success + `zap` skipped** (che si riporta NON ESEGUITO, mai fra i verdi), `gate` success. **Unione #166 verificata
+dallo stato** (`merged:true`, `merged_at 2026-09-09T13:50:43Z`), non dall'esito del comando → master **`7965c13`**.
+**Deploy** col pulsante: backup `20260909-112614` verificato **aprendolo** (27 archivi su 27: gzip fino in fondo +
+sha256 + «SQLite format 3») · paracadute `USCITA=0`, `:prec` ri-agganciato alla viva **misurata** `16c42e94…`
+(⚠️ non era quella dell'ultimo scambio registrato: l'immagine era stata ricostruita la notte del 9/9 — il pulsante la
+misura, non la ricorda), `PRE_DEPLOY_...commit` = 3ab352a · scambio staccato con `nohup`, «SCAMBIO FATTO alle 13:52:03Z»
+`USCITA=0` · verifica: app e backup healthy, `money_path_pronto True, avvisi []`, nessuna `PAGAMENTO_`, sha VPS
+`7965c13`, viva `364f4985…` ≠ prec · sonde / 200 · /api/health 200 · **negativa** /api/bunker/invarianti **403**
+(`/api/admin/ping` dà 404 e infatti non prova niente: sta nel registro solo come confronto) · INVARIANTI ARCHIVI
+`archivi:27 violazioni=0 non_eseguiti=0 ciechi=0` + «GUARDIANO: nessuno stato anomalo» · **0 Traceback** · sul VPS zero
+modifiche locali e zero commit solo suoi, compose **2.29.7** · `verifica_produzione.py` **190 controlli, 0 violazioni**
+(certificato valido ancora 74 giorni) · `esame_produzione.py` (senza `--scrivi`) **VERDE 9/9, denominatore 14**.
+🔑 **Atteso dichiarato prima e rispettato: questo deploy NON cambia niente di visibile** — il blocco tocca solo
+`collaudi/`, test e documenti. Non c'è nessun «effetto visibile misurato» da mostrare e non se ne inventa uno; se il
+comportamento fosse cambiato sarebbe stato un difetto. Registri in `corsia_B_2026-09-09\deploy_{1c_backup,1_paracadute,
+2_scambio_avvio,3_verifica,4_sonde,5_effetti}.log`, `verifica_produzione_dopo_deploy.log`, `esame_produzione_dopo_deploy.log`.
+**Cartelle:** `Core_Auto` portata a `7965c13` con `merge --ff-only`, pulita; `Core_Auto_B3` tolta (verificato prima:
+zero file non salvati, zero commit non in master, e i file del blocco **byte-identici** fra le due cartelle). Sul Desktop
+restano `Core_Auto` e `Core_Auto_GUARDIE_PRONTE` (registri e reti, non è un repository).
+**📄 E una cosa nuova per il fondatore, fuori dal repository:** `C:\Users\MaxDanno\Desktop\63_MODULI_SPENTI.txt` — la
+fotografia **prodotta da `collaudi/raggiungibilita.py`** (154 moduli, 91 usati dalla produzione, **63 no**, 10.148 righe,
+58 su 63 con un test dedicato), divisa in quattro gruppi: **A** 38 moduli del vecchio impianto dei tavoli (TavolaVIP),
+**B** 4 di ricerca clienti (l'outreach è stato abbandonato per scelta), **C** 13 del marketplace di oggi mai collegati
+(«qui si guadagna»), **D** 8 recenti di cui **cinque senza nessun test**. Nasce dalla domanda del fondatore («tanti
+moduli creati e poi mai attivati, io non so più il perché») e dalla sua richiesta di una lista che tiene lui sul Desktop
+e spunta man mano. ⛔ Il file **lo produce un programma e si rigenera**: non è una seconda lista scritta a mano, che è
+esattamente il difetto del 22 agosto.
+**🔎 9 SETTEMBRE, 16:3x — LA FOTOGRAFIA DEI MODULI SPENTI, FATTA DA 81 AGENTI (ultracode, chiesto dal fondatore: «fai la
+fotografia dei 63 moduli con ultracode, 38 mango non c'entrano li cancelliamo?»).** Esito su
+`C:\Users\MaxDanno\Desktop\63_MODULI_SPENTI.txt`, **prodotto da un programma e rigenerabile**, mai scritto a mano.
+⛔ **DUE CORREZIONI, ed erano MIE:** (1) **non sono 63 ma 59** — `fase193_canale_mastodon`, `fase194_canale_bluesky`,
+`fase195_canale_reddit` e `fase197_canale_nostr` sono caricati da un modulo **VIVO**, `fase91_canali_social.py:144-148`,
+con `getattr(__import__(mod), fn)(...)` dove `mod` è **una stringa**: `collaudi/raggiungibilita.py` legge l'albero
+sintattico e un nome dentro una stringa **non lo vede**. Sono già collegati, dormono solo senza credenziali. Perimetro
+del punto cieco **misurato, non supposto**: `grep -rn "__import__\|importlib.import_module"` su tutti i `fase*.py` →
+quello è l'**unico** punto in cui si carica un nostro modulo per nome (gli altri caricano `time` e `calendar`).
+(2) **non sono 38 del vecchio impianto ma 18**: contarli per numero di fase (13-56) era una scorciatoia mia, e in
+quell'intervallo ci sono anche moduli di ricerca clienti e di infrastruttura generica. Chi ha **letto il codice** li ha
+divisi diversamente.
+✅ **Confermato invece che la produzione parte da un file solo:** `Dockerfile.casavip:42` è `CMD ["python",
+"main_casavip.py"]` e le righe 25-27 copiano nell'immagine **solo** `main_casavip.py`, i `fase*.py` e `deploy/` —
+`app.py` e `gunicorn.conf.py` **non ci sono**, e `gunicorn` non è nemmeno installato (guardia in
+`test_deploy_config.py`). Quindi `fase13`, `fase15` e `fase17`, che solo quei due file nominano, sono spenti davvero.
+Oltre al sito la produzione esegue anche `deploy/backup_casavip.sh` (ogni 6 h) e `deploy/watchdog.sh` (cron ogni 10 min).
+**Verdetti (59):** 21 TOGLIERE · 5 ACCENDERE (manca solo il filo, zero costi: `fase16_outbox` e `fase23_datastore` di
+valore alto) · 33 ASPETTA UNA DECISIONE DEL FONDATORE.
+⛔ **Limite dichiarato (D18 punto 3):** la verifica ostile ha coperto **15 moduli su 63** — il limite di sessione ha
+fermato gli altri 48 (e il critico di completezza). Sui 15 verificati **2 verdetti sono stati corretti**
+(`fase139_chatbot_guest` e `fase141_onboarding_wizard`, da ACCENDERE a ASPETTA): il tasso di correzione osservato è
+**2 su 15**, quindi i 48 non verificati **non si usano per cancellare niente** finché non passano sotto un secondo
+occhio. Non è stato guardato il codice morto **dentro** i 91 moduli vivi: è un lavoro a parte.
+⛔ **E la cancellazione dei 18 del vecchio impianto NON è stata fatta:** sono `fase*.py`, cioè codice protetto da **B4**,
+si importano fra loro (vanno tolti insieme o non si tocca niente), portano via i loro test — quindi il conto della suite
+cala e le guardie sui numeri diventano rosse lo stesso giorno. Serve la parola scritta del fondatore e un blocco suo.
+**⏳ Aperto e portato al blocco successivo** (non toccato oggi per non invalidare la suite): il promemoria 7 del
+pre-fatto è **ROSSO** su due righe storiche — `REGISTRO_INGEGNERIA.md:842` e `RIPRENDI_QUI.md:4447` dicono «88
+raggiungibili su 151» dove la macchina misura **91 su 154**. Erano già in master identiche, non le ha introdotte questo
+lavoro, e stanno proprio nella sezione «63 moduli costruiti e mai collegati»: si sistemano insieme alla fotografia.
 
 **📏 5 SETTEMBRE, 02:3x — IL METRO RIPARATO: le impronte non dipendono più dai fine riga (ramo `metro-fine-riga`
 su `2a3d6d7`, parola del fondatore «ripara»):** lo stesso Blocco 1 leggeva 6 su 6 in B2 e **0 su 6** in un albero
@@ -1898,9 +1983,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 3ab352a
+CONSEGNE AGGIORNATE A: 7965c13
 
-SUITE ATTUALE: Ran 6711 test
+SUITE ATTUALE: Ran 6714 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
@@ -4443,10 +4528,20 @@ tecniche di verifica** stanno in `REGISTRO_INGEGNERIA.md` fra `TECNICHE-INIZIO` 
 documento in maiuscolo. Un terzo elenco ancora sono i **14 «attrezzi obbligatori»** di
 `piano.py`, dove `gare` e `concorrenza` sono **la stessa tecnica con due nomi**.
 
-### 63 moduli costruiti e mai collegati
-`python collaudi/raggiungibilita.py` → 88 raggiungibili su 151. Trentaquattro sono il vecchio
-impianto (Mango) e vanno solo dichiarati morti. Gli altri sono roba costruita e mai accesa:
-lista dei desideri, chatbot, notifiche sul telefono, traduzione recensioni.
+### I moduli costruiti e mai collegati
+⛔ **QUI C'ERA UNA COPPIA DI CIFRE SCRITTE A MANO, ED ERANO INVECCHIATE DUE VOLTE** (quante ne
+raggiunge la produzione, su quanti moduli esistono). Il 2026-09-09 non tornavano più né i
+raggiunti né il totale, e dopo la riparazione della cecità agli import per nome, fatta lo stesso
+giorno, cambiavano ancora. ⛔ **Perciò qui non c'è più nessuna cifra, e non va rimessa:** la
+produce `python collaudi/raggiungibilita.py`, che le stampa insieme all'elenco dei morti e ai
+caricamenti per nome. Il promemoria 7 del pre-fatto diventa rosso il giorno che qualcuno la
+ricopia qui — ed è successo davvero mentre si riparava questa riga, perché **anche citare la
+cifra vecchia fra virgolette la fa scattare**: giusto così, è la S17 («un commento non nomina il
+numero»). Il vecchio impianto dei tavoli non sono «trentaquattro»: chi ha **letto il codice** ne
+ha contati **18** — l'intervallo dei numeri di fase non è una classificazione. Gli altri sono roba
+costruita e mai accesa: lista dei desideri, chatbot, notifiche sul telefono, traduzione
+recensioni. La fotografia per famiglia sta in `C:\Users\MaxDanno\Desktop\63_MODULI_SPENTI.txt`,
+prodotta da un programma e rigenerabile.
 ⚠️ Fra questi c'è **`fase15_idempotency`**, che serve a non addebitare due volte la stessa
 carta: costruito, non collegato.
 
