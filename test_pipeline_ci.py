@@ -11709,6 +11709,64 @@ class TestLEsameDellaProduzioneNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
             self.assertFalse(verde, "con «%s» l'esame ha detto VERDE" % nome)
             self.assertTrue(motivi, "con «%s» il rosso e' MUTO: nessun motivo" % nome)
 
+    def test_IL_GIRO_INTERO_DI_IERI_E_I_PASSI_ORARI_DI_OGGI_SONO_UN_SERVER_SANO(self):
+        """Dal 2026-09-06 il tick di fase83 e' orario (`giro % 24`): 23 passi su 24 scrivono SOLO
+        la riga INVARIANTI ARCHIVI, e il giro INTERO -- l'unico che chiude con `GUARDIANO:` -- e'
+        uno al giorno, piu' quello all'avvio del container. Il 2026-09-10 l'esame diceva ROSSO su
+        un server sano: cercava `GUARDIANO:` DOPO l'ultima riga oraria, dove per costruzione non
+        c'e', e diventava verde solo nell'ora dopo il giro intero o subito dopo un deploy (il 9/9
+        alle 13:52Z era stato scritto verde cosi'). Le letture di prima (`letture_finte`) avevano
+        la forma che l'esame si aspettava, non quella che il server scrive: la guardia coincideva
+        con l'ipotesi. Qui le letture hanno la forma del registro VERO letto quel giorno -- il
+        giro intero pulito nove ore fa, poi un passo orario ogni ora fino a 18 minuti fa -- e
+        l'esame deve dire VERDE; e ROSSO, col motivo che nomina il Guardiano, se il giro intero
+        non e' pulito, se nelle 26 ore non c'e' stato, o se e' piu' vecchio del tetto del battito."""
+        import fase202_invarianti_archivi as f202
+        esame = self._esame()
+        ora = 1_800_000_000
+        pulito_vero = "GUARDIANO: nessuno stato anomalo (tutto quadra)"
+        with io.open(os.path.join(QUI, "fase83_server.py"), encoding="utf-8") as f:
+            self.assertIn(pulito_vero, f.read(),
+                          "premessa: la riga del giro intero la scrive fase83 con queste parole; "
+                          "se cambiano, questa guardia va riscritta, non passa a vuoto")
+        riga_inv = f202.formatta_riga({"verificati": list(f202.CODICI),
+                                       "letti": {"archivi": 27, "prenotazioni": 0},
+                                       "violazioni": {}, "non_eseguiti": [], "ciechi": []})
+
+        def quando(secondi_fa):
+            return time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(ora - secondi_fa))
+
+        def registro(pulito=True, giro_intero=True, ore_fa=9):
+            """Il giro intero `ore_fa` ore (+18 min) fa, poi un passo orario ogni ora fino a
+            18 minuti fa: la forma esatta del registro del 2026-09-10 (giro alle 23:59:36,
+            passi alle :59:36, letto alle 09:17)."""
+            righe = []
+            if giro_intero:
+                q = quando(ore_fa * 3600 + 18 * 60)
+                righe.append("%s.293136668Z x INFO core_auto.invarianti_archivi %s" % (q, riga_inv))
+                righe.append("%s.293192278Z x INFO core_auto.server %s"
+                             % (q, pulito_vero if pulito else "GUARDIANO: 1 stato/i anomalo/i -> {...}"))
+            for h in range(ore_fa - 1, -1, -1):
+                righe.append("%s.000000000Z x INFO core_auto.invarianti_archivi %s"
+                             % (quando(h * 3600 + 18 * 60), riga_inv))
+            return "\n".join(righe)
+
+        sane = dict(esame.letture_finte(ora), registro=registro())
+        verde, passi, motivi, den = esame.giudica(sane)
+        self.assertTrue(verde, "su un server sano (giro intero pulito 9 ore fa, poi i passi orari) "
+                               "l'esame dice ROSSO: %s" % motivi)
+        self.assertEqual(den, len(esame.CODICI) + len(passi))
+        storte = {
+            "il giro intero NON pulito, poi passi orari puliti": registro(pulito=False),
+            "NESSUN giro intero nelle 26 ore, solo passi orari": registro(giro_intero=False),
+            "il giro intero vecchio di 26 ore, passi orari freschi": registro(ore_fa=26),
+        }
+        for nome, testo in storte.items():
+            verde, _p, motivi, _d = esame.giudica(dict(sane, registro=testo))
+            self.assertFalse(verde, "con «%s» l'esame ha detto VERDE" % nome)
+            self.assertTrue(any("GUARDIANO" in m for m in motivi),
+                            "con «%s» il motivo non nomina il Guardiano: %s" % (nome, motivi))
+
     def test_LA_RIGA_CHE_LEGGE_E_QUELLA_CHE_LA_PRODUZIONE_SCRIVE(self):
         """La sonda cerca nel registro la riga di `fase202.formatta_riga`: le due forme devono
         restare UNA. Qui la riga la produce fase202 davvero, e l'esame deve saperla leggere."""

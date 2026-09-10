@@ -25,7 +25,9 @@ COSA MISURA, e da dove (tutto letto dal server vivo, niente e' dedotto dal codic
      `INVARIANTI ARCHIVI` scritta da `fase202` -- il giro quotidiano che verifica i cinque
      invarianti di `fase199` sugli archivi veri -- ed e' piu' giovane di 25 ore;
   3. quella riga dice: verificati TUTTI e cinque (I1..I5), `violazioni=0`, `non_eseguiti=0`,
-     `ciechi=0`; e il giro del Guardiano che la contiene e' finito «nessuno stato anomalo»;
+     `ciechi=0`; e l'ULTIMO giro INTERO del Guardiano (quello che chiude con `GUARDIANO:`, uno
+     al giorno: dal 2026-09-06 i 23 passi orari scrivono SOLO la riga INVARIANTI ARCHIVI) e'
+     finito «nessuno stato anomalo», ha meno di 25 ore, e la sua riga INVARIANTI lo precede;
   4. il codice che gira sul server e' quello di `master` (HEAD del VPS == `origin/master`):
      una misura fatta su un altro commit non parlerebbe di questo codice.
   Il denominatore e' 5 (gli invarianti) + i passi sopra: la scheda sa su quante cose ha guardato.
@@ -104,6 +106,10 @@ NON_GUARDA = (
     "Un prodotto con zero prenotazioni ha invarianti verificati su zero righe, ed e' la verita'",
     "il bottone manuale del bunker (`/api/bunker/invarianti`, solo I1): resta com'e', non e' "
     "il giro quotidiano",
+    "cosa e' successo DOPO l'ultimo giro intero: i passi orari verificano i cinque invarianti "
+    "sugli archivi, non i conti con Stripe, gli escrow e i bonifici (fase186), che il Guardiano "
+    "guarda una volta al giorno. Qui si legge l'ULTIMO giro intero (meno di 25 ore): un'anomalia "
+    "di fase186 nata dopo la vede il giro di domani, e questo esame con lei",
     "le altre cinque caselle del blocco: non le tocca",
     "per la casella «OGNI ORA»: il passo orario SCRIVE la riga (e grida nel registro se trova una "
     "violazione), ma l'email del Guardiano parte solo dal giro quotidiano: una violazione vista "
@@ -186,6 +192,26 @@ def _ultima_riga_invarianti(registro):
     return None, None, None
 
 
+def _ultimo_giro_intero(registro):
+    """L'ULTIMO giro intero del Guardiano nel registro: (istante, riga GUARDIANO, preceduto
+    dalla riga INVARIANTI ARCHIVI). (None, None, False) se non c'e' nessun `GUARDIANO:`.
+
+    ⛔ Il giro INTERO (fase83 `_tick_guardiano`: uno al giorno, piu' quello all'avvio del
+       container) e' l'UNICO che chiude con `GUARDIANO:`; dal 2026-09-06 i 23 passi orari
+       scrivono SOLO la riga INVARIANTI ARCHIVI. Fino al 2026-09-10 l'esame cercava
+       `GUARDIANO:` DOPO l'ULTIMA riga INVARIANTI: lo trovava un'ora su ventiquattro (o subito
+       dopo un deploy, quando il primo tick e' il giro intero) e diceva ROSSO su un server sano.
+       Il giro intero VERIFICA gli invarianti e poi RIFERISCE: la riga INVARIANTI sta subito
+       prima del suo `GUARDIANO:`. Se manca (fase202 `giro_quotidiano`: scansione fallita o
+       cartella dati assente), quel giro non li ha verificati, e lo si dice."""
+    righe = (registro or "").splitlines()
+    for i in range(len(righe) - 1, -1, -1):
+        if "GUARDIANO:" in righe[i]:
+            preceduto = i > 0 and RIGA.search(righe[i - 1]) is not None
+            return _istante(righe[i]), righe[i], preceduto
+    return None, None, False
+
+
 def giudica(letture, ora=None):
     """(verde, passi, motivi, denominatore). Ogni passo e' (nome, ok, dettaglio)."""
     ora = int(letture.get("ora") or 0) if ora is None else int(ora)
@@ -201,7 +227,7 @@ def giudica(letture, ora=None):
           sal.get("guardiano") == "ok", "guardiano=%s" % sal.get("guardiano"))
 
     registro = letture.get("registro") or ""
-    indice, quando, campi = _ultima_riga_invarianti(registro)
+    _indice, quando, campi = _ultima_riga_invarianti(registro)
     eta = (ora - quando) if (quando is not None) else None
     passo("il registro del server ha la riga %s, piu' giovane di 25 h" % MARCA,
           campi is not None and eta is not None and 0 <= eta <= MAX_ETA_SEC,
@@ -217,11 +243,22 @@ def giudica(letture, ora=None):
     passo("non_eseguiti=0 (nessun invariante saltato)", campi["non_eseguiti"] == 0,
           "non_eseguiti=%s" % campi["non_eseguiti"])
     passo("ciechi=0 (ogni archivio si e' letto)", campi["ciechi"] == 0, "ciechi=%s" % campi["ciechi"])
-    dopo = registro.splitlines()[indice + 1:] if indice is not None else []
-    guard = [r for r in dopo if "GUARDIANO:" in r]
-    passo("il giro del Guardiano che la contiene e' finito pulito (%s)" % GUARDIANO_PULITO,
-          bool(guard) and GUARDIANO_PULITO in guard[0],
-          guard[0][guard[0].find("GUARDIANO:"):][:100] if guard else "nessuna riga GUARDIANO dopo quella")
+    giro_quando, giro_riga, giro_con_invarianti = _ultimo_giro_intero(registro)
+    eta_giro = (ora - giro_quando) if giro_quando is not None else None
+    if giro_riga is None:
+        dettaglio_giro = ("nessuna riga GUARDIANO nelle ultime %s: nessun giro INTERO del "
+                          "Guardiano (i passi orari non lo sono)" % FINESTRA_REGISTRO)
+    else:
+        dettaglio_giro = "%s · eta %s · riga %s subito prima: %s" % (
+            giro_riga[giro_riga.find("GUARDIANO:"):][:60],
+            ("%.1f h" % (eta_giro / 3600.0)) if eta_giro is not None else "illeggibile",
+            MARCA, "si'" if giro_con_invarianti else "NO (quel giro non li ha verificati)")
+    passo("l'ULTIMO giro INTERO del Guardiano e' finito pulito (%s), ha meno di %d h e ha "
+          "verificato gli invarianti (la sua riga %s lo precede)"
+          % (GUARDIANO_PULITO, MAX_ETA_SEC // 3600, MARCA),
+          giro_riga is not None and GUARDIANO_PULITO in giro_riga and giro_con_invarianti
+          and eta_giro is not None and 0 <= eta_giro <= MAX_ETA_SEC,
+          dettaglio_giro)
     head, master = letture.get("vps_head") or "", letture.get("master") or ""
     passo("il codice in produzione e' master (HEAD del VPS == origin/master)",
           bool(head) and len(head) >= 7 and head == master,
@@ -359,6 +396,29 @@ def inietta_il_guasto(letture):
     return storte
 
 
+def letture_finte_giro_e_passi(ora, *, ore_dal_giro=9, eta_sec=18 * 60, pulito=True,
+                               giro_intero=True, senza_riga_invarianti=False, **resto):
+    """Il registro come lo scrive il server DAL 2026-09-06: il giro INTERO (riga INVARIANTI +
+    `GUARDIANO:`) `ore_dal_giro` ore e `eta_sec` fa, poi un passo orario (SOLO la riga
+    INVARIANTI) ogni ora fino a `eta_sec` fa. E' la forma del registro vero letto il 2026-09-10
+    (giro alle 23:59:36, passi alle :59:36, letto alle 09:17), quella su cui l'esame diceva ROSSO.
+    `giro_intero=False`: solo passi orari. `senza_riga_invarianti=True`: il `GUARDIANO:` c'e'
+    ma la sua riga INVARIANTI no (fase202 `giro_quotidiano` fallito o senza cartella dati)."""
+    base = letture_finte(ora, eta_sec=eta_sec, pulito=pulito, **resto)
+    riga_inv, riga_guard = base["registro"].splitlines()
+    quando_giro = ora - ore_dal_giro * 3600 - eta_sec
+    testo = []
+    if giro_intero:
+        q = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(quando_giro))
+        if not senza_riga_invarianti:
+            testo.append(q + riga_inv[19:])
+        testo.append(q + riga_guard[19:])
+    for i in range(ore_dal_giro - 1, -1, -1):
+        q = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(ora - eta_sec - i * 3600))
+        testo.append(q + riga_inv[19:])
+    return dict(base, registro="\n".join(testo))
+
+
 def letture_finte_orarie(ora, *, eta_sec=600, passo_sec=3600, righe=2, **resto):
     """Un registro con `righe` righe INVARIANTI ARCHIVI a distanza `passo_sec`, l'ultima
     vecchia `eta_sec`: e' cio' che un server col passo orario acceso scrive davvero."""
@@ -401,7 +461,13 @@ def autoprova_oraria():
 def autoprova():
     ora = 1_800_000_000
     casi = (
-        ("letture SANE", letture_finte(ora), True),
+        ("letture SANE (giro intero appena fatto)", letture_finte(ora), True),
+        ("giro intero 9 ore fa, poi i passi orari", letture_finte_giro_e_passi(ora), True),
+        ("solo passi orari, NESSUN giro intero", letture_finte_giro_e_passi(ora, giro_intero=False), False),
+        ("giro intero NON pulito, passi puliti dopo", letture_finte_giro_e_passi(ora, pulito=False), False),
+        ("giro intero di 26 ore fa, passi freschi", letture_finte_giro_e_passi(ora, ore_dal_giro=26), False),
+        ("GUARDIANO pulito SENZA la sua riga INVARIANTI",
+         letture_finte_giro_e_passi(ora, senza_riga_invarianti=True), False),
         ("UNA violazione", inietta_il_guasto(letture_finte(ora)), False),
         ("riga vecchia di 26 ore", letture_finte(ora, eta_sec=26 * 3600), False),
         ("quattro invarianti su cinque", letture_finte(ora, verificati=CODICI[:4]), False),

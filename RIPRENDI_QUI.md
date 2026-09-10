@@ -395,6 +395,31 @@ giri di mutazione da 60 e 600 minuti dichiarati. Guardia `TestUnaCasellaSCADUTAD
 vista rossa prima (3 su 3). **Misurato adesso: 9 caselle rilanciabili subito, 2 che vogliono il server.**
 🔑 **Quindi «15 caselle su 39» NON vuol dire che il lavoro sia fermo:** vuol dire che gran parte delle misure è
 scaduta e va rifatta. Il primo lavoro utile è rilanciare quei 9 attrezzi.
+**🔁 10 SETTEMBRE, mattina — LE CASELLE SCADUTE RIMESSE, DA 15 A 21 SU 39, E UN ESAME DEI SOLDI CHE DICEVA ROSSO SU UN
+SERVER SANO (`Core_Auto` su master `8358c04`, corsia unica; modello e potenza impostati dal fondatore: Opus 5 medium per
+l'esecuzione, poi Fable 5.1 max al primo rosso, sue parole «o messo fable max, lancia esame_sentinella e ripara»):** `--rimisura`
+elencava 9 caselle (8 comandi: `esame_soldi` ne scrive due) più 2 col server. I sei attrezzi veloci rilanciati, ognuno prima
+senza `--scrivi` e poi con: `esame_soldi` VERDE (caselle 1 e 4, den. 54 e 15) · `esame_rimborsi` VERDE 7 strade su 7, E2E vero
+contro Stripe di prova (den. 38) · `esame_orologi` VERDE 34/34 (den. 34) · `esame_produzione --casella ogni-ora` VERDE 8/8
+(den. 13) · `esame_sentinella` ROSSA 4 passi su 10, **scritta col motivo** (nessun monitor esterno: il conto UptimeRobot lo apre
+il fondatore; GitHub come seconda linea ha un buco di 286 minuti nelle 24 ore, 7 giri) · `esame_produzione` **ROSSO 8 su 9**.
+⛔ **Il rosso era nell'attrezzo, non nei soldi** (fermata e riferito prima di toccare, come vuole il prompt): cercava la riga
+`GUARDIANO:` DOPO l'ultima riga `INVARIANTI ARCHIVI`; dal 6/9 il tick di `fase83` è orario (`giro % 24`), 23 passi su 24
+scrivono solo la riga oraria e il giro intero (con `GUARDIANO:`) è uno al giorno più quello all'avvio del container — quindi
+il passo era verde **un'ora su ventiquattro**, o subito dopo un deploy: è così che il 9/9 alle 13:52Z era stato scritto verde.
+Nel registro vero (26 ore, 11 righe) la riga `GUARDIANO: nessuno stato anomalo (tutto quadra)` c'era, delle 23:59:36Z. Le
+letture finte dell'autoprova avevano la forma che l'esame si aspettava, non quella che il server scrive: la guardia coincideva
+con l'ipotesi. **Cura (D20, `collaudi/` non è produzione):** guardia
+`test_IL_GIRO_INTERO_DI_IERI_E_I_PASSI_ORARI_DI_OGGI_SONO_UN_SERVER_SANO` scritta con la forma del registro vero e vista ROSSA
+(motivo: «nessuna riga GUARDIANO dopo quella»); poi `_ultimo_giro_intero()` in `esame_produzione.py`: il passo legge l'ULTIMO
+`GUARDIANO:` del registro e pretende che sia pulito, più giovane di 25 ore e preceduto dalla sua riga INVARIANTI (se
+`giro_quotidiano` fallisce la riga manca e quel giro non ha verificato niente); `letture_finte_giro_e_passi` e 5 casi nuovi
+nell'autoprova (25/25 nelle due direzioni); classe 11/11; sulle letture delle 09:17 VERDE 9/9, dal vivo VERDE 9/9 → casella 6
+scritta (den. 14, impronta invariata: `collaudi/` non entra nell'impronta del blocco). Scheda **21 su 39**, Blocco 1 **6 su 14**;
+`--rimisura` ne elenca 2 (i giri di mutazione da 60 e 600 minuti) più le 2 col server. Caricatore **6718**. Voce di registro:
+*«L'ESAME DELLA PRODUZIONE ERA VERDE UN'ORA SU VENTIQUATTRO»*. **Cosa manca:** suite → commit → PR → CI → unione → deploy (regola
+del 9/9); poi i due giri di mutazione (60 e 600 minuti dichiarati), i due esami col materiale del VPS (`esame_backup`,
+`esame_deploy`), e il conto UptimeRobot (decisione del fondatore).
 
 **🔎 9 SETTEMBRE, 16:3x — LA FOTOGRAFIA DEI MODULI SPENTI, FATTA DA 81 AGENTI (ultracode, chiesto dal fondatore: «fai la
 fotografia dei 63 moduli con ultracode, 38 mango non c'entrano li cancelliamo?»).** Esito su
@@ -1999,9 +2024,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: da0411e
+CONSEGNE AGGIORNATE A: 8358c04
 
-SUITE ATTUALE: Ran 6717 test
+SUITE ATTUALE: Ran 6718 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
