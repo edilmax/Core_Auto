@@ -12698,6 +12698,129 @@ class TestLEsameDelPannelloSoldiNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
         self.assertTrue(riuscita, righe)
 
 
+class TestLEsameDeiPercorsiPerRuoloNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
+    """⛔ D18 PUNTO 4 PER `collaudi/esame_percorso_ruoli.py`, l'attrezzo che scrive DUE caselle:
+    il giro INTERO di admin e super admin (Blocco 3) e la coerenza fra le letture che ruoli
+    diversi fanno dello stesso denaro (Blocco 1).
+
+    Il banco costa **un secondo**, quindi qui l'esame si ESEGUE davvero, sano e col guasto:
+    una guardia che si accontentasse di leggere il sorgente la soddisferebbe un commento
+    (sbaglio S6). E c'e' una prova di PREMESSA sul prodotto: se un domani le due rotte che
+    muovono denaro smettessero di pretendere il secondo fattore, questa guardia lo dice invece
+    di continuare a passare -- il giro resterebbe verde misurando una macchina piu' debole.
+    """
+
+    def _esame(self):
+        return self._carica("esame_percorso_ruoli.py", "_esame_percorso_ruoli_sotto_guardia")
+
+    def test_IL_GIUDIZIO_DICE_VERDE_SOLO_CON_GLI_ANELLI_INTERI(self):
+        esame = self._esame()
+        for anelli in (esame.ANELLI_ADMIN, esame.ANELLI_SUPER, esame.ANELLI_COERENZA):
+            verde, motivi, den = esame.giudica(esame.passi_finti(anelli), anelli)
+            self.assertTrue(verde, motivi)
+            self.assertEqual(den, len(anelli))
+            for a in anelli:
+                self.assertFalse(esame.giudica(esame.passi_finti(anelli, rossi=(a,)), anelli)[0],
+                                 "con l'anello «%s» ROSSO ha detto VERDE" % a)
+                self.assertFalse(esame.giudica(esame.passi_finti(anelli, senza=(a,)), anelli)[0],
+                                 "con l'anello «%s» NON MISURATO ha detto VERDE" % a)
+            #  un anello non misurato deve dire PERCHE', non tacere (sbaglio S7)
+            _v, motivi, _d = esame.giudica(esame.passi_finti(anelli, senza=(anelli[0],)), anelli)
+            self.assertTrue(any("NON misurato" in m for m in motivi), motivi)
+        self.assertFalse(esame.giudica([], esame.ANELLI_ADMIN)[0], "zero passi non e' un verde")
+        self.assertFalse(esame.giudica(esame.passi_finti(esame.ANELLI_ADMIN)
+                                       + [("intruso", "x", True, "")], esame.ANELLI_ADMIN)[0])
+
+    def test_L_ESAME_VERO_E_VERDE_SANO_E_ROSSO_COL_GUASTO(self):
+        """Le due direzioni sul banco VERO (un secondo), e i codici d'uscita di casa:
+        0 sano · 1 col guasto · 2 se qualcuno prova a REGISTRARE un guasto."""
+        esame = self._esame()
+        self.assertEqual(esame.main([]), 0, "l'esame non e' verde su un banco sano")
+        self.assertEqual(esame.main(["--con-guasto"]), 1, "col guasto dentro NON ha gridato")
+
+    def test_COL_GUASTO_DENTRO_NON_SCRIVE_MAI(self):
+        esame = self._esame()
+        vera_registra = esame.scheda.registra
+        scritture = []
+        try:
+            esame.scheda.registra = lambda *a, **k: scritture.append((a, k))
+            self.assertEqual(esame.main(["--con-guasto", "--scrivi"]), 2)
+            self.assertEqual(scritture, [], "ha registrato un'incoerenza costruita apposta")
+        finally:
+            esame.scheda.registra = vera_registra
+
+    def test_I_DUE_GUASTI_COLPISCONO_META_DIVERSE(self):
+        """⛔ UN GUASTO SOLO NON BASTA, ed e' il motivo per cui ce ne sono due. Il primo
+        (il mastro spostato di UN centesimo) rompe la COERENZA e lascerebbe il giro tutto
+        verde: meta' attrezzo non sarebbe mai stata vista gridare. Il secondo (il gateway
+        che non sa rispondere) ferma la catena dell'admin dove deve fermarsi."""
+        esame = self._esame()
+        import io as _io
+        with _io.open(os.path.join(QUI, "collaudi", "esame_percorso_ruoli.py"),
+                      encoding="utf-8") as f:
+            sorgente = f.read()
+        self.assertIn("guasta_il_mastro", sorgente)
+        self.assertIn("gateway.muto = True", sorgente)
+        g = esame.GatewayDiProva()
+        self.assertEqual(g.rimborsi_di("pi_x"), {"ok": True, "rimborsato_cents": 0, "conteggio": 0})
+        g.rimborsa("pi_x", 700, "k1")
+        self.assertEqual(g.rimborsi_di("pi_x")["rimborsato_cents"], 700,
+                         "il gateway non tiene conto: direbbe zero anche dopo un rimborso")
+        g.rimborsa("pi_x", 700, "k1")          # stessa chiave: idempotente, non esce due volte
+        self.assertEqual(g.rimborsi_di("pi_x")["rimborsato_cents"], 700)
+        g.muto = True
+        self.assertFalse(g.rimborsi_di("pi_x")["ok"],
+                         "«non lo so» deve restare distinguibile da «nessun rimborso»")
+
+    def test_PREMESSA_I_DUE_GESTI_CHE_MUOVONO_DENARO_VOGLIONO_IL_SECONDO_FATTORE(self):
+        """La premessa su cui poggiano gli anelli [risolve] e [rimborsa]: nel prodotto,
+        `_admin_controversia_risolvi` e `_admin_rimborsa_dovuto` passano TUTTE E DUE da
+        `_bunker_ok_o_field`. Se un domani non fosse piu' vero, l'esame continuerebbe a
+        dire verde su una macchina piu' debole -- e nessuno se ne accorgerebbe."""
+        import io as _io
+        with _io.open(os.path.join(QUI, "fase83_server.py"), encoding="utf-8") as f:
+            sorgente = f.read()
+        for funzione in ("_admin_controversia_risolvi", "_admin_rimborsa_dovuto"):
+            inizio = sorgente.find("def %s(" % funzione)
+            self.assertGreater(inizio, 0, "la funzione %s non esiste piu'" % funzione)
+            testa = sorgente[inizio:inizio + 1400]
+            self.assertIn("_bunker_ok_o_field", testa,
+                          "%s non pretende piu' il secondo fattore: un gesto che muove denaro "
+                          "e' rimasto dietro la sola chiave admin" % funzione)
+
+    def test_IL_TESTO_DELLE_CASELLE_NON_E_RICOPIATO_A_MANO(self):
+        esame = self._esame()
+        import io as _io
+        with _io.open(os.path.join(QUI, "collaudi", "esame_percorso_ruoli.py"),
+                      encoding="utf-8") as f:
+            sorgente = f.read()
+        for blocco, marca in ((esame.BLOCCO_GIRI, esame.MARCA_GIRO),
+                              (esame.BLOCCO_SOLDI, esame.MARCA_COERENZA)):
+            testo = esame.condizione(blocco, marca)
+            self.assertIn(marca, testo)
+            self.assertNotIn(testo, sorgente,
+                             "il testo della casella e' ricopiato nell'esame: il giorno che il "
+                             "piano cambia, l'esame spunterebbe una casella che non esiste piu'")
+
+    def test_L_ESAME_DICHIARA_COSA_NON_HA_GUARDATO_E_SA_PROVARSI(self):
+        esame = self._esame()
+        self.assertTrue(getattr(esame, "NON_GUARDA", ()))
+        self.assertTrue(all(isinstance(r, str) and r.strip() for r in esame.NON_GUARDA))
+        riuscita, righe = esame.autoprova()
+        self.assertTrue(riuscita, righe)
+
+    def test_L_AMBIENTE_TORNA_COM_ERA_DOPO_IL_BANCO(self):
+        """Lezione della CI del 2026-09-07: un attrezzo che costruisce un sistema locale non
+        deve lasciare `os.environ` cambiato ne' il fetch di Stripe sostituito sulla classe."""
+        import fase85_pagamenti_stripe as stripe_mod
+        esame = self._esame()
+        upload_prima = os.environ.get("UPLOAD_DIR")
+        fetch_prima = vars(stripe_mod.ProviderStripe).get("_fetch_reale")
+        esame.main([])
+        self.assertEqual(os.environ.get("UPLOAD_DIR"), upload_prima)
+        self.assertEqual(vars(stripe_mod.ProviderStripe).get("_fetch_reale"), fetch_prima)
+
+
 class TestLEsameLegaleNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
     """⛔ D18 PUNTO 4 PER `collaudi/esame_legale.py`, l'attrezzo delle caselle 1 e 2 del Blocco 5
     («le 3 spunte obbligatorie sono bloccate lato browser E rifiutate 422 lato server»; «termini e

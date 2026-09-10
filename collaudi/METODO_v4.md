@@ -1055,6 +1055,117 @@ Il sistema è online, i soldi degli ospiti sono in mezzo, e tutto quello che ser
 
 ---
 
+# PARTE 20 — TRE FAMIGLIE CHE I NOVE STRATI NON PRENDONO
+
+*(aggiunta il 2026-09-10, dopo due difetti in due giorni che nessuno dei nove strati poteva
+vedere. Non sono strati "migliori": sono famiglie **diverse**, come dice la PARTE 2.)*
+
+I nove strati chiedono tutti la stessa domanda: **«questo pezzo è giusto?»**. Nessuno chiede
+«il pezzo A passa la palla al pezzo B?», nessuno chiede «due pezzi che guardano lo stesso
+fatto dicono lo stesso numero?», e nessuno chiede «questo controllo parla ancora del codice
+di oggi?».
+
+⛔ **E quello che un metodo non nomina, non si costruisce.** La prova, misurata su questo
+progetto il 2026-09-10: dei quattro percorsi di ruolo (cliente, host, admin, super admin)
+**uno solo** era provato da capo a fondo. Non per pigrizia: perché il documento non aveva una
+riga che lo chiedesse.
+
+---
+
+## 20.1 — Il giro intero, per ruolo
+
+**Cosa prende:** i difetti che stanno nel **passaggio** fra due pezzi, dove ogni pezzo è
+corretto e la catena no. Nessuno degli altri strati li vede, perché ognuno guarda dentro un
+pezzo.
+
+**Come si misura.** Per ogni ruolo si sceglie il giro che quella persona fa davvero, e lo si
+esegue intero, sul sistema vero, osservando **ogni anello**:
+
+| ruolo | il giro |
+|---|---|
+| cliente | cerca · prenota · paga · modifica · cancella · viene rimborsato · recensisce |
+| host | si iscrive · pubblica · tiene il calendario · riceve · incassa · prende il bonifico · contesta |
+| admin | legge le prenotazioni · risolve una controversia · rimborsa · legge i conti |
+| super admin | crea un admin · cambia una commissione · chiude una giurisdizione · legge gli invarianti |
+
+⛔ **Il criterio non è «nessun errore»: è che ogni anello lasci una traccia osservabile, e che
+la traccia del PASSAGGIO esista.** Un giro che arriva in fondo senza che si veda *dove* è
+passato non è una prova: è una speranza con l'aria di un verde. È la regola ferrea 9
+(osservabile debole) applicata al percorso invece che al singolo pezzo.
+
+🔑 **E la prova si prende in DUE TEMPI: PRIMA non c'è, DOPO c'è.** Così il verde misura una
+**differenza** e non la presenza di una pagina che mostra sempre qualcosa (modo di rompersi
+n. 1, i dati effimeri). Un elenco che mostra righe *sembra* sano anche quando non ha letto
+niente.
+
+**Il denominatore è il numero di anelli**, e si dichiara: «12 anelli su 12», non «funziona».
+
+---
+
+## 20.2 — La coerenza fra ruoli
+
+**Cosa prende:** lo **stesso fatto** che due ruoli vedono **diverso**. È la famiglia più
+pericolosa per la reputazione, perché nessuna delle due parti è rotta: sono d'accordo con sé
+stesse e in disaccordo fra loro, e chi paga il conto è quello che ci ha creduto.
+
+**Il caso che l'ha nominata**, su questo progetto, il 2026-09-08: il pannello dell'host
+mostrava fra i guadagni un **hold che nessuno aveva pagato**, mentre il mastro dei payout era
+**giusto** (contava solo le pagate). Due numeri, due verità, un solo fatto. Nessuno se n'era
+accorto proprio perché il registro dei soldi era corretto.
+
+**Come si misura.** Si prende UN fatto vero (una prenotazione, un rimborso, un bonifico), lo
+si legge da **ogni** pannello e da **ogni** registro che lo nomina, e si pretende che i numeri
+coincidano **al centesimo**. Le fonti si leggono dal codice, non a memoria: se domani nasce un
+terzo pannello che mostra quel numero, entra nel confronto da solo.
+
+⛔ **Non basta che i totali tornino.** Devono coincidere le **singole righe**: due errori che
+si compensano danno un totale giusto, ed è esattamente il caso che nessuno trova mai.
+
+---
+
+## 20.3 — La misura che invecchia
+
+**Cosa prende:** il controllo che **era** vero e **non lo è più**, perché il codice si è
+spostato sotto di lui. Non è un difetto del prodotto: è un difetto dello strumento, e per
+questo nessuno degli altri strati lo vede — gli altri misurano il prodotto.
+
+⛔ **La forma peggiore non è il rosso: è il verde.** Un controllo che ha smesso di guardare
+tace, e il silenzio somiglia alla pace.
+
+**I due casi che l'hanno nominata, in due giorni:**
+
+- **2026-09-09** — ogni casella era legata a un'impronta di tutti i moduli del suo blocco: ne
+  cambiava uno, si svuotavano tutte, **in silenzio e senza dire quale**. Il codice migliorava
+  e il punteggio andava indietro.
+- **2026-09-10** — l'esame della produzione cercava la riga del giro quotidiano **dopo**
+  l'ultima riga oraria. Dal giorno in cui il tick è diventato orario, quella riga c'è
+  **un'ora su ventiquattro**: l'esame diceva ROSSO su un server sano, ed era stato scritto
+  verde solo perché era stato lanciato nell'ora giusta, subito dopo un deploy. Le stesse
+  letture del server vivo, date ai due codici: il vecchio ROSSO 8 passi su 9, il nuovo VERDE
+  9 su 9.
+
+**Come si misura.** Ogni strumento che misura dichiara **su cosa** ha misurato (l'impronta) e
+**quando** smette di parlare del codice di oggi; e un controllo che dipende dal **momento** in
+cui lo lanci va provato **anche nel momento sbagliato** — se è verde solo in una finestra, la
+finestra è parte del risultato e va stampata.
+
+🔑 **La regola che ne esce, ed è la più corta di tutto il documento:**
+**l'atteso di una guardia si scrive guardando il sistema VERO, mai la descrizione di come
+dovrebbe comportarsi.** Le due cose coincidono il giorno che la scrivi, e divergono in
+silenzio il giorno che il sistema cambia. Nel caso del 2026-09-10 le letture finte avevano la
+forma che l'esame *si aspettava*, non quella che il server *scriveva da quattro giorni*: la
+guardia coincideva con l'ipotesi che doveva controllare.
+
+---
+
+## Cosa queste tre NON prendono (la PARTE 14 resta intera)
+
+Nessuna delle tre dice se la **regola** è giusta. Un giro intero verde su una commissione
+sbagliata è un giro intero verde. Quel buco non si chiude con un metodo: si chiude con una
+persona che legge le regole, e con un avvocato che legge i testi (PARTE 19).
+
+---
+
 # CHIUSURA — IL BERSAGLIO
 
 Non punto a "non sbaglia mai". Quello non esiste per nessuno, e questa guida lo dimostra parte per parte.
@@ -1068,4 +1179,4 @@ Il giorno in cui la PARTE 12 è tutta spuntata con misure vere, il lavoro non è
 
 ---
 
-*Versione 4 — ultimo aggiornamento: 2026-09-05 (righe 1 e 2 della PARTE 11, due famiglie nella PARTE 13)*
+*Versione 4 — ultimo aggiornamento: 2026-09-10 (PARTE 20: le tre famiglie che i nove strati non prendono)*

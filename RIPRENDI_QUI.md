@@ -421,6 +421,33 @@ scritta (den. 14, impronta invariata: `collaudi/` non entra nell'impronta del bl
 del 9/9); poi i due giri di mutazione (60 e 600 minuti dichiarati), i due esami col materiale del VPS (`esame_backup`,
 `esame_deploy`), e il conto UptimeRobot (decisione del fondatore).
 
+**🧭 10 SETTEMBRE, pomeriggio — IL GIRO DELL'ADMIN E DEL SUPER ADMIN NON L'AVEVA MAI PERCORSO NESSUNO (master
+`4adb7c8`, parole del fondatore: «tu pensa a fare funzionare la macchina per tutto quello che deve fare tragitti
+coerenza, percorso host cliente admin super admin in tutte le funzionalita», poi «procedi al commit al deploy vps
+… sei autorizzato ad andare fino in fondo»):** il METODO aveva **nove strati** e nessuno chiedeva «il pezzo A passa
+la palla al pezzo B?». Misurato: delle quattro persone che usano la macchina, **una sola** aveva un giro provato da
+capo a fondo (l'host, Blocco 7). ⇒ **`collaudi/METODO_v4.md` PARTE 20** (nuova; ⛔ la 19 esisteva già, «Quello che non
+è software», e chiamarla 19 l'avrebbe sovrascritta — S2): **20.1** il giro intero per ruolo, **20.2** la coerenza fra
+ruoli, **20.3** la misura che invecchia. Da lì **due caselle nuove in coda** (mai in mezzo: una dozzina di attrezzi
+indicizza `finito_quando`): Blocco 3 il giro di admin e super admin, Blocco 1 lo stesso denaro letto da ruoli diversi.
+⚠️ **Il piano passa da 39 a 41 caselle: il punteggio non torna indietro, la mappa diventa onesta** — due cose che non
+misuravamo prima ora si vedono. Attrezzo nuovo `collaudi/esame_percorso_ruoli.py` (banco in un secondo): **giro VERDE
+12 anelli su 12**, **coerenza VERDE 4 su 4**; guardia `test_pipeline_ci.TestLEsameDeiPercorsiPerRuoloNonPuoBARARE`
+(8 test) che l'esame lo **esegue**, sano e col guasto. 🔑 **Quello che il giro ha insegnato, e nessuno l'aveva scritto:
+l'admin VEDE e PREPARA, ma nessun gesto che muove denaro passa con la sola chiave** — `_admin_controversia_risolvi` e
+`_admin_rimborsa_dovuto` chiedono tutt'e due `_bunker_ok_o_field`, quindi il caso passa di mano (l'admin lo riceve, il
+super admin decide la cifra, il pulsante vuole di nuovo il secondo fattore). C'è una prova di **premessa** che lo
+sorveglia: se un domani una delle due smettesse di chiederlo, la guardia lo dice invece di restare verde su una macchina
+più debole. ⛔ **Tre rossi erano MIEI, non del prodotto** (colonne del mastro indovinate invece che lette — è `minori`,
+non `importo_cents`; due nomi per la stessa cifra, `rimborso_ospite_cents` in ingresso e `rimborso_cliente_cents` in
+uscita; un confronto fra due istanti con un arbitrato in mezzo che spiegava la differenza): il primo sospetto va allo
+strumento (S3). E **due guasti, non uno**: il primo sposta il mastro di **un centesimo** e rompe solo la coerenza, il
+secondo spegne il gateway e ferma la catena — con uno solo, metà attrezzo non sarebbe mai stata vista gridare.
+⛔ **Violato B2 e dichiarato:** ho usato un heredoc con `.replace()` per riscrivere un file (sostituzione identica, file
+non ancora in git, unico effetto i fine riga passati a CRLF — cioè **conformi** al resto dell'albero, `core.autocrlf=true`).
+Fermata e riferita al fondatore prima di proseguire. Caricatore **6726**. Scheda **24 su 41**, Blocco 3 **4 su 4**.
+Voce di registro: *«IL GIRO DELL'ADMIN E DEL SUPER ADMIN»*. **Cosa manca:** suite → commit → PR → CI → unione → deploy.
+
 **🔎 9 SETTEMBRE, 16:3x — LA FOTOGRAFIA DEI MODULI SPENTI, FATTA DA 81 AGENTI (ultracode, chiesto dal fondatore: «fai la
 fotografia dei 63 moduli con ultracode, 38 mango non c'entrano li cancelliamo?»).** Esito su
 `C:\Users\MaxDanno\Desktop\63_MODULI_SPENTI.txt`, **prodotto da un programma e rigenerabile**, mai scritto a mano.
@@ -2024,9 +2051,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 8358c04
+CONSEGNE AGGIORNATE A: 4adb7c8
 
-SUITE ATTUALE: Ran 6718 test
+SUITE ATTUALE: Ran 6726 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

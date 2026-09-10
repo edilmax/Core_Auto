@@ -294,6 +294,15 @@ BLOCCHI = (
             # per TESTO («OGNI ORA»), non per indice, cosi' il posto in coda non cambia il verdetto.
             "gli invarianti sui dati veri girano in produzione almeno OGNI ORA, non una volta "
             "al giorno, e l'ultimo giro si legge dal registro del server con la sua ora",
+            # In coda (2026-09-10, METODO_v4 PARTE 20.2). La famiglia l'ha nominata un difetto
+            # vero: l'8 settembre il pannello dell'host mostrava fra i guadagni un hold che
+            # nessuno aveva pagato, mentre il mastro dei payout era GIUSTO. Nessuna delle due
+            # parti era rotta: erano in disaccordo fra loro, e nessun collaudo confrontava le
+            # due letture dello stesso fatto.
+            "lo stesso fatto sui soldi -- una prenotazione, un rimborso, un bonifico -- letto "
+            "dal pannello dell'host, da quello dell'admin e dal bunker da' lo STESSO numero al "
+            "centesimo, riga per riga e non solo nei totali (due errori che si compensano danno "
+            "un totale giusto), e le letture si enumerano dal codice, non a memoria",
         ),
     },
     {
@@ -354,6 +363,15 @@ BLOCCHI = (
             "viene letto dal codice, e ognuna senza credenziali risponde 401/403/422, mai 200",
             "la matrice dei permessi e' verde su ogni rotta riservata, provata SUL SITO VERO",
             "ogni sonda negativa interroga un indirizzo che risponde diverso da 404",
+            # In coda (2026-09-10, METODO_v4 PARTE 20.1). Le tre caselle sopra misurano CHI puo'
+            # aprire una porta; nessuna misura che, aperta la porta, il lavoro si porti a termine.
+            # I due ruoli stanno qui perche' qui stanno i loro moduli (fase180_bunker,
+            # fase192_admin_accounts), e il giro dell'host e dell'ospite ce l'ha gia' il Blocco 7.
+            "l'admin e il super admin portano a termine il loro giro INTERO, non solo l'accesso: "
+            "l'admin legge le prenotazioni, risolve una controversia, rimborsa il dovuto e "
+            "rilegge i conti; il super admin crea un admin, cambia uno scaglione e rilegge gli "
+            "invarianti. Ogni anello lascia una traccia, e il verde misura la DIFFERENZA fra "
+            "prima e dopo, mai la presenza di una pagina che mostra sempre qualcosa",
         ),
     },
     {
