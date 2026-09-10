@@ -421,6 +421,61 @@ scritta (den. 14, impronta invariata: `collaudi/` non entra nell'impronta del bl
 del 9/9); poi i due giri di mutazione (60 e 600 minuti dichiarati), i due esami col materiale del VPS (`esame_backup`,
 `esame_deploy`), e il conto UptimeRobot (decisione del fondatore).
 
+**🧩 10 SETTEMBRE, sera — «NON CI DEVE SCAPPARE NIENTE»: LE TRE COLONNE, E IL PERIMETRO CHE SI CONTA DA SOLO
+(parole del fondatore: «io partirei da admin, la prima voce… cosa deve succedere? quella cosa lì bisogna portarla in
+quell'altro posto… fare gli incroci dall'inizio alla fine e non lasciare fuori niente»; poi «sia dal lato dei soldi
+sia dal lato dei bottoni, perché poi subentrano anche i database… questo salva quel dato, deve controllare che finisce
+lì dentro, ci rimane o si cancella. Noi dobbiamo conservarlo per sempre»):** la PARTE 20 del METODO ha aperto il
+problema, questa voce lo definisce. Per **ogni singolo gesto** che una persona può fare servono **tre colonne**:
+
+| colonna | la domanda | chi la misura oggi |
+|---|---|---|
+| **il bottone** | premo questo: cosa deve succedere, e dove finisce quella cosa? | UNA catena su 21 (la controversia, `esame_percorso_ruoli`) |
+| **i soldi** | quali importi si muovono, e cosa deve coincidere con cosa, al centesimo? | i cinque invarianti in produzione + il netto host/mastro |
+| **l'archivio** | dove si scrive, ci resta, si cancella, e per quale legge / quanti anni? | **nessuno** |
+
+🔑 **E la cosa che rende vero «non ci scappa niente» NON è coprire le 21 voci: è che a contarle sia la MACCHINA.**
+Un elenco scritto a mano copre tutto oggi e domani non sa del bottone numero 22 — e non sbaglia: **tace**. Quindi
+l'attrezzo apre la pagina del pannello, conta da sé rotte, bottoni e campi, e pretende per ognuno una catena
+dichiarata: chi non ce l'ha è **ROSSO quel giorno stesso**. È la differenza fra un elenco (invecchia) e un perimetro
+(resta vero) — la stessa lezione del metro dei moduli e delle caselle scadute, in un posto nuovo.
+
+**Il perimetro dell'admin, già misurato (letto da `deploy/admin.html`, non a memoria): 21 rotte · 27 bottoni ·
+12 campi.** Tre rotte sfuggono a chi guarda solo l'elenco principale perché sono sotto-percorsi
+(`verifiche/dettaglio`, `verifiche/fascicolo`, `controversia/risolvi`). Ogni rotta è nominata da almeno 3 collaudi,
+**zero scoperte** — ⚠️ ma «un collaudo la nomina» non è «qualcuno la segue fino in fondo»: la catena intera oggi
+esiste per **una** voce su 21.
+
+⛔ **UN BUCO MISURATO NEL DIRITTO ALL'OBLIO, e non l'ha trovato un test.** `fase156_erasure` (il tasto «cancella
+tutto») cancella-poi-verifica e dichiara `ok=True` solo con zero residui: la forma è giusta. Ma gli archivi che guarda
+sono **cinque, scritti a mano dentro quel file** (annunci, inventario, messaggi, referral, anagrafica host), e il
+server ne ha **27** (`archivi:27` nella riga oraria degli invarianti). Il file dichiara di essere «resiliente»: un
+archivio nuovo che non espone i metodi viene **saltato in silenzio**. ⇒ `ok=True` vuol dire «non è rimasto niente nei
+cinque che so guardare». ⚠️ **NON è misurato** che uno dei ventidue non guardati contenga davvero dati di una persona
+(molti sono cache, marche temporali, blog): quello che è certo è il **meccanismo** — nessuno confronta la lista dei
+cinque con l'elenco vero degli archivi, e quel controllo non esiste.
+
+**E le due leggi si contraddicono, quindi la riga va scritta per ognuno dei 27:** il cliente ha diritto a farsi
+cancellare, il fisco pretende che fatture, registro dei pagamenti e DAC7 si conservino per anni. Non possono valere
+tutte e due sullo stesso dato. Per ogni archivio serve: **contiene dati di una persona? sì/no · si cancella? · se no:
+per quale legge e per quanti anni**. Un archivio senza quella riga = rosso; un archivio nuovo domani = rosso lo
+stesso giorno.
+
+**La mappa dei soldi, le cinque tappe da inchiodare:** da dove entra (l'ospite paga) · dove sosta (la garanzia) ·
+quando si muove (check-in + 24 h) · dove finisce (il conto dell'host, meno la commissione) · chi lo tiene se qualcosa
+va storto (rimborso, penale, arbitrato). Per ognuna: chi la scrive, chi la legge, e cosa deve coincidere con cosa.
+💡 Un millesimo non si può perdere perché **non si può scrivere**: tutto è in centesimi interi (`/api/health` dichiara
+`money_unit: cents_integer`) — ma manca il cane da guardia che abbai il giorno che qualcuno scrive una virgola (è la
+casella «zero rilievi money-float», mai misurata).
+⛔ **E manca il testimone di FUORI:** oggi la macchina controlla che i suoi conti tornino con i suoi conti. La verità
+su dove sono i soldi ce l'ha chi li muove. La riconciliazione notturna col registro di Stripe **esiste come codice e
+non è mai stata misurata** — è una delle sette caselle del webhook.
+
+**L'ordine, deciso dal fondatore («una cosa alla volta in perfezione e non torniamo più indietro»):** si parte dalla
+**prima voce del pannello admin** e si scende, una catena per volta; poi lo stesso per host, super admin e cliente.
+Ogni catena si scrive **prima** («premo questo, deve succedere questo, che finisce lì, e lì deve fare quest'altro»),
+poi la percorre la macchina e conta gli anelli: se un anello non c'è, esce rosso e si vede **quale**.
+
 **🧭 10 SETTEMBRE, pomeriggio — IL GIRO DELL'ADMIN E DEL SUPER ADMIN NON L'AVEVA MAI PERCORSO NESSUNO (master
 `4adb7c8`, parole del fondatore: «tu pensa a fare funzionare la macchina per tutto quello che deve fare tragitti
 coerenza, percorso host cliente admin super admin in tutte le funzionalita», poi «procedi al commit al deploy vps
