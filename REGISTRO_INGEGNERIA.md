@@ -403,6 +403,150 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🧾 QUATTRO GESTI DELL'ADMIN NON LASCIAVANO NESSUNA TRACCIA — 11 settembre, riparato con «autorizzato»
+
+**Cosa è cambiato.** `fase83_server.py`: **4 istruzioni**, una per gesto (`_admin_alloggio_stato`,
+`_admin_storno_penale`, `_admin_controversia_risolvi`, `_admin_cancella_attivita`), zero righe
+rimosse, zero funzioni e zero dipendenze nuove. Guardia nuova:
+`test_pipeline_ci.TestOgniGestoDellAdminLasciaLaSuaRiga` (5 test). **STATO: acceso** — le righe
+finiscono nel registro del server, dove guarda già il Guardiano (`fase186`).
+Parole del fondatore: *«autorizzato anche le 4 righe di registro in fase83»*.
+
+**Cosa era rotto, e come è venuto fuori.** L'ha trovato l'anello [traccia] della prima catena del
+pannello (`collaudi/esame_catene_admin.py`): sospendere un annuncio non lasciava **nessuna** riga.
+Misurando poi il corpo di ogni funzione admin — il corpo fino al `def` successivo, perché con una
+finestra di 85 righe il conto sconfinava e **diceva il falso** — il quadro era questo: le due
+**letture** (`_admin_alloggi`, `_admin_search`) scrivono `AUDIT … ip=`; `_admin_verifica_stato` era
+l'unica **scrittura** con la riga intera; `_admin_rimborso` e `_admin_rimborsa_dovuto` scrivono
+l'esito ma non chi; gli altri quattro **niente**. La riga del bunker
+(`BUNKER: azione '%s' autorizzata ip=%s`) dà chi e il **tipo** di azione, mai su quale oggetto, e
+c'è solo a bunker configurato.
+
+🔑 **La forma del difetto, che è la parte da ricordare: era il contrario di quello che sembra
+naturale.** *Guardare* l'elenco degli annunci lasciava una traccia; *sospenderne uno* no. Le rotte
+erano blindate alla porta — chiave, secondo fattore, ruolo — e scoperte **dopo**: nessuno aveva
+chiesto «e dopo che è entrato, resta scritto cosa ha fatto?». È la famiglia della PARTE 20: i nove
+strati chiedono «questo pezzo è giusto?», e un registro che non c'è non rompe nessun pezzo.
+
+**D20, nell'ordine, e l'ordine ha fatto il suo lavoro.** (1) Prima la guardia, che **esegue** i
+quattro gesti sul banco e legge il registro — mai il sorgente: una guardia che cercasse la stringa
+`ADMIN_ACTION` nel file la soddisferebbe un commento (S6), e non direbbe niente sul giorno in cui
+la riga c'è ma non viene eseguita. Costruire i quattro scenari è stato possibile perché il banco ha
+il controller finanziario: la nota di debito di prova la emette `fase177.emetti_nota`, e l'host da
+cancellare è un secondo host registrato apposta. (2) Vista **ROSSA su tutti e quattro**, col
+messaggio esatto e con l'unica riga esistente riportata dentro l'errore. (3) Le 4 righe. (4) Verdi.
+
+**Cosa pretende ogni riga, e perché tre cose e non due.** **Chi** (l'ip), **che azione**, **su quale
+oggetto**: una riga che dice «qualcuno ha sospeso qualcosa» è un registro che non serve il giorno
+che lo si apre. Per la controversia c'è anche la **cifra decisa** (`RIMBORSO_CENTS`), perché là il
+«cosa» *è* l'importo. Per la cancellazione la riga si scrive **anche sul rifiuto** (409): «ho
+provato a cancellare e qualcosa è rimasto» è precisamente il caso in cui qualcuno andrà a leggere.
+Tutti i valori passano dai sanificatori già esistenti (`_rif_per_registro`, `_testo_per_registro`):
+una riga fabbricata dentro il registro non è un difetto qualunque, è un difetto nello strumento con
+cui si vedono i difetti.
+
+⚠️ **Cosa NON è stato toccato, e si dichiara invece di lasciarlo credere fatto.**
+`_admin_rimborso` e `_admin_rimborsa_dovuto` continuano a scrivere l'esito **senza l'ip di chi ha
+premuto**. L'autorizzazione era per quattro righe e lo scopo non si allarga da sé (ferrea 15): là
+l'informazione del *cosa* esiste, per gli altri quattro mancava tutto.
+
+📌 **Un effetto collaterale previsto dal meccanismo delle impronte:** `fase83_server` sta nel
+**Blocco 8**, quindi la sua casella è scaduta. Rimessa subito (`esame_sentinella.py --scrivi`):
+ROSSA 4 passi su 10, **lo stesso motivo di ieri** (manca un monitor esterno, che è una decisione del
+fondatore) — una casella scaduta e rimessa non è un guasto nuovo, ed è esattamente quello che le
+impronte servono a far vedere.
+
+### 🧮 IL PERIMETRO DEL PANNELLO ADMIN ADESSO LO CONTA LA PAGINA, E LA PRIMA CATENA È PERCORSA — 10 settembre, notte
+
+**Cosa è cambiato.** `collaudi/esame_catene_admin.py` **NUOVO** (legge `deploy/admin.html`, usa il
+banco di `esame_percorso_ruoli`). `collaudi/piano.py`: una casella **in coda** al Blocco 3.
+Guardia: `test_pipeline_ci.TestLEsameDelleCateneAdminNonPuoBARARE` (8 test, 2.4 s). **STATO:
+acceso**, nessuna dipendenza nuova, **zero righe di produzione**.
+
+**Il problema, nelle parole del fondatore.** *«Fare gli incroci dall'inizio alla fine e non
+lasciare fuori niente»*, e *«sia dal lato dei soldi sia dal lato dei bottoni, perché poi subentrano
+anche i database»*. Tre colonne per ogni gesto: il bottone (cosa deve succedere, e dove finisce il
+dato), i soldi (quali importi si muovono, cosa coincide al centesimo), l'archivio (dove si scrive,
+se ci resta, se si cancella e per quale legge).
+
+🔑 **E la cosa che rende vero «non ci scappa niente» non è coprire le voci di oggi: è che a
+contarle sia la MACCHINA.** Per questo l'esame fa **due** mestieri separati, e la separazione è il
+progetto: il **censimento** è un cancello che può essere verde oggi e rosso domani (ogni voce della
+pagina deve essere attribuita, e le rotte senza catena non possono essere più di quante erano); le
+**catene** sono il lavoro, e procedono una per volta. Mescolarli avrebbe prodotto un rosso perenne
+con sessanta rilievi indistinguibili — cioè un allarme che si impara a ignorare (ferrea 10), e
+dentro quel rumore il bottone numero 22 sarebbe passato inosservato.
+
+**Il perimetro, misurato (`--perimetro`): 21 rotte · 33 bottoni in 29 identità · 17 campi in 13.**
+⛔ Il foglio della sera prima diceva «27 bottoni · 12 campi», scritti a mano e senza il comando che
+li avesse contati: il numero vero è più alto perché la pagina disegna bottoni **dentro le stringhe
+dello script** (le righe delle controversie, dei rimborsi dovuti, delle verifiche), e un gesto che
+la pagina disegna è un gesto che una persona preme. Non era un errore di aritmetica: era un confine
+mai dichiarato.
+
+**Il cricchetto, e perché è un numero e non un elenco.** Le rotte senza catena si **contano**, non
+si elencano a mano: oggi 19, e il tetto dice che non possono essere di più. Una voce nuova fa salire
+il conto e la casella diventa rossa **lo stesso giorno**. ⚠️ Limite dichiarato: dice **che** una
+voce è entrata, non **quale** (quello lo dice il diff di `deploy/admin.html`). Un elenco scritto a
+mano direbbe anche quale, e in cambio **tacerebbe** il giorno che qualcuno si dimentica di
+aggiornarlo — ed è esattamente lo scambio che il fondatore ha chiesto di fare.
+
+**La catena 1 «Tutti gli annunci»: 8 anelli su 9 verdi**, ognuno una differenza fra prima e dopo.
+🔑 **L'anello che vale i soldi è [prenota], e il guasto lo dimostra.** La rotta cambia **un** campo
+in **un** archivio (`catalogo.alloggi.stato`): tutto il resto del prodotto deve accorgersene da sé
+leggendo quel campo. Col concierge reso cieco sullo stato (guasto iniettato sull'**istanza** del
+banco, mai nel codice), il preventivo risponde 200 e la conferma **201**: una prenotazione vera su
+un annuncio che l'admin credeva chiuso, e le righe dell'elenco admin passano da 1 a 2. Senza quel
+controllo, «sospeso» sarebbe una parola sulla pagina — ed è il difetto che `fase59` si porta scritto
+nel commento, già provato una volta.
+
+⛔ **L'UNICO ROSSO È DEL PRODOTTO: nessuna riga dice chi ha sospeso cosa.** Misurato leggendo il
+corpo di ogni funzione admin di `fase83_server.py` — il corpo fino al `def` successivo, perché con
+una finestra di 85 righe il conto sconfinava nella funzione dopo e **diceva il falso** (un difetto
+di misura preso in tempo, S3 applicata al proprio attrezzo). L'esito:
+
+| gesto | cosa scrive |
+|---|---|
+| `_admin_alloggi`, `_admin_search` (**letture**) | `AUDIT ... ip=...` ✅ |
+| `_admin_verifica_stato` (scrittura) | `ADMIN_ACTION \| OGGETTO \| AZIONE \| MOTIVO \| IP` ✅ |
+| `_admin_rimborso`, `_admin_rimborsa_dovuto` | l'esito (`RIMBORSO ESEGUITO rif=... importo=...`), **non chi** |
+| `_admin_alloggio_stato`, `_admin_storno_penale`, `_admin_controversia_risolvi`, `_admin_cancella_attivita` | **niente** |
+
+La riga del bunker (`BUNKER: azione '%s' autorizzata ip=%s`) dà chi e il **tipo** di azione, mai su
+quale oggetto, e c'è solo a bunker configurato. ⇒ **Guardare** l'elenco degli annunci è
+ricostruibile; **sospenderne uno** no. Così per lo storno di una penale, per la cifra decisa in una
+controversia e per la cancellazione irreversibile di un host. 📌 La riparazione tocca
+`fase83_server.py`, cioè produzione: serve **«autorizzato»** (B4). Finché non c'è, l'anello resta
+rosso col suo motivo e la guardia pretende che sia **quello e uno solo**: se un domani diventasse
+verde da sé, lo dice invece di tacere.
+
+⛔ **TRE DEI PRIMI OTTO ROSSI ERANO DELL'ATTREZZO**, e la lezione è sempre la stessa (S3).
+(1) **Il banco passa la query dentro il path**, mentre `router.gestisci` vuole il path puro e la
+query già in un dizionario: ogni rotta interrogata con `?` risponde **404 `rotta_non_trovata`**.
+🔑 E qui c'è la cosa che vale più di tutte: un 404 somiglia in tutto a «la vetrina non mostra
+l'annuncio». Misurando solo il **dopo**, l'anello [vetrina] sarebbe stato **VERDE per il motivo
+sbagliato** — cioè un verde che non ha guardato niente. L'ha trovato il **due tempi** (prima c'era,
+dopo no), che la PARTE 20.1 pretende: non è un formalismo, è il meccanismo che becca l'attrezzo
+rotto. (2) Passavo il token dell'operatore `supporto` **insieme** alla chiave root, e
+`_ruolo_operatore` legge «admin»: chi ha la chiave root **è** root, ed è giusto così — il 200 che
+somigliava a una scalata di privilegi (il difetto vero del 2026-07-28) era mio. (3) Il lettore dei
+tag si fermava al primo `>`, e il `>` di `()=>` dentro un `onclick` chiudeva il tag in anticipo:
+**tre bottoni diversi finivano in una sola identità anonima**. Non un numero sbagliato — un
+perimetro che **tace**, che è la forma peggiore.
+
+⛔ **E una riga della mappa gesto→rotta l'avevo dimenticata** (`stornaPenale()`, il bottone che vive
+dentro la scheda audit e a occhio non si vede): l'ha trovata il censimento al primo giro, e sta qui
+perché è la prova in piccolo di tutto il resto — una lista scritta a mano non sbaglia: **tace**.
+
+**Nelle due direzioni, con l'editor e col ripristino verificato.** Guasto 1, cricchetto spento
+(`if False and ...`): **3 guardie rosse** col motivo esatto («una rotta nuova senza catena non ha
+fatto gridare il censimento»). Guasto 2, lettore dei tag cieco: **2 guardie rosse**
+(`'risolviCtr()' not found`). Ripristino da copia, **sha256 identico prima e dopo**
+(`f731da6a1835b5383680675a3a3bbdf216af1ba82bf9fee57ac6060d31d56bcf`), e le 8 guardie di nuovo verdi.
+Caricatore **6734**. Scheda: **Blocco 3 4 su 5**, la casella nuova scritta **ROSSA col motivo** —
+che è lo stato vero, e vale più di un verde che avrebbe dichiarato «non ci scappa niente» con venti
+voci mai seguite.
+
 ### 🧭 IL GIRO DELL'ADMIN E DEL SUPER ADMIN NON L'AVEVA MAI PERCORSO NESSUNO — 10 settembre, corsia unica
 
 **Cosa è cambiato.** `collaudi/METODO_v4.md`: **PARTE 20** (tre famiglie nuove). `collaudi/piano.py`:

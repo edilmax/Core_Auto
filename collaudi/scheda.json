@@ -329,11 +329,11 @@
  "a36e3373da1d": {
   "blocco": 8,
   "comando": "python collaudi/esame_sentinella.py --scrivi",
-  "commit": "8358c04",
+  "commit": "6b613b3",
   "condizione": "una sentinella ESTERNA (non nostra) si accorge se il sito muore",
   "denominatore": 10,
   "esito": false,
-  "impronta": "736625024342",
+  "impronta": "299a84e13a2f",
   "impronte_moduli": {
    "fase13_protocollo_finale": "2dce22f058cc",
    "fase16_outbox": "a47de5874653",
@@ -347,11 +347,11 @@
    "fase42_observability": "a557645447a7",
    "fase60_mcp_server": "56ffc4364819",
    "fase81_bootstrap_casavip": "dacbc902ed40",
-   "fase83_server": "8605be6f1b94",
+   "fase83_server": "c6c04f52b76b",
    "fase86_email": "19069663f9d1"
   },
   "motivo": "[esiste] un monitor ESTERNO (non GitHub) esiste e guarda bookinvip.com/api/health (nessun monitor esterno nelle letture: serve un conto (UptimeRobot o Better Stack, gratuito), lo apre il fondatore); [sveglia] il monitor esterno controlla almeno ogni 5 minuti e non e' in pausa (nessun monitor esterno); [sveglia] nelle ultime 24 ore i controlli del monitor non hanno buchi > 15 minuti e l'ultimo ha meno di 15 minuti (controlli nelle 24 ore: 0, buco massimo -, ultimo -); [sveglia] GitHub (seconda linea): ultimo giro entro 60 minuti e buco massimo nelle 24 ore sotto i 60 minuti — DECIDE, perche' il",
-  "quando": "2026-09-10T12:02:22"
+  "quando": "2026-09-11T00:08:52"
  },
  "a6c9694a48f1": {
   "blocco": 2,
@@ -423,6 +423,28 @@
   },
   "motivo": "",
   "quando": "2026-09-10T11:13:51"
+ },
+ "d22022c687dd": {
+  "blocco": 3,
+  "comando": "python collaudi/esame_catene_admin.py --scrivi",
+  "commit": "6b613b3",
+  "condizione": "ogni gesto del pannello admin -- rotte, bottoni e campi CONTATI dalla pagina a ogni giro, non da un elenco scritto a mano -- ha le sue tre colonne dichiarate (cosa deve succedere e dove finisce il dato · quali importi si muovono e cosa deve coincidere al centesimo · in quale archivio si scrive, se ci resta, se si cancella e per quale legge) e la catena PERCORSA anello per anello, dove ogni anello e' una differenza fra prima e dopo; una voce nuova senza catena e' rossa lo stesso giorno",
+  "denominatore": 81,
+  "esito": false,
+  "impronta": "01970b37c064",
+  "impronte_moduli": {
+   "fase105_identity_gate": "a3ab7f1e6819",
+   "fase127_checkin_digitale": "316a826c975f",
+   "fase143_kyc_host": "9024eed56447",
+   "fase179_rate_limit": "d676ae5e7797",
+   "fase180_bunker": "12b50f910968",
+   "fase192_admin_accounts": "d781a60fe796",
+   "fase64_smartpass": "62f32d2a9183",
+   "fase73_firma_agile": "16cd09e0ed5d",
+   "fase80_sentinel": "ebc8a451110f"
+  },
+  "motivo": "19 rotte del pannello su 21 non hanno ancora una catena percorsa (debito dichiarato, tetto 19): /api/admin/audit, /api/admin/cancella_attivita, /api/admin/controversia/risolvi, /api/admin/controversie, /api/admin/messaggi, /api/admin/prenotazioni, /api/admin/rimborsa_dovuto, /api/admin/rimborsi_dovuti, /api/admin/rimborso, /api/admin/search, /api/admin/storno_penale, /api/admin/verifica_stato, /api/admin/verifiche, /api/admin/verifiche/dettaglio, /api/admin/verifiche/fascicolo, /api/bunker/login, /api/bunker/logout, /api/gate/logout, /api/marketing/campagna",
+  "quando": "2026-09-11T00:08:11"
  },
  "d4e612aafcd1": {
   "blocco": 9,

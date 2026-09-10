@@ -3124,6 +3124,12 @@ class RouterHTTP:
             if n is None or n.get("tipo") != "debito":
                 return 404, {"errore": "nota_non_trovata_o_non_ND"}
             return 503, {"errore": "giornale_non_scrivibile"}
+        # TRACCIA DEL GESTO (vedi `_admin_alloggio_stato`): una nota di debito stornata muove soldi
+        # veri e il motivo e' obbligatorio -- ma senza questa riga non restava scritto CHI l'ha
+        # deciso. Guardia: `test_pipeline_ci.TestOgniGestoDellAdminLasciaLaSuaRiga`.
+        logger.warning("ADMIN_ACTION | OGGETTO: %s | AZIONE: Storno penale | MOTIVO: %s | IP: %s",
+                       _rif_per_registro(nota_id), _testo_per_registro(motivo),
+                       self._client_ip(headers))
         return 200, esito
 
     def _admin_alloggio_stato(self, body, headers):
@@ -3144,6 +3150,14 @@ class RouterHTTP:
         if not (isinstance(slug, str) and slug and isinstance(stato, str)):
             return 422, {"errore": "campi_non_validi"}
         ok = self._sys.catalogo.imposta_stato(slug, stato)
+        # TRACCIA DEL GESTO (difetto vivo trovato il 2026-09-10 percorrendo la catena del pannello
+        # admin, `collaudi/esame_catene_admin.py` anello [traccia]): sospendere un annuncio non
+        # lasciava NESSUNA riga, mentre *guardare* l'elenco ne lascia una. La riga del bunker dice
+        # chi e il TIPO di azione, mai su quale oggetto -- e c'e' solo a bunker configurato.
+        # Guardia: `test_pipeline_ci.TestOgniGestoDellAdminLasciaLaSuaRiga`.
+        logger.warning("ADMIN_ACTION | OGGETTO: %s | AZIONE: Stato->%s | ESITO: %s | IP: %s",
+                       _rif_per_registro(slug), _testo_per_registro(stato),
+                       "eseguito" if ok else "rifiutato", self._client_ip(headers))
         return (200 if ok else 422), {"stato": stato if ok else "rifiutato"}
 
     # ── BUNKER (super-admin, fase180): 2FA + sessione blindata ──────────────
@@ -4479,6 +4493,14 @@ class RouterHTTP:
         except Exception:
             logger.error("admin cancella attivita: eccezione ISOLATA", exc_info=True)
             return 503, {"errore": "service_unavailable"}
+        # TRACCIA DEL GESTO (vedi `_admin_alloggio_stato`), e qui vale anche per il RIFIUTO: «ho
+        # provato a cancellare un host e qualcosa e' rimasto» e' precisamente il caso in cui
+        # qualcuno andra' a leggere il registro. E' la piu' distruttiva delle cinque azioni e non
+        # lasciava niente. Guardia: `test_pipeline_ci.TestOgniGestoDellAdminLasciaLaSuaRiga`.
+        logger.warning("ADMIN_ACTION | OGGETTO: %s | AZIONE: Cancella attivita%s | ESITO: %s | IP: %s",
+                       _rif_per_registro(host_id), " (forzata)" if forza else "",
+                       _testo_per_registro(rep.get("errore") or ("ok" if rep.get("ok") else "residui")),
+                       self._client_ip(headers))
         if rep.get("errore") == "obblighi_pendenti":
             return 409, rep                         # bloccata: prima si sistema
         return (200 if rep.get("ok") else 409), rep
@@ -5044,6 +5066,13 @@ class RouterHTTP:
                        evento_id="rimborso_controversia:" + str(rif),
                        causale="rimborso deciso dall'arbitro (controversia risolta)")
         self._email_esito_controversia(rif, out.get("ospite_rimborso_cents", rimborso))
+        # TRACCIA DEL GESTO (vedi `_admin_alloggio_stato`): questa rotta DECIDE quanto torna
+        # all'ospite, e la cifra fa parte del «cosa» -- una riga senza l'importo non dice cosa e'
+        # stato deciso. Guardia: `test_pipeline_ci.TestOgniGestoDellAdminLasciaLaSuaRiga`.
+        logger.warning("ADMIN_ACTION | OGGETTO: %s | AZIONE: Controversia risolta | "
+                       "RIMBORSO_CENTS: %d | IP: %s", _rif_per_registro(rif),
+                       int(out.get("ospite_rimborso_cents", rimborso) or 0),
+                       self._client_ip(headers))
         return 200, {"stato": "risolta", "riferimento": rif,
                      "rimborso_cliente_cents": out.get("ospite_rimborso_cents", rimborso),
                      "va_all_host_cents": out.get("host_riceve_cents", importo - rimborso),
