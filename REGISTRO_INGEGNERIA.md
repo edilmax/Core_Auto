@@ -403,6 +403,64 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🕐 L'ESAME DELLA PRODUZIONE ERA VERDE UN'ORA SU VENTIQUATTRO — 10 settembre, corsia unica (difetto nell'attrezzo, guardia vista rossa prima)
+
+**Cosa è cambiato.** `collaudi/esame_produzione.py`: una funzione nuova (`_ultimo_giro_intero`),
+un passo del giudizio riscritto, un costruttore di letture per l'autoprova
+(`letture_finte_giro_e_passi`) con cinque casi nuovi, una riga in `NON_GUARDA`, il docstring.
+**STATO: acceso**, nessuna dipendenza nuova, zero righe di produzione. Guardia:
+`test_pipeline_ci.TestLEsameDellaProduzioneNonPuoBARARE.test_IL_GIRO_INTERO_DI_IERI_E_I_PASSI_ORARI_DI_OGGI_SONO_UN_SERVER_SANO`.
+
+**Il difetto.** Rilanciando le caselle scadute (il primo lavoro del 10 settembre),
+`esame_produzione.py` ha detto **ROSSO 8 passi su 9** su un server sano: *«il giro del Guardiano
+che la contiene è finito pulito — nessuna riga GUARDIANO dopo quella»*. Il passo prendeva
+l'**ultima** riga `INVARIANTI ARCHIVI` del registro e cercava un `GUARDIANO:` dopo di lei. Dal
+6 settembre (casella «OGNI ORA») il tick di `fase83` è orario: `if giro % 24:` — 23 passi su 24
+chiamano `_invarianti_orari` e scrivono **solo** la riga oraria; il giro intero, l'unico che
+chiude con `GUARDIANO:`, è il passo 0 — cioè all'avvio del container e poi ogni 24 ore. Quindi
+quel passo era verde **un'ora su ventiquattro**, o subito dopo un deploy: ed è esattamente così
+che il 9/9 alle 13:52Z la casella era stata scritta verde 9 su 9 — il deploy aveva appena
+riavviato l'app. Una misura verde in una finestra di un'ora al giorno, e nessuno lo sapeva.
+
+**Perché non l'aveva presa nessuna guardia.** `letture_finte()` — le letture sane
+dell'autoprova e della guardia — costruiva la riga INVARIANTI **e** la riga GUARDIANO allo
+stesso istante: la forma che l'esame *si aspettava*, non quella che il server *scrive* da
+quattro giorni. È la guardia che coincide con l'ipotesi che dovrebbe controllare: l'atteso era
+stato scritto dalla descrizione, non dal registro vero. Il registro vero (26 ore, 11 righe)
+aveva la riga `GUARDIANO: nessuno stato anomalo (tutto quadra)` delle 23:59:36Z e poi nove
+righe orarie: il Guardiano era a posto, il criterio no.
+
+**Un rosso non dimostra che il difetto esista.** Prima di toccare qualcosa: fermata e riferito
+(la regola del prompt: un rosso su un attrezzo dei soldi non si ripara di slancio), letture
+salvate con `--salva`, riga `GUARDIANO:` cercata nel registro e trovata pulita, poi
+`fase83_server.py` letto alla riga del `giro % 24` per confermare il meccanismo. Solo dopo il
+cambio di modello deciso dal fondatore (Fable 5.1 a max) la cura.
+
+**La cura.** `_ultimo_giro_intero(registro)` cerca l'**ultimo** `GUARDIANO:` del registro,
+non il primo dopo l'ultima riga oraria; il passo pretende tre cose: che sia pulito, che abbia
+meno di 25 ore (il tetto del battito, `fase178`), e che **la riga INVARIANTI del suo stesso
+giro lo preceda** — perché `fase202.giro_quotidiano` non la scrive se la scansione fallisce o
+manca la cartella dati, e allora quel giro chiude con un `GUARDIANO:` senza aver verificato
+niente (letto nel codice, non supposto). Il dettaglio stampato dice cosa ha visto: *«GUARDIANO:
+nessuno stato anomalo (tutto quadra) · eta 10.2 h · riga INVARIANTI ARCHIVI subito prima: sì»*.
+Denominatore invariato (14).
+
+**Nelle due direzioni.** Guardia scritta **prima**, con la forma del registro vero (giro intero
+pulito nove ore fa, poi un passo orario ogni ora fino a 18 minuti fa; la riga INVARIANTI la
+produce `fase202.formatta_riga`, e un test di premessa pretende che le parole del `GUARDIANO:`
+pulito stiano in `fase83_server.py`, così se cambiano la guardia lo dice invece di passare a
+vuoto), vista **ROSSA** col motivo esatto visto dal vivo; poi la cura; poi la classe intera
+**11 su 11**. L'autoprova ha cinque casi nuovi — giro intero 9 ore fa poi i passi (VERDE);
+solo passi orari senza giro intero, giro intero non pulito con passi puliti dopo, giro intero
+di 26 ore fa, `GUARDIANO:` pulito senza la sua riga INVARIANTI (tutti ROSSI) — **25 su 25**.
+Sulle **stesse letture** delle 09:17 che davano rosso: VERDE 9 su 9; dal vivo: VERDE 9 su 9,
+casella scritta.
+
+⚠️ **Limite dichiarato (D18 punto 3), aggiunto a `NON_GUARDA`:** i passi orari verificano i
+cinque invarianti sugli archivi, non i conti con Stripe, gli escrow e i bonifici di `fase186`,
+che il Guardiano guarda una volta al giorno: un'anomalia nata dopo l'ultimo giro intero la
+vede il giro di domani, e questo esame con lei.
+
 ### 📉 «ANDIAMO AVANTI E POI INDIETRO, NON CAPISCO» — 9 settembre, il punteggio tornava indietro quando il lavoro andava avanti
 
 **Cosa è cambiato.** `collaudi/scheda.py`: due funzioni nuove (`impronte_dei_moduli`,
