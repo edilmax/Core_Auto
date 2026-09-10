@@ -403,6 +403,69 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🧭 IL GIRO DELL'ADMIN E DEL SUPER ADMIN NON L'AVEVA MAI PERCORSO NESSUNO — 10 settembre, corsia unica
+
+**Cosa è cambiato.** `collaudi/METODO_v4.md`: **PARTE 20** (tre famiglie nuove). `collaudi/piano.py`:
+due caselle **in coda** (Blocco 3 e Blocco 1). `collaudi/esame_percorso_ruoli.py` **NUOVO**
+(banco proprio, gateway di prova con stato). Guardia:
+`test_pipeline_ci.TestLEsameDeiPercorsiPerRuoloNonPuoBARARE` (8 test). **STATO: acceso**,
+nessuna dipendenza nuova, **zero righe di produzione**.
+
+**Il buco, e non era un difetto: era un'assenza.** Il fondatore ha chiesto *«percorso host
+cliente admin super admin in tutte le funzionalità»*. Misurato: dei quattro ruoli, **uno solo**
+aveva un giro provato da capo a fondo. E il motivo non era la pigrizia — i nove strati del
+METODO chiedono tutti *«questo pezzo è giusto?»*, nessuno chiede *«il pezzo A passa la palla al
+pezzo B?»*. ⇒ **quello che un metodo non nomina, non si costruisce.** Da lì la PARTE 20: il giro
+intero per ruolo, la coerenza fra ruoli, la misura che invecchia.
+
+⛔ **E la PARTE 19 esisteva già.** Stavo per chiamare 19 la parte nuova e sovrascrivere «Quello
+che non è software». Presa leggendo l'indice, non ricordandolo: è la S2 nella forma in cui
+distrugge invece di far perdere tempo.
+
+**Cosa ha insegnato il giro, e non stava scritto da nessuna parte.** Percorrendolo si scopre che
+**l'admin vede e prepara, ma nessun gesto che muove denaro passa con la sola chiave**:
+`_admin_controversia_risolvi` **e** `_admin_rimborsa_dovuto` chiedono tutt'e due
+`_bunker_ok_o_field`. Quindi il caso **passa di mano** — l'admin lo riceve, il super admin decide
+la cifra, e il pulsante che fa uscire i soldi vuole di nuovo il secondo fattore. Il modello è più
+stretto di come appariva da fuori, ed è giusto. La guardia ha una prova di **premessa** che legge
+il sorgente delle due funzioni: se un domani una smettesse di chiederlo, lo dice — invece di
+restare verde misurando una macchina più debole.
+
+⛔ **TRE ROSSI SU CINQUE ERANO DELL'ATTREZZO, NON DEL PRODOTTO**, e li elenco perché la lezione è
+sempre la stessa (S3: quando la misura è assurda, il primo sospetto va allo strumento).
+(1) La colonna del mastro l'avevo **indovinata**: si chiama `minori`, non `importo_cents` — somma
+zero su una riga che esisteva. (2) La stessa cifra ha **due nomi**: la rotta riceve
+`rimborso_ospite_cents` e risponde `rimborso_cliente_cents`; usare il nome della risposta anche
+nella richiesta dà 422. (3) Confrontavo il pannello di **prima** col mastro di **adesso**, con
+l'arbitrato in mezzo che riallineava il ledger alla quota host (16400 → 11400): **un evento che
+spiega la differenza non è una divergenza**, e un confronto fra due istanti diversi accusa il
+prodotto di una cosa che ha fatto giusta. Il quarto rosso, `manca: ['verifica_stripe']`, era il
+prodotto che **si rifiutava di muovere soldi che non poteva verificare** — cioè uno dei suoi
+quattro freni, e il banco era povero: il gateway finto non rispondeva alla domanda sui rimborsi.
+
+**Il gateway di prova TIENE CONTO, e questo è il punto.** Un finto che annuisce sempre terrebbe
+la riga nell'elenco per sempre (dicendo «zero rimborsato») **oppure** la farebbe sparire *prima*
+che qualcuno prema il pulsante (dicendo «tutto rimborsato») — e allora l'anello sarebbe verde
+senza che sia uscito un centesimo. Quindi tiene lo stato: zero prima, la cifra vera dopo, e
+l'idempotenza sulla chiave. E `ok=False` resta **«non lo so»**, mai «nessun rimborso».
+
+**Nelle due direzioni, e servono DUE guasti.** Il primo sposta il mastro di **un centesimo** dopo
+che il pannello ha già mostrato la sua cifra (16400 contro 16401): se l'esame non vede un
+centesimo non vede niente. ⚠️ Ma quel guasto rompe **solo la coerenza** e lasciava il giro tutto
+verde: metà attrezzo non sarebbe mai stata vista gridare. Il secondo spegne il gateway. Con
+tutt'e due: giro ROSSO **e** coerenza ROSSA, e l'esame **rifiuta di scrivere** (uscita 2). Sano:
+giro **12 anelli su 12**, coerenza **4 su 4**, uscita 0.
+
+🔑 **Il denominatore si chiama ANELLI, non «controlli»**, e ogni anello è una **differenza** —
+prima non c'è, dopo c'è. Un elenco che mostra righe sembra sano anche quando non ha letto niente.
+
+⛔ **E una regola violata, dichiarata invece che nascosta.** Ho usato un heredoc con `.replace()`
+per riscrivere un file: **B2**. La sostituzione era identica e il file non era ancora in git, per
+cui l'unico effetto misurato è stato il passaggio a CRLF — che nell'albero è la forma **giusta**
+(`core.autocrlf=true`, tutti i `.py` stanno così). Danno zero, regola violata lo stesso: mi sono
+fermato e l'ho detto. Il divieto non ha eccezioni proprio perché la volta che sembra innocuo è
+quella in cui si smette di rispettarlo.
+
 ### 🕐 L'ESAME DELLA PRODUZIONE ERA VERDE UN'ORA SU VENTIQUATTRO — 10 settembre, corsia unica (difetto nell'attrezzo, guardia vista rossa prima)
 
 **Cosa è cambiato.** `collaudi/esame_produzione.py`: una funzione nuova (`_ultimo_giro_intero`),

@@ -110,6 +110,45 @@
   "motivo": "",
   "quando": "2026-09-10T11:17:22"
  },
+ "227c35ec4353": {
+  "blocco": 1,
+  "comando": "python collaudi/esame_percorso_ruoli.py --casella coerenza --scrivi",
+  "commit": "4adb7c8",
+  "condizione": "lo stesso fatto sui soldi -- una prenotazione, un rimborso, un bonifico -- letto dal pannello dell'host, da quello dell'admin e dal bunker da' lo STESSO numero al centesimo, riga per riga e non solo nei totali (due errori che si compensano danno un totale giusto), e le letture si enumerano dal codice, non a memoria",
+  "denominatore": 4,
+  "esito": true,
+  "impronta": "2835740729f0",
+  "impronte_moduli": {
+   "fase101_stripe_connect": "30d6d6acc8ee",
+   "fase102_motore_autonomo": "5f821fcc906f",
+   "fase104_gateway_asia": "f0f1fed87367",
+   "fase131_payout_dashboard": "06cd8f312f05",
+   "fase133_split_quote_uguali": "900818f6ee45",
+   "fase149_deposito_cauzionale": "272fe8e92880",
+   "fase15_idempotency": "bfcd5e8ca68b",
+   "fase160_escrow_garanzia": "dbf2a26f8a0a",
+   "fase162_pagamenti_pendenti": "c26dc3e3eb98",
+   "fase167_credito_single_use": "4c767fea639e",
+   "fase177_financial_controller": "c49d832d573c",
+   "fase17_money": "4f56d5c69a04",
+   "fase181_audit_console": "f03c9196f159",
+   "fase182_riconciliazione": "360574b705b8",
+   "fase183_carta_offsession": "cad1b678abff",
+   "fase186_guardiano": "72d34d3c1ed0",
+   "fase188_paga_struttura": "b06f26f76cda",
+   "fase191_blocco_globale": "0e25d2e0ab6f",
+   "fase199_invarianti": "00192bca45b2",
+   "fase202_invarianti_archivi": "55487d36c717",
+   "fase204_eventi_stripe": "2f45faff9e1d",
+   "fase35_pagamenti": "abd2cab5c989",
+   "fase65_split_payment": "2f6d24e7b1fe",
+   "fase85_pagamenti_stripe": "ffc644cfd6fb",
+   "fase87_stripe_webhook": "d597430f8f64",
+   "fase99_multicurrency": "61a3b5a0c820"
+  },
+  "motivo": "",
+  "quando": "2026-09-10T16:44:41"
+ },
  "24faa37bd025": {
   "blocco": 7,
   "comando": "python collaudi/esame_host_da_solo.py --scrivi",
@@ -325,6 +364,27 @@
   "motivo": "",
   "quando": "2026-09-06T19:21:39"
  },
+ "bf93b1c1b0ce": {
+  "blocco": 7,
+  "comando": "python collaudi/esame_pannello_soldi.py --scrivi",
+  "commit": "4adb7c8",
+  "condizione": "il pannello dice sempre la verita' sui suoi soldi (nessun saldo stimato)",
+  "denominatore": 21,
+  "esito": true,
+  "impronta": "f59dead49141",
+  "impronte_moduli": {
+   "fase109_referral_host": "5f390a47ceef",
+   "fase115_dashboard_metriche": "582b15ad00df",
+   "fase141_onboarding_wizard": "d42c7f91a98e",
+   "fase70_turnover": "e6dd2a9ff349",
+   "fase72_digital_twin": "9004ef285f00",
+   "fase75_guardian_engine": "c6b61d9e6d89",
+   "fase78_sleep_guarantee": "05e5c1b2a549",
+   "fase88_registro_host": "d241ca990d66"
+  },
+  "motivo": "",
+  "quando": "2026-09-10T15:26:41"
+ },
  "c3cf3da4543f": {
   "blocco": 1,
   "comando": "python collaudi/esame_soldi.py --scrivi",
@@ -490,5 +550,27 @@
   "impronta": "6927427232b8",
   "motivo": "",
   "quando": "2026-09-07T23:21:16"
+ },
+ "fb42414c3b6b": {
+  "blocco": 3,
+  "comando": "python collaudi/esame_percorso_ruoli.py --casella giro --scrivi",
+  "commit": "4adb7c8",
+  "condizione": "l'admin e il super admin portano a termine il loro giro INTERO, non solo l'accesso: l'admin legge le prenotazioni, risolve una controversia, rimborsa il dovuto e rilegge i conti; il super admin crea un admin, cambia uno scaglione e rilegge gli invarianti. Ogni anello lascia una traccia, e il verde misura la DIFFERENZA fra prima e dopo, mai la presenza di una pagina che mostra sempre qualcosa",
+  "denominatore": 12,
+  "esito": true,
+  "impronta": "01970b37c064",
+  "impronte_moduli": {
+   "fase105_identity_gate": "a3ab7f1e6819",
+   "fase127_checkin_digitale": "316a826c975f",
+   "fase143_kyc_host": "9024eed56447",
+   "fase179_rate_limit": "d676ae5e7797",
+   "fase180_bunker": "12b50f910968",
+   "fase192_admin_accounts": "d781a60fe796",
+   "fase64_smartpass": "62f32d2a9183",
+   "fase73_firma_agile": "16cd09e0ed5d",
+   "fase80_sentinel": "ebc8a451110f"
+  },
+  "motivo": "",
+  "quando": "2026-09-10T16:44:41"
  }
 }
