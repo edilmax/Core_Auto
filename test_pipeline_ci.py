@@ -12821,6 +12821,287 @@ class TestLEsameDeiPercorsiPerRuoloNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
         self.assertEqual(vars(stripe_mod.ProviderStripe).get("_fetch_reale"), fetch_prima)
 
 
+class TestOgniGestoDellAdminLasciaLaSuaRiga(_GuardieSugliAttrezziDelLavoro):
+    """⛔ D20 PER UN DIFETTO VIVO: quattro gesti dell'admin cambiavano lo stato o muovevano denaro
+    SENZA lasciare una riga che dicesse chi avesse fatto cosa su cosa.
+
+    **Trovato percorrendo la catena 1** (`collaudi/esame_catene_admin.py`, anello [traccia]) e
+    misurato leggendo il corpo di ogni funzione admin di `fase83_server.py`: le due LETTURE
+    (`_admin_alloggi`, `_admin_search`) scrivono `AUDIT ... ip=`; `_admin_verifica_stato` era
+    l'unica SCRITTURA con la riga intera; `_admin_alloggio_stato`, `_admin_storno_penale`,
+    `_admin_controversia_risolvi` e `_admin_cancella_attivita` non scrivevano NIENTE. La riga del
+    bunker (`BUNKER: azione '%s' autorizzata ip=%s`) dava chi e il TIPO di azione, mai su quale
+    oggetto -- e solo a bunker configurato. ⇒ *Guardare* l'elenco degli annunci era ricostruibile,
+    *sospenderne uno* no.
+
+    ⛔ **QUESTA GUARDIA NON LEGGE IL SORGENTE: ESEGUE I QUATTRO GESTI** sul banco e guarda cosa
+    finisce nel registro. Una guardia che cercasse la stringa `ADMIN_ACTION` nel file la
+    soddisferebbe un commento (sbaglio S6), e soprattutto non direbbe niente sul giorno in cui la
+    riga c'e' ma non viene mai eseguita (il ramo `if` sbagliato, il `return` prima).
+
+    🔑 E pretende le TRE cose insieme, perche' due su tre non bastano a ricostruire un gesto:
+    **CHI** (l'ip), **CHE AZIONE**, **SU QUALE OGGETTO**. Una riga che dice «qualcuno ha sospeso
+    qualcosa» e' un registro che non serve il giorno che lo si apre.
+    """
+
+    GESTI = ("alloggio_stato", "storno_penale", "controversia_risolvi", "cancella_attivita")
+
+    def _apri_banco(self):
+        ruoli = self._carica("esame_percorso_ruoli.py", "_ruoli_per_le_tracce")
+        salvato = ruoli._ambiente_salvato()
+        cartella = tempfile.mkdtemp(prefix="tracce_")
+        self.addCleanup(shutil.rmtree, cartella, True)
+        self.addCleanup(ruoli._ambiente_ripristinato, salvato)
+        banco = ruoli.Banco(cartella)
+        stato, intestazioni = banco.bunker_headers()
+        self.assertEqual(stato, 200, "il bunker del banco non apre: il gesto non sarebbe misurato "
+                                    "ma SALTATO, e un salto somiglia a un verde (sbaglio S7)")
+        return ruoli, banco, intestazioni
+
+    @staticmethod
+    def _registro_del_gesto(fare):
+        """Esegue `fare()` catturando il registro del server. Rende (esito, righe)."""
+        import logging
+        righe = []
+
+        class _Presa(logging.Handler):
+            def emit(self, record):
+                try:
+                    righe.append(record.getMessage())
+                except Exception:
+                    righe.append(str(record.msg))
+
+        presa = _Presa()
+        log = logging.getLogger("core_auto.server")
+        livello = log.level
+        log.addHandler(presa)
+        log.setLevel(logging.DEBUG)
+        try:
+            esito = fare()
+        finally:
+            log.removeHandler(presa)
+            log.setLevel(livello)
+        return esito, righe
+
+    def _pretendi_la_riga(self, gesto, righe, *pezzi):
+        """La riga esiste, dice CHI (ip), CHE AZIONE e SU QUALE OGGETTO."""
+        azione = [r for r in righe if "ADMIN_ACTION" in r]
+        self.assertTrue(azione, "il gesto «%s» non lascia NESSUNA riga ADMIN_ACTION: chi l'ha fatto "
+                                "e su cosa non e' ricostruibile. Righe scritte durante il gesto: %r"
+                        % (gesto, [r[:110] for r in righe]))
+        intere = [r for r in azione if all(str(p) in r for p in pezzi) and "IP:" in r]
+        self.assertTrue(intere, "il gesto «%s» lascia una riga ADMIN_ACTION che non unisce CHI (IP) e "
+                                "SU COSA (%s): %r" % (gesto, ", ".join(str(p) for p in pezzi),
+                                                      [r[:160] for r in azione]))
+
+    def test_SOSPENDERE_UN_ANNUNCIO_LASCIA_LA_SUA_RIGA(self):
+        _ruoli, b, BH = self._apri_banco()
+        slug = b.alloggio("casa-traccia", 2, "2027-08-01", "2027-08-10")
+        esito, righe = self._registro_del_gesto(
+            lambda: b.g("POST", "/api/admin/alloggio_stato", {"slug": slug, "stato": "sospeso"}, BH))
+        self.assertEqual(esito[0], 200, esito)
+        self._pretendi_la_riga("alloggio_stato", righe, slug, "sospeso")
+
+    def test_STORNARE_UNA_PENALE_LASCIA_LA_SUA_RIGA(self):
+        _ruoli, b, BH = self._apri_banco()
+        finanza = getattr(b.sis, "finanza", None)
+        self.assertIsNotNone(finanza, "il banco non ha il controller finanziario: il gesto non "
+                                      "sarebbe misurato ma saltato")
+        nota = finanza.emetti_nota(tipo="debito", riferimento="RIF-TRACCIA-1", soggetto=b.host_id,
+                                   importo_cents=5000, valuta="EUR", causale="penale di prova",
+                                   emittente="banco-dei-collaudi")
+        self.assertTrue(nota and nota.get("nota_id"), "la nota di debito di prova non nasce: %r" % (nota,))
+        esito, righe = self._registro_del_gesto(
+            lambda: b.g("POST", "/api/admin/storno_penale",
+                        {"nota_id": nota["nota_id"], "motivo": "emessa per errore"}, BH))
+        self.assertEqual(esito[0], 200, esito)
+        self._pretendi_la_riga("storno_penale", righe, nota["nota_id"])
+
+    def test_RISOLVERE_UNA_CONTROVERSIA_LASCIA_LA_SUA_RIGA(self):
+        _ruoli, b, BH = self._apri_banco()
+        slug = b.alloggio("casa-traccia-2", 2, "2027-09-01", "2027-09-10")
+        rif, voucher = b.pagata(slug, "2027-09-03", "2027-09-05")
+        self.assertTrue(rif and voucher, "il banco non ha prodotto una prenotazione pagata")
+        b.g("POST", "/api/garanzia/contesta", {"voucher_token": voucher, "motivo": "prova"})
+        esito, righe = self._registro_del_gesto(
+            lambda: b.g("POST", "/api/admin/controversia/risolvi",
+                        {"riferimento": rif, "rimborso_ospite_cents": 1000}, BH))
+        self.assertEqual(esito[0], 200, esito)
+        #  la cifra decisa fa parte del «cosa»: una riga senza l'importo non dice cosa e' stato deciso
+        self._pretendi_la_riga("controversia_risolvi", righe, rif, 1000)
+
+    def test_CANCELLARE_UN_HOST_LASCIA_LA_SUA_RIGA(self):
+        _ruoli, b, BH = self._apri_banco()
+        _tk, host_id = b.registra_host("da-cancellare@esame.it")
+        esito, righe = self._registro_del_gesto(
+            lambda: b.g("POST", "/api/admin/cancella_attivita", {"host_id": host_id}, BH))
+        self.assertIn(esito[0], (200, 409), esito)
+        #  ⛔ ANCHE UN 409 DEVE LASCIARE LA RIGA: «ho provato a cancellare e qualcosa e' rimasto» e'
+        #     precisamente il caso in cui qualcuno andra' a leggere il registro.
+        self._pretendi_la_riga("cancella_attivita", righe, host_id)
+
+    def test_LE_QUATTRO_FUNZIONI_ESISTONO_ANCORA_CON_QUESTI_NOMI(self):
+        """Prova di PREMESSA: se una di queste funzioni venisse rinominata o divisa, i quattro test
+        qui sopra passerebbero dalla porta sbagliata (la rotta risponderebbe 404 e il registro
+        sarebbe vuoto per un motivo diverso da quello che cerchiamo)."""
+        with io.open(os.path.join(QUI, "fase83_server.py"), encoding="utf-8") as f:
+            sorgente = f.read()
+        for funzione in ("_admin_alloggio_stato", "_admin_storno_penale",
+                         "_admin_controversia_risolvi", "_admin_cancella_attivita"):
+            self.assertIn("def %s(" % funzione, sorgente, "la funzione %s non esiste piu'" % funzione)
+
+
+class TestLEsameDelleCateneAdminNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
+    """⛔ D18 PUNTO 4 PER `collaudi/esame_catene_admin.py`, l'attrezzo della casella «ogni gesto del
+    pannello admin ha le sue tre colonne» (Blocco 3, in coda): il perimetro lo CONTA la pagina e
+    ogni voce vuole la sua catena, percorsa anello per anello.
+
+    Qui l'esame si ESEGUE davvero (il banco costa un secondo), e le guardie stanno sulle due cose
+    che possono rompersi in silenzio:
+
+    1. **IL CENSIMENTO, cioe' il cancello.** Deve essere VERDE oggi e diventare ROSSO il giorno che
+       entra nel pannello un gesto nuovo senza catena -- e' tutto il senso del lavoro («un elenco
+       scritto a mano copre tutto oggi e domani non sa del bottone numero 22: non sbaglia, TACE»).
+       Si prova in tutt'e due i versi su una pagina costruita, e sulla pagina VERA.
+    2. **LA CATENA 1 E' VERDE, E DEVE RESTARLO ANELLO PER ANELLO.** Il difetto vivo che questo
+       esame ha trovato -- nessuna riga diceva chi aveva sospeso cosa -- e' stato riparato il
+       2026-09-11 (4 righe `ADMIN_ACTION`, guardia `TestOgniGestoDellAdminLasciaLaSuaRiga` vista
+       rossa prima). Da qui in avanti questa guardia pretende **zero** anelli rossi sul codice
+       sano: se uno torna rosso lo dice, invece di lasciarlo passare dentro un rosso generico.
+    """
+
+    def _esame(self):
+        return self._carica("esame_catene_admin.py", "_esame_catene_admin_sotto_guardia")
+
+    def test_IL_CENSIMENTO_GRIDA_SU_UNA_VOCE_NUOVA_E_TACE_SU_UNA_PAGINA_CENSITA(self):
+        esame = self._esame()
+        percorsa = esame.Catena("v", ("/api/a",), ("uno",), "b", "s", "a", percorre=lambda *a, **k: None)
+        pagina = {"rotte": ["/api/a"], "bottoni": {"#x": 1}, "campi": {"#y": 1}}
+        verde, motivi, den, scoperte = esame.censimento(pagina, {"/api/a": percorsa},
+                                                        {"#x": "/api/a"}, {"#y": esame.PAGINA_SOLA}, 0)
+        self.assertTrue(verde, motivi)
+        self.assertEqual((den, scoperte), (3, []))
+        #  la voce NUOVA, nelle tre forme in cui puo' entrare: una rotta, un bottone, un campo
+        nuova_rotta = {"rotte": ["/api/a", "/api/nata_ieri"], "bottoni": {"#x": 1}, "campi": {"#y": 1}}
+        verde, motivi, _d, scoperte = esame.censimento(nuova_rotta, {"/api/a": percorsa},
+                                                       {"#x": "/api/a"}, {"#y": esame.PAGINA_SOLA}, 0)
+        self.assertFalse(verde, "una rotta nuova senza catena non ha fatto gridare il censimento")
+        self.assertEqual(scoperte, ["/api/nata_ieri"])
+        self.assertTrue(any("voce NUOVA" in m for m in motivi), motivi)
+        for voce, pagina_nuova in (("bottone", {"rotte": ["/api/a"], "bottoni": {"#x": 1, "#nuovo": 1},
+                                                "campi": {"#y": 1}}),
+                                   ("campo", {"rotte": ["/api/a"], "bottoni": {"#x": 1},
+                                              "campi": {"#y": 1, "#nuovo": 1}})):
+            verde, motivi, _d, _s = esame.censimento(pagina_nuova, {"/api/a": percorsa},
+                                                     {"#x": "/api/a"}, {"#y": esame.PAGINA_SOLA}, 0)
+            self.assertFalse(verde, "un %s nuovo non ha fatto gridare il censimento" % voce)
+            self.assertTrue(any("MAI CENSITO" in m for m in motivi), motivi)
+        #  e una dichiarazione che parla di una voce che non c'e' piu' e' rossa uguale
+        self.assertFalse(esame.censimento(pagina, {"/api/a": percorsa, "/api/sparita": percorsa},
+                                          {"#x": "/api/a"}, {"#y": esame.PAGINA_SOLA}, 0)[0],
+                         "una catena orfana non ha fatto gridare il censimento")
+        self.assertFalse(esame.censimento({"rotte": [], "bottoni": {}, "campi": {}}, {}, {}, {}, 0)[0],
+                         "una pagina senza rotte non e' una misura: e' una lettura fallita")
+
+    def test_IL_PERIMETRO_SI_LEGGE_DALLA_PAGINA_VERA_E_NON_LASCIA_VOCI_ANONIME(self):
+        """⛔ Il lettore dei tag va fino al `>` che chiude DAVVERO: tre bottoni di questa pagina
+        hanno una arrow function nell'`onclick` (`()=>risolviCtr(...)`), e col `>` di `=>` preso per
+        fine del tag TRE gesti diversi finivano in UNA identita' anonima. Non un numero sbagliato:
+        un perimetro che TACE su due bottoni."""
+        esame = self._esame()
+        per = esame.perimetro()
+        self.assertGreaterEqual(len(per["rotte"]), 21)
+        self.assertIn("/api/admin/alloggio_stato", per["rotte"])
+        for ide in ("risolviCtr()", "eseguiRimborsoDovuto()", "vediChat()"):
+            self.assertIn(ide, per["bottoni"], "il lettore non distingue piu' il bottone %s" % ide)
+        anonimi = [i for i in list(per["bottoni"]) + list(per["campi"]) if i.startswith("<")]
+        self.assertEqual(anonimi, [], "voci senza identita': il perimetro tace su di loro")
+        verde, motivi, _den, scoperte = esame.censimento(per)
+        self.assertTrue(verde, "il censimento della pagina vera e' rosso: %s" % motivi)
+        self.assertEqual(len(scoperte), esame.ROTTE_SENZA_CATENA_TETTO,
+                         "il tetto del cricchetto non coincide piu' con le rotte senza catena: "
+                         "se e' calato e' lavoro fatto (abbassalo), se e' salito e' una voce nuova")
+
+    def test_L_ESAME_VERO_GRIDA_COL_GUASTO_E_TACE_SULLA_CATENA_SANA(self):
+        """Le due direzioni sul banco VERO. Sano: censimento verde e **zero** anelli rossi; la
+        casella resta comunque ROSSA, e per un motivo che non e' un guasto -- 19 rotte del pannello
+        non hanno ancora una catena (debito dichiarato). Col guasto gridano [prenota] (il concierge
+        non guarda piu' lo stato: una prenotazione VERA su un annuncio sospeso) e il censimento (una
+        rotta nuova)."""
+        esame = self._esame()
+        self.assertEqual(esame.main([]), 1,
+                         "l'esame dice VERDE mentre 19 rotte non hanno catena: ha smesso di contare "
+                         "il debito, ed e' il verde peggiore -- «non ci scappa niente» senza averle viste")
+        sano = esame.ULTIMO
+        self.assertTrue(sano["censimento"], sano["motivi_censimento"])
+        self.assertEqual([c["rossi"] for c in sano["catene"]], [[]],
+                         "un anello della catena 1 e' rosso sul codice sano: %s"
+                         % [c["motivi"] for c in sano["catene"]])
+        self.assertTrue(sano["scoperte"], "il debito e' sparito senza che nessuna catena nuova sia "
+                                         "stata scritta: il conto non lo misura piu' nessuno")
+        self.assertEqual(esame.main(["--con-guasto"]), 1, "coi guasti dentro NON ha gridato")
+        guasto = esame.ULTIMO
+        self.assertFalse(guasto["censimento"], "la rotta nuova non ha fatto gridare il censimento")
+        self.assertIn("prenota", guasto["catene"][0]["rossi"],
+                      "col concierge cieco l'anello che vale i soldi e' rimasto verde: %s"
+                      % guasto["catene"][0]["motivi"])
+
+    def test_COL_GUASTO_DENTRO_NON_SCRIVE_MAI(self):
+        esame = self._esame()
+        vera_registra = esame.scheda.registra
+        scritture = []
+        try:
+            esame.scheda.registra = lambda *a, **k: scritture.append((a, k))
+            self.assertEqual(esame.main(["--con-guasto", "--scrivi"]), 2)
+            self.assertEqual(scritture, [], "ha registrato un guasto costruito apposta")
+        finally:
+            esame.scheda.registra = vera_registra
+
+    def test_LE_TRE_COLONNE_CI_SONO_PER_OGNI_CATENA_DICHIARATA(self):
+        """Una catena senza la colonna dei SOLDI o quella dell'ARCHIVIO non e' una catena: e' la
+        meta' comoda del lavoro. Il fondatore le ha chieste tutte e tre nello stesso respiro
+        («sia dal lato dei soldi sia dal lato dei bottoni, perche' poi subentrano anche i database»)."""
+        esame = self._esame()
+        viste = []
+        for cat in esame.CATENE.values():        # la chiave non serve: piu' rotte condividono una catena
+            if cat in viste:
+                continue
+            viste.append(cat)
+            for colonna in ("bottone", "soldi", "archivio"):
+                testo = getattr(cat, colonna, "")
+                self.assertTrue(isinstance(testo, str) and len(testo.split()) >= 8,
+                                "la catena «%s» non dichiara la colonna %s" % (cat.voce, colonna))
+            self.assertTrue(cat.anelli and cat.percorre is not None, cat.voce)
+        self.assertTrue(viste, "nessuna catena dichiarata")
+
+    def test_IL_TESTO_DELLA_CASELLA_NON_E_RICOPIATO_A_MANO(self):
+        esame = self._esame()
+        import io as _io
+        with _io.open(os.path.join(QUI, "collaudi", "esame_catene_admin.py"), encoding="utf-8") as f:
+            sorgente = f.read()
+        testo = esame.condizione()
+        self.assertIn(esame.MARCA, testo)
+        self.assertNotIn(testo, sorgente,
+                         "il testo della casella e' ricopiato nell'esame: il giorno che il piano "
+                         "cambia, l'esame spunterebbe una casella che non esiste piu'")
+
+    def test_L_ESAME_DICHIARA_COSA_NON_HA_GUARDATO_E_SA_PROVARSI(self):
+        esame = self._esame()
+        self.assertTrue(getattr(esame, "NON_GUARDA", ()))
+        self.assertTrue(all(isinstance(r, str) and r.strip() for r in esame.NON_GUARDA))
+        riuscita, righe = esame.autoprova()
+        self.assertTrue(riuscita, righe)
+
+    def test_L_AMBIENTE_TORNA_COM_ERA_DOPO_IL_BANCO(self):
+        import fase85_pagamenti_stripe as stripe_mod
+        esame = self._esame()
+        upload_prima = os.environ.get("UPLOAD_DIR")
+        fetch_prima = vars(stripe_mod.ProviderStripe).get("_fetch_reale")
+        esame.main([])
+        self.assertEqual(os.environ.get("UPLOAD_DIR"), upload_prima)
+        self.assertEqual(vars(stripe_mod.ProviderStripe).get("_fetch_reale"), fetch_prima)
+
+
 class TestLEsameLegaleNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
     """⛔ D18 PUNTO 4 PER `collaudi/esame_legale.py`, l'attrezzo delle caselle 1 e 2 del Blocco 5
     («le 3 spunte obbligatorie sono bloccate lato browser E rifiutate 422 lato server»; «termini e
@@ -13300,6 +13581,16 @@ class TestLEsameDellaSentinellaNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
             percorso = os.path.join(d, "letture.json")
             with io.open(percorso, "w", encoding="utf-8") as f:
                 json.dump(esame.letture_finte(esterno=None, **oggi), f)
+            # ⛔ LO STATO «SENZA CHIAVE» SI COSTRUISCE, NON SI ASSUME. Fino al 2026-09-11 questo
+            #    passo dava per scontato che `UPTIMEROBOT_API_KEY` non fosse nell'ambiente --
+            #    vero finche' il conto UptimeRobot non esisteva. Il giorno in cui il fondatore
+            #    l'ha configurata sul suo computer (`setx`), la precondizione ha smesso di essere
+            #    rossa e il test e' diventato ROSSO su una macchina SANA: 1 invece di 2. In CI la
+            #    chiave non c'e', quindi la' restava verde -- cioe' il rosso colpiva solo chi ha
+            #    fatto la cosa giusta. E' la famiglia 20.3 del METODO (la misura che invecchia) e
+            #    la D23 (l'ambiente fa parte della misura): il `finally` qui sotto rimette
+            #    l'ambiente com'era, quindi togliere la chiave qui non ha effetti fuori dal test.
+            os.environ.pop(esame.VARIABILE_CHIAVE, None)
             uscita = io.StringIO()
             with contextlib.redirect_stdout(uscita):
                 self.assertEqual(esame.main(["--monitor", "uptimerobot", "--da-file", percorso]), 2)   # senza chiave: FERMO

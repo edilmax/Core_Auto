@@ -372,6 +372,18 @@ BLOCCHI = (
             "rilegge i conti; il super admin crea un admin, cambia uno scaglione e rilegge gli "
             "invarianti. Ogni anello lascia una traccia, e il verde misura la DIFFERENZA fra "
             "prima e dopo, mai la presenza di una pagina che mostra sempre qualcosa",
+            # In coda (2026-09-10 sera, parole del fondatore: «fare gli incroci dall'inizio alla
+            # fine e non lasciare fuori niente»). ⛔ La riga d'arrivo NON e' «coprire le 21 voci
+            # di oggi»: e' che a contarle sia la MACCHINA. Un elenco scritto a mano copre tutto
+            # oggi e domani non sa del bottone numero 22 -- e non sbaglia: TACE. Per ogni voce
+            # servono TRE colonne (il bottone · i soldi · l'archivio), e la catena va PERCORSA:
+            # «un collaudo la nomina» non e' «qualcuno la segue fino in fondo».
+            "ogni gesto del pannello admin -- rotte, bottoni e campi CONTATI dalla pagina a ogni "
+            "giro, non da un elenco scritto a mano -- ha le sue tre colonne dichiarate (cosa deve "
+            "succedere e dove finisce il dato · quali importi si muovono e cosa deve coincidere al "
+            "centesimo · in quale archivio si scrive, se ci resta, se si cancella e per quale legge) "
+            "e la catena PERCORSA anello per anello, dove ogni anello e' una differenza fra prima e "
+            "dopo; una voce nuova senza catena e' rossa lo stesso giorno",
         ),
     },
     {

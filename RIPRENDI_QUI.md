@@ -395,6 +395,68 @@ giri di mutazione da 60 e 600 minuti dichiarati. Guardia `TestUnaCasellaSCADUTAD
 vista rossa prima (3 su 3). **Misurato adesso: 9 caselle rilanciabili subito, 2 che vogliono il server.**
 🔑 **Quindi «15 caselle su 39» NON vuol dire che il lavoro sia fermo:** vuol dire che gran parte delle misure è
 scaduta e va rifatta. Il primo lavoro utile è rilanciare quei 9 attrezzi.
+**🧮 10 SETTEMBRE, notte — LA PRIMA CATENA È PERCORSA, E IL PERIMETRO DEL PANNELLO ADMIN ADESSO LO CONTA LA MACCHINA
+(ramo `catene-admin-2026-09-10` su master `6b613b3`, cartella `Core_Auto_B3`; modello e potenza impostati dal fondatore:
+Fable 5.1 max per l'attrezzo, poi Opus 5 max):** attrezzo nuovo `collaudi/esame_catene_admin.py` + casella **in coda** al
+Blocco 3 + guardia `test_pipeline_ci.TestLEsameDelleCateneAdminNonPuoBARARE` (8 test, 2.4 s). **Zero righe di produzione.**
+L'esame fa DUE cose separate, e la separazione è il punto:
+· **il CENSIMENTO (il cancello): ✅ VERDE, 71 voci guardate** — rotte, bottoni e campi letti da `deploy/admin.html` a ogni
+giro e ognuno attribuito a una catena. **Misurato: 21 rotte · 33 bottoni in 29 identità · 17 campi in 13 identità**
+(`python collaudi/esame_catene_admin.py --perimetro`). ⛔ **Il foglio del 10/9 sera diceva «27 bottoni · 12 campi»: erano
+scritti a mano e senza il comando.** Il numero vero è più alto perché la pagina disegna bottoni anche dentro le stringhe
+dello script (le righe delle controversie, dei rimborsi, delle verifiche) — e un gesto che la pagina disegna è un gesto che
+una persona preme. Il cricchetto: **le rotte senza catena non possono essere più di 19** — se domani ne entra una, la casella
+è rossa quel giorno stesso. ⚠️ Il cricchetto dice **CHE** una voce è entrata, non **quale** (quello lo dice il diff della
+pagina): è lo scambio chiesto dal fondatore, perché una lista scritta a mano direbbe anche quale e poi **tacerebbe**.
+· **la CATENA 1 «Tutti gli annunci» (pubblica/sospendi): 8 anelli su 9 verdi**, ognuno una differenza fra prima e dopo —
+porta (401 senza chiave · 403 `bunker_richiesto` con la sola chiave · 403 `permesso_negato_ruolo` col ruolo `supporto`, e
+nessuna delle tre ha cambiato lo stato) · vede · sospendi · vetrina (sparisce dalla ricerca **e** la scheda passa da 200 a
+404) · **prenota** · host · ripubblica · esistenti · traccia.
+🔑 **L'anello che vale i soldi è [prenota], e il guasto lo dimostra:** col concierge reso cieco sullo stato, il preventivo
+risponde 200 e la conferma **201** — una prenotazione vera su un annuncio che l'admin credeva chiuso, e nell'elenco
+dell'admin le righe passano da 1 a 2. Senza quell'anello, «sospeso» sarebbe una parola sulla pagina.
+✅ **IL DIFETTO VIVO CHE L'ESAME HA TROVATO — «nessuna riga dice CHI ha sospeso COSA» — È RIPARATO (11 settembre, parole del
+fondatore: «autorizzato anche le 4 righe di registro in fase83»).** Lo stato di prima, misurato leggendo il corpo di ogni
+funzione admin (il corpo fino al `def` successivo: con una finestra di righe il conto diceva il falso): `_admin_alloggi` e
+`_admin_search` — due **letture** — scrivevano `AUDIT ... ip=`; `_admin_verifica_stato` era l'unica **scrittura** con la riga
+intera; **`_admin_alloggio_stato`, `_admin_storno_penale`, `_admin_controversia_risolvi` e `_admin_cancella_attivita` non
+scrivevano niente.** La riga del bunker dà chi e il **tipo** di azione, mai su quale oggetto — e solo a bunker configurato.
+⇒ *Guardare* l'elenco degli annunci era ricostruibile, *sospenderne uno* no.
+**Riparato nell'ordine di D20, e l'ordine non è un formalismo:** prima la guardia
+`test_pipeline_ci.TestOgniGestoDellAdminLasciaLaSuaRiga` (5 test) che **esegue** i quattro gesti sul banco e legge il registro
+(una guardia che cercasse `ADMIN_ACTION` nel sorgente la soddisferebbe un commento, S6), vista **ROSSA su tutti e quattro**
+con il messaggio esatto («non lascia NESSUNA riga ADMIN_ACTION… l'unica riga: `BUNKER: azione '…' autorizzata ip=…`»); poi
+**4 istruzioni** in `fase83_server.py`, zero righe rimosse, zero funzioni e zero dipendenze nuove; poi le 5 guardie verdi.
+Ogni riga unisce le tre cose che servono a ricostruire un gesto — **chi** (ip), **che azione**, **su quale oggetto** — e per
+la controversia anche la **cifra decisa**, perché una riga senza l'importo non dice cosa è stato deciso. Per la cancellazione
+la riga si scrive **anche quando rifiuta** (409): «ho provato a cancellare e qualcosa è rimasto» è precisamente il caso in cui
+qualcuno andrà a leggere il registro. ⇒ **La catena 1 è VERDE, 9 anelli su 9.**
+⚠️ **Cosa resta, dichiarato e non toccato:** `_admin_rimborso` e `_admin_rimborsa_dovuto` scrivono l'esito
+(`RIMBORSO ESEGUITO rif=… importo=…`) ma ancora **non l'ip di chi ha premuto**. L'autorizzazione era per quattro righe e lo
+scopo non si allarga da sé (ferrea 15): là il *cosa* esiste, per gli altri quattro mancava tutto.
+📌 **E un effetto da sapere:** toccando `fase83_server.py` è scaduta la casella del **Blocco 8** (l'impronta del blocco è
+cambiata). Rimessa subito con `python collaudi/esame_sentinella.py --scrivi`: **ROSSA 4 passi su 10**, lo stesso motivo di
+stamattina (manca un monitor esterno — il conto UptimeRobot è una decisione del fondatore), non un guasto nuovo. Restano da
+rimisurare solo i due giri di mutazione (60 e 600 minuti dichiarati) e i due esami col materiale del VPS: lo stesso stato di
+stamattina.
+⛔ **TRE ROSSI DEI PRIMI OTTO ERANO MIEI** (S3: il primo sospetto va allo strumento). (1) Il banco di `esame_percorso_ruoli`
+passa la query **dentro il path**, e `router.gestisci` vuole il path puro + la query in un dizionario: ogni rotta interrogata
+con `?` risponde **404 `rotta_non_trovata`** — e un 404 somiglia in tutto a «la vetrina non mostra l'annuncio». L'ha trovato
+il **due tempi**: col solo «dopo» l'anello [vetrina] sarebbe stato **VERDE per il motivo sbagliato**. (2) Passavo il token
+dell'operatore `supporto` **insieme** alla chiave root: `_ruolo_operatore` legge «admin», perché chi ha la chiave root *è*
+root — giusto così, e il 200 che sembrava una scalata di privilegi era mio. (3) Il mio lettore dei tag si fermava al primo
+`>`, e il `>` di `()=>` nelle `onclick` chiudeva il tag in anticipo: **tre bottoni diversi finivano in una sola identità
+anonima** (`risolviCtr`, `eseguiRimborsoDovuto`, `vediChat`). Non un numero sbagliato: un perimetro che **tace**.
+⛔ E una riga della mappa gesto→rotta **l'avevo dimenticata** (`stornaPenale()`, il bottone dentro la scheda audit): l'ha
+trovata il censimento al primo giro. È la prova in piccolo di perché la mappa non può essere l'unica fonte.
+Le due guardie viste **ROSSE** sul guasto vero, iniettato con l'editor e ripristinato **byte-identico**
+(sha256 `f731da6a1835…` prima e dopo): cricchetto spento → 3 test rossi col motivo esatto; lettore dei tag cieco → 2 test
+rossi. Caricatore **6739** (`python -c "import unittest; print(unittest.TestLoader().discover('.', pattern='test_*.py').countTestCases())"`).
+Scheda **Blocco 3 4 su 5**: la casella nuova resta **ROSSA**, e adesso per un motivo che **non è un guasto** — 19 rotte del
+pannello su 21 non hanno ancora una catena percorsa (debito dichiarato, tetto 19). ⛔ Quel rosso è voluto: un verde qui sarebbe
+la frase più falsa del lavoro, «non ci scappa niente» con venti voci mai seguite. **Cosa manca:** suite → commit → PR → CI →
+unione → deploy; poi le altre 19 catene, una per volta, nell'ordine del pannello (la prossima è `/api/admin/prenotazioni`).
+
 **🔁 10 SETTEMBRE, mattina — LE CASELLE SCADUTE RIMESSE, DA 15 A 21 SU 39, E UN ESAME DEI SOLDI CHE DICEVA ROSSO SU UN
 SERVER SANO (`Core_Auto` su master `8358c04`, corsia unica; modello e potenza impostati dal fondatore: Opus 5 medium per
 l'esecuzione, poi Fable 5.1 max al primo rosso, sue parole «o messo fable max, lancia esame_sentinella e ripara»):** `--rimisura`
@@ -2106,9 +2168,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 4adb7c8
+CONSEGNE AGGIORNATE A: d69bdd7
 
-SUITE ATTUALE: Ran 6726 test
+SUITE ATTUALE: Ran 6739 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
