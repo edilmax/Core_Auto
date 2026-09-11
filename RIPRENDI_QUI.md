@@ -395,6 +395,133 @@ giri di mutazione da 60 e 600 minuti dichiarati. Guardia `TestUnaCasellaSCADUTAD
 vista rossa prima (3 su 3). **Misurato adesso: 9 caselle rilanciabili subito, 2 che vogliono il server.**
 🔑 **Quindi «15 caselle su 39» NON vuol dire che il lavoro sia fermo:** vuol dire che gran parte delle misure è
 scaduta e va rifatta. Il primo lavoro utile è rilanciare quei 9 attrezzi.
+**🧭 11 SETTEMBRE, sera — PASSAGGIO DI CONSEGNE (D21) E LA CODA DEI LAVORI, UNO ALLA VOLTA**
+
+> ⛔ **D21: contesto all'80%, letto dal fondatore con `/context`** (802k su 1M). La soglia è il 50%: superata senza
+> accorgermene, perché la percentuale non la vedo io. Lavoro nuovo NON aperto: la correzione del promemoria, autorizzata,
+> parte nella chat nuova. **Stato della macchina:** master **`d870a17`** uguale su computer, GitHub e VPS (deploy D17 di
+> `0f22730` l'11/9 notte: sonde 200/200, negativa `/api/bunker/invarianti` 403, `verifica_produzione` 190 controlli 0
+> violazioni, e il passo [1b] ha ri-agganciato `:prec` che puntava a un'immagine di due giorni prima). Ultima suite intera
+> verde: `Ran 6734 in 1634 s — OK (skipped=4)`, uscita 0 (i 5 che mancano al caricatore **6739** sono
+> `TestRipristinoAPezziNonPassa`, saltata in blocco perché su Windows manca `openssl`; in CI girano). Il lavoro di
+> questa voce sta sul ramo `promemoria-e-mutazione-2026-09-11` (cartella `Core_Auto_B3`): questa voce, il diario e
+> `collaudi/scheda.json` con le due caselle di mutazione. **Le bozze della prossima correzione** (estrazione, cura, 6
+> guardie) e la coda originale stanno FUORI dal repository, in
+> `Core_Auto_GUARDIE_PRONTE\corsia_2026-09-10\bozze_per_la_prossima_chat\`: sono bozze, la verità è qui sotto.
+
+> **Ordine del fondatore:** *«bisogna prima finire il lavoro programmato e poi si passa al successivo»* · *«non deve
+> rimanere nella tua memoria ma disponibile a te e alle nuove chat»* · *«quando si finisce un lavoro spuntano le caselle,
+> fatto deve risultare»* · *«procedi con cautela, controlla, non ti fidare dei risultati»*. Il mandato: *«concentrati da
+> vero ingegnere software … gestione soldi, prenotazione e il resto, farlo funzionare al massimo … senza dimenticare più
+> nulla»*. La sequenza che ha deciso per sé: **prima il software provato, poi l'avvocato, poi il VPS annuale** (ha già
+> speso 500 € e non paga un avvocato per una macchina di cui non è sicuro).
+> 🔑 **Come si chiude un punto:** guardia vista rossa · suite intera verde · commit → PR → CI → unione → deploy se tocca il
+> prodotto · **e DEVE RISULTARE:** l'attrezzo che misura la casella si rilancia con `--scrivi` (mai una spunta a mano) e
+> il punto qui diventa ✅ FATTO col commit e la misura. Se un lavoro non ha una casella che lo misuri, lo si dice.
+
+**🧬 LA MUTAZIONE DI OGGI, VERIFICATA INVECE DI CREDUTA** (`Core_Auto` su `d870a17`, registri in `GUARDIE_PRONTE`):
+· **Blocco 1, i 5 moduli del denaro:** 246 provati · 245 uccisi · **0 sopravvissuti** · 1 equivalente · 15 uccisi rifatti
+  da capo, 0 smentiti · rinunce del generatore 12 → **casella ✅, Blocco 1 a 8 su 15**. Controllato che non fosse falso:
+  la base verde la misura il giudice PRIMA di rompere (`misura_normale`; se è rossa salta il modulo) e i 5 moduli hanno
+  la riga «normale» che si scrive solo dopo; un tempo scaduto diventa «non determinabile», mai «ucciso»; l'equivalente è
+  `fase85 crea_link_anticipo` `>=`→`>` su `saldo`, **dimostrato per esaurimento** con ancore che lo fanno decadere se il
+  codice cambia; impronta della casella = impronta di oggi (`2835740729f0`). Ogni modulo giudicato dal SUO test dedicato.
+· **Blocco 2, i 10 moduli vivi delle prenotazioni:** 493 provati · 461 uccisi · **26 sopravvissuti** · 6 equivalenti ·
+  **14 punti mai esaminati** → **casella scritta ROSSA** (giusta). ⚠️ Il mio contatore diceva 52: il giudice ristampa
+  l'elenco a fine giro e io li contavo due volte (aveva ragione lui). Per modulo: **`fase58` 18** — tutte righe del
+  commit `c326105` dell'**8 settembre** («Il feed esterno valeva in un verso solo…»), cioè codice aggiunto DOPO che la
+  casella era verde: buchi molto probabili nel suo test dedicato; **`fase82` 8**; `fase203` 0. I **14 punti** sono
+  `fase58`, che oggi ha 164 punti contro il tetto 150 del comando: ⛔ il tetto NON è scritto nel piano, la rimisura
+  ripropone il comando dell'ultimo giro (6/9, quando `fase58` aveva 147 punti) → **il prossimo giro va lanciato con
+  `--tetto 170`**, altrimenti la casella non può diventare verde qualunque cosa si ripari.
+· **`fase82` ri-giudicato con i 3 test che lo importano** (`--parziale`, non scrive: verificato in `scrivi_la_scheda`,
+  che senza TUTTI i moduli del blocco non scrive mai — il verde falso da giro corto è già impedito): 29 · 20 uccisi ·
+  **9 sopravvissuti**. Gli **8 di prima sono sopravvissuti ANCHE a questo giro** (righe 119, 170, 191, 211, 227, 236,
+  239, 253) → buchi molto probabili. Il nono (riga 204) nel giro grande era UCCISO: un test che non importa `fase82` lo
+  esercita passando da altri moduli ⇒ ⛔ **la classificazione «occhio vero / di carta» (import diretto) NON basta a
+  scegliere gli occhi**: un «di carta» può essere un occhio vero indiretto.
+· **Il primo lancio del ri-giudizio si è fermato con BASE ROSSA, e aveva ragione:** `test_prezzo_vetrina_e_cassa`, da
+  solo, fa 6 errori su 37 (`UnicodeEncodeError` a `collaudi/prezzi_coerenti.py:198`, un'emoji stampata con l'uscita in
+  cp1252). Stesso esito in `Core_Auto`; con `PYTHONIOENCODING=utf-8` 37 su 37. Nella suite passa solo perché un test
+  precedente sistema la codifica per tutti → **PUNTO 6-bis** qui sotto.
+
+**PUNTO 1 — FINIRE I PANNELLI: le catene, una per volta, fino in fondo.** *(Blocco 3, il lavoro APERTO.)* Admin **2 rotte
+su 21** con la catena percorsa; host, super admin (`deploy/bunker.html`) e cliente **senza nemmeno il perimetro contato**
+(stessa macchina: cambia la riga `PAGINA` di `collaudi/esame_catene_admin.py`). ⛔ **Il giro del CLIENTE non esiste**: dei
+quattro ruoli è l'unico mai percorso da capo a fondo, ed è quello che porta i soldi. Dentro il Punto 1, per la voce
+«Controversie», nell'ordine:
+  **1a — ⛔ LA PROSSIMA COSA DA FARE: il promemoria al check-in. ✅ «autorizzato» del fondatore (11/9).** Il modello e il
+  giro esistono e sono collegati (`fase86.corpo_promemoria_checkin_html`, `fase83._tick_promemoria`), con DUE difetti
+  vivi misurati: **(1) parte PRIMA dell'arrivo** — `check_in <= date.today()` in un contenitore UTC ⇒ dalla mezzanotte
+  UTC, misurato con `_istante_checkin` su un check-in del 20 settembre: Roma 13 h prima, Manila 7, Los Angeles 22, fuso
+  ignoto 27, con il testo «speriamo che il soggiorno stia andando bene»; la garanzia invece conta le 24 ore dalle 15:00
+  LOCALI (`_apri_garanzia`) — due definizioni dello stesso fatto; **(2) un invio fallito risulta fatto** — `invia()`
+  restituisce False senza sollevare e il giro chiama `segna_promemoria` comunque. **La cura:** estrarre il giro in
+  `promemoria_una_passata(sistema, router, *, ora_ts=None)` come `sweep_hold_una_passata` (il tick resta `while True` +
+  `try`, lo pretende `test_thread_sopravvivenza`); l'invio parte quando è passato l'arrivo calcolato con la STESSA
+  `_istante_checkin`; si segna solo se `invia` dice sì; a finestra chiusa si segna senza spedire con una riga d'ERRORE.
+  **D20:** guardia scritta → rossa per ImportError (motivo sbagliato, si registra) → passo 0 = estrazione con la logica di
+  oggi → guardia **rossa per i motivi giusti** → cura → verde. Le 6 guardie vanno in `test_promemoria_checkin.py`. ⚠️ Le
+  variabili `_dt3`/`_j3` del blocco servono ancora a `_tick_invito_recensione`: la riga d'import non si tocca.
+  **1b — Video via email + la casella da spuntare. ✅ «autorizzato» per i pezzi 1 e 2.** Le prove oggi sono solo foto
+  (`png jpg webp gif`, max 10). Pezzo 1: sul voucher (`fase83.pagina_voucher_html`, sezione chat) il pulsante «manda un
+  video» con l'email già compilata a **`info@bookinvip.com`** (già pubblico; non confermato esplicitamente) e l'oggetto
+  col riferimento, più l'invito a scriverlo in chat; pezzo 2: nel riquadro Controversie l'email della prenotazione (oggi
+  non c'è). Pezzo 3 (pulsante «video ricevuti») solo se servisse. **La casella è una DICHIARAZIONE, non un consenso** (il
+  consenso si ritira, GDPR art. 7.3; EDPB Linee guida 05/2020: non si chiede il consenso contando su un'altra base se
+  viene ritirato): *«Dichiaro che le foto e i video che invio riguardano questo soggiorno e non sono stati modificati. So
+  che BookinVIP li usa solo per risolvere questa segnalazione, che possono essere mostrati all'host e a chi decide, e che
+  li conserva per il tempo indicato nell'Informativa Privacy. Non invio immagini di altre persone senza il loro
+  permesso.»* Registrata con la prova firmata di `fase163`. Testi nelle 8 lingue. ⛔ Non si pubblica prima della riga
+  nella privacy (1c). Limiti: allegati fino a ~20-25 MB, i link possono scadere, l'host vede la riga in chat e non il
+  video, i video stanno fuori dal sistema (punto per l'avvocato). L'admin la chat la può solo leggere, e `fase113.invia`
+  rifiuta ogni mittente che non sia host o cliente: non si cambia.
+  **1c — Conservazione: UNA REGOLA SOLA A 2 ANNI. ✅ «autorizzato» (11/9) e «va bene una regola sola a 2 anni».** Tutte
+  le chat e le prove si cancellano **2 anni dopo il check-out, o dopo la chiusura della controversia se è più tardi**;
+  mai finché una controversia è aperta. I SOLDI no: scritture contabili 10 anni (art. 2220 c.c.; DAC7 da 5 a 10), il
+  giornale di `fase177` li tiene già. Buchi misurati: la privacy §4 (`fase185.testo_privacy`) non dichiara nessun tempo
+  per le comunicazioni; `fase113` non cancella mai niente; `pulizia_uploads_orfani` toglie solo i file senza messaggio
+  (più vecchi di 7 giorni). Pezzi: la riga nella privacy per TUTTE le comunicazioni, un giro una volta al giorno che
+  cancella le chat scadute e lo scrive nel registro (le foto diventano orfane e la pulizia esistente le toglie), e la
+  regola scritta a mano per la casella `info@` (il giro non la raggiunge). L'avvocato controllerà che 2 anni bastino
+  anche per una causa.
+  **1d — Poi le altre 19 catene del pannello admin**, una per volta (la prossima: `/api/admin/prenotazioni`), e le
+  catene di host, super admin e cliente.
+
+⛔ **I PUNTI SOTTO NON SI APRONO FINCHÉ IL PUNTO 1 NON È CHIUSO.** Scritti perché non si perdano.
+**PUNTO 2 — riconciliazione notturna col registro di Stripe** (Blocco 1): esiste ed è collegata (`fase186` →
+`fase182.riconcilia`), mai misurata; va verificato che la mail parta anche quando tutto quadra.
+**PUNTO 3 — rilavoratore degli eventi Stripe rimasti indietro** (⛔ produzione): `fase204.pendenti()` li mostra,
+nessuno li rilavora, e Stripe non li riporta più dopo il 2xx.
+**PUNTO 4 — deduplicazione per «stesso fatto»** (⛔ produzione): la chiave non può essere l'`evt_id`.
+**PUNTO 5 — rileggere lo stato di un pagamento dall'API di Stripe:** da verificare quanto esiste.
+**PUNTO 6 — l'elaborazione del webhook fuori dalla risposta** (⛔ produzione, per ultimo): 120 chiamate in 81 file di
+collaudo si aspettano la conferma dentro la risposta.
+**PUNTO 6-bis — 18 attrezzi di `collaudi/` esplodono su Windows se l'uscita non è UTF-8** (non produzione): 76 stampano
+caratteri non-ASCII scritti nel codice, 58 hanno `sys.stdout.reconfigure(...)`, 18 no: `beh_pannelli coverage_pannelli
+cronometro_suite e2e_credito_stripe e2e_rimborso_stripe esame_cifre_pubbliche esame_host_da_solo esame_testi_congelati
+estremo fedelta_banco giro_banco oracolo_payout oracolo_tassa piano_dei_soldi prezzi_coerenti prova_bonifico_host
+raggiungibilita sentinella_ci`. Danno rumoroso (escono con errore, non scrivono niente). Limiti del conteggio: non vede i
+caratteri che arrivano da variabili, e riconosce la guardia dal testo. Cura: la riga che gli altri 58 hanno, più una
+guardia che esegue ogni attrezzo con l'uscita in cp1252, vista rossa sui 18.
+**PUNTO 7 — i sopravvissuti del Blocco 2:** `fase58` ri-giudicato con occhi scelti bene (non basta l'import diretto,
+vedi sopra) e `--tetto 170`, poi le guardie nel dedicato per i buchi veri, poi il giro INTERO del blocco (≈6 ore, di
+notte) perché la casella risulti.
+**PUNTO 8 — money-float** (nessun numero con la virgola tocca un importo, Blocco 1) e **relazioni metamorfiche sui
+prezzi** (Blocco 4).
+**NON È LAVORO MIO, e aspetta il fondatore:** il **monitor UptimeRobot** guarda `https://bookinvip.com` (la home risponde
+anche con l'applicazione morta) e non è mai andato giù — va spostato su `https://bookinvip.com/api/health` e visto una
+volta in discesa su `…/api/health-prova-allarme` (404); la chiave di sola lettura è già in `UPTIMEROBOT_API_KEY`
+(35 caratteri, formato del monitor singolo). **«Un avvocato vero ha validato i testi»**: dopo il collaudo. **La casella
+del deploy** (Blocco 8) non è chiudibile come sta: i deploy di settembre prima dell'11 non hanno lasciato il punto di
+ritorno entro 3 ore, e l'esame riconosce la firma del pulsante («SCAMBIO FATTO») ma non quella del protocollo
+(«USCITA_DIRETTA=0») — da decidere: insegnare all'esame la seconda firma (sposta il bersaglio) o far scrivere al
+protocollo la prima (tocca `deploy/`). **I 21 moduli del vecchio impianto**: rinviati («finiamo la macchina»); 4.172 righe
+e 334 test, e ⛔ `fase164_pool_ai` e `fase165_adattatori_esterni` NON si toccano (li raggiunge `fase81_bootstrap`).
+**Visto e non autorizzato:** l'invito a recensire (`_tick_invito_recensione`) ha lo stesso difetto n. 2 del promemoria.
+**In produzione non è mai passata una prenotazione pagata** (0 pagati, 0 promemoria, 2 garanzie annullate) e Stripe è
+in modalità LIVE: la prova completa sul server costa la commissione, decisione del fondatore, dopo le correzioni.
+
 **🧮 10 SETTEMBRE, notte — LA PRIMA CATENA È PERCORSA, E IL PERIMETRO DEL PANNELLO ADMIN ADESSO LO CONTA LA MACCHINA
 (ramo `catene-admin-2026-09-10` su master `6b613b3`, cartella `Core_Auto_B3`; modello e potenza impostati dal fondatore:
 Fable 5.1 max per l'attrezzo, poi Opus 5 max):** attrezzo nuovo `collaudi/esame_catene_admin.py` + casella **in coda** al
@@ -2193,7 +2320,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 0f22730
+CONSEGNE AGGIORNATE A: d870a17
 
 SUITE ATTUALE: Ran 6739 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
