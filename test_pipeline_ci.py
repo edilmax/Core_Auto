@@ -13063,7 +13063,7 @@ class TestLEsameDelleCateneAdminNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
         («sia dal lato dei soldi sia dal lato dei bottoni, perche' poi subentrano anche i database»)."""
         esame = self._esame()
         viste = []
-        for rotta, cat in esame.CATENE.items():
+        for cat in esame.CATENE.values():        # la chiave non serve: piu' rotte condividono una catena
             if cat in viste:
                 continue
             viste.append(cat)
@@ -13581,6 +13581,16 @@ class TestLEsameDellaSentinellaNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
             percorso = os.path.join(d, "letture.json")
             with io.open(percorso, "w", encoding="utf-8") as f:
                 json.dump(esame.letture_finte(esterno=None, **oggi), f)
+            # ⛔ LO STATO «SENZA CHIAVE» SI COSTRUISCE, NON SI ASSUME. Fino al 2026-09-11 questo
+            #    passo dava per scontato che `UPTIMEROBOT_API_KEY` non fosse nell'ambiente --
+            #    vero finche' il conto UptimeRobot non esisteva. Il giorno in cui il fondatore
+            #    l'ha configurata sul suo computer (`setx`), la precondizione ha smesso di essere
+            #    rossa e il test e' diventato ROSSO su una macchina SANA: 1 invece di 2. In CI la
+            #    chiave non c'e', quindi la' restava verde -- cioe' il rosso colpiva solo chi ha
+            #    fatto la cosa giusta. E' la famiglia 20.3 del METODO (la misura che invecchia) e
+            #    la D23 (l'ambiente fa parte della misura): il `finally` qui sotto rimette
+            #    l'ambiente com'era, quindi togliere la chiave qui non ha effetti fuori dal test.
+            os.environ.pop(esame.VARIABILE_CHIAVE, None)
             uscita = io.StringIO()
             with contextlib.redirect_stdout(uscita):
                 self.assertEqual(esame.main(["--monitor", "uptimerobot", "--da-file", percorso]), 2)   # senza chiave: FERMO
