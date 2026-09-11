@@ -403,6 +403,39 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🧬 LA MUTAZIONE DI BLOCCO 1 E BLOCCO 2, VERIFICATA INVECE DI CREDUTA — 11 settembre
+
+**Cosa è cambiato.** Nessuna riga di codice. `collaudi/scheda.json`: le due caselle di mutazione rimisurate sul codice di
+oggi. **Blocco 1** (5 moduli del denaro): 246 provati, 245 uccisi, **0 sopravvissuti**, 1 equivalente → casella verde.
+**Blocco 2** (10 moduli vivi delle prenotazioni): 493 provati, 461 uccisi, **26 sopravvissuti**, 6 equivalenti, **14 punti
+mai esaminati** → casella rossa.
+
+**Il fondatore ha detto «procedi con cautela, controlla, non ti fidare dei risultati»**, e il controllo ha lavorato in
+entrambe le direzioni. Contro il **giudice** non ha trovato niente: la base verde la misura lui PRIMA di rompere e salta il
+modulo se è rossa; un tempo scaduto diventa «non determinabile», mai «ucciso»; gli uccisi si ri-confermano a campione;
+l'equivalente del Blocco 1 ha una dimostrazione per esaurimento con le ancore che la fanno decadere; e un giro su un
+modulo solo NON può riscrivere la casella di un blocco intero (`scrivi_la_scheda` pretende tutti i moduli). Contro i
+**miei strumenti** ha trovato tre cose: il mio contatore diceva 52 sopravvissuti (il giudice ristampa l'elenco a fine giro
+e io lo sommavo); il «tetto 150 difetto del piano» che avevo annunciato non esiste (la rimisura ripropone il comando
+dell'ultimo giro, e da allora `fase58` è cresciuto da 147 a 164 punti); e la classificazione «occhio vero se importa il
+modulo» sbaglia — ri-giudicando `fase82` con i soli 3 test che lo importano è sopravvissuto un punto (riga 204) che il
+giro grande aveva ucciso, quindi un test «di carta» lo esercitava passando da altri moduli.
+
+🔑 **Più occhi possono solo uccidere di più.** Quando un giro con MENO test fa sopravvivere un punto che un giro con PIÙ
+test aveva ucciso, non è una contraddizione del giudice: è la prova che l'elenco degli occhi tolti ne conteneva uno vero.
+È la regola di D26 punto 2 usata al contrario, come strumento di diagnosi.
+
+**Il blocco del primo ri-giudizio, e perché era giusto.** «BASE ROSSA»: `test_prezzo_vetrina_e_cassa` fa 6 errori su 37
+se eseguito da solo (`UnicodeEncodeError` in `collaudi/prezzi_coerenti.py`, un'emoji stampata con l'uscita in cp1252),
+identico in due alberi, e 37 su 37 con `PYTHONIOENCODING=utf-8`. Nella suite intera passa solo perché un test eseguito
+prima sistema la codifica per tutti: una dipendenza dall'ordine che su Linux non si vede. Misurata la famiglia: 18
+attrezzi di `collaudi/` stampano caratteri non-ASCII senza sistemare la codifica (su 76). Il giudice che si rifiuta di
+misurare su una base rossa è la D18 che funziona: un punteggio lì sarebbe stato «tutti uccisi», falso.
+
+**Cosa resta, e sta in `RIPRENDI_QUI.md`:** i 18 sopravvissuti di `fase58` stanno tutti in righe del commit `c326105`
+(8 settembre), codice aggiunto dopo che la casella era verde; gli 8 di `fase82` sono sopravvissuti a due giri con occhi
+diversi. Il prossimo giro intero del Blocco 2 va lanciato con `--tetto 170`.
+
 ### 🧾 QUATTRO GESTI DELL'ADMIN NON LASCIAVANO NESSUNA TRACCIA — 11 settembre, riparato con «autorizzato»
 
 **Cosa è cambiato.** `fase83_server.py`: **4 istruzioni**, una per gesto (`_admin_alloggio_stato`,
