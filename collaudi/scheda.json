@@ -357,11 +357,11 @@
  "a36e3373da1d": {
   "blocco": 8,
   "comando": "python collaudi/esame_sentinella.py --scrivi",
-  "commit": "6b613b3",
+  "commit": "3a02b0d",
   "condizione": "una sentinella ESTERNA (non nostra) si accorge se il sito muore",
   "denominatore": 10,
   "esito": false,
-  "impronta": "299a84e13a2f",
+  "impronta": "e445d065e819",
   "impronte_moduli": {
    "fase13_protocollo_finale": "2dce22f058cc",
    "fase16_outbox": "a47de5874653",
@@ -375,11 +375,11 @@
    "fase42_observability": "a557645447a7",
    "fase60_mcp_server": "56ffc4364819",
    "fase81_bootstrap_casavip": "dacbc902ed40",
-   "fase83_server": "c6c04f52b76b",
+   "fase83_server": "96de68f73c79",
    "fase86_email": "19069663f9d1"
   },
   "motivo": "[esiste] un monitor ESTERNO (non GitHub) esiste e guarda bookinvip.com/api/health (nessun monitor esterno nelle letture: serve un conto (UptimeRobot o Better Stack, gratuito), lo apre il fondatore); [sveglia] il monitor esterno controlla almeno ogni 5 minuti e non e' in pausa (nessun monitor esterno); [sveglia] nelle ultime 24 ore i controlli del monitor non hanno buchi > 15 minuti e l'ultimo ha meno di 15 minuti (controlli nelle 24 ore: 0, buco massimo -, ultimo -); [sveglia] GitHub (seconda linea): ultimo giro entro 60 minuti e buco massimo nelle 24 ore sotto i 60 minuti — DECIDE, perche' il",
-  "quando": "2026-09-11T00:08:52"
+  "quando": "2026-09-11T21:10:48"
  },
  "a6c9694a48f1": {
   "blocco": 2,

@@ -11030,6 +11030,102 @@ def sweep_hold_una_passata(sistema: Any, router: Any) -> None:
         logger.warning("sweep hold fallito (ignorato)", exc_info=True)
 
 
+def promemoria_una_passata(sistema: Any, router: Any, *,
+                           ora_ts: Any = None) -> Dict[str, List[str]]:
+    """UNA passata del promemoria post-check-in al cliente («tutto ok? / segnala un problema
+    entro 24 ore»), estratta dal thread per essere TESTABILE come `sweep_hold_una_passata`.
+
+    ⛔ DUE DIFETTI VIVI RIPARATI QUI il 2026-09-11, misurati prima di toccare:
+      1. PARTIVA PRIMA DELL'ARRIVO. Il giro sceglieva `check_in <= date.today()`, e nel
+         contenitore (UTC) vuol dire dalla mezzanotte UTC del giorno del check-in. Misurato con
+         `_istante_checkin` su un check-in del 20/09: 13 ore prima dell'arrivo a Roma, 22 a Los
+         Angeles, 27 senza fuso -- con un testo che dice «speriamo che il soggiorno stia andando
+         bene». Erano DUE definizioni dello stesso fatto: la garanzia conta le 24 ore dalle 15:00
+         LOCALI, il promemoria dalla mezzanotte del server. Qui l'arrivo si calcola con la STESSA
+         `_istante_checkin` della garanzia (`_apri_garanzia`), cosi' le due non possono piu'
+         divergere (METODO PARTE 20.2).
+      2. UN INVIO FALLITO RISULTAVA FATTO. `invia()` restituisce un booleano (False pulito dal
+         provider, senza eccezione) e il giro chiamava `segna_promemoria` comunque, anche dopo
+         un'eccezione: il cliente non riceveva niente e nessuno ritentava. Qui si segna SOLO se
+         `invia` ha detto si'; altrimenti si ritenta al giro dopo, finche' la finestra e' aperta.
+    ⛔ A FINESTRA CHIUSA SI SMETTE, E RESTA SCRITTO. Un promemoria dopo le 24 ore direbbe
+       «segnala entro 24 ore» quando sono finite; e una riga mai segnata riproverebbe per sempre,
+       occupando i primi posti della coda (`ORDER BY check_in LIMIT`) a danno dei clienti
+       arrivati oggi. Quindi si segna SENZA spedire, con una riga d'ERRORE che nomina il
+       riferimento: la differenza fra «inviato» e «perso» sta nel registro.
+    Il filtro del database (`check_in <= oggi`, data UTC) basta come primo setaccio: nessun fuso
+    del pianeta mette le 15:00 locali prima della mezzanotte UTC dello stesso giorno (UTC+14 le
+    mette all'01:00). La decisione la prende l'istante d'arrivo.
+    Guardie: `test_promemoria_checkin.TestIlPromemoriaArrivaDopoLArrivoENonSiPerde`.
+    Ritorna chi e' partito, chi aspetta l'arrivo, chi va ritentato e chi e' andato perso.
+    Non solleva mai."""
+    esito: Dict[str, List[str]] = {"inviati": [], "in_attesa": [], "ritentare": [], "persi": []}
+    pp = getattr(sistema, "pagamenti_pendenti", None)
+    ep = getattr(sistema, "email_provider", None)
+    if pp is None or ep is None:
+        return esito
+    import datetime as _dt
+    import json as _json
+    import time as _t
+    from fase160_escrow_garanzia import FINESTRA_ORE_DEFAULT
+    ora = ora_ts if (isinstance(ora_ts, (int, float)) and not isinstance(ora_ts, bool)) else _t.time()
+    oggi = _dt.datetime.fromtimestamp(ora, tz=_dt.timezone.utc).date().isoformat()
+    base = getattr(getattr(sistema, "config", None), "base_url", "") or "https://bookinvip.com"
+    try:
+        righe = pp.da_promemoriare(oggi=oggi)
+    except Exception:
+        logger.warning("promemoria: coda non leggibile, giro saltato", exc_info=True)
+        return esito
+    for rec in righe:
+        rif = str(rec.get("riferimento") or "")
+        try:
+            arrivo = _istante_checkin(rec.get("check_in", ""),
+                                      router._fuso_alloggio(rec.get("alloggio_id", "")))
+            if arrivo is None:
+                logger.error("PROMEMORIA NON CONSEGNATO | rif %s | data di check-in illeggibile",
+                             _rif_per_registro(rif))
+                pp.segna_promemoria(rif)
+                esito["persi"].append(rif)
+                continue
+            if ora < arrivo:
+                esito["in_attesa"].append(rif)
+                continue
+            if ora >= arrivo + int(FINESTRA_ORE_DEFAULT) * 3600:
+                logger.error("PROMEMORIA NON CONSEGNATO | rif %s | la finestra di contestazione "
+                             "si e' chiusa senza che l'email partisse", _rif_per_registro(rif))
+                pp.segna_promemoria(rif)
+                esito["persi"].append(rif)
+                continue
+            try:
+                dj = _json.loads(rec.get("corpo_json") or "{}")
+            except Exception:
+                dj = {}
+            dj = dj if isinstance(dj, dict) else {}
+            vt = dj.get("voucher_token", "") or ""
+            lang = router._lang_da_voucher(vt)
+            vurl = (base + "/voucher/" + vt + "?lang=" + lang) if vt else ""
+            titolo = dj.get("titolo") or rec.get("alloggio_id", "")
+            try:
+                from fase86_email import corpo_promemoria_checkin_html, oggetto
+                html = corpo_promemoria_checkin_html(titolo, vurl, lingua=lang)
+                partito = bool(ep.invia(rec.get("email", ""), oggetto("pr_ogg", lang), html))
+            except Exception:
+                logger.warning("promemoria: invio fallito con un'eccezione, ritento al giro dopo | "
+                               "rif %s", _rif_per_registro(rif), exc_info=True)
+                partito = False
+            if partito:
+                pp.segna_promemoria(rif)
+                esito["inviati"].append(rif)
+            else:
+                logger.warning("promemoria: il provider non ha consegnato, ritento al giro dopo | "
+                               "rif %s", _rif_per_registro(rif))
+                esito["ritentare"].append(rif)
+        except Exception:
+            logger.warning("promemoria: riga saltata (isolata) | rif %s",
+                           _rif_per_registro(rif), exc_info=True)
+    return esito
+
+
 def _subentro_per_disaccordo(sistema: Any, *, ora_ts: Any = None) -> List[str]:
     """«Se non si mettono d'accordo subentriamo noi» (regola del fondatore, 2026-09-06,
     «autorizzato»). Alla scadenza della finestra di garanzia, se dopo il check-in hanno scritto
@@ -11802,27 +11898,9 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
         import threading as _th3, datetime as _dt3, json as _j3
 
         def _tick_promemoria():
-            base = getattr(getattr(sistema, "config", None), "base_url", "") or "https://bookinvip.com"
             while True:
                 try:
-                    oggi = _dt3.date.today().isoformat()
-                    for rec in pp.da_promemoriare(oggi=oggi):
-                        try:
-                            dj = _j3.loads(rec.get("corpo_json") or "{}")
-                        except Exception:
-                            dj = {}
-                        vt = dj.get("voucher_token", "")
-                        lang = router._lang_da_voucher(vt)
-                        vurl = (base + "/voucher/" + vt + "?lang=" + lang) if vt else ""
-                        titolo = dj.get("titolo") or rec.get("alloggio_id", "")
-                        try:
-                            from fase86_email import corpo_promemoria_checkin_html, oggetto
-                            html = corpo_promemoria_checkin_html(titolo, vurl, lingua=lang)
-                            email_prov.invia(rec.get("email", ""),
-                                             oggetto("pr_ogg", lang), html)
-                        except Exception:
-                            logger.warning("invio promemoria fallito (ignorato)", exc_info=True)
-                        pp.segna_promemoria(rec["riferimento"])
+                    promemoria_una_passata(sistema, router)
                 except Exception:
                     logger.warning("sweep promemoria fallito (ignorato)", exc_info=True)
                 __import__("time").sleep(3600)     # ogni ora

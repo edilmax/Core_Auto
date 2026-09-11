@@ -450,7 +450,19 @@ su 21** con la catena percorsa; host, super admin (`deploy/bunker.html`) e clien
 (stessa macchina: cambia la riga `PAGINA` di `collaudi/esame_catene_admin.py`). ⛔ **Il giro del CLIENTE non esiste**: dei
 quattro ruoli è l'unico mai percorso da capo a fondo, ed è quello che porta i soldi. Dentro il Punto 1, per la voce
 «Controversie», nell'ordine:
-  **1a — ⛔ LA PROSSIMA COSA DA FARE: il promemoria al check-in. ✅ «autorizzato» del fondatore (11/9).** Il modello e il
+  **1a — 🔧 CURA SCRITTA E PROVATA, NON ANCORA IN PRODUZIONE: il promemoria al check-in.** ✅ «autorizzato» del fondatore
+  (11/9, e riscritto nella chat che l'ha eseguito). **Fatto, nell'ordine di D20:** 6 guardie in `test_promemoria_checkin.
+  TestIlPromemoriaArrivaDopoLArrivoENonSiPerde` · rosse per il motivo sbagliato (`AttributeError`, la passata non esisteva)
+  · passo 0 in `fase83_server.py` (`promemoria_una_passata`, il tick la chiama) · **8 rossi per i motivi giusti** sul codice
+  del progetto (parte prima dell'arrivo in 5 fusi su 5; un «no» e un'eccezione del provider segnati come inviati; a
+  finestra chiusa spedisce) · cura · 13 su 13 verdi (`test_promemoria_checkin` + `test_thread_sopravvivenza`) · la guardia
+  «parte una volta sola», verde anche sul codice vecchio, **vista ROSSA** togliendo con l'editor la segnatura dopo un invio
+  riuscito (`3 != 1`) e ripristinata con impronta identica. La cura è stata provata PRIMA su una copia fuori dal
+  repository: il file del progetto ha la stessa sha256 della copia provata. Caricatore: **6745** test. **Resta:** suite
+  intera, commit, unione, deploy. ⚠️ **Nessuna casella del piano misura questo punto** (la casella admin del Blocco 3 conta
+  i gesti del pannello, non il promemoria): lo dichiaro invece di spuntare qualcosa che non lo misura. Toccando
+  `fase83_server.py` è scaduta la casella «sentinella esterna» del Blocco 8: riscritta con `esame_sentinella.py --scrivi`,
+  ROSSA 4 passi su 10, il motivo di ieri (manca il monitor esterno). **Il testo di prima, per memoria:** il modello e il
   giro esistono e sono collegati (`fase86.corpo_promemoria_checkin_html`, `fase83._tick_promemoria`), con DUE difetti
   vivi misurati: **(1) parte PRIMA dell'arrivo** — `check_in <= date.today()` in un contenitore UTC ⇒ dalla mezzanotte
   UTC, misurato con `_istante_checkin` su un check-in del 20 settembre: Roma 13 h prima, Manila 7, Los Angeles 22, fuso
@@ -2320,9 +2332,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: d870a17
+CONSEGNE AGGIORNATE A: 3a02b0d
 
-SUITE ATTUALE: Ran 6739 test
+SUITE ATTUALE: Ran 6745 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
