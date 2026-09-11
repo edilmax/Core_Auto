@@ -456,6 +456,31 @@ ROSSA 4 passi su 10, **lo stesso motivo di ieri** (manca un monitor esterno, che
 fondatore) — una casella scaduta e rimessa non è un guasto nuovo, ed è esattamente quello che le
 impronte servono a far vedere.
 
+**In produzione dall'11 settembre, e la prova si è guardata DENTRO.** Master `0f22730` (PR #172,
+CI 15 pass · 1 skip), deploy D17 completo: sonde `/` 200 · `/api/health` 200 · negativa
+`/api/bunker/invarianti` **403**; `verifica_produzione` 190 controlli, **0 violazioni**. Dentro il
+contenitore che gira: commit `0f22730`, le **4 righe `ADMIN_ACTION` presenti** (righi 3130, 3158,
+4500, 5072) e `collaudi/esame_catene_admin.py` **assente** — che è giusto, `collaudi/` non entra
+nell'immagine. ⚠️ E il passo [1b] ha evitato un danno vero: `:prec` puntava a un'immagine di **due
+giorni prima**; ri-agganciato **misurando** a quella viva. È la settima volta che quel paracadute
+sarebbe stato sbagliato, e la seconda che lo salva un attrezzo invece della memoria.
+
+🩹 **I DUE ROSSI CHIUSI PER STRADA, entrambi MIEI, ed entrambi della stessa famiglia: una misura
+che parla di un mondo che non c'è più.**
+· **Il cricchetto statico** ha bocciato il primo giro di CI per **una** segnalazione
+(`test_pipeline_ci.py|B007`: variabile di ciclo non usata) mentre 13 job erano verdi. I due cancelli
+locali non guardano i rilievi statici e `ruff check .` nudo ne stampa 676 di debito dichiarato, che
+sommergono quello nuovo: l'unico gesto che lo vede costa **0,21 s**
+(`python collaudi/cricchetto_statico.py ruff`). Terza istanza, e la prima in un file di **test** —
+cioè dove l'attenzione non era, perché era tutta sulle righe di produzione.
+· **Un test che assumeva l'ambiente invece di costruirlo.** `test_IL_MONITOR_ESTERNO_DECIDE_E_LA_
+CHIAVE_NON_SI_STAMPA` pretendeva uscita 2 «manca la chiave»: vero finché il conto UptimeRobot non
+esisteva. Configurata la chiave, la precondizione non è più rossa, l'esame misura e torna 1 ⇒ la
+suite è diventata **rossa su una macchina sana**, e in CI (dove la chiave non c'è) restava verde.
+🔑 **Il rosso colpiva solo chi aveva fatto la cosa giusta**, ed è la forma peggiore di una guardia
+che invecchia: non tace, accusa. Cura: lo stato «senza chiave» si costruisce dentro il test; provato
+verde **con** la chiave e **senza**.
+
 ### 🧮 IL PERIMETRO DEL PANNELLO ADMIN ADESSO LO CONTA LA PAGINA, E LA PRIMA CATENA È PERCORSA — 10 settembre, notte
 
 **Cosa è cambiato.** `collaudi/esame_catene_admin.py` **NUOVO** (legge `deploy/admin.html`, usa il
