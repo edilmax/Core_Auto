@@ -454,8 +454,33 @@ Le due guardie viste **ROSSE** sul guasto vero, iniettato con l'editor e riprist
 rossi. Caricatore **6739** (`python -c "import unittest; print(unittest.TestLoader().discover('.', pattern='test_*.py').countTestCases())"`).
 Scheda **Blocco 3 4 su 5**: la casella nuova resta **ROSSA**, e adesso per un motivo che **non è un guasto** — 19 rotte del
 pannello su 21 non hanno ancora una catena percorsa (debito dichiarato, tetto 19). ⛔ Quel rosso è voluto: un verde qui sarebbe
-la frase più falsa del lavoro, «non ci scappa niente» con venti voci mai seguite. **Cosa manca:** suite → commit → PR → CI →
-unione → deploy; poi le altre 19 catene, una per volta, nell'ordine del pannello (la prossima è `/api/admin/prenotazioni`).
+la frase più falsa del lavoro, «non ci scappa niente» con venti voci mai seguite.
+✅ **CHIUSO E IN PRODUZIONE nella notte fra il 10 e l'11 settembre** («autorizzato a portare il lavoro finito», poi
+«autorizzato a tutto fino alla fine»): commit `d69bdd7` + `064b11a` → **PR #172 unita** → master **`0f22730`** → **deploy D17
+completo**, e i tre posti danno lo stesso commit. Suite intera verde (`Ran 6734 in 1618 s`, `OK (skipped=4)`, uscita 0), CI
+**15 pass · 1 skip** col `gate` verde. D17: punto di ritorno riletto dal disco · ⚠️ **il paracadute `:prec` puntava a
+un'immagine di DUE GIORNI prima (`26e73f00`) e il passo [1b] l'ha ri-agganciato misurando** a quella viva (`d60ffa63`) — se
+fosse servito prima, si tornava oltre l'ultimo stato buono · backup riaperto davvero (`gzip -t` + «SQLite format 3») · sonde
+`/` 200, `/api/health` 200, **negativa `/api/bunker/invarianti` → 403** (un indirizzo che esiste, mai un 404 come prova) ·
+`verifica_produzione` **190 controlli, 0 violazioni** · dentro il contenitore: commit `0f22730`, immagine `382d9e04`,
+paracadute su `d60ffa63`, e **le 4 righe `ADMIN_ACTION` nuove presenti nel codice vivo** (righi 3130, 3158, 4500, 5072), mentre
+`collaudi/esame_catene_admin.py` **non** c'è — `collaudi/` non entra nell'immagine, come dichiarato.
+⛔ **DUE ROSSI CHIUSI PER STRADA, e nessuno dei due era del prodotto.** (1) La CI ha bocciato il primo giro per **una**
+segnalazione del cricchetto statico (`test_pipeline_ci.py|B007`, una variabile di ciclo non usata) mentre gli altri 13 job
+erano verdi: i cancelli locali **non guardano i rilievi statici**, e il gesto che lo vede costa **0,21 s**
+(`python collaudi/cricchetto_statico.py ruff`) — terza volta, e stavolta il rilievo era in un **test**, non in produzione.
+(2) La suite è diventata rossa su **una macchina sana** appena il fondatore ha configurato la chiave di UptimeRobot: un test
+pretendeva uscita 2 «perché la chiave non c'è», dando per scontato l'ambiente invece di costruirlo — e in CI restava verde,
+quindi **il rosso colpiva solo chi aveva fatto la cosa giusta**. Riparato togliendo la chiave dentro il test (il `finally`
+la rimette) e provato nelle **due direzioni**: verde con la chiave e senza.
+💡 **E un numero da sapere, perché cambia le decisioni:** tre giri di suite nella stessa cartella, stessa notte, stesso
+codice → **3454 s · 2980 s · 1619 s**. Il primo giro in una cartella fredda è il caro; i successivi costano metà o meno.
+Rifare la suite dopo una correzione **non costa come la prima volta**.
+**Cosa manca:** le altre 19 catene del pannello, una per volta, nell'ordine del pannello (la prossima è
+`/api/admin/prenotazioni`); poi host, super admin e cliente. E la casella della sentinella: il monitor esterno esiste
+(intervallo 5 min, 1 contatto d'allarme, i tempi di risposta arrivano via API), ma guarda `https://bookinvip.com` invece di
+`/api/health` e **non è mai andato giù** ⇒ va spostato sull'indirizzo della salute e provato una volta in discesa, altrimenti
+è un allarme che nessuno ha mai sentito suonare.
 
 **🔁 10 SETTEMBRE, mattina — LE CASELLE SCADUTE RIMESSE, DA 15 A 21 SU 39, E UN ESAME DEI SOLDI CHE DICEVA ROSSO SU UN
 SERVER SANO (`Core_Auto` su master `8358c04`, corsia unica; modello e potenza impostati dal fondatore: Opus 5 medium per
@@ -2168,7 +2193,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: d69bdd7
+CONSEGNE AGGIORNATE A: 0f22730
 
 SUITE ATTUALE: Ran 6739 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
