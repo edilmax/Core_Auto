@@ -403,6 +403,49 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### ✉️ IL PROMEMORIA AL CHECK-IN PARTIVA PRIMA DELL'ARRIVO, E UN INVIO FALLITO RISULTAVA FATTO — 11 settembre, sera, «autorizzato»
+
+**Cosa è cambiato.** `fase83_server.py`: il giro orario `_tick_promemoria` ora chiama una funzione sola,
+`promemoria_una_passata(sistema, router, *, ora_ts=None)`, estratta come `sweep_hold_una_passata` perché si
+possa provare con un orologio iniettato. Il tick resta `while True` + `try` (lo pretende
+`test_thread_sopravvivenza`). Zero dipendenze nuove, zero file nuovi. Guardia nuova:
+`test_promemoria_checkin.TestIlPromemoriaArrivaDopoLArrivoENonSiPerde` (6 test). **STATO: acceso al prossimo
+deploy** — parte da solo, ogni ora, se il server ha archivio pagamenti e provider email.
+
+**Cosa era rotto — due difetti vivi, misurati prima di toccare.**
+1. **Partiva prima dell'arrivo.** Il giro sceglieva `check_in <= date.today()`: nel contenitore, che è in UTC,
+   dalla mezzanotte UTC del giorno del check-in. Misurato con `_istante_checkin` su un check-in del 20 settembre:
+   **13 ore** prima dell'arrivo a Roma, **7** a Manila, **22** a Los Angeles, **1** a Kiritimati, **27** per un
+   alloggio senza fuso — con un testo che dice «speriamo che il soggiorno stia andando bene». La garanzia invece
+   conta le 24 ore dalle 15:00 **locali** (`_apri_garanzia`). Due definizioni dello stesso fatto: è la famiglia
+   20.2 del METODO (coerenza fra due pezzi che guardano lo stesso istante).
+2. **Un invio fallito risultava fatto.** `invia()` di `fase86` restituisce un booleano e non solleva; il giro
+   ignorava il valore e chiamava `segna_promemoria` comunque, anche dopo un'eccezione. Il cliente non riceveva
+   niente, nessuno ritentava, e 24 ore dopo i soldi andavano all'host senza che gli fosse stato ricordato di
+   poter segnalare un problema.
+
+**La cura.** L'arrivo si chiede alla **stessa** `_istante_checkin` della garanzia, col fuso dell'alloggio: prima
+dell'arrivo la riga aspetta. Si segna **solo** se `invia` ha detto sì; altrimenti si ritenta al giro dopo. A
+finestra chiusa (arrivo + `FINESTRA_ORE_DEFAULT`) si smette: la riga si segna senza spedire, con una riga di
+livello ERROR che nomina il riferimento — un promemoria dopo le 24 ore direbbe «segnala entro 24 ore» quando sono
+finite, e una riga mai segnata occuperebbe per sempre i primi posti della coda (`ORDER BY check_in LIMIT`). Il
+filtro del database resta il primo setaccio: nessun fuso mette le 15:00 locali prima della mezzanotte UTC dello
+stesso giorno.
+
+**D20, nell'ordine.** (1) Guardia scritta. (2) Rossa per il motivo **sbagliato** — `AttributeError`, la passata
+non esisteva — e registrato come tale. (3) Passo 0: estrazione con la logica di prima, orologio iniettabile.
+(4) **8 rossi per i motivi giusti** sul codice del progetto: 5 fusi su 5 prima dell'arrivo, il «no» e l'eccezione
+segnati come inviati, a finestra chiusa spedisce. (5) Cura. (6) 13 su 13 verdi. (7) La guardia «parte una volta
+sola», che il codice vecchio non violava, è stata **vista rossa** togliendo con l'editor la segnatura dopo un
+invio riuscito (`3 != 1`), e il file ripristinato ha la stessa sha256 di prima del guasto. In più, la cura è stata
+provata **prima** su una copia fuori dal repository, e il file del progetto ha la stessa sha256 della copia provata:
+quello che è entrato è esattamente quello che è stato collaudato.
+
+⚠️ **Cosa NON è stato toccato, e si dichiara.** `_tick_invito_recensione` ha lo **stesso** difetto n. 2 (segna
+l'invito anche se `invia` fallisce): visto, non autorizzato, resta in `RIPRENDI_QUI.md`. **Nessuna casella del
+piano misura questo lavoro**; la casella «sentinella esterna» del Blocco 8 è scaduta perché `fase83_server` è
+cambiato, ed è stata riscritta subito dall'attrezzo: rossa per il motivo di prima (manca il monitor esterno).
+
 ### 🧬 LA MUTAZIONE DI BLOCCO 1 E BLOCCO 2, VERIFICATA INVECE DI CREDUTA — 11 settembre
 
 **Cosa è cambiato.** Nessuna riga di codice. `collaudi/scheda.json`: le due caselle di mutazione rimisurate sul codice di
