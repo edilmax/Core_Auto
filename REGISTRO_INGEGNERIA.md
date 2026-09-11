@@ -446,6 +446,20 @@ l'invito anche se `invia` fallisce): visto, non autorizzato, resta in `RIPRENDI_
 piano misura questo lavoro**; la casella «sentinella esterna» del Blocco 8 è scaduta perché `fase83_server` è
 cambiato, ed è stata riscritta subito dall'attrezzo: rossa per il motivo di prima (manca il monitor esterno).
 
+**In produzione dall'11 settembre sera, e la prova si è guardata DENTRO.** Suite intera locale da PowerShell
+(`openssl` assente): `Ran 6740 tests in 4221.468s` · `OK (skipped=4)` · `USCITA_DIRETTA=0` — i 5 che mancano al
+caricatore (6745) sono la classe dei backup saltata senza `openssl`. Durante il giro quattro file di produzione
+hanno cambiato data (`fase59`, `fase160`, `fase162`, `fase167`: li riscrive e li rimette la mutazione dentro la
+suite) e `git diff HEAD` su di loro è **vuoto**. Commit `063b505`, PR #175: 16 controlli, 15 `success`, `zap`
+**skipped** (non eseguito, non contato fra i verdi), `gate` `success`; unione `ac11a14`. Deploy D17: `prima` —
+punto di ritorno `3a02b0d` riletto, ⚠️ **`:prec` puntava di nuovo a un'immagine diversa da quella viva**
+(`d60ffa63…` contro `382d9e04…`) e il passo [1b] l'ha ri-agganciato misurando, backup
+`finanza-20260911-191044.db.gz` aperto (`gzip -t` integro, `SQLite format 3`); `scambio` — `:latest` `05b3b1c2…`
+diversa da `:prec`, `healthy`, `money_path_pronto: True`, `avvisi: []`; `dopo` — `/` 200 · `/api/health` 200 ·
+negativa `/api/bunker/invarianti` **403** · `verifica_produzione` 190 controlli, **0 violazioni**. Dentro il
+contenitore: file a `ac11a14`, `def promemoria_una_passata` presente, il tick la chiama, le due righe `PROMEMORIA
+NON CONSEGNATO` presenti, `date.today` nel tick **0** volte.
+
 ### 🧬 LA MUTAZIONE DI BLOCCO 1 E BLOCCO 2, VERIFICATA INVECE DI CREDUTA — 11 settembre
 
 **Cosa è cambiato.** Nessuna riga di codice. `collaudi/scheda.json`: le due caselle di mutazione rimisurate sul codice di

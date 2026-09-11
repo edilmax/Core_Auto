@@ -450,7 +450,13 @@ su 21** con la catena percorsa; host, super admin (`deploy/bunker.html`) e clien
 (stessa macchina: cambia la riga `PAGINA` di `collaudi/esame_catene_admin.py`). ⛔ **Il giro del CLIENTE non esiste**: dei
 quattro ruoli è l'unico mai percorso da capo a fondo, ed è quello che porta i soldi. Dentro il Punto 1, per la voce
 «Controversie», nell'ordine:
-  **1a — 🔧 CURA SCRITTA E PROVATA, NON ANCORA IN PRODUZIONE: il promemoria al check-in.** ✅ «autorizzato» del fondatore
+  **1a — ✅ FATTO: il promemoria al check-in — in produzione dall'11/9 sera.** Commit `063b505`, unione **`ac11a14`**
+  (PR #175) uguale su computer, GitHub e VPS. Suite intera locale `Ran 6740 · OK (skipped=4) · USCITA_DIRETTA=0`. CI
+  della PR e di master (evento `push`): 16 controlli, 15 `success`, `zap` **skipped** (non eseguito), `gate` `success`.
+  Deploy D17: `prima` (⚠️ `:prec` puntava di nuovo a un'immagine diversa da quella viva, ri-agganciato dal passo [1b])
+  · `scambio` `healthy`, `money_path_pronto: True` · `dopo` 200/200, negativa 403, `verifica_produzione` 190 controlli
+  0 violazioni · dentro il contenitore `promemoria_una_passata` presente e chiamata dal tick. ⚠️ **Non misurato:** un
+  promemoria vero partito in produzione — lì non è mai passata una prenotazione pagata. «autorizzato» del fondatore
   (11/9, e riscritto nella chat che l'ha eseguito). **Fatto, nell'ordine di D20:** 6 guardie in `test_promemoria_checkin.
   TestIlPromemoriaArrivaDopoLArrivoENonSiPerde` · rosse per il motivo sbagliato (`AttributeError`, la passata non esisteva)
   · passo 0 in `fase83_server.py` (`promemoria_una_passata`, il tick la chiama) · **8 rossi per i motivi giusti** sul codice
@@ -458,8 +464,7 @@ quattro ruoli è l'unico mai percorso da capo a fondo, ed è quello che porta i 
   finestra chiusa spedisce) · cura · 13 su 13 verdi (`test_promemoria_checkin` + `test_thread_sopravvivenza`) · la guardia
   «parte una volta sola», verde anche sul codice vecchio, **vista ROSSA** togliendo con l'editor la segnatura dopo un invio
   riuscito (`3 != 1`) e ripristinata con impronta identica. La cura è stata provata PRIMA su una copia fuori dal
-  repository: il file del progetto ha la stessa sha256 della copia provata. Caricatore: **6745** test. **Resta:** suite
-  intera, commit, unione, deploy. ⚠️ **Nessuna casella del piano misura questo punto** (la casella admin del Blocco 3 conta
+  repository: il file del progetto ha la stessa sha256 della copia provata. Caricatore: **6745** test. ⚠️ **Nessuna casella del piano misura questo punto** (la casella admin del Blocco 3 conta
   i gesti del pannello, non il promemoria): lo dichiaro invece di spuntare qualcosa che non lo misura. Toccando
   `fase83_server.py` è scaduta la casella «sentinella esterna» del Blocco 8: riscritta con `esame_sentinella.py --scrivi`,
   ROSSA 4 passi su 10, il motivo di ieri (manca il monitor esterno). **Il testo di prima, per memoria:** il modello e il
@@ -2332,7 +2337,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 3a02b0d
+CONSEGNE AGGIORNATE A: ac11a14
 
 SUITE ATTUALE: Ran 6745 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
