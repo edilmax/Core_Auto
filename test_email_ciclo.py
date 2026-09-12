@@ -15,12 +15,14 @@ Guardie di questo compartimento:
 Le email di ciclo sono BEST-EFFORT in background: mai bloccare i soldi.
 """
 import datetime
+import io
 import json
 import os
 import shutil
 import tempfile
 import threading
 import time
+import types
 import unittest
 
 import fase85_pagamenti_stripe as _stripe
@@ -31,6 +33,7 @@ from fase86_email import (corpo_cancellazione_html, corpo_esito_controversia_htm
                           corpo_invito_recensione_html,
                           corpo_pagamento_confermato_html, corpo_payout_host_html)
 from fase87_stripe_webhook import firma_di_test
+from fase162_pagamenti_pendenti import crea_pagamenti_pendenti
 from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
 
 
@@ -289,6 +292,200 @@ class TestEmailCiclo(unittest.TestCase):
         # e il gancio email conferma sta nel punto giusto: DOPO la riasserzione
         # idempotente, MAI nel ramo retry (stato gia' 'pagato' esce prima)
         self.assertIn("self._email_pagamento_confermato(rec)", src)
+
+
+class TestLInvitoARecensireNonRisultaFattoSeNonParte(unittest.TestCase):
+    """⛔ D20, difetto vivo sul giro che invita a recensire dopo il check-out (lo STESSO
+    difetto n. 2 del promemoria al check-in, riparato l'11 settembre; qui era rimasto).
+    Parole del fondatore: «autorizzato» e poi «correggi tutto … non si torna piu' indietro».
+
+    **Cosa era rotto.** `invia()` restituisce un booleano (False pulito dal provider, senza
+    eccezione) e il giro chiamava `segna_invito_recensione` comunque, anche dopo un'eccezione:
+    il cliente non riceveva l'invito, nessuno ritentava, e senza inviti il motore delle
+    recensioni resta a secco. In piu' un invito mai partito **spariva in silenzio** quando la
+    finestra di 14 giorni lo faceva uscire dalla coda: nessuno poteva sapere che era successo.
+
+    ⛔ L'ORA QUI NON E' UN DIFETTO, e lo si MISURA invece di affermarlo
+    (`test_PREMESSA_L_INVITO_NON_PRECEDE_MAI_IL_DIRITTO`): il giro sceglie `check_out < oggi`
+    (data UTC) e il diritto di recensire parte dalla mezzanotte del check-out nel fuso
+    dell'alloggio -- il primo giro utile cade sempre dopo, anche a UTC+14.
+    ⛔ Queste guardie ESEGUONO la passata vera con un orologio iniettato, un archivio vero
+    (`fase162`) e un provider finto che dice si', no o solleva: non cercano parole nel
+    sorgente, che un commento soddisferebbe (sbaglio S6).
+    """
+
+    CO = "2026-09-20"          # check-out
+    OGGI = "2026-09-21"        # il primo giorno in cui il giro vede la riga
+    ULTIMO = "2026-10-04"      # CO + 14: l'ULTIMO giorno in cui la riga e' ancora in coda
+
+    class _Posta(object):
+        """Il provider finto: ricorda cosa gli si chiede, e risponde si', no o solleva."""
+
+        def __init__(self, esito=True):
+            self.esito = esito
+            self.inviate = []
+
+        def invia(self, destinatario, oggetto, corpo_html):
+            self.inviate.append((destinatario, oggetto))
+            if isinstance(self.esito, Exception):
+                raise self.esito
+            return self.esito
+
+    class _Router(object):
+        """Il router finto: SOLO il metodo che la passata usa."""
+
+        def _lang_da_voucher(self, vt):
+            return "it"
+
+    def setUp(self):
+        import fase83_server
+        self.s = fase83_server
+        self.dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def _banco(self, nome, esito=True):
+        pp = crea_pagamenti_pendenti(os.path.join(self.dir, nome + ".db"))
+        pp.inizializza_schema()
+        pp.registra("R-" + nome, alloggio_id="casa", check_in="2026-09-18",
+                    check_out=self.CO, email="cliente@x.it",
+                    corpo_json='{"voucher_token":"vt.sig","titolo":"Casa Bella"}')
+        pp.conferma("R-" + nome)
+        posta = self._Posta(esito)
+        sistema = types.SimpleNamespace(pagamenti_pendenti=pp, email_provider=posta,
+                                        config=types.SimpleNamespace(base_url="https://x"))
+        return pp, posta, sistema, self._Router()
+
+    def _in_coda(self, pp):
+        """Le righe non ancora segnate. Si sonda col PRIMO giorno utile: la finestra di 14
+        giorni le farebbe sparire da sola piu' avanti, e allora «segnata» e «scaduta»
+        sarebbero indistinguibili."""
+        return [r["riferimento"] for r in pp.da_invitare_recensione(oggi=self.OGGI)]
+
+    @staticmethod
+    def _ora_di(giorno):
+        return datetime.datetime.fromisoformat(giorno + "T12:00:00+00:00").timestamp()
+
+    def _errori_durante(self, fare):
+        """Esegue `fare()` e rende le righe di livello ERROR scritte dal server nel frattempo."""
+        import logging
+        righe = []
+
+        class _Presa(logging.Handler):
+            def emit(self, record):
+                righe.append(record.getMessage())
+
+        presa = _Presa(level=logging.ERROR)
+        log = logging.getLogger("core_auto.server")
+        log.addHandler(presa)
+        try:
+            fare()
+        finally:
+            log.removeHandler(presa)
+        return righe
+
+    def test_UN_INVIO_FALLITO_NON_RISULTA_FATTO_E_SI_RITENTA(self):
+        pp, posta, sistema, router = self._banco("fallito", esito=False)
+        self.s.invito_recensione_una_passata(sistema, router, ora_ts=self._ora_di(self.OGGI))
+        self.assertEqual(len(posta.inviate), 1, "non ha nemmeno provato a spedire")
+        self.assertIn("R-fallito", self._in_coda(pp),
+                      "il provider ha detto NO e l'invito risulta mandato: il cliente non "
+                      "riceve niente e nessuno ritenta")
+        posta.esito = True
+        self.s.invito_recensione_una_passata(sistema, router, ora_ts=self._ora_di(self.OGGI))
+        self.assertEqual(len(posta.inviate), 2, "al giro dopo non ha ritentato")
+        self.assertNotIn("R-fallito", self._in_coda(pp))
+
+    def test_UN_ECCEZIONE_DEL_PROVIDER_NON_RISULTA_FATTA(self):
+        pp, posta, sistema, router = self._banco("eccezione", esito=OSError("smtp giu'"))
+        self.s.invito_recensione_una_passata(sistema, router, ora_ts=self._ora_di(self.OGGI))
+        self.assertEqual(len(posta.inviate), 1, "non ha nemmeno provato a spedire")
+        self.assertIn("R-eccezione", self._in_coda(pp),
+                      "un'eccezione del provider e' stata segnata come invito riuscito")
+
+    def test_ALL_ULTIMO_GIORNO_UTILE_SI_SMETTE_E_RESTA_SCRITTO(self):
+        """La finestra di 14 giorni fa uscire la riga dalla coda da sola: senza una riga
+        d'ERRORE, un invito mai partito sparisce e nessuno lo sa. Qui si pretende che
+        l'ultimo tentativo fallito lasci una traccia col riferimento."""
+        pp, posta, sistema, router = self._banco("perso", esito=False)
+        errori = self._errori_durante(
+            lambda: self.s.invito_recensione_una_passata(
+                sistema, router, ora_ts=self._ora_di(self.ULTIMO)))
+        self.assertEqual(len(posta.inviate), 1,
+                         "all'ultimo giorno utile non ha nemmeno provato a spedire")
+        self.assertNotIn("R-perso", self._in_coda(pp),
+                         "all'ultimo giorno utile la riga resta non segnata: domani esce "
+                         "dalla finestra e il caso sparisce senza che nessuno lo sappia")
+        self.assertTrue(any("R-perso" in r for r in errori),
+                        "l'invito e' andato perso senza una riga d'ERRORE che lo dica: %r"
+                        % errori)
+        # ⛔ E la riga deve dire QUALE condizione ha chiuso il caso. Senza questo la guardia
+        # passa anche quando scatta un ramo d'emergenza qualunque: e' successo davvero il
+        # 2026-09-12, con la costante dei 14 giorni non ancora definita -- il NameError
+        # finiva nel ramo «data illeggibile» e questa prova diventava VERDE PER IL MOTIVO
+        # SBAGLIATO, mentre il prodotto smetteva di ritentare.
+        self.assertTrue(any("ultimo giorno utile" in r for r in errori),
+                        "la riga d'ERRORE non dice che a chiudere il caso e' stato l'ultimo "
+                        "giorno della finestra: %r" % errori)
+
+    def test_PREMESSA_I_QUATTORDICI_GIORNI_SONO_QUELLI_VERI_DELLA_CODA(self):
+        """`GIORNI_INVITO_RECENSIONE` in `fase83_server` e' una COPIA: il numero vero e'
+        scritto a mano dentro la query di `fase162`. Qui si MISURA la finestra vera --
+        l'ultimo giorno in cui la coda restituisce ancora la riga -- e si pretende che le due
+        coincidano. Se qualcuno cambia la finestra di la', questa diventa rossa oggi."""
+        pp, _posta, _sistema, _router = self._banco("finestra", esito=True)
+        co = datetime.date.fromisoformat(self.CO)
+        ultimo_vero = None
+        for giorni in range(1, 40):
+            oggi = (co + datetime.timedelta(days=giorni)).isoformat()
+            if [r for r in pp.da_invitare_recensione(oggi=oggi) if r["riferimento"] == "R-finestra"]:
+                ultimo_vero = giorni
+        self.assertIsNotNone(ultimo_vero, "la coda non restituisce mai la riga: banco rotto")
+        self.assertEqual(
+            self.s.GIORNI_INVITO_RECENSIONE, ultimo_vero,
+            "la costante dice %r giorni, ma la coda smette di restituire la riga dopo %r: "
+            "il numero copiato non descrive piu' la finestra vera"
+            % (self.s.GIORNI_INVITO_RECENSIONE, ultimo_vero))
+
+    def test_PARTE_UNA_VOLTA_SOLA(self):
+        pp, posta, sistema, router = self._banco("una", esito=True)
+        for _ in range(3):
+            self.s.invito_recensione_una_passata(sistema, router,
+                                                 ora_ts=self._ora_di(self.OGGI))
+        self.assertEqual(len(posta.inviate), 1, "l'invito e' partito piu' di una volta")
+
+    def test_PREMESSA_L_INVITO_NON_PRECEDE_MAI_IL_DIRITTO(self):
+        """L'ora NON e' il difetto, e qui si misura: il primo istante in cui il giro puo'
+        vedere la riga e' la mezzanotte UTC del giorno dopo il check-out; il diritto di
+        recensire parte dalla mezzanotte del check-out NEL FUSO dell'alloggio. Il fuso piu'
+        a est (UTC+14) e' il caso peggiore."""
+        primo_giro = datetime.datetime.fromisoformat(
+            self.OGGI + "T00:00:00+00:00").timestamp()
+        for fuso in ("Europe/Rome", "Asia/Manila", "America/Los_Angeles",
+                     "Pacific/Kiritimati", ""):
+            with self.subTest(fuso=fuso or "(fuso ignoto)"):
+                diritto = self.s._mezzanotte_checkout(self.CO, fuso)
+                self.assertIsNotNone(diritto, "fuso %r: nessun istante calcolato" % fuso)
+                self.assertGreaterEqual(
+                    primo_giro, diritto,
+                    "l'invito puo' partire PRIMA che si possa recensire (fuso %s)"
+                    % (fuso or "ignoto"))
+
+    def test_PREMESSA_IL_GIRO_DEL_SERVER_CHIAMA_QUESTA_PASSATA(self):
+        """Se il thread del server tenesse una SUA copia della logica, le prove qui sopra
+        misurerebbero una funzione che la produzione non esegue."""
+        import re
+        with io.open(self.s.__file__, encoding="utf-8") as f:
+            sorgente = f.read()
+        m = re.search(r"def _tick_invito_recensione\(\):(.+?)\n        _th", sorgente, re.S)
+        self.assertIsNotNone(m, "il giro _tick_invito_recensione non si trova piu'")
+        corpo = "\n".join(r for r in m.group(1).splitlines()
+                          if r.strip() and not r.strip().startswith("#"))
+        self.assertIn("invito_recensione_una_passata(sistema, router)", corpo,
+                      "il giro del server non chiama la passata provata qui")
+        self.assertNotIn("segna_invito_recensione", corpo,
+                         "il giro del server ha ancora una SUA copia della logica")
 
 
 if __name__ == "__main__":

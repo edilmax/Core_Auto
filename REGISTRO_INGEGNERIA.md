@@ -403,6 +403,53 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### ⭐ ANCHE L'INVITO A RECENSIRE DAVA PER MANDATE LE EMAIL CHE NON PARTIVANO — 12 settembre, notte, «autorizzato»
+
+**Cosa è cambiato.** `fase83_server.py`: il giro orario `_tick_invito_recensione` ora chiama
+`invito_recensione_una_passata(sistema, router, *, ora_ts=None)`, estratta come le altre due passate
+(`sweep_hold_una_passata`, `promemoria_una_passata`) per poter essere provata con un orologio iniettato. Il tick
+resta `while True` + `try`. Guardia nuova: `test_email_ciclo.TestLInvitoARecensireNonRisultaFattoSeNonParte`
+(7 test). **STATO: acceso al prossimo deploy.** Parole del fondatore: *«autorizzato»*, poi *«correggi tutto e vai
+avanti si ripara subito si finisce e non si torna piu indietro»* — ed è quel secondo ordine ad aver aggiunto il
+terzo pezzo (la riga d'ERRORE sull'invito perso), che da solo non avrei fatto.
+
+**Cosa era rotto.** Lo **stesso difetto n. 2** del promemoria, rimasto in piedi quando quello fu riparato:
+`invia()` restituisce un booleano e il giro chiamava `segna_invito_recensione` comunque, anche dopo
+un'eccezione. Il cliente non riceveva l'invito, nessuno ritentava, e senza inviti il motore delle recensioni resta
+a secco. In più un invito mai partito **spariva in silenzio**: dopo 14 giorni la coda smette di restituire la riga
+e nessuno poteva sapere che quel cliente non era mai stato invitato.
+
+**La cura.** Si segna solo se `invia` dice sì; altrimenti si ritenta al giro dopo; e all'**ultimo giorno utile**
+(check-out + 14, l'ultimo in cui la coda restituisce la riga) si smette lasciando una riga di livello ERROR col
+riferimento, che il Guardiano legge ogni giorno. ⚠️ **L'ORA qui NON era un difetto** — a differenza del
+promemoria — e invece di affermarlo lo misura una guardia: il primo giro utile cade sempre dopo il diritto di
+recensire, anche a UTC+14.
+
+**D20, e tre cose andate storte per strada, tutte mie.**
+1. **Una guardia è diventata VERDE PER IL MOTIVO SBAGLIATO.** Avevo usato `GIORNI_INVITO_RECENSIONE` senza
+   definirla: il `NameError` cadeva dentro il mio `except` e finiva nel ramo «data illeggibile», che segna e
+   chiude. Così `test_ALL_ULTIMO_GIORNO_UTILE` passava — con la riga d'errore **sbagliata** — mentre il prodotto
+   smetteva di ritentare. Cura: la guardia adesso pretende **quale** condizione ha chiuso il caso, non solo che
+   una riga nomini la prenotazione. Una prova che non guarda il motivo si accontenta del primo ramo che passa.
+2. **Ho rotto una guardia sana con un commento.** La docstring della funzione nuova nominava i due simboli che
+   `test_pagina_recensione` cerca nel sorgente: la sua fetta di testo si chiudeva sulla mia prosa invece che sul
+   codice, e il test diventava rosso su codice giusto. Misurato riga per riga (11980 contro 12004), non intuito.
+   La docstring ora descrive senza nominare.
+3. **`_dt3` e `_j3` sono rimasti orfani** dopo le due estrazioni e hanno fermato il cancello statico (2 rilievi
+   `F401`). `RIPRENDI_QUI.md` diceva «la riga d'import non si tocca, serve all'invito»: quel motivo l'avevo appena
+   tolto io. Resta `threading as _th3`, che serve davvero in due punti.
+
+**Le due guardie nuove sono state VISTE ROSSE su guasto vero, e il ripristino è dimostrato** (sha256
+`8d0ba697…` prima e dopo, tutte e due le volte): la costante portata a 13 → *«13 != 14: la costante dice 13
+giorni, ma la coda smette di restituire la riga dopo 14»*; la segnatura tolta dopo un invio riuscito → *«3 != 1:
+l'invito è partito più di una volta»*.
+
+⚠️ **Limiti dichiarati.** I 14 giorni in `fase83_server` sono una **copia**: il numero vero è scritto a mano dentro
+la query di `fase162`, che non espone una costante. Le due sono inchiodate da una guardia che **misura** la
+finestra vera interrogando la coda, quindi una divergenza diventa rossa lo stesso giorno — ma restano due posti.
+E come per il promemoria: in produzione non è mai partito un invito vero, perché non è mai passata una
+prenotazione pagata.
+
 ### ✉️ IL PROMEMORIA AL CHECK-IN PARTIVA PRIMA DELL'ARRIVO, E UN INVIO FALLITO RISULTAVA FATTO — 11 settembre, sera, «autorizzato»
 
 **Cosa è cambiato.** `fase83_server.py`: il giro orario `_tick_promemoria` ora chiama una funzione sola,
