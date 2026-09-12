@@ -480,6 +480,23 @@ quattro ruoli è l'unico mai percorso da capo a fondo, ed è quello che porta i 
   **D20:** guardia scritta → rossa per ImportError (motivo sbagliato, si registra) → passo 0 = estrazione con la logica di
   oggi → guardia **rossa per i motivi giusti** → cura → verde. Le 6 guardie vanno in `test_promemoria_checkin.py`. ⚠️ Le
   variabili `_dt3`/`_j3` del blocco servono ancora a `_tick_invito_recensione`: la riga d'import non si tocca.
+  **1a-bis — 🔧 L'INVITO A RECENSIRE: cura scritta e provata, NON ancora in produzione.** ✅ «autorizzato» del
+  fondatore (12/9), poi *«correggi tutto … non si torna piu indietro»*, che ha aggiunto il terzo pezzo. Stesso
+  difetto n. 2 del promemoria, rimasto in piedi quando quello fu riparato: `invia()` dice False senza sollevare e
+  il giro segnava lo stesso. **La cura:** giro estratto in `invito_recensione_una_passata(sistema, router, *,
+  ora_ts=None)` (in fondo a `fase83_server.py`, DOPO `servi()`: messa prima romperebbe una guardia che legge il
+  sorgente — misurato, riga 11980 contro 12004); si segna solo se l'invio riesce; se no si ritenta; **all'ultimo
+  giorno utile** (check-out + 14) si smette con una riga d'ERRORE col riferimento, perché dopo quel giorno la coda
+  non restituisce più la riga e l'invito perso sparirebbe in silenzio. ⚠️ L'ORA qui **non** era un difetto, e una
+  guardia lo **misura** invece di affermarlo. **7 guardie** in `test_email_ciclo.
+  TestLInvitoARecensireNonRisultaFattoSeNonParte`, tutte con un rosso alle spalle: 3 viste rosse sul difetto vero,
+  2 sui guasti iniettati con l'editor — costante 13 al posto di 14 → *«13 != 14: la costante dice 13 giorni, ma la
+  coda smette di restituire la riga dopo 14»*; segnatura tolta dopo un invio riuscito → *«3 != 1: l'invito è
+  partito più di una volta»* — con ripristino dimostrato (sha256 `8d0ba697…` prima e dopo, due volte su due).
+  Cancello statico pulito dopo aver tolto `_dt3`/`_j3`, rimasti orfani (2 rilievi `F401`): resta `threading as
+  _th3`. Caricatore: **6752** test. ⚠️ **Limite:** i 14 giorni sono una **copia** del numero scritto a mano in
+  `fase162`, inchiodata da una guardia che misura la finestra vera. **Resta:** suite intera, commit, unione,
+  deploy (tocca codice servito dal contenitore).
   **1b — Video via email + la casella da spuntare. ✅ «autorizzato» per i pezzi 1 e 2.** Le prove oggi sono solo foto
   (`png jpg webp gif`, max 10). Pezzo 1: sul voucher (`fase83.pagina_voucher_html`, sezione chat) il pulsante «manda un
   video» con l'email già compilata a **`info@bookinvip.com`** (già pubblico; non confermato esplicitamente) e l'oggetto
@@ -535,7 +552,8 @@ ritorno entro 3 ore, e l'esame riconosce la firma del pulsante («SCAMBIO FATTO�
 («USCITA_DIRETTA=0») — da decidere: insegnare all'esame la seconda firma (sposta il bersaglio) o far scrivere al
 protocollo la prima (tocca `deploy/`). **I 21 moduli del vecchio impianto**: rinviati («finiamo la macchina»); 4.172 righe
 e 334 test, e ⛔ `fase164_pool_ai` e `fase165_adattatori_esterni` NON si toccano (li raggiunge `fase81_bootstrap`).
-**Visto e non autorizzato:** l'invito a recensire (`_tick_invito_recensione`) ha lo stesso difetto n. 2 del promemoria.
+**L'invito a recensire aveva lo stesso difetto n. 2 del promemoria: ✅ RIPARATO il 12/9** («autorizzato» del fondatore,
+poi *«correggi tutto … non si torna piu indietro»*) — vedi il punto 1a-bis qui sotto.
 **In produzione non è mai passata una prenotazione pagata** (0 pagati, 0 promemoria, 2 garanzie annullate) e Stripe è
 in modalità LIVE: la prova completa sul server costa la commissione, decisione del fondatore, dopo le correzioni.
 
@@ -2337,9 +2355,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: ac11a14
+CONSEGNE AGGIORNATE A: f11835c
 
-SUITE ATTUALE: Ran 6745 test
+SUITE ATTUALE: Ran 6752 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

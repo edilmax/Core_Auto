@@ -576,6 +576,15 @@ def _mezzanotte_checkout(check_out: str, fuso: str = "") -> Optional[int]:
     return int(_d.datetime(g.year, g.month, g.day, 0, 0, 0, tzinfo=piu_a_ovest).timestamp())
 
 
+# ⛔ I 14 GIORNI DELLA FINESTRA DELL'INVITO A RECENSIRE, e sono una COPIA: il numero vero
+# vive dentro la query di `fase162_pagamenti_pendenti.da_invitare_recensione` (scritto a mano
+# li' dentro, senza una costante da importare). Due copie dello stesso numero divergono in
+# silenzio, quindi questa e' inchiodata al comportamento VERO della coda da una guardia che
+# lo MISURA (`test_email_ciclo`, premessa sui quattordici giorni): se qualcuno cambia la
+# finestra in `fase162`, quella diventa rossa lo stesso giorno invece di lasciare qui un
+# numero che non descrive piu' niente.
+GIORNI_INVITO_RECENSIONE = 14
+
 SECONDI_RIPENSAMENTO = 48 * 3600          # 172.800: quarantotto ore VERE
 
 
@@ -11895,7 +11904,7 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
     # aumenta la fiducia e dà al cliente il momento chiaro per agire prima dell'auto-rilascio.
     email_prov = getattr(sistema, "email_provider", None)
     if pp is not None and email_prov is not None:
-        import threading as _th3, datetime as _dt3, json as _j3
+        import threading as _th3
 
         def _tick_promemoria():
             while True:
@@ -11909,32 +11918,9 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
         def _tick_invito_recensione():
             """C3: post-CHECK-OUT parte l'invito a recensire (stile Booking). Senza invito
             il motore recensioni resta a secco. Finestra 14gg, una sola volta per rif."""
-            base = getattr(getattr(sistema, "config", None), "base_url", "") or "https://bookinvip.com"
             while True:
                 try:
-                    oggi = _dt3.date.today().isoformat()
-                    for rec in pp.da_invitare_recensione(oggi=oggi):
-                        try:
-                            dj = _j3.loads(rec.get("corpo_json") or "{}")
-                        except Exception:
-                            dj = {}
-                        vt = dj.get("voucher_token", "")
-                        lang = router._lang_da_voucher(vt)
-                        # RICOLLEGATO ALLA PAGINA DI SOLA VALUTAZIONE (2026-07-20): l'invito
-                        # post-soggiorno porta a /recensione/ (solo il voto), NON al voucher
-                        # pieno. Stesso token firmato, stesso motore: cambia solo la vetrina.
-                        vurl = (base + "/recensione/" + vt + "?lang=" + lang) if vt else ""
-                        titolo = dj.get("titolo") or rec.get("alloggio_id", "")
-                        try:
-                            from fase86_email import corpo_invito_recensione_html, oggetto
-                            email_prov.invia(rec.get("email", ""),
-                                             oggetto("r_ogg", lang),
-                                             corpo_invito_recensione_html(titolo, vurl,
-                                                                          lingua=lang))
-                        except Exception:
-                            logger.warning("invio invito recensione fallito (ignorato)",
-                                           exc_info=True)
-                        pp.segna_invito_recensione(rec["riferimento"])
+                    invito_recensione_una_passata(sistema, router)
                 except Exception:
                     logger.warning("sweep invito recensione fallito (ignorato)", exc_info=True)
                 __import__("time").sleep(3600)     # ogni ora
@@ -11990,3 +11976,92 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
     _thi.Thread(target=_tick_ical, daemon=True).start()
 
     srv.serve_forever()
+
+
+def invito_recensione_una_passata(sistema: Any, router: Any, *,
+                                  ora_ts: Any = None) -> Dict[str, List[str]]:
+    """UNA passata dell'invito a recensire post-check-out, estratta dal thread per essere
+    TESTABILE come `sweep_hold_una_passata` e `promemoria_una_passata`. [PASSO 0 di D20: la
+    STESSA logica che stava nel thread, con l'orologio iniettabile.]
+
+    ⛔ STA IN FONDO AL FILE, DOPO `servi()`, e la posizione e' MISURATA non scelta: una
+    guardia di `test_pagina_recensione` legge il SORGENTE dal giro orario fino alla prima
+    chiamata che costruisce l'email, e pretende in mezzo l'indirizzo della pagina di voto.
+    Messa PRIMA del giro (come `promemoria_una_passata`) quella guardia andrebbe in errore:
+    un rosso di forma su una guardia sana.
+    ⛔ E QUI NON SI NOMINANO I SIMBOLI CHE QUELLA GUARDIA CERCA. Scrivendoli in questa
+    docstring (2026-09-12) la guardia li ha trovati PRIMA del codice vero e si e' fermata
+    qui: rossa su codice sano. Un commento che nomina un simbolo entra nel testo misurato."""
+    esito: Dict[str, List[str]] = {"inviati": [], "ritentare": [], "persi": []}
+    pp = getattr(sistema, "pagamenti_pendenti", None)
+    ep = getattr(sistema, "email_provider", None)
+    if pp is None or ep is None:
+        return esito
+    import datetime as _dt
+    import json as _json
+    import time as _t
+    ora = ora_ts if (isinstance(ora_ts, (int, float)) and not isinstance(ora_ts, bool)) else _t.time()
+    oggi = _dt.datetime.fromtimestamp(ora, tz=_dt.timezone.utc).date().isoformat()
+    base = getattr(getattr(sistema, "config", None), "base_url", "") or "https://bookinvip.com"
+    try:
+        righe = pp.da_invitare_recensione(oggi=oggi)
+    except Exception:
+        logger.warning("invito recensione: coda non leggibile, giro saltato", exc_info=True)
+        return esito
+    for rec in righe:
+        rif = str(rec.get("riferimento") or "")
+        try:
+            try:
+                dj = _json.loads(rec.get("corpo_json") or "{}")
+            except Exception:
+                dj = {}
+            dj = dj if isinstance(dj, dict) else {}
+            vt = dj.get("voucher_token", "") or ""
+            lang = router._lang_da_voucher(vt)
+            # RICOLLEGATO ALLA PAGINA DI SOLA VALUTAZIONE (2026-07-20): l'invito
+            # post-soggiorno porta a /recensione/ (solo il voto), NON al voucher
+            # pieno. Stesso token firmato, stesso motore: cambia solo la vetrina.
+            vurl = (base + "/recensione/" + vt + "?lang=" + lang) if vt else ""
+            titolo = dj.get("titolo") or rec.get("alloggio_id", "")
+            try:
+                from fase86_email import corpo_invito_recensione_html, oggetto
+                partito = bool(ep.invia(rec.get("email", ""), oggetto("r_ogg", lang),
+                                        corpo_invito_recensione_html(titolo, vurl,
+                                                                     lingua=lang)))
+            except Exception:
+                logger.warning("invito recensione: invio fallito con un'eccezione, ritento "
+                               "al giro dopo | rif %s", _rif_per_registro(rif), exc_info=True)
+                partito = False
+            if partito:
+                pp.segna_invito_recensione(rif)
+                esito["inviati"].append(rif)
+                continue
+            # NON partito. Se la riga e' ancora dentro la finestra si ritenta al giro dopo;
+            # se invece oggi e' l'ULTIMO giorno in cui la coda la restituisce, domani sparisce
+            # da sola e nessuno saprebbe mai che quel cliente non e' stato invitato. Allora si
+            # segna (non serve a impedire un doppio invio: serve a dire «chiuso, perso») e
+            # resta una riga d'ERRORE col riferimento, che il Guardiano legge ogni giorno.
+            ultimo_giorno = True
+            try:
+                passati = (_dt.date.fromisoformat(oggi)
+                           - _dt.date.fromisoformat(str(rec.get("check_out") or ""))).days
+                ultimo_giorno = passati >= GIORNI_INVITO_RECENSIONE
+            except Exception:
+                # data illeggibile: non si sa quanto tempo resta, e sbagliare dalla parte di
+                # «ritento per sempre» terrebbe la riga in testa alla coda (ORDER BY check_out)
+                logger.error("INVITO RECENSIONE NON CONSEGNATO | rif %s | data di check-out "
+                             "illeggibile", _rif_per_registro(rif))
+            if ultimo_giorno:
+                logger.error("INVITO RECENSIONE NON CONSEGNATO | rif %s | ultimo giorno utile "
+                             "e l'email non e' partita: la finestra si chiude qui",
+                             _rif_per_registro(rif))
+                pp.segna_invito_recensione(rif)
+                esito["persi"].append(rif)
+            else:
+                logger.warning("invito recensione: il provider non ha consegnato, ritento al "
+                               "giro dopo | rif %s", _rif_per_registro(rif))
+                esito["ritentare"].append(rif)
+        except Exception:
+            logger.warning("invito recensione: riga saltata (isolata) | rif %s",
+                           _rif_per_registro(rif), exc_info=True)
+    return esito
