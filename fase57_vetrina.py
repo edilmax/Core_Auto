@@ -430,6 +430,18 @@ class CatalogoVetrina:
             con.execute("PRAGMA journal_mode=WAL")
         except sqlite3.Error:
             pass
+        try:
+            # ⛔ Un annuncio porta l'INDIRIZZO di casa dell'host, dichiarato piu' sopra
+            # «PRIVATO: solo per geocodifica precisa, mai pubblico», e un `DELETE` di SQLite
+            # lo lascia leggibile nelle pagine libere del file. Il pragma sta sulla
+            # CONNESSIONE, non dentro una funzione: cosi' vale anche per le cancellazioni
+            # che nasceranno domani. Misurato il 2026-09-12 dalla rotta vera
+            # `/api/host/alloggio_elimina`: la riga spariva e l'indirizzo restava nei byte,
+            # mentre la sorella `cancella_alloggi_host` -- che il pragma ce l'aveva in casa
+            # propria -- sullo stesso banco non lasciava niente.
+            con.execute("PRAGMA secure_delete=ON")
+        except sqlite3.Error:
+            logger.warning("secure_delete non applicabile su questo database")
         return con
 
     def inizializza_schema(self) -> None:
@@ -822,8 +834,16 @@ class CatalogoVetrina:
             except sqlite3.Error:
                 logger.warning("secure_delete non applicabile su questo database")
             with con:
+                # ⛔ `id`, non `slug`: la colonna si chiama `alloggio_id` e porta
+                # `alloggi.id` -- lo dichiara la lettura a `i.alloggio_id = a.id`, ed e' cosi'
+                # che la usano `pubblica` ed `elimina_alloggio`. Con `slug` si confrontava un
+                # NUMERO con un TESTO: la condizione non era mai vera e le FOTO restavano in
+                # archivio, VIVE e interrogabili, dopo un «cancellami». Misurato il 2026-09-12:
+                # 1 riga prima, 1 riga dopo, mentre `elimina_alloggio` sullo stesso banco la
+                # toglieva. L'esame dell'oblio non poteva vederlo: quella riga non porta
+                # l'host_id, che e' l'unico ago che cerca.
                 con.execute("DELETE FROM alloggio_immagini WHERE alloggio_id IN "
-                            "(SELECT slug FROM alloggi WHERE host_id=?)", (host_id,))
+                            "(SELECT id FROM alloggi WHERE host_id=?)", (host_id,))
                 cur = con.execute("DELETE FROM alloggi WHERE host_id=?", (host_id,))
             return cur.rowcount if (cur.rowcount and cur.rowcount > 0) else 0
         finally:

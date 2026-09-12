@@ -403,6 +403,70 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🧾 LA GUARDIA DI IERI ERA STATA PROVATA NELL'UNICO PUNTO IN CUI POTEVA FALLIRE — 12 settembre, «autorizzato fino alla fine, rispettare metodo V4»
+
+**Da dove nasce.** Il fondatore ha chiesto di controllare il lavoro del giorno prima con un criterio suo: *«quando i
+test restituiscono un falso verde, significa che lo strumento sta valutando la descrizione e non il sistema reale»*.
+Ventidue agenti in sola lettura, con l'ordine di **far cadere** i rilievi invece di confermarli: 18 sono caduti, e
+quelli rimasti avevano tutti una prova eseguita. Poi il fondatore ha detto «rispetta il METODO v4», e il METODO ha
+cambiato il lavoro: *«non riparo l'esemplare, chiudo la famiglia»*.
+
+**Due difetti VIVI in produzione, trovati misurando e non leggendo.**
+· `fase57_vetrina.elimina_alloggio` toglieva la riga ma **non azzerava i byte**: l'host cancellava il suo annuncio
+dalla rotta vera e l'**indirizzo di casa sua** — campo dichiarato «PRIVATO: solo per geocodifica precisa, mai
+pubblico» — restava leggibile in `catalogo.db`. La sorella `cancella_alloggi_host`, che il pragma ce l'aveva in casa
+propria, sullo stesso banco non lasciava niente: la differenza era una riga. Curato mettendo
+`PRAGMA secure_delete=ON` in `_apri`, cioè sulla **connessione**, come già fanno `fase117`, `fase123`, `fase162`,
+`fase203`: così vale anche per le cancellazioni che nasceranno.
+· `fase57.cancella_alloggi_host` — cioè **proprio il «cancellami»** che `fase156_erasure` chiama — cancellava
+l'annuncio e **lasciava la riga della foto**, viva e interrogabile: confrontava `alloggio_id` (un numero, come dichiara
+la lettura `i.alloggio_id = a.id`) con `slug` (un testo), e la condizione non era mai vera. `SELECT slug` →
+`SELECT id`. L'esame dell'oblio non poteva vederlo: quella riga non porta l'`host_id`, che è l'unico ago che cerca.
+
+**E due posizioni legali che non trattenevano niente.** `TRATTENUTI_PER_LEGGE` era intestato a `note_credito` e
+`debiti_host`: accendendo il sistema vero (23 archivi, 35 tabelle) **quelle tabelle non esistono** — si chiamano `note`
+e `debiti`, e `debiti_host` è il nome di un **metodo** di `fase177`. Nomi presi dalla memoria invece che da un `grep`
+(sbaglio S2). Il danno era il contrario di quello che si teme: la tabella vera non combaciava, finiva fra le «non
+dichiarate», `ok` usciva falso — e **un host con una nota di credito si sentiva rispondere errore a una richiesta di
+cancellazione che per legge deve andare a buon fine**.
+
+**Il metro che dava il verdetto era cieco in tre punti.** `collaudi/esame_oblio.py`, nato il giorno prima: col guasto
+dentro — oblio mai eseguito, dato intatto in quattro archivi su quattro — stampava `OK la scansione è stata eseguita`,
+`OK 0 non dichiarati` e `OK trattenute: -` nella stessa schermata che diceva «SPORCHI dopo: 4 su 23». Tre anelli verdi
+perché leggevano **chiavi assenti**, e in Python l'assenza si legge come successo. Ora il rapporto monco si **dichiara**
+invece di essere giudicato. Tolti anche due anelli che **non potevano fallire**: «il dato c'era» (già preteso dalla
+premessa, che esce con `return 1`) e «l'oblio RICONTROLLA ogni archivio», che confrontava due numeri di vocabolari
+diversi — nomi di **file** contro nomi **logici**, intersezione vuota, e il verde nasceva da «4 >= 4». Quello si
+rompeva proprio dove l'esame promette di crescere: un archivio nuovo che si comporta **bene** lo faceva uscire ROSSO su
+macchina sana. E i **byte** ora si giudicano per coppia (archivio, dato) invece che per archivio: bastava una tabella
+trattenuta perché il controllo si spegnesse su tutto il file.
+
+**La famiglia, non l'esemplare (METODO v4, regola sopra tutte).** Il cricchetto `TestOgniCancellazioneDichiaraSeAzzeraIByte`
+cercava la parola `SECURE_DELETE` in una chiamata **qualunque** del modulo: un `logger.warning("secure_delete non
+applicabile…")` accanto al pragma bastava a dichiararlo conforme. Misurato: togliendo il pragma vero da `fase88`,
+`fase113` e `fase57` — i tre moduli con i dati più delicati, password col sale, chat, indirizzo di casa — la guardia
+restava **verde**, e gridava solo su `fase117`, l'unico senza quella riga di registro. Ed è esattamente lì che la prova
+«visto rosso» era stata fatta. Ora il censimento guarda **funzione per funzione**: conforme è chi ha il pragma in casa
+propria, oppure apre le connessioni in una funzione che ce l'ha e che non cancella. ⛔ Pretendere solo la seconda forma
+renderebbe rossi `fase113` e `fase88`, che sono sani: due falsi allarmi nuovi al posto di uno vecchio.
+
+**Le prove D20, nell'ordine.** Guardia scritta → vista ROSSA sul codice di produzione → riparazione → verde:
+`TestUnAnnuncioCANCELLATOSPARISCEDAVVERO` (`test_elimina_annuncio.py`, 2 rossi: byte e foto) ·
+`TestOgniPosizioneLegaleNOMINAUnaTabellaCHEESISTE` (`test_fase156_erasure.py`, rosso su `['debiti_host',
+'note_credito']`) · il cricchetto riscritto, eseguito **contro il `fase57` di `HEAD`** senza toccare il repository:
+`FAILED (failures=1)`, mentre la forma di ieri sullo stesso file taceva.
+
+**Un rilievo ALTA degli agenti è caduto alla misura, ed è una buona notizia.** `_safe` maschera davvero qualunque
+eccezione in «0 residui» — ma `ok` **non** viene ingannato, perché la scansione degli archivi veri aggiunta il giorno
+prima becca l'archivio sporco nello stesso giro (`OBLIO INCOMPLETO … 1 archivi`). Il controllo nuovo fa il lavoro per
+cui era nato: non si tocca.
+
+**Limite dichiarato, non risolto.** Resta fuori l'anello che pretenderebbe che una tabella trattenuta stia
+nell'**archivio che le compete**: oggi la chiave è il nome nudo, valido ovunque. E `collaudi/METODO_v4.md` PARTE 12
+dichiara `[SI']` alla riga «numero archivi = numero conferme di cancellazione» appoggiandosi a
+`prova_copertura_archivi.py`, che misura la **persistenza** e non nomina mai una cancellazione: quella riga è `[NO]`, e
+rimetterla a posto è il lavoro successivo.
+
 ### 🔏 «CANCELLATO» E «FIRMATO» ERANO PAROLE, NON MISURE — 12 settembre, «autorizzato fino alla fine»
 
 **Cosa è cambiato.** `fase163_accettazioni`: `PRIVACY_VERSIONE` viene **da** `fase185` (un numero solo, con ripiego

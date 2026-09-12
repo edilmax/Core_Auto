@@ -395,6 +395,111 @@ giri di mutazione da 60 e 600 minuti dichiarati. Guardia `TestUnaCasellaSCADUTAD
 vista rossa prima (3 su 3). **Misurato adesso: 9 caselle rilanciabili subito, 2 che vogliono il server.**
 🔑 **Quindi «15 caselle su 39» NON vuol dire che il lavoro sia fermo:** vuol dire che gran parte delle misure è
 scaduta e va rifatta. Il primo lavoro utile è rilanciare quei 9 attrezzi.
+**🧾 12 SETTEMBRE, notte — DUE DIFETTI VIVI CHIUSI, E IL METRO CHE LI AVREBBE DOVUTI VEDERE (ramo: ancora sull'albero di lavoro, «autorizzato fino alla fine rispettare metodo V4»)**
+
+> **Come sono usciti.** Il fondatore ha chiesto di controllare il lavoro del 12 col suo criterio — *«un falso verde
+> significa che lo strumento valuta la DESCRIZIONE e non il sistema reale»* — e poi «rispetta il METODO v4», che ha
+> cambiato il lavoro: *«non riparo l'esemplare, chiudo la famiglia»*. 22 agenti in sola lettura col mandato di **far
+> cadere** i rilievi: **18 caduti**, e i rimasti avevano tutti una prova eseguita. Nessun agente ha scritto nel
+> repository.
+>
+> **PRODUZIONE, due difetti VIVI** (`fase57_vetrina.py`, «autorizzato»): ① `elimina_alloggio` cancellava la riga e
+> lasciava l'**indirizzo di casa dell'host** — campo dichiarato PRIVATO — leggibile nei byte di `catalogo.db`; curato
+> col `PRAGMA secure_delete=ON` in `_apri`, cioè sulla connessione, come `fase117/123/162/203`. ② `cancella_alloggi_host`
+> — **il «cancellami»** che `fase156` chiama — confrontava `alloggio_id` (numero) con `slug` (testo): le **foto**
+> restavano in archivio, vive e interrogabili. `SELECT slug` → `SELECT id`.
+> **PRODUZIONE, due posizioni legali inefficaci** (`fase156_erasure.py`): `TRATTENUTI_PER_LEGGE` nominava
+> `note_credito` e `debiti_host`, che **non sono tabelle** (sono `note` e `debiti`; `debiti_host` è un metodo di
+> `fase177`). Effetto opposto a quello che si teme: un host con una nota di credito riceveva **errore** a una richiesta
+> di cancellazione che per legge deve riuscire.
+> **IL METRO** (`collaudi/esame_oblio.py`): col guasto dentro tre anelli dicevano `OK` leggendo **chiavi assenti**
+> (`all()` su vuoto è vero); ora il rapporto monco si **dichiara**. Tolti due anelli che non potevano fallire — fra cui
+> quello che confrontava nomi di **file** con nomi **logici** (intersezione vuota, verde da «4 >= 4») e che faceva
+> uscire ROSSO l'esame su una macchina **sana** appena nasceva un archivio nuovo. I byte ora si giudicano per coppia
+> (archivio, dato): prima bastava una tabella trattenuta per spegnere il controllo su tutto il file.
+> **LA FAMIGLIA** (`test_pipeline_ci.py`): il cricchetto cercava la **parola** `secure_delete` in una chiamata qualunque
+> del modulo — un `logger.warning` che la nomina bastava. Togliendo il pragma vero da `fase88`, `fase113` e `fase57`
+> restava **verde**; gridava solo su `fase117`, l'unico senza quella riga — ed è lì che la prova «visto rosso» era stata
+> fatta. Ora guarda **funzione per funzione**.
+>
+> **Le prove D20, nell'ordine:** `TestUnAnnuncioCANCELLATOSPARISCEDAVVERO` (2 rossi visti: byte e foto) ·
+> `TestOgniPosizioneLegaleNOMINAUnaTabellaCHEESISTE` (rosso su `['debiti_host','note_credito']`) · il cricchetto
+> riscritto eseguito **contro il `fase57` di HEAD** senza toccare il repository (`FAILED (failures=1)`, mentre la forma
+> di ieri sullo stesso file taceva). Esame dell'oblio: sano **VERDE 7 su 7** (erano 9, di cui 2 incapaci di fallire),
+> col guasto **ROSSO 6 rossi su 7** (erano 4 su 9). Mirati verdi: 169 test su vetrina+oblio, 22 su `test_fase156_erasure`,
+> 23 su `test_pulizia_uploads`, 3 sul cricchetto. `cricchetto_statico.py` **ruff ok E bandit ok**.
+>
+> ⛔ **COSA MANCA, e in quest'ordine.** ① la **casella** del Blocco 5 e il `--scrivi` a `esame_oblio.py` (il lavoro
+> chiesto dal fondatore, non ancora fatto: prima andava riparato il metro, perché una casella spuntata da un metro
+> storto è peggio di nessuna casella); ② `collaudi/METODO_v4.md` PARTE 12 dichiara **`[SI']`** alla riga «numero archivi
+> = numero conferme di cancellazione» appoggiandosi a `prova_copertura_archivi.py`, che misura la **persistenza** e non
+> nomina mai una cancellazione (`grep 'cancell|erasure|oblio|fase156'` su quel file: **zero** su 92 righe, mentre su
+> `fase156_erasure.py` dà 41): quella riga è **[NO]**, e le conferme oggi sono **4 su 23 archivi**; ③ rimisurare la
+> PARTE 12 intera, ferma a `8436dac` del 28 agosto; ④ l'anello che pretenda che una tabella trattenuta stia
+> nell'**archivio che le compete** (oggi la chiave è il nome nudo, valido ovunque); ⑤ **non giudicato**: l'URL privato
+> del calendario Airbnb dell'host sembra sopravvivere a «cancella tutto» (`fase203`, la riga è legata a
+> `alloggio_id`+`url`, mai a `host_id`) — va passato a un refutatore, non infilato dentro un altro intervento.
+
+**🧭 12 SETTEMBRE, sera — PASSAGGIO DI CONSEGNE (D21)**
+
+> ⛔ **Contesto al 74%, letto dal fondatore. La soglia è il 50%: superata, e la colpa è di chi scrive —
+> quella percentuale io non la vedo, la vede lui.** Lavoro nuovo NON aperto.
+> **Stato della macchina:** master **`efc5b2c`** uguale su computer, GitHub e VPS (deploy D17 completo:
+> ⚠️ `:prec` puntava di nuovo all'immagine sbagliata — **undicesima volta su undici** — e il passo [1b]
+> l'ha ri-agganciato misurando; backup `finanza-20260912-171757.db.gz` riaperto; sonde 200/200, negative
+> **403** e **401**; `verifica_produzione` **190 controlli 0 violazioni**; dentro il contenitore
+> `TRATTENUTI_PER_LEGGE`, `secure_delete` in `fase88/113/57/162`, e `fase163` che firma il testo servito).
+> Ultima suite intera: **`Ran 6780 in 4111.884s · OK (skipped=4) · USCITA_DIRETTA=0`** (caricatore 6785).
+> ⚠️ **QUESTO BLOCCO NON È COMMITTATO**: scriverlo costa zero, committarlo costa una suite intera
+> (ferrea 6). Lo committa la chat nuova insieme al suo primo lavoro, con **una** suite invece di due.
+
+> **⛔ LA REGOLA DEL FONDATORE DI STASERA, ed è la prima cosa da fare:** *«ogni lavoro deve avere casella
+> fatto, se no torniamo indietro a fare lavoro fatto»*. **Il lavoro di oggi NON ha una casella**, e l'ho
+> pure scritto due volte andando avanti lo stesso. Manca poco e il pezzo è preciso:
+> ① una casella nel **Blocco 5 (LEGALE E CONFORMITÀ**, oggi 3 caselle) di `collaudi/piano.py`: *«il giro
+> del "cancellami" è percorso intero: ogni archivio che conteneva il dato è pulito oppure dichiarato
+> trattenuto per legge col suo perché, e il dato non si rilegge dai byte»*; ② **`--scrivi` in
+> `collaudi/esame_oblio.py`**, come ce l'hanno `esame_legale`/`esame_sentinella`/`esame_backup`, così la
+> casella la spunta **l'attrezzo** e mai una mano. L'attrezzo esiste ed è **verde 9 anelli su 9**, e col
+> guasto (`--guasto salta-oblio`) esce rosso con 4: manca solo il filo che lo attacca alla scheda.
+> ⚠️ Copre anche il **1c** di stamattina, che è senza casella per lo stesso motivo.
+
+> **POI, in quest'ordine.** ③ **RIMISURARE LA PARTE 12 di `collaudi/METODO_v4.md`** — è stata misurata su
+> `8436dac` (**28 agosto**) e dice già almeno **due cose false**: «nessuna tabella di eventi Stripe» (esiste
+> `fase204_eventi_stripe.py` con `CREATE TABLE eventi_stripe` e `pendenti(piu_vecchi_di_sec=…)`) e
+> «gitleaks ATTREZZO NON USABILE» (oggi il cricchetto stampa `gitleaks ok`, e su quella frase si
+> appoggiano due righe). Lavorare su quei [NO] senza rimisurare = rifare lavoro già fatto, cioè
+> **esattamente** il difetto del 15 agosto con CodeQL. Oggi la porta è **13 [SI'] · 10 [NO] · 11 [NON
+> MISURATO]**. ⇒ Il fondatore ha approvato **due agenti in SOLA LETTURA** per dividersela (uno Soldi+
+> Calendario, l'altro Accessi+Dati+Coerenza+Robustezza+Mondo reale), con la regola che **riportano comando
+> e uscita, mai il riassunto** (B3) e non lanciano suite. ④ **Il giro del CLIENTE**: dei quattro ruoli è
+> l'unico mai percorso da capo a fondo, ed è quello che porta i soldi. ⑤ **Il blocco manuale per le liti**
+> («legal hold»), che non esiste: oggi la cancellazione si ferma solo se la controversia è aperta *dentro
+> il nostro sistema*, ma un cliente può citare fino a **10 anni** (art. 2946 c.c.) mentre le chat si
+> cancellano a **2** — cioè al sesto anno la prova che dà ragione al fondatore è già distrutta, **nel
+> rispetto della nostra stessa informativa**. ⑥ La **famiglia webhook** (PUNTI 3-6) tutta insieme, mai a
+> pezzi: sono quattro [NO] che sono **una cosa sola**, e 120 chiamate in 81 file di collaudo si aspettano
+> la conferma dentro la risposta.
+
+> **⚠️ E QUATTRO DECISIONI CHE ASPETTANO IL FONDATORE, non lavoro tecnico.** (a) i **quattro tempi
+> dell'informativa senza meccanismo** (account · contabili · prove di accettazione · dati tecnici): la
+> guardia li conta, le risposte no — e due chiedono una scelta che nessun programma può fare (cosa sono i
+> «dati di account» quando sugli stessi fatti restano obblighi fiscali? quanto dura «il periodo di
+> prescrizione»?); (b) **`fase15_idempotency`** tiene in cache anche la **risposta** già prodotta, che in
+> qualche rotta può contenere dati di una persona, e sta sul percorso caldo: non è misurato **quali**
+> rotte; (c) **`fase16_outbox` e `fase33_persistenza`** passano da un archivio **astratto**: il pragma di
+> SQLite non li raggiunge e serve un rimedio loro; (d) le righe di **`TRATTENUTI_PER_LEGGE` sono posizioni
+> legali** e vanno lette da un avvocato — ripetono ciò che l'informativa già dichiara, ma ripetere non è
+> validare. 📚 Le fonti con gli articoli stanno in memoria:
+> `bookinvip-conservazione-e-giurisdizione.md` (e lì c'è anche il fatto che **le regole seguono i clienti,
+> non la sede**: GDPR art. 3.2 + rappresentante art. 27, DAC7 anche per piattaforme non UE — quindi
+> spostare la sede fuori dall'Europa **aggiunge** un obbligo invece di toglierlo).
+
+> ⚡ **E IL GESTO CHE OGGI È COSTATO UN GIRO DI CI:** `python collaudi/cricchetto_statico.py ruff` **NON
+> BASTA** — la CI lancia `tutti`. La #181 è caduta su `fase156_erasure.py|B608`, che è **bandit**. Da
+> adesso: **`ruff` E `bandit`** (≈15 s insieme). E un SQL costruito con `%` vuole **DUE** silenziatori:
+> `# nosec B608  # noqa: S608` — `fase202` li ha entrambi da sempre, era lì da copiare.
+
 **🧭 11 SETTEMBRE, sera — PASSAGGIO DI CONSEGNE (D21) E LA CODA DEI LAVORI, UNO ALLA VOLTA**
 
 > ⛔ **D21: contesto all'80%, letto dal fondatore con `/context`** (802k su 1M). La soglia è il 50%: superata senza
@@ -2494,7 +2599,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 ```
 CONSEGNE AGGIORNATE A: 0f69379
 
-SUITE ATTUALE: Ran 6785 test
+SUITE ATTUALE: Ran 6789 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

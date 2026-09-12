@@ -593,5 +593,82 @@ class TestErasureConArchiviINCOMPLETI(unittest.TestCase):
                                       % (nome, t))
 
 
+class TestOgniPosizioneLegaleNOMINAUnaTabellaCHEESISTE(unittest.TestCase):
+    """⛔ D20 — scritta PRIMA della riparazione e vista ROSSA sul codice di produzione.
+
+    `TRATTENUTI_PER_LEGGE` dice, TABELLA per TABELLA, perche' un dato resta anche dopo un
+    «cancellami». La chiave e' il nome della tabella, e su quel nome si decide tutto:
+    `cancella_attivita_host` confronta le tabelle rimaste sporche con questo dizionario, e
+    quelle che non combaciano finiscono in `sporchi_non_dichiarati` -> `ok` diventa False e
+    la rotta risponde ERRORE a una persona che per legge ha diritto alla cancellazione.
+
+    ⛔ Quindi un nome sbagliato non e' un refuso: e' una posizione legale che non si applica
+    a niente, e per di piu' BLOCCA l'oblio invece di permetterlo. Misurato il 2026-09-12
+    accendendo il sistema vero (23 archivi, 35 tabelle): due chiavi su quattro nominavano
+    tabelle inesistenti -- una diceva `note_credito` mentre la tabella si chiama `note`, e
+    l'altra `debiti_host` mentre si chiama `debiti` mentre `debiti_host` e' il nome di un
+    METODO di fase177. E' lo sbaglio S2: un nome preso dalla memoria invece che da un `grep`.
+
+    ⛔ E chiude la FAMIGLIA, non i due esemplari: qualunque chiave nuova intestata a una
+    tabella che non esiste diventa rossa lo stesso giorno. La guardia NON legge il sorgente
+    -- un commento la soddisferebbe (sbaglio S6) -- ma ACCENDE il sistema e chiede a
+    `sqlite_master` quali tabelle esistono davvero.
+    """
+
+    def _tabelle_vere(self):
+        """{nome tabella: archivi in cui compare}, leggendo gli archivi che il sistema crea
+        all'accensione. I campi si scoprono dalla configurazione, non da un elenco scritto a
+        mano: un archivio nuovo entra nel conto da solo."""
+        import dataclasses
+        import glob
+        import os
+        import sqlite3
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        campi = {f.name: os.path.join(d, f.name[3:] + ".db")
+                 for f in dataclasses.fields(ConfigCasaVIP) if f.name.startswith("db_")}
+        crea_sistema(ConfigCasaVIP(abilitato=True, segreto_hmac=SEG,
+                                   con_registrazione_host=True, commissione_bps=1500,
+                                   **campi))
+        tabelle = {}
+        for p in sorted(glob.glob(os.path.join(d, "*.db"))):
+            con = sqlite3.connect(p)
+            try:
+                for (nome,) in con.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table' "
+                        "AND name NOT LIKE 'sqlite_%'"):
+                    tabelle.setdefault(nome, set()).add(os.path.basename(p))
+            finally:
+                con.close()
+        return tabelle
+
+    def test_ogni_chiave_e_una_TABELLA_CHE_ESISTE_davvero(self):
+        from fase156_erasure import TRATTENUTI_PER_LEGGE
+        tabelle = self._tabelle_vere()
+        # PREMESSA (sbaglio S1: il vuoto non e' un valore). Se il sistema non avesse creato
+        # nessuna tabella, «tutte le chiavi mancano» sarebbe vero per il motivo sbagliato e
+        # il rosso non direbbe niente di questo difetto.
+        self.assertGreater(len(tabelle), 10,
+                           "misura non valida: il sistema non ha creato le tabelle")
+        mancanti = sorted(t for t in TRATTENUTI_PER_LEGGE if t not in tabelle)
+        self.assertEqual(
+            mancanti, [],
+            "queste posizioni legali sono intestate a tabelle che NON ESISTONO: %s. Non "
+            "trattengono niente, e la tabella vera finisce fra le «non dichiarate»: l'oblio "
+            "esce ok=False e la persona si sente rispondere errore a una richiesta che per "
+            "legge deve andare a buon fine. Tabelle esistenti: %s"
+            % (mancanti, sorted(tabelle)))
+
+    def test_ogni_posizione_legale_porta_il_suo_PERCHE_scritto(self):
+        """L'altra meta', e serve perche' l'anello dell'esame dell'oblio che controlla i
+        motivi usa `all()`, che su un insieme vuoto e' vero: una chiave giusta con il motivo
+        vuoto passerebbe di la' senza che nessuno se ne accorga."""
+        from fase156_erasure import TRATTENUTI_PER_LEGGE
+        self.assertTrue(TRATTENUTI_PER_LEGGE, "misura non valida: il dizionario e' vuoto")
+        for tabella, motivo in sorted(TRATTENUTI_PER_LEGGE.items()):
+            self.assertTrue(str(motivo).strip(),
+                            "la tabella `%s` e' trattenuta senza dire perche'" % tabella)
+
+
 if __name__ == "__main__":
     unittest.main()
