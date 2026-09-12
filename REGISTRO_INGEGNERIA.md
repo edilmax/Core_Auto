@@ -403,6 +403,78 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🗄️ LE CHAT NON SI CANCELLAVANO MAI, E L'INFORMATIVA NON PROMETTEVA NIENTE — 12 settembre, «autorizzato»
+
+**Cosa è cambiato.** `fase185_testi_legali.py`: nuova costante `ANNI_CONSERVAZIONE_CHAT`, `_componi` la sostituisce
+come `{ANNI_CHAT}`, e il §4 dell'informativa dichiara il termine delle comunicazioni **in tutte e 8 le lingue**;
+`PRIVACY_VERSIONE` passa a `2026-09-12`. `fase113_messaggistica.py`: `cancella_thread` e
+`prenotazioni_con_ultimo_messaggio`. `fase83_server.py`: `conservazione_una_passata(sistema, *, ora_ts=None,
+limite=50)` in fondo al file, `_conservazione_se_ora` col freno di 24 ore e la chiamata dentro il giro orario.
+Guardie nuove: `test_pulizia_uploads.TestLeChatNonRestanoInEternoENonSPARISCONOTroppoPRESTO` (15) e
+`test_testi_legali.TestLaConservazioneDelleComunicazioniInOgniLingua` (3). **STATO: acceso al prossimo deploy.**
+Parole del fondatore (11 settembre): *«autorizzato»* e *«va bene una regola sola a 2 anni»*.
+
+**Cosa era rotto.** Il §1 dichiarava di trattare «comunicazioni con la controparte» e il §4 **non diceva per quanto
+tempo**: non un'informativa generica, un'informativa incompleta (art. 13.2.a GDPR; l'EDPB chiede termini distinti per
+categoria). E il codice le teneva **per sempre**: `fase113` cancellava solo su richiesta di oblio di un host, e la
+scopa dei file porta via soltanto gli upload che nessun messaggio cita — una conversazione di cinque anni fa restava
+intera con le sue foto.
+
+**La cura, e le tre scelte che contano.** ⓐ **Il termine esiste in un posto solo** e il documento che lo *promette* è
+quello da cui il codice che *distrugge* lo legge: così l'informativa non può restare indietro rispetto a una
+cancellazione più aggressiva, e testo e motore non possono divergere. È il rimedio che `_percentuali` si era già dato
+dopo che otto traduzioni dichiararono per settimane una tariffa superata — ma stavolta senza la copia sorvegliata, che
+è ciò che allora lasciò scoperta una terza copia in `fase89`. ⓑ **Si conta dalla data più recente fra tre osservabili**
+(ultimo messaggio · check-out · ultimo movimento nel giornale). Serviva la data di chiusura di una controversia:
+`fase160.stato()` non la espone, e aggiungerla avrebbe fatto scadere **tutte le caselle del Blocco 1** — l'impronta di
+una casella copre tutti i moduli del blocco. Il massimo di tre date è più prudente di `aggiornato_ts` e non tocca
+nessun modulo dei soldi. ⓒ **Si parte dalle chat**, non dalle prenotazioni: una conversazione la cui riga in `pendenti`
+è stata purgata non sarebbe raggiungibile dall'altro verso e resterebbe in eterno. E il giro vive **dentro** il blocco
+del tick che esiste solo se esiste l'archivio delle controversie: il freno «finché si litiga non si cancella» non è
+scavalcabile per costruzione.
+
+**D20, nell'ordine.** (1) Guardie scritte, zero produzione toccata. (2) **3 rosse per il motivo giusto** — la promessa
+non esisteva da nessuna parte — e **13 rosse per il motivo sbagliato** (`ImportError`: la passata non c'era),
+registrato come tale. (3) Passo 0: la passata con la logica di **oggi**, che non cancella niente. (4) **7 rossi per i
+motivi giusti**, fra cui il difetto vivo (`'rif-vecchia' not found in []`) — e **6 verdi su una funzione vuota**, cioè
+sei guardie che in quel momento non dimostravano nulla. (5) Cura. (6) 42 verdi, uscita 0.
+
+**E i sei verdi sono stati pagati: dieci guasti veri, iniettati con l'editor, uno per volta.** Via l'ancora del
+check-out, del giornale, del messaggio · `gz.stato` «isolato» in un `except` (lo sbaglio che qualcuno farà davvero
+domani) · `pp.rimuovi` aggiunto sui soldi · via il freno delle 24 ore · via il freno della controversia aperta · la
+riga tedesca cancellata → *«['de'] != []»* · `3 ans` scritto a mano in francese → *«{'fr': ['10','3']}»* · via il
+pragma `secure_delete`. Ognuno visto rosso col messaggio esatto, e dopo ogni ripristino le tre impronte sha256 sono
+tornate identiche (`D6638A3C…`, `41035A5F…`, `85C7DD07…`).
+
+**Due cose andate storte, e le ha prese la macchina, non io.**
+1. **Una guardia stava per passare per il motivo sbagliato.** Quella sull'ancora del giornale era trattenuta dal
+   messaggio recente, non dal giornale: l'ho vista solo *progettando il guasto* da iniettare, chiedendomi quale rosso
+   avrebbe dovuto produrre. Curata datando i messaggi con l'orologio iniettabile di `fase113`, e solo dopo la
+   correzione il guasto l'ha fatta diventare rossa. È il difetto n.1 del 12 settembre in una forma nuova: **il modo
+   più affidabile di scoprirlo è chiedersi quale guasto dovrebbe farla fallire.**
+2. **Un test stava per passare a vuoto.** La spia della guardia sui byte conteneva dodici cifre di fila, `maschera_pii`
+   l'ha presa per un numero di telefono e l'ha sostituita: la spia non arrivava nel file, e «assente prima, assente
+   dopo» sarebbe stato un verde che non guarda niente. L'ha preso il **controllo della premessa** scritto dentro la
+   guardia (S1: il vuoto non è un valore, è una misura non valida).
+
+**«Cancellato» è misurato sui byte, non affermato.** Un `DELETE` normale di SQLite marca lo spazio come riutilizzabile
+e **lascia il testo nel file** (misurato nelle due direzioni: spia presente senza il pragma, assente con); il recupero
+dei record cancellati è letteratura (bring2lite, *Forensic Science International: Digital Investigation*, 2019) e il
+rimedio è documentato da SQLite (`pragma_secure_delete`). ⚠️ **Limite:** in `journal_mode=WAL` tracce possono restare
+nel file `-wal` finché non è riassorbito — nella misura fatta qui, dopo la cancellazione il `-wal` non esisteva più.
+
+⚠️ **Limiti dichiarati.** Il giornale ignora i movimenti di importo nullo, quindi una controversia chiusa senza un
+centesimo di movimento non lascia la sua data e resta l'ancora dell'ultimo messaggio · il tetto per passata tiene gli
+orfani pochi, perché il paracadute della scopa dei file annulla la pulizia quando sono troppi e su una macchina sana
+sarebbe un falso allarme (regola ferrea 10) · la casella `info@` non è raggiunta da nessun giro e l'informativa lo
+**dichiara**: è una procedura a mano, non un meccanismo · in produzione non è mai stata cancellata una chat vera,
+perché non è mai passata una prenotazione pagata.
+
+⚠️ **Due difetti visti e NON toccati, perché fuori dall'autorizzazione di questo lavoro** (restano in
+`RIPRENDI_QUI.md`): le due `PRIVACY_VERSIONE` di `fase163` e `fase185` non coincidono e l'impronta del consenso è
+calcolata sulla **cornice** `deploy/privacy.html` invece che sul testo servito, quindi la prova firmata non lega le
+parole lette mentre il §3 promette che le leghi; e `fase113.cancella_messaggi_host` — l'oblio GDPR — non azzera i byte.
+
 ### ⭐ ANCHE L'INVITO A RECENSIRE DAVA PER MANDATE LE EMAIL CHE NON PARTIVANO — 12 settembre, notte, «autorizzato»
 
 **Cosa è cambiato.** `fase83_server.py`: il giro orario `_tick_invito_recensione` ora chiama

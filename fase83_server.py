@@ -2416,6 +2416,15 @@ class RouterHTTP:
         self._pulizia_uploads_ts = _t.time()
         return self.pulizia_uploads_orfani()
 
+    def _conservazione_se_ora(self):
+        """Gancio per il tick orario: la conservazione delle comunicazioni gira al massimo
+        una volta ogni 24h, come la scopa dei file qui sopra."""
+        import time as _t
+        if _t.time() - getattr(self, "_conservazione_ts", 0) < 86400:
+            return None
+        self._conservazione_ts = _t.time()
+        return conservazione_una_passata(self._sys)
+
     def _upload_foto(self, body, headers):
         """Upload foto alloggio (base64) -> salva su UPLOAD_DIR -> ritorna l'URL /uploads/<nome>,
         che il catalogo/vetrina mostra come qualsiasi immagine. Host-auth. BLINDATO: valida il
@@ -11784,6 +11793,15 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                 except Exception:
                     logger.warning("pulizia uploads fallita (ignorata)", exc_info=True)
                 try:
+                    # La conservazione delle comunicazioni sta QUI, dentro il blocco che
+                    # esiste solo se esiste l'archivio delle controversie: cosi' il freno
+                    # «finche' si litiga non si cancella» non puo' essere scavalcato per
+                    # costruzione, non perche' qualcuno si ricorda di controllarlo.
+                    router._conservazione_se_ora()
+                except Exception:
+                    logger.warning("conservazione comunicazioni fallita (ignorata)",
+                                   exc_info=True)
+                try:
                     router._riscuoti_carta_se_ora()     # Scatto ③ (gated SCATTO3_ATTIVO)
                 except Exception:
                     logger.warning("sweep carta off-session fallito (ignorato)", exc_info=True)
@@ -12064,4 +12082,121 @@ def invito_recensione_una_passata(sistema: Any, router: Any, *,
         except Exception:
             logger.warning("invito recensione: riga saltata (isolata) | rif %s",
                            _rif_per_registro(rif), exc_info=True)
+    return esito
+
+
+def _indietro_di_anni(giorno: Any, anni: int) -> Any:
+    """Lo stesso giorno, tanti anni prima. Il 29 febbraio non esiste ogni anno: si ripiega
+    sul 28, cioe' su un confine piu' INDIETRO, che trattiene un giorno in piu' invece di
+    cancellare un giorno prima. Fra i due sbagli possibili si sceglie quello reversibile."""
+    try:
+        return giorno.replace(year=giorno.year - anni)
+    except ValueError:
+        return giorno.replace(year=giorno.year - anni, day=28)
+
+
+def conservazione_una_passata(sistema: Any, *, ora_ts: Any = None,
+                              limite: int = 50) -> Dict[str, List[str]]:
+    """UNA passata della conservazione delle comunicazioni, con l'orologio iniettabile come
+    le altre passate. Cancella le conversazioni di una prenotazione (messaggi e prove foto)
+    quando e' passato il termine che l'informativa DICHIARA, e mai finche' una controversia
+    e' aperta. Le foto restano orfane su disco e le porta via la scopa che esiste gia'.
+
+    ⛔ IL TERMINE SI LEGGE DAL DOCUMENTO CHE LO PROMETTE (`fase185`), non da una costante
+    di qui: se il documento e questo giro dicessero numeri diversi, il piu' aggressivo dei
+    due sarebbe una promessa non mantenuta, e nessuno se ne accorgerebbe.
+
+    ⛔ SI CONTA DALLA DATA PIU' RECENTE FRA QUELLE OSSERVABILI -- ultimo messaggio,
+    check-out, ultimo movimento nel giornale. Non e' prudenza generica: il check-out da
+    solo cancellerebbe le prove di una controversia CHIUSA IERI su un soggiorno vecchio, e
+    l'ultimo movimento del giornale e' il modo di sapere QUANDO una controversia si e'
+    chiusa senza dover chiedere una data nuova a un modulo dei soldi.
+
+    ⛔ FAIL-CLOSED IN OGNI RAMO. Senza l'archivio delle controversie non si cancella
+    NIENTE: «non riesco a sapere se si sta litigando» non e' «non si sta litigando». E una
+    riga che solleva per qualunque motivo si TRATTIENE, mai si cancella: fra le due
+    direzioni una si ripara domani, l'altra no.
+
+    ⚠️ LIMITI DICHIARATI (D18 punto 3):
+    · il giornale ignora i movimenti di importo nullo, quindi una controversia chiusa senza
+      un centesimo di movimento non lascia la sua data: resta l'ancora dell'ultimo
+      messaggio, che in una controversia esiste praticamente sempre ma non per definizione;
+    · il tetto per passata tiene il lavoro limitato e, di conseguenza, gli orfani pochi: il
+      paracadute della scopa dei file annulla la pulizia quando gli orfani sono troppi, e
+      un tetto alto qui lo farebbe scattare su una macchina sana (falso allarme);
+    · la casella {EMAIL} non e' raggiunta da nessun giro: l'informativa dichiara che quelle
+      email si cancellano a mano, ed e' una procedura, non un meccanismo.
+    """
+    esito: Dict[str, List[str]] = {"cancellate": [], "trattenute": []}
+    msg = getattr(sistema, "messaggistica", None)
+    gz = getattr(sistema, "garanzia", None)
+    if msg is None:
+        esito["saltata"] = "senza_messaggistica"
+        return esito
+    if gz is None:
+        logger.warning("CONSERVAZIONE saltata: senza l'archivio delle controversie non si "
+                       "puo' sapere se ce n'e' una aperta, quindi non si cancella niente")
+        esito["saltata"] = "senza_controversie"
+        return esito
+    try:
+        from fase185_testi_legali import ANNI_CONSERVAZIONE_CHAT as _anni
+    except Exception:
+        logger.error("CONSERVAZIONE saltata: il termine promesso dall'informativa non e' "
+                     "leggibile, e senza la promessa non si distrugge niente", exc_info=True)
+        esito["saltata"] = "senza_termine_promesso"
+        return esito
+    import datetime as _dt
+    import time as _t
+    ora = ora_ts if (isinstance(ora_ts, (int, float))
+                     and not isinstance(ora_ts, bool)) else _t.time()
+    oggi = _dt.datetime.fromtimestamp(ora, tz=_dt.timezone.utc).date()
+    confine = _indietro_di_anni(oggi, int(_anni))
+    try:
+        righe = msg.prenotazioni_con_ultimo_messaggio(limit=limite)
+    except Exception:
+        logger.warning("CONSERVAZIONE saltata: le conversazioni non sono leggibili",
+                       exc_info=True)
+        esito["saltata"] = "chat_non_leggibili"
+        return esito
+    pp = getattr(sistema, "pagamenti_pendenti", None)
+    fin = getattr(sistema, "finanza", None)
+    for r in righe:
+        rif = str((r or {}).get("prenotazione_id") or "")
+        if not rif:
+            continue
+        try:
+            stato = gz.stato(rif)
+            if stato is not None and stato.get("stato") == "contestato":
+                esito["trattenute"].append(rif)
+                continue
+            ultima = _dt.datetime.fromtimestamp(int(r.get("ultimo_ts") or 0),
+                                                tz=_dt.timezone.utc).date()
+            if pp is not None:
+                riga = pp.info(rif)
+                if riga:
+                    try:
+                        ultima = max(ultima,
+                                     _dt.date.fromisoformat(str(riga.get("check_out"))))
+                    except ValueError:
+                        # data illeggibile: resta l'ancora del messaggio, mai nessuna
+                        logger.warning("CONSERVAZIONE | rif %s | check-out illeggibile: "
+                                       "conto dall'ultimo messaggio",
+                                       _rif_per_registro(rif))
+            if fin is not None:
+                for mov in (fin.movimenti(rif) or []):
+                    ultima = max(ultima, _dt.datetime.fromtimestamp(
+                        int((mov or {}).get("ts") or 0), tz=_dt.timezone.utc).date())
+            if ultima > confine:
+                esito["trattenute"].append(rif)
+                continue
+            quanti = msg.cancella_thread(rif)
+            logger.warning("CONSERVAZIONE | rif %s | cancellati %d messaggi: termine "
+                           "passato (data piu' recente %s, confine %s)",
+                           _rif_per_registro(rif), quanti, ultima, confine)
+            esito["cancellate"].append(rif)
+        except Exception:
+            logger.warning("CONSERVAZIONE | rif %s | TRATTENUTA: non si e' potuto "
+                           "stabilire se il termine e' passato",
+                           _rif_per_registro(rif), exc_info=True)
+            esito["trattenute"].append(rif)
     return esito
