@@ -325,7 +325,18 @@ def link_contratto(lang: Any = "it") -> str:
 # contratto. Si registra come RIGA A PARTE (documento diverso) e NON come colonna nuova:
 # cosi' la stringa firmata resta identica e le prove gia' archiviate restano INTEGRE.
 DOCUMENTO_PRIVACY = "privacy_gdpr"
-PRIVACY_VERSIONE = "2026-07-20"
+
+# ⛔ LA VERSIONE DELLA PROVA E' QUELLA STAMPATA NELL'INFORMATIVA, E VIENE DA LI'.
+# Fino al 2026-09-12 erano due numeri indipendenti: qui 2026-07-20, nell'informativa che la
+# persona legge 2026-09-12. Chi si registrava leggeva una versione e firmava l'altra, e
+# nessuno dei due era rotto -- erano d'accordo con se stessi e in disaccordo fra loro
+# (famiglia 20.2 del METODO). Il ripiego qui sotto esiste solo perche' un'informativa
+# illeggibile non deve impedire una registrazione, e una guardia pretende che combaci.
+_PRIVACY_VERSIONE_RIPIEGO = "2026-09-12"
+try:
+    from fase185_testi_legali import PRIVACY_VERSIONE
+except Exception:          # pragma: no cover - il motore dei testi non si importa
+    PRIVACY_VERSIONE = _PRIVACY_VERSIONE_RIPIEGO
 
 # ── LEGAME IDENTITA' VERIFICATA ↔ FIRMA DEL CONTRATTO (2026-07-21) ────────────
 # Senza questo, la prova dice "qualcuno da questo IP ha accettato quel testo": NON dice
@@ -347,19 +358,38 @@ _privacy_cache: Dict[str, str] = {}
 
 
 def testo_privacy() -> str:
-    """Testo su cui si calcola l'impronta del consenso privacy: la pagina REALE
-    (deploy/privacy.html, quella che l'utente vede). Se illeggibile -> testo di riserva,
-    cosi' il consenso si registra comunque (mai bloccare una registrazione per un file)."""
+    """Testo su cui si calcola l'impronta del consenso: il DOCUMENTO SERVITO nella lingua
+    che fa fede, cioe' le PAROLE CHE LA PERSONA LEGGE.
+
+    ⛔ PRIMA ERA `deploy/privacy.html`, e quella scelta era diventata falsa senza che
+    niente si rompesse: dal giorno in cui le pagine legali sono diventate GUSCI quel file
+    non contiene piu' il testo — le parole arrivano da `/api/legale/documento`. L'impronta
+    legava la CORNICE, quindi due informative diverse servite dalla stessa cornice avevano
+    la STESSA impronta. Misurato il 2026-09-12: aggiunta una clausola all'informativa,
+    l'impronta del consenso non e' cambiata di un carattere — mentre il documento promette
+    che quell'impronta dimostri COSA e' stato accettato. E' la famiglia 20.3 del METODO,
+    la misura che invecchia: non e' diventata rossa, e' diventata MUTA.
+
+    Ripiego, in ordine: la pagina, poi il testo di riserva — cosi' il consenso si registra
+    comunque, perche' un file illeggibile non deve impedire una registrazione."""
     if "t" not in _privacy_cache:
-        testo = _PRIVACY_FALLBACK
+        testo = ""
         try:
-            import os
-            p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                             "deploy", "privacy.html")
-            with open(p, encoding="utf-8") as f:
-                testo = f.read()
+            from fase185_testi_legali import LINGUA_CHE_FA_FEDE
+            from fase185_testi_legali import testo_privacy as _servito
+            testo = _servito(LINGUA_CHE_FA_FEDE) or ""
         except Exception:
-            logger.warning("privacy.html non leggibile: uso il testo di riserva")
+            logger.warning("informativa non leggibile dal motore dei testi", exc_info=True)
+        if not testo:
+            try:
+                import os
+                p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                 "deploy", "privacy.html")
+                with open(p, encoding="utf-8") as f:
+                    testo = f.read()
+            except Exception:
+                logger.warning("privacy.html non leggibile: uso il testo di riserva")
+                testo = _PRIVACY_FALLBACK
         _privacy_cache["t"] = testo
     return _privacy_cache["t"]
 

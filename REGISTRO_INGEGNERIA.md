@@ -403,6 +403,89 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🔏 «CANCELLATO» E «FIRMATO» ERANO PAROLE, NON MISURE — 12 settembre, «autorizzato fino alla fine»
+
+**Cosa è cambiato.** `fase163_accettazioni`: `PRIVACY_VERSIONE` viene **da** `fase185` (un numero solo, con ripiego
+sorvegliato) e `testo_privacy()` firma il **testo servito** nella lingua che fa fede invece della cornice HTML.
+`fase156_erasure`: non si fida più della sua lista di cinque archivi — cerca negli archivi **veri** (`_dove_e_rimasto`,
+stesso criterio di `fase202`), `ok` diventa falso se resta sporco un archivio **non dichiarato**, e ciò che resta per
+legge sta in `TRATTENUTI_PER_LEGGE` col perché. `PRAGMA secure_delete=ON` sulla **connessione** di `fase113`, `fase88`,
+`fase57`, `fase162`, `fase117`, `fase123`, `fase203`. `fase83_server`: il giro della conservazione scrive il suo
+**battito**. Attrezzo nuovo `collaudi/esame_oblio.py`. Guardie nuove: `TestOgniCancellazioneDichiaraSeAzzeraIByte`
+(test_pipeline_ci), `TestOgniPromessaDiConservazioneHaIlSuoMeccanismo` e
+`TestLaProvaDelConsensoLegaLeParoleCheLaPersonaHaLETTO` (test_testi_legali), `TestIlGiroDellOblioEPercorsoDAVVERO` e
+l'oblio sui byte (test_pulizia_uploads). **STATO: acceso al prossimo deploy.**
+
+**Cosa era rotto, e nessuno di questi si vedeva provando il sito.**
+1. **La prova firmata del consenso copriva la CORNICE.** Dal giorno in cui le pagine legali sono diventate gusci,
+   `deploy/privacy.html` non contiene più il testo. Misurato: aggiunta una clausola all'informativa, l'impronta del
+   consenso **identica** — mentre il paragrafo 3 promette che dimostri *cosa* è stato accettato. E le due
+   `PRIVACY_VERSIONE` erano numeri indipendenti: si leggeva `2026-09-12` e si firmava `2026-07-20`.
+2. **20 funzioni cancellavano, 4 azzeravano i byte.** Fra quelle che non azzeravano c'era `fase88.cancella_host`,
+   cioè l'oblio di una persona: email, telefono, ragione sociale, impronta della password col suo sale.
+3. **L'oblio diceva `ok=True` guardando 5 archivi su 27**, e il suo file *dichiarava* che aggiungerne uno non richiede
+   toccarlo — cioè: un archivio nuovo saltato in silenzio.
+4. **Il giro della conservazione taceva** quando non cancellava: «nessuna riga» significava due cose opposte.
+5. **L'informativa promette cinque tempi, il codice ne applica uno.**
+
+**La cura, e perché in questa forma.** Il pragma sta sulla **connessione** e non nelle singole funzioni: una lista di
+funzioni da ricordare invecchia, una connessione no. E il verso della dipendenza fra `fase163` e `fase185` è voluto: il
+codice che firma legge il documento che **promette**, non viceversa.
+
+**E la parte che risponde alla domanda vera del fondatore** — *«si fa una cosa e si ritorna indietro»*. La risposta
+misurata è che si riparavano **istanze** invece di **famiglie**. Quindi tre contatori invece di tre riparazioni:
+· **`collaudi/esame_oblio.py` — il giro intero del «cancellami», percorso per la prima volta** (famiglia 20.1 del
+METODO, col denominatore dichiarato): **8 anelli su 8**, e col guasto iniettato **rosso con 4**. Conta gli archivi dai
+FILE e cerca il dato in ogni tabella e ogni colonna di testo: un archivio nato domani entra da solo.
+· **il cricchetto delle cancellazioni**: ogni modulo che cancella deve avere la sua riga — *dati di una persona? sì/no,
+e perché*. Visto rosso togliendo il pragma da `fase117`: *«Lists differ: ['fase117_wishlist.py'] != []»*.
+· **il cricchetto delle promesse**: ogni categoria del paragrafo 4 deve dire con quale meccanismo si mantiene o perché
+non ce l'ha. Oggi 1 con meccanismo, 4 dichiarate scoperte — contate, non dimenticate.
+
+**Tre cose andate storte per strada, tutte mie, tutte prese da una macchina.**
+1. **L'esame accusava un innocente.** Al primo giro dopo la cura restava rosso su `accettazioni.db` «il dato è ancora
+   nei byte» — ma quell'archivio è **trattenuto per legge**: il dato lì ci deve stare. Cercarlo era un **rosso falso**,
+   e un falso allarme è un difetto quanto un allarme mancato (ferrea 10). I byte si guardano solo dove il dato doveva
+   sparire.
+2. **Una premessa che non guardavo.** Il cancello statico ha segnalato `byte_prima` assegnata e mai usata: era la
+   prova che il dato **fosse nei byte prima**. Senza, «non è nei byte dopo» non dimostra niente — assente prima,
+   assente dopo. Non l'ho cancellata: l'ho **usata** come seconda premessa.
+3. **Una chiave che non combaciava col testo vero**, scritta a memoria invece che letta: la guardia delle promesse è
+   diventata rossa subito, ed era lei ad avere ragione.
+
+**E ALTRE TRE LE HA TROVATE LA SUITE INTERA, diventata ROSSA con 9 fallimenti.** Nessuna delle tre si vedeva provando i
+pezzi uno per uno, ed e' esattamente il motivo per cui la regola ferrea 6 pretende la suite intera.
+1. **Avevo trasformato un «non eseguito» in un fallimento.** Legare `ok` alla scansione degli archivi veri significava
+   che ogni sistema **in memoria** — cioe' tutti i banchi — usciva `ok=False`: **otto guardie sane diventate rosse**.
+   «Non eseguito» e' una terza cosa, non e' «pulito» e non e' «sporco», e va detta con la sua parola. La pretesa che
+   la scansione sia partita e' passata dove ha senso: dentro `esame_oblio`, dove gli archivi sono file veri.
+2. **Avevo appeso una posizione legale al NOME DI UN FILE.** `TRATTENUTI_PER_LEGGE` era indicizzato su
+   `accettazioni.db`, ma quello stesso archivio nei banchi si chiama `a.db` o `db_accettazioni.db`: il nome dipende
+   dalla **configurazione**, non dal prodotto. La dichiarazione non combaciava, l'oblio usciva `ok=False` e la rotta
+   rispondeva **409 su un host pulito**. La chiave giusta e' la **tabella**, che sta nello schema ed e' la stessa
+   ovunque.
+3. **Il livello di un messaggio non e' un dettaglio.** La riga «scansione non eseguita» l'avevo scritta come
+   `warning`, e una guardia sana pretende che ogni allarme su un passo fallito porti la traccia dell'eccezione: la
+   mia non ne aveva nessuna, perche' non era un fallimento. Scritta come `info` dice il vero.
+
+**E la quarta, che e' la piu' istruttiva perche' la guardia aveva ragione DUE volte di fila.** Alzando la versione
+dell'informativa e' diventato rosso `test_una_versione_vecchia_del_contratto_obbliga_a_riaccettare`: il corpus di dati
+realistici teneva una **copia a mano** della versione (`PRIVACY_VERSIONE_CORRENTE`, col commento «deve combaciare a
+mano») ed era rimasta indietro. Il primo rimedio — fargliela importare dal prodotto — ha fatto diventare rosso
+`test_il_corpus_e_scritto_senza_il_prodotto`, e **aveva ragione anche lui**: quel corpus non deve importare il
+prodotto, o smette di essere un oracolo indipendente e prova soltanto che il prodotto sa rileggere se stesso. ⇒ La
+copia resta, ma **sorvegliata** (`TestIlBancoDeiDatiRealisticiNonRestaINDIETRO`). 🔑 **Una copia dichiarata e
+controllata e' un oracolo; una copia dichiarata e non controllata e' una bomba a orologeria con un commento sopra** —
+e per la versione del contratto quel commento c'era da mesi, senza nessuno che lo controllasse.
+
+⚠️ **Limiti dichiarati.** `fase15_idempotency` tiene in cache anche la **risposta** già prodotta, che in qualche rotta
+può contenere dati di una persona, e sta sul percorso caldo: non è misurato quali rotte · `fase16_outbox` e
+`fase33_persistenza` passano da un archivio **astratto**, non da sqlite3: il pragma non si applica · in `journal_mode=
+WAL` tracce possono restare nel file `-wal` · le righe di `TRATTENUTI_PER_LEGGE` sono **posizioni legali** e vanno
+lette da un avvocato: ripetono ciò che l'informativa già dichiara, ma ripetere non è validare · i quattro tempi
+dell'informativa senza meccanismo chiedono **prima una decisione** (cosa sono i «dati di account» quando restano
+obblighi fiscali sugli stessi fatti? quanto dura «il periodo di prescrizione»?).
+
 ### 🗄️ LE CHAT NON SI CANCELLAVANO MAI, E L'INFORMATIVA NON PROMETTEVA NIENTE — 12 settembre, «autorizzato»
 
 **Cosa è cambiato.** `fase185_testi_legali.py`: nuova costante `ANNI_CONSERVAZIONE_CHAT`, `_componi` la sostituisce

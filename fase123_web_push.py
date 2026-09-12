@@ -61,6 +61,13 @@ class WebPush:
             con.execute("PRAGMA journal_mode=WAL")
         except sqlite3.Error:
             pass
+        try:
+            # ⛔ Qui dentro c'e' l'indirizzo del dispositivo di una persona (un
+            # identificativo che la segue), e un `DELETE` di SQLite lo lascia leggibile
+            # nelle pagine libere. Il pragma sta sulla CONNESSIONE: vale anche per domani.
+            con.execute("PRAGMA secure_delete=ON")
+        except sqlite3.Error:
+            pass
         return con
 
     def inizializza_schema(self) -> None:

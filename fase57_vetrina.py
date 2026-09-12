@@ -806,11 +806,21 @@ class CatalogoVetrina:
             con.close()
 
     def cancella_alloggi_host(self, host_id: Any) -> int:
-        """CANCELLAZIONE TOTALE annunci+immagini di un host (diritto all'oblio / pulizia)."""
+        """CANCELLAZIONE TOTALE annunci+immagini di un host (diritto all'oblio / pulizia).
+
+        ⛔ SOVRASCRIVE: un annuncio porta l'indirizzo dell'immobile, e un `DELETE` di SQLite
+        lascia il contenuto nelle pagine libere del file, da dove si rilegge con un editor
+        esadecimale. Misurato il 2026-09-12 percorrendo il giro intero dell'oblio
+        (`collaudi/esame_oblio.py`): dopo una cancellazione riuscita il dato era ancora nei
+        byte di `catalogo.db`."""
         if not (isinstance(host_id, str) and host_id):
             return 0
         con = self._apri()
         try:
+            try:
+                con.execute("PRAGMA secure_delete=ON")
+            except sqlite3.Error:
+                logger.warning("secure_delete non applicabile su questo database")
             with con:
                 con.execute("DELETE FROM alloggio_immagini WHERE alloggio_id IN "
                             "(SELECT slug FROM alloggi WHERE host_id=?)", (host_id,))

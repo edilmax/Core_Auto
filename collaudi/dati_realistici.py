@@ -104,7 +104,15 @@ REF_ANNO_PRIMA = "IDEM-2025-9001"      # esercizio fiscale precedente
 # riaccettare` diventa rossa. E' il segnale, non un fastidio.
 CONTRATTO_VERSIONE_CORRENTE = "2026-09-07"    # deve combaciare con fase163 (a mano)
 CONTRATTO_VERSIONE_VECCHIA = "2026-01-11"     # una versione DAVVERO vecchia, mai corrente
-PRIVACY_VERSIONE_CORRENTE = "2026-07-20"
+# ⛔ COPIA VOLUTA, E ADESSO SORVEGLIATA. Questo corpus non importa il prodotto di proposito
+# (`test_il_corpus_e_scritto_senza_il_prodotto`): se lo importasse, proverebbe solo che il
+# prodotto sa rileggere se stesso, e smetterebbe di essere un oracolo indipendente. Il
+# prezzo e' una copia, e il 2026-09-12 quella copia e' rimasta indietro: l'informativa e'
+# passata a una versione nuova e qui restava la vecchia, quindi il banco dichiarava «gia'
+# accettata» una versione che non esisteva piu'. Il rimedio non e' togliere la copia (che
+# romperebbe l'indipendenza) ma SORVEGLIARLA: `test_pipeline_ci.
+# TestIlBancoDeiDatiRealisticiNonRestaINDIETRO` pretende che combaci col prodotto.
+PRIVACY_VERSIONE_CORRENTE = "2026-09-12"
 
 TITOLO_ROMA = "Attico «da sogno» a Trastevere \U0001f3db️ — l’affaccio sulle cupole"
 DESCRIZIONE_LUNGA = ("Loft su due livelli nel cuore di Shoreditch. " * 200)[:8000]

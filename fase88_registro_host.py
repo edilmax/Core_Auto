@@ -634,11 +634,25 @@ class RegistroHost:
             con.close()
 
     def cancella_host(self, host_id: Any) -> int:
-        """CANCELLAZIONE TOTALE dell'account host (diritto all'oblio / pulizia)."""
+        """CANCELLAZIONE TOTALE dell'account host (diritto all'oblio / pulizia).
+
+        ⛔ SOVRASCRIVE, e qui piu' che altrove: questa riga porta email, telefono, ragione
+        sociale, l'impronta della password col suo sale, i gettoni di messaggistica e
+        l'identificativo del conto di pagamento. Un `DELETE` normale di SQLite marca lo
+        spazio come riutilizzabile e LASCIA il contenuto nelle pagine libere: la riga non si
+        interroga piu' e il testo si rilegge con un editor esadecimale. Misurato il
+        2026-09-12 percorrendo il giro intero dell'oblio (`collaudi/esame_oblio.py`): dopo
+        una cancellazione riuscita l'email della persona era ancora nei byte del file.
+        ⚠️ LIMITE: in `journal_mode=WAL` tracce possono restare nel file `-wal` finche' non
+        viene riassorbito, e il pragma non le raggiunge."""
         if not (isinstance(host_id, str) and host_id):
             return 0
         con = self._apri()
         try:
+            try:
+                con.execute("PRAGMA secure_delete=ON")
+            except sqlite3.Error:
+                logger.warning("secure_delete non applicabile su questo database")
             with con:
                 cur = con.execute("DELETE FROM host WHERE host_id=?", (host_id,))
             return cur.rowcount if (cur.rowcount and cur.rowcount > 0) else 0

@@ -14022,5 +14022,164 @@ class TestLEsameDelBackupNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
         self.assertGreaterEqual(len(esame.NON_GUARDA), 5)
 
 
+class TestIlBancoDeiDatiRealisticiNonRestaINDIETRO(unittest.TestCase):
+    """Il corpus di dati realistici tiene una COPIA delle versioni dei documenti legali, e
+    la copia e' voluta: `test_il_corpus_e_scritto_senza_il_prodotto` gli vieta di importare
+    il prodotto, altrimenti smetterebbe di essere un oracolo indipendente e proverebbe solo
+    che il prodotto sa rileggere se stesso.
+
+    ⛔ Il prezzo dell'indipendenza e' che quella copia puo' restare indietro — ed e'
+    successo il 2026-09-12: l'informativa e' passata a una versione nuova e il banco
+    continuava a dichiarare «gia' accettata» quella vecchia. Non si e' rotto niente di
+    visibile: e' diventata rossa una guardia sulla ri-accettazione, e per un momento
+    sembrava che il difetto fosse suo.
+
+    🔑 Il rimedio non e' togliere la copia: e' SORVEGLIARLA. Una copia dichiarata e
+    controllata e' un oracolo; una copia dichiarata e non controllata e' una bomba a
+    orologeria con un commento sopra. Prima di oggi, per la versione del contratto, c'era
+    scritto «deve combaciare con fase163 (a mano)» e nessuno lo controllava.
+    """
+
+    def test_le_versioni_dei_documenti_combaciano_col_prodotto(self):
+        from collaudi import dati_realistici as banco
+        import fase163_accettazioni as acc
+        self.assertEqual(
+            banco.PRIVACY_VERSIONE_CORRENTE, acc.PRIVACY_VERSIONE,
+            "il banco dei dati realistici dichiara una versione dell'informativa diversa "
+            "da quella del prodotto: le prove che costruisce descrivono un mondo che non "
+            "esiste piu'")
+        self.assertEqual(
+            banco.CONTRATTO_VERSIONE_CORRENTE, acc.CONTRATTO_HOST_VERSIONE,
+            "il banco dei dati realistici dichiara una versione del contratto diversa da "
+            "quella del prodotto")
+
+    def test_la_versione_VECCHIA_resta_davvero_vecchia(self):
+        """L'altra meta': se la «vecchia» diventasse per caso la corrente, il collaudo sulla
+        ri-accettazione proverebbe il contrario di quello che dice."""
+        from collaudi import dati_realistici as banco
+        import fase163_accettazioni as acc
+        self.assertNotIn(banco.CONTRATTO_VERSIONE_VECCHIA,
+                         (acc.CONTRATTO_HOST_VERSIONE, acc.PRIVACY_VERSIONE),
+                         "la versione dichiarata «vecchia» e' diventata una corrente")
+
+
+class TestOgniCancellazioneDichiaraSeAzzeraIByte(unittest.TestCase):
+    """⛔ IL CRICCHETTO DELLE CANCELLAZIONI — perche' la terza istanza non nasca.
+
+    Il 12 settembre 2026 il censimento ha detto: **20 funzioni cancellano righe, 4 azzerano
+    i byte**. Un `DELETE` di SQLite marca lo spazio come riutilizzabile e LASCIA il
+    contenuto nelle pagine libere del file: la riga non si interroga piu' e il testo si
+    rilegge con un editor esadecimale. Su un archivio che tiene email, telefoni e l'impronta
+    di una password, «cancellato» diventa una parola che non corrisponde a niente.
+
+    ⛔ E IL DIFETTO VERO NON ERA LA RIGA MANCANTE: era che nessuno contava. Ogni riparazione
+    chiudeva l'istanza che si aveva davanti, e la successiva nasceva in silenzio. Questa
+    guardia non ripara niente: **pretende che ogni modulo che cancella abbia la sua riga
+    scritta** — contiene dati di una persona? si'/no, e perche'. Un modulo nuovo che cancella
+    e non e' dichiarato qui diventa rosso LO STESSO GIORNO.
+
+    ⛔ E il pragma si cerca nel MODULO, non nella singola funzione, perche' sta sulla
+    connessione (`_apri`): cosi' copre anche le cancellazioni che nasceranno dentro quel
+    modulo, e una lista di funzioni da ricordare non deve esistere.
+    """
+
+    # {modulo: (contiene dati di una persona?, perche')}
+    CANCELLAZIONI = {
+        "fase113_messaggistica.py": (True, "il contenuto delle chat e le prove foto citate"),
+        "fase88_registro_host.py": (
+            True, "email, telefono, ragione sociale, impronta della password col suo sale, "
+                  "gettoni di messaggistica, identificativo del conto di pagamento"),
+        "fase57_vetrina.py": (True, "l'indirizzo dell'immobile di una persona"),
+        "fase162_pagamenti_pendenti.py": (True, "l'email di chi prenota e il corpo della "
+                                                "prenotazione"),
+        "fase117_wishlist.py": (True, "cosa una persona ha messo fra i preferiti"),
+        "fase123_web_push.py": (True, "l'indirizzo del dispositivo, un identificativo che "
+                                      "segue la persona"),
+        "fase203_ical_orologio.py": (True, "l'indirizzo del calendario dell'host, che spesso "
+                                           "porta il suo identificativo altrove"),
+        "fase13_protocollo_finale.py": (
+            False, "gettoni casuali usa-e-getta (nonce), nessun contatto. E sta sul percorso "
+                   "CALDO: si potano a ogni richiesta, e sovrascrivere li' costerebbe su ogni "
+                   "chiamata senza proteggere nessun dato"),
+        "fase15_idempotency.py": (
+            False, "chiavi di idempotenza, sul percorso caldo. ⚠️ LIMITE DICHIARATO, e va "
+                   "guardato: la cache tiene anche la RISPOSTA gia' prodotta, che in qualche "
+                   "rotta puo' contenere dati di una persona. Non e' stato misurato quali"),
+        "fase16_outbox.py": (
+            False, "⚠️ LIMITE DICHIARATO: il `payload` della coda puo' contenere dati di una "
+                   "persona, ma questo modulo passa da un archivio ASTRATTO (`ds.execute`) e "
+                   "non da sqlite3: il pragma non si applica, serve un rimedio suo"),
+        "fase33_persistenza.py": (
+            False, "⚠️ LIMITE DICHIARATO: tiene il contenuto delle conversazioni dell'impianto "
+                   "vecchio, ma passa dallo stesso archivio astratto di fase16"),
+        "fase58_channel_manager.py": (False, "disponibilita' e blocchi di calendario: date, "
+                                             "non persone"),
+        "fase131_payout_dashboard.py": (False, "identificativo dell'host e un importo, senza "
+                                               "nessun contatto: pseudonimo, non anagrafica"),
+    }
+
+    def _censimento(self):
+        """{modulo: azzera i byte?} per ogni modulo che esegue un DELETE. Letto
+        dall'ALBERO SINTATTICO: un commento che nomina `DELETE FROM` non conta, ed e' lo
+        sbaglio S6 (una guardia che conta nel sorgente la soddisfa un commento)."""
+        import ast
+        import glob as _glob
+        import io as _io
+        fuori = {}
+        for percorso in sorted(_glob.glob(os.path.join(QUI, "fase*.py"))):
+            nome = os.path.basename(percorso)
+            with _io.open(percorso, encoding="utf-8") as f:
+                try:
+                    albero = ast.parse(f.read())
+                except SyntaxError:
+                    continue
+            cancella = pragma = False
+            for chiamata in [n for n in ast.walk(albero) if isinstance(n, ast.Call)]:
+                testo = " ".join(
+                    v.value for a in chiamata.args for v in ast.walk(a)
+                    if isinstance(v, ast.Constant) and isinstance(v.value, str)).upper()
+                if "DELETE FROM" in testo:
+                    cancella = True
+                if "SECURE_DELETE" in testo:
+                    pragma = True
+            if cancella:
+                fuori[nome] = pragma
+        return fuori
+
+    def test_ogni_modulo_che_cancella_ha_la_sua_riga(self):
+        trovati = self._censimento()
+        self.assertTrue(trovati, "misura non valida: nessun modulo che cancella trovato")
+        senza_riga = sorted(set(trovati) - set(self.CANCELLAZIONI))
+        self.assertEqual(
+            senza_riga, [],
+            "questi moduli cancellano e NESSUNO ha scritto se quello che cancellano sono "
+            "dati di una persona: %s. Si scrive la riga in CANCELLAZIONI, non si toglie "
+            "questa guardia." % senza_riga)
+
+    def test_chi_cancella_dati_di_una_persona_AZZERA_i_byte(self):
+        trovati = self._censimento()
+        bugiardi = sorted(m for m, personali in
+                          ((m, self.CANCELLAZIONI.get(m, (None, ""))[0]) for m in trovati)
+                          if personali and not trovati[m])
+        self.assertEqual(
+            bugiardi, [],
+            "questi moduli cancellano dati di una persona e li lasciano LEGGIBILI nei byte "
+            "del file: %s" % bugiardi)
+
+    def test_ogni_NO_porta_il_suo_perche(self):
+        """Un «no» senza motivo non e' una decisione: e' una dimenticanza con l'aria di una
+        decisione. E un modulo dichiarato che non cancella piu' va tolto dalla riga, o
+        l'elenco comincia a parlare di codice che non esiste (famiglia 20.3 del METODO)."""
+        trovati = self._censimento()
+        for modulo, (personali, motivo) in sorted(self.CANCELLAZIONI.items()):
+            self.assertIn(modulo, trovati,
+                          "%s e' dichiarato qui ma non cancella piu' niente: la riga parla "
+                          "di codice che non c'e'" % modulo)
+            if not personali:
+                self.assertTrue(str(motivo).strip(),
+                                "%s dice «non sono dati di una persona» senza dire perche'"
+                                % modulo)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

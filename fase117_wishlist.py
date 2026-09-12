@@ -45,6 +45,13 @@ class Wishlist:
             con.execute("PRAGMA journal_mode=WAL")
         except sqlite3.Error:
             pass
+        try:
+            # ⛔ Qui dentro c'e' cosa una persona ha messo fra i preferiti, e un `DELETE` di
+            # SQLite lo lascia leggibile nelle pagine libere del file. Il pragma sta sulla
+            # CONNESSIONE, cosi' vale anche per le cancellazioni che nasceranno domani.
+            con.execute("PRAGMA secure_delete=ON")
+        except sqlite3.Error:
+            pass
         return con
 
     def inizializza_schema(self) -> None:
