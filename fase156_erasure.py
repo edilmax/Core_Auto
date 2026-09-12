@@ -41,6 +41,17 @@ logger = logging.getLogger(__name__)
 # la dichiarazione non combaciava, l'oblio usciva `ok=False` e la rotta rispondeva 409 su
 # un host pulito. Una posizione legale non puo' stare appesa a come qualcuno ha chiamato un
 # file: la tabella sta nello schema ed e' la stessa ovunque.
+# ⛔ E DEV'ESSERE UNA TABELLA CHE ESISTE. Il 2026-09-12, accendendo il sistema vero (23
+# archivi, 35 tabelle), due chiavi su quattro nominavano tabelle inesistenti: si leggeva
+# `note_credito` mentre la tabella si chiama `note`, e `debiti_host` mentre si chiama
+# `debiti` — `debiti_host` e' il nome di un METODO di fase177, non di una tabella. Erano
+# nomi presi dalla memoria invece che da un `grep` (sbaglio S2). Il danno non e' un dato
+# che sopravvive di nascosto: e' il contrario. La tabella vera non combaciava con nessuna
+# chiave, finiva fra le «non dichiarate», `ok` usciva False — e un host con una nota di
+# credito si sentiva rispondere ERRORE a una richiesta di cancellazione che per legge deve
+# andare a buon fine. Lo sorveglia `TestOgniPosizioneLegaleNOMINAUnaTabellaCHEESISTE` in
+# `test_fase156_erasure.py`, che accende il sistema e interroga `sqlite_master`: una chiave
+# nuova intestata a una tabella che non esiste diventa rossa lo stesso giorno.
 TRATTENUTI_PER_LEGGE: Dict[str, str] = {
     "accettazioni":
         "prove di accettazione: conservate per la durata del rapporto e per il periodo di "
@@ -51,9 +62,9 @@ TRATTENUTI_PER_LEGGE: Dict[str, str] = {
         "scritture contabili: 10 anni dall'ultima registrazione (art. 2220 c.c.), e oltre "
         "finche' non sono definiti gli accertamenti (art. 22 DPR 600/1973). "
         "L'informativa lo dichiara al paragrafo 4.",
-    "note_credito":
+    "note":
         "documenti contabili: stesso termine delle scritture (art. 2220 c.c.).",
-    "debiti_host":
+    "debiti":
         "partite contabili aperte verso l'host: stesso termine delle scritture "
         "(art. 2220 c.c.); cancellarle farebbe sparire un credito o un debito.",
 }

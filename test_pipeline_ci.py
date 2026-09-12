@@ -14121,10 +14121,37 @@ class TestOgniCancellazioneDichiaraSeAzzeraIByte(unittest.TestCase):
     def _censimento(self):
         """{modulo: azzera i byte?} per ogni modulo che esegue un DELETE. Letto
         dall'ALBERO SINTATTICO: un commento che nomina `DELETE FROM` non conta, ed e' lo
-        sbaglio S6 (una guardia che conta nel sorgente la soddisfa un commento)."""
+        sbaglio S6 (una guardia che conta nel sorgente la soddisfa un commento).
+
+        ⛔ E SI GUARDA FUNZIONE PER FUNZIONE, non il modulo in blocco. Fino al 2026-09-12
+        bastava che la parola `SECURE_DELETE` comparisse in UNA chiamata qualunque del
+        modulo: cosi' un `logger.warning("secure_delete non applicabile...")` accanto al
+        pragma rendeva conforme un modulo dove una seconda funzione cancellava senza
+        protezione. Misurato: togliendo il pragma vero da `fase88`, `fase113` e `fase57` la
+        guardia restava VERDE — i tre moduli con i dati piu' delicati (password col sale,
+        chat, indirizzo di casa) — mentre gridava solo su `fase117`, l'unico senza quella
+        riga di registro, ed e' proprio li' che la prova «vista rossa» era stata fatta.
+        ⛔ E il difetto non era teorico: `fase57.elimina_alloggio` cancellava l'annuncio di
+        un host lasciandogli l'indirizzo di casa leggibile nei byte, e questa guardia diceva
+        «conforme». Sul file com'era su `efc5b2c` la forma nuova lo GRIDA («scoperte:
+        pubblica, elimina_alloggio») e quella vecchia TACE.
+
+        Conforme = ogni funzione che cancella ha il pragma in casa propria, OPPURE il modulo
+        apre le connessioni in una funzione che il pragma ce l'ha e che non cancella (la
+        forma di `fase117`, `fase123`, `fase162`, `fase203`). ⛔ Pretendere SOLO la seconda
+        renderebbe rossi `fase113` e `fase88`, che sono sani e mettono il pragma dentro ogni
+        funzione che cancella: sarebbero due falsi allarmi nuovi al posto di uno vecchio.
+        """
         import ast
         import glob as _glob
         import io as _io
+
+        def _testi(nodo):
+            for chiamata in [n for n in ast.walk(nodo) if isinstance(n, ast.Call)]:
+                yield " ".join(
+                    v.value for a in chiamata.args for v in ast.walk(a)
+                    if isinstance(v, ast.Constant) and isinstance(v.value, str)).upper()
+
         fuori = {}
         for percorso in sorted(_glob.glob(os.path.join(QUI, "fase*.py"))):
             nome = os.path.basename(percorso)
@@ -14133,17 +14160,20 @@ class TestOgniCancellazioneDichiaraSeAzzeraIByte(unittest.TestCase):
                     albero = ast.parse(f.read())
                 except SyntaxError:
                     continue
-            cancella = pragma = False
-            for chiamata in [n for n in ast.walk(albero) if isinstance(n, ast.Call)]:
-                testo = " ".join(
-                    v.value for a in chiamata.args for v in ast.walk(a)
-                    if isinstance(v, ast.Constant) and isinstance(v.value, str)).upper()
-                if "DELETE FROM" in testo:
+            cancella, apertura, scoperte = False, False, False
+            for fn in [n for n in ast.walk(albero)
+                       if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]:
+                testi = list(_testi(fn))
+                canc = any("DELETE FROM" in t for t in testi)
+                prag = any("SECURE_DELETE" in t for t in testi)
+                if canc:
                     cancella = True
-                if "SECURE_DELETE" in testo:
-                    pragma = True
+                if prag and not canc:
+                    apertura = True      # apre la connessione: copre tutto il modulo
+                if canc and not prag:
+                    scoperte = True
             if cancella:
-                fuori[nome] = pragma
+                fuori[nome] = apertura or not scoperte
         return fuori
 
     def test_ogni_modulo_che_cancella_ha_la_sua_riga(self):
