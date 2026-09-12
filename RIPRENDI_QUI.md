@@ -518,15 +518,77 @@ quattro ruoli è l'unico mai percorso da capo a fondo, ed è quello che porta i 
   nella privacy (1c). Limiti: allegati fino a ~20-25 MB, i link possono scadere, l'host vede la riga in chat e non il
   video, i video stanno fuori dal sistema (punto per l'avvocato). L'admin la chat la può solo leggere, e `fase113.invia`
   rifiuta ogni mittente che non sia host o cliente: non si cambia.
-  **1c — Conservazione: UNA REGOLA SOLA A 2 ANNI. ✅ «autorizzato» (11/9) e «va bene una regola sola a 2 anni».** Tutte
-  le chat e le prove si cancellano **2 anni dopo il check-out, o dopo la chiusura della controversia se è più tardi**;
-  mai finché una controversia è aperta. I SOLDI no: scritture contabili 10 anni (art. 2220 c.c.; DAC7 da 5 a 10), il
-  giornale di `fase177` li tiene già. Buchi misurati: la privacy §4 (`fase185.testo_privacy`) non dichiara nessun tempo
-  per le comunicazioni; `fase113` non cancella mai niente; `pulizia_uploads_orfani` toglie solo i file senza messaggio
-  (più vecchi di 7 giorni). Pezzi: la riga nella privacy per TUTTE le comunicazioni, un giro una volta al giorno che
-  cancella le chat scadute e lo scrive nel registro (le foto diventano orfane e la pulizia esistente le toglie), e la
-  regola scritta a mano per la casella `info@` (il giro non la raggiunge). L'avvocato controllerà che 2 anni bastino
-  anche per una causa.
+  **1c — Conservazione: UNA REGOLA SOLA A 2 ANNI. ✅ «autorizzato» (11/9) e «va bene una regola sola a 2 anni».**
+  🛠️ **SCRITTO E PROVATO IN LOCALE il 12 settembre, NON ANCORA IN PRODUZIONE:** mancano suite intera, CI, commit,
+  unione e deploy — cioè tutto quello che questa coda chiama «chiuso». Non si scrive ✅ FATTO finché non lo è.
+  Tutte le chat e le prove si cancellano **2 anni dopo il check-out, o dopo la chiusura della controversia se è più
+  tardi**; mai finché una controversia è aperta. I SOLDI no: scritture contabili 10 anni (art. 2220 c.c.; DAC7 da 5 a
+  10), il giornale di `fase177` li tiene già.
+  **I tre pezzi, e come sono fatti.** (1) La riga nel §4 dell'informativa, in **tutte e 8 le lingue**, che dichiara il
+  termine delle comunicazioni — il §1 diceva di trattarle e il §4 tacque per sempre su di esse (art. 13.2.a GDPR: il
+  termine va dichiarato, e l'EDPB chiede termini **distinti per categoria**; «per il tempo necessario» non basta, e
+  tacere basta ancora meno). ⛔ **Il numero esiste in UN SOLO POSTO** (`fase185.ANNI_CONSERVAZIONE_CHAT`) e `_componi`
+  lo sostituisce nelle otto lingue come già fa per le percentuali: testo e motore **non possono** divergere, invece di
+  essere due copie sorvegliate — che è il rimedio che nel 2026-08 lasciò scoperta una terza copia in `fase89`.
+  `PRIVACY_VERSIONE` passa a **2026-09-12**: cambiare il testo e lasciare la data vecchia sarebbe un testo che mente.
+  (2) `conservazione_una_passata(sistema, *, ora_ts=None, limite=50)` in fondo a `fase83_server.py`, chiamata dal giro
+  orario con un freno di 24 ore (`_conservazione_se_ora`), più `fase113.cancella_thread` e
+  `fase113.prenotazioni_con_ultimo_messaggio`. (3) La casella `info@`: la regola è **scritta nell'informativa** come
+  procedura a mano, perché nessun giro la raggiunge — e dirlo è meglio che prometterlo.
+  🔑 **Tre scelte tecniche che valgono più del codice.** ⓐ **Si conta dalla data più RECENTE fra tre che si leggono
+  già** — ultimo messaggio, check-out, ultimo movimento nel giornale. Serviva la data di **chiusura** di una
+  controversia, e `fase160.stato()` non la espone: aggiungerla avrebbe fatto **scadere tutte le caselle del Blocco 1**
+  (8 su 15 guadagnate, mutazione compresa) perché l'impronta di una casella copre **tutti** i moduli del blocco
+  (`collaudi/scheda.py:156-177`). Il massimo di tre date è **più prudente** di `aggiornato_ts` e non tocca nessun
+  modulo dei soldi. ⓑ **Si parte dalle CHAT, non dalle prenotazioni:** una conversazione la cui riga in `pendenti` è
+  stata purgata non sarebbe raggiungibile dall'altro verso e resterebbe **in eterno** senza che niente lo dica.
+  ⓒ **Il giro vive DENTRO il blocco del tick che esiste solo se esiste l'archivio delle controversie**
+  (`if gz is not None`): il freno «finché si litiga non si cancella» non è scavalcabile **per costruzione**, non perché
+  qualcuno si ricorda di controllarlo.
+  🧪 **D20, e le misure.** **18 guardie nuove** (15 in `test_pulizia_uploads.TestLeChatNonRestanoInEternoENonSPARISCONO
+  TroppoPRESTO`, 3 in `test_testi_legali.TestLaConservazioneDelleComunicazioniInOgniLingua`). Ordine: guardie scritte →
+  **3 rosse per il motivo giusto** sulla promessa assente e **13 rosse per il motivo SBAGLIATO** (`ImportError`, la
+  passata non esisteva: registrato come tale) → passo 0, la passata con la logica di **oggi** (non cancella niente) →
+  **7 rossi per i motivi giusti** fra cui il difetto vivo (`'rif-vecchia' not found in []`) e **6 verdi su una funzione
+  vuota**, cioè sei guardie che a quel punto non valevano niente → cura → **42 verdi** (`test_pulizia_uploads` +
+  `test_testi_legali`, uscita 0).
+  ⛔ **E QUEI SEI VERDI SONO STATI PAGATI: dieci guasti veri iniettati con l'editor, uno per volta**, ognuno visto
+  rosso col messaggio esatto e ognuno seguito da ripristino **byte-identico** (`fase83` sha256 `D6638A3C…`, `fase113`
+  `41035A5F…`, `fase185` `85C7DD07…`, uguali prima e dopo tutte le iniezioni): via l'ancora del check-out → *«'rif-recente'
+  unexpectedly found»* · via l'ancora del giornale → *«'rif-chiusa-ieri' unexpectedly found»* · via l'ancora del
+  messaggio → *«'rif-viva' unexpectedly found»* · `gz.stato` «isolato» in un `except` → *«['rif-garanzia-rotta'] != []»* ·
+  aggiunto `pp.rimuovi` → *«ha cancellato la riga della PRENOTAZIONE»* · via il freno delle 24 ore → *«entro 24h NON
+  deve rieseguire»* · via il freno della controversia aperta → *«'rif-contesa' unexpectedly found»* · la riga tedesca
+  cancellata → *«['de'] != []»* · `3 ans` scritto a mano in francese → *«{'fr': ['10','3']}»* · via il pragma
+  `secure_delete` → *«['conservazione.db'] != []»*.
+  ⚠️ **DUE COSE TROVATE MENTRE LAVORAVO, ed entrambe hanno cambiato il lavoro.** (a) **Una guardia stava per passare
+  per il motivo sbagliato:** quella sull'ancora del giornale era trattenuta dal messaggio recente, non dal giornale —
+  corretta datando i messaggi con l'orologio iniettabile di `fase113`, e solo dopo la correzione il guasto 2 l'ha fatta
+  diventare rossa. (b) **Un test stava per passare a VUOTO:** la spia della guardia sui byte conteneva dodici cifre di
+  fila, `maschera_pii` l'ha presa per un telefono e l'ha sostituita, quindi la spia non arrivava nel file e «assente
+  prima, assente dopo» sarebbe stato un verde che non guarda niente. L'ha preso **il controllo della premessa** scritto
+  dentro la guardia (S1: il vuoto non è un valore), non io.
+  📏 **«Cancellato» misurato sui byte, non affermato:** un `DELETE` normale lascia il testo leggibile nel file (misurato:
+  spia presente), `cancella_thread` lo azzera con `PRAGMA secure_delete=ON` (spia assente) — fonte
+  `sqlite.org/pragma.html#pragma_secure_delete`, e il recupero dei record cancellati è letteratura (bring2lite, FSI:
+  Digital Investigation 2019). ⚠️ **Limite dichiarato:** in `journal_mode=WAL` tracce possono restare nel file `-wal`
+  finché non è riassorbito; nella misura fatta qui, dopo la cancellazione il `-wal` non esisteva più.
+  ⚠️ **Altri limiti dichiarati:** il giornale **ignora i movimenti di importo nullo** (`fase83:6144`), quindi una
+  controversia chiusa senza un centesimo di movimento non lascia la sua data e resta l'ancora dell'ultimo messaggio ·
+  il tetto di 50 per passata tiene gli orfani pochi, perché il paracadute della scopa dei file annulla la pulizia
+  quando sono troppi e su una macchina sana sarebbe un falso allarme · **in produzione non è mai stata cancellata una
+  chat vera**, perché non è mai passata una prenotazione pagata: tutto è provato sul banco. L'avvocato controllerà che
+  2 anni bastino anche per una causa.
+  ⛔ **UN DIFETTO VIVO TROVATO E NON TOCCATO, perché è FUORI dall'«autorizzato» del 1c — aspetta una tua parola.** Le
+  versioni della privacy sono **due e non coincidono**: `fase163_accettazioni.py:328` `PRIVACY_VERSIONE = "2026-07-20"`
+  (quella scritta nella **prova firmata**) contro `fase185_testi_legali.py:46` `"2026-09-12"` (quella **stampata
+  nell'informativa**, che oggi ho aggiornato — lo scarto era già di 11 giorni e ora è più largo). Peggio:
+  `fase163.testo_privacy()` calcola l'impronta su `deploy/privacy.html`, che è solo la **cornice** (il testo vero arriva
+  da `/api/legale/documento`), quindi la prova **non lega le parole che la persona ha letto** — mentre il §3 promette
+  *«conserviamo… versione del documento, sua impronta crittografica… Serve a dimostrare cosa hai accettato»*. È un modo
+  di rompersi n.3 su una prova legale. Non è stato toccato niente. **E una seconda, più piccola:** anche
+  `fase113.cancella_messaggi_host` — la cancellazione per oblio GDPR — non azzera i byte, perché il pragma l'ho messo
+  solo nel giro della conservazione.
   **1d — Poi le altre 19 catene del pannello admin**, una per volta (la prossima: `/api/admin/prenotazioni`), e le
   catene di host, super admin e cliente.
 
@@ -2365,7 +2427,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 ```
 CONSEGNE AGGIORNATE A: 2f1ea8e
 
-SUITE ATTUALE: Ran 6752 test
+SUITE ATTUALE: Ran 6770 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

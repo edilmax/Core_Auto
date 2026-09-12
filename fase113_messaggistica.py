@@ -103,6 +103,59 @@ class Messaggistica:
         finally:
             con.close()
 
+    def cancella_thread(self, prenotazione_id: Any) -> int:
+        """La conversazione di UNA prenotazione, cancellata perche' il termine di
+        conservazione dichiarato nell'informativa e' passato. Ritorna quanti messaggi.
+
+        ⛔ SOVRASCRIVE, non solo scollega. Un `DELETE` di SQLite marca lo spazio come
+        riutilizzabile e lascia il testo nelle pagine libere, da cui si rilegge con
+        strumenti forensi ordinari (`sqlite.org/pragma.html#pragma_secure_delete`; la
+        ricostruzione dei record cancellati e' letteratura, vedi bring2lite, Forensic
+        Science International: Digital Investigation, 2019). Un'informativa che promette
+        la cancellazione deve restare vera anche aprendo il file con un editor
+        esadecimale, quindi il contenuto si azzera.
+        ⚠️ LIMITE DICHIARATO: in `journal_mode=WAL` tracce possono sopravvivere nel file
+        `-wal` finche' non viene riassorbito, e il pragma non le raggiunge.
+        ⛔ SOLLEVA su errore del database, come `nomi_uploads`: il chiamante e'
+        fail-closed e deve poter trattenere la riga invece di darla per cancellata.
+        """
+        if not (isinstance(prenotazione_id, str) and prenotazione_id):
+            return 0
+        con = self._apri()
+        try:
+            try:
+                con.execute("PRAGMA secure_delete=ON")
+            except sqlite3.Error:
+                logger.warning("secure_delete non applicabile su questo database")
+            with con:
+                cur = con.execute("DELETE FROM messaggi WHERE prenotazione_id=?",
+                                  (str(prenotazione_id),))
+            return cur.rowcount if (cur.rowcount and cur.rowcount > 0) else 0
+        finally:
+            con.close()
+
+    def prenotazioni_con_ultimo_messaggio(self, *, limit: int = 200) -> List[Dict[str, Any]]:
+        """Una riga per conversazione: la prenotazione e la data dell'ULTIMO messaggio.
+
+        ⛔ PARTE DALLE CHAT, e il verso non e' indifferente. Girando sulle prenotazioni,
+        una conversazione la cui riga di prenotazione e' stata purgata non sarebbe piu'
+        raggiungibile da nessuno, e resterebbe in eterno senza che niente lo dica: la
+        promessa dell'informativa vale per OGNI chat, non per quelle ancora agganciate.
+        Le piu' vecchie prima, cosi' il tetto per passata non lascia indietro le scadute.
+        ⛔ SOLLEVA su errore del database: il chiamante e' fail-closed."""
+        lim = limit if (isinstance(limit, int) and not isinstance(limit, bool)
+                        and 0 < limit <= 5000) else 200
+        con = self._apri()
+        try:
+            rows = con.execute(
+                "SELECT prenotazione_id, MAX(ts) AS ultimo_ts, COUNT(*) AS n "
+                "FROM messaggi GROUP BY prenotazione_id "
+                "ORDER BY ultimo_ts LIMIT ?", (lim,)).fetchall()
+            return [{"prenotazione_id": p, "ultimo_ts": int(t or 0), "messaggi": int(n)}
+                    for p, t, n in rows]
+        finally:
+            con.close()
+
     def conta_messaggi_host(self, host_id: Any) -> int:
         if not (isinstance(host_id, str) and host_id):
             return 0

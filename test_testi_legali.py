@@ -283,5 +283,93 @@ class TestTariffaTecnicaInOgniLingua(unittest.TestCase):
                                  % (nome, lang, resti))
 
 
+class TestLaConservazioneDelleComunicazioniInOgniLingua(unittest.TestCase):
+    """Per quanto tempo teniamo le comunicazioni di una prenotazione: dichiarato
+    nell'informativa, in TUTTE le lingue, con il numero che usa il motore che cancella.
+
+    PERCHE' (coda dei lavori 1c, «autorizzato» dal fondatore l'11 settembre 2026): il §4
+    elencava quattro categorie e non quella che il §1 dichiara di trattare — le
+    comunicazioni con la controparte. Non e' un'informativa generica: e' un'informativa
+    INCOMPLETA, e sono due difetti diversi. L'art. 13.2.a del GDPR chiede il termine di
+    conservazione, e l'EDPB chiede termini DISTINTI per categoria dove ha senso: dire
+    «per il tempo necessario» non basta, e tacere su una categoria basta ancora meno.
+
+    ⛔ IL NUMERO NON SI SCRIVE IN QUESTO FILE, e nemmeno nei testi. Il modulo lo dichiara
+    una volta sola e `_componi` lo sostituisce in tutte le lingue: cosi' testo e motore
+    non POSSONO divergere. E' il rimedio che il modulo si e' già dato per le percentuali
+    dopo che otto lingue hanno continuato a dichiarare una tariffa che il motore non
+    addebitava piu' (vedi il commento dentro `_percentuali`).
+    """
+
+    # La parola «anni» come la scrive OGNI traduzione. Non e' inventata: e' quella che il
+    # §4 usa già nella riga delle scritture contabili, letta da com'e' scritta oggi.
+    ANNI_NELLA_LINGUA = {"it": "anni", "en": "years", "es": "anos", "fr": "ans",
+                         "de": "Jahre", "pt": "anos", "ja": "年", "zh": "年"}
+
+    def _anni(self):
+        """D18 punto 1 — misura prima se stessa: senza il numero non c'e' niente da
+        confrontare, e un confronto senza termine di paragone non dice «uguali», dice
+        «misura non valida» (sbaglio S1). Quindi ROSSO, mai un salto."""
+        anni = getattr(L, "ANNI_CONSERVAZIONE_CHAT", None)
+        self.assertIsInstance(
+            anni, int,
+            "il modulo dei testi legali non dichiara ANNI_CONSERVAZIONE_CHAT: "
+            "l'informativa non ha da nessuna parte per quanto tempo si tengono le "
+            "comunicazioni della prenotazione")
+        self.assertGreater(anni, 0, "un termine di conservazione nullo o negativo")
+        return anni
+
+    def _sezione_conservazione(self, lang):
+        """Il §4 di quella lingua. Se non si trova NON si cerca in tutto il documento:
+        una dichiarazione sulla conservazione vale nella sezione della conservazione, e
+        un ripiego piu' largo renderebbe questo controllo incapace di fallire."""
+        testo = L.testo_privacy(lang)
+        m = re.search(r"^4\..*?(?=^5\.)", testo, re.S | re.M)
+        self.assertIsNotNone(
+            m, "privacy[%s]: la sezione sulla conservazione (4.) non si trova, "
+               "quindi questo controllo non ha guardato niente" % lang)
+        return m.group(0)
+
+    def test_il_modulo_dichiara_per_quanti_anni_si_tengono_le_comunicazioni(self):
+        self._anni()
+
+    def test_ogni_lingua_lo_dichiara_nella_sezione_della_conservazione(self):
+        anni = self._anni()
+        mute = []
+        for lang in L.LINGUE:
+            parola = self.ANNI_NELLA_LINGUA.get(lang)
+            self.assertIsNotNone(
+                parola, "lingua %s senza la sua parola per «anni»: questo controllo non "
+                        "puo' giudicarla, e un controllo che non giudica non e' verde" % lang)
+            # (?<!\d) perche' «12 anni» non deve poter soddisfare un termine di 2 anni.
+            if not re.search(r"(?<!\d)%d\s?%s" % (anni, re.escape(parola)),
+                             self._sezione_conservazione(lang)):
+                mute.append(lang)
+        self.assertEqual(
+            mute, [],
+            "queste lingue non dichiarano per quanto tempo si tengono le comunicazioni "
+            "della prenotazione (%d %s): %s" % (anni, self.ANNI_NELLA_LINGUA["it"], mute))
+
+    def test_nessuna_lingua_promette_un_termine_DIVERSO_da_quello_che_fa_fede(self):
+        """Due traduzioni che promettono termini diversi sono il modo di rompersi n.3
+        (testi che mentono) nella forma peggiore: nessuna delle due e' rotta da sola."""
+        anni = self._anni()
+        atteso = sorted(set(re.findall(
+            r"(?<!\d)(\d+)\s?%s" % re.escape(self.ANNI_NELLA_LINGUA["it"]),
+            self._sezione_conservazione(L.LINGUA_CHE_FA_FEDE))))
+        self.assertIn(str(anni), atteso,
+                      "la lingua che fa fede non dichiara il termine del modulo")
+        diverse = {}
+        for lang in L.LINGUE:
+            trovati = sorted(set(re.findall(
+                r"(?<!\d)(\d+)\s?%s" % re.escape(self.ANNI_NELLA_LINGUA[lang]),
+                self._sezione_conservazione(lang))))
+            if trovati != atteso:
+                diverse[lang] = trovati
+        self.assertEqual(diverse, {},
+                         "termini in anni diversi fra le lingue (%s fa fede con %s): %s"
+                         % (L.LINGUA_CHE_FA_FEDE, atteso, diverse))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

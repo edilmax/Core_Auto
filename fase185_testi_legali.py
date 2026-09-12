@@ -43,7 +43,21 @@ LINGUA_CHE_FA_FEDE = "it"
 LINGUA_RIPIEGO = "en"
 
 TERMINI_VERSIONE = "2026-08-10"   # tariffa tecnica: 3% secco -> 5% + 0,25 EUR (7% valuta estera)
-PRIVACY_VERSIONE = "2026-07-31"   # aggiunta la dichiarazione sull'impronta anti-riciclo
+PRIVACY_VERSIONE = "2026-09-12"   # dichiarato il termine delle comunicazioni (§4)
+
+# Per quanti ANNI si tengono le comunicazioni di una prenotazione (chat e prove foto).
+# ⛔ QUESTO E' L'UNICO POSTO DOVE IL TERMINE ESISTE. `_componi` lo sostituisce in tutte e
+# otto le lingue e il giro che cancella lo legge da qui: cosi' il testo non puo' promettere
+# un tempo diverso da quello che la macchina applica. Non e' prudenza astratta — otto
+# traduzioni hanno dichiarato per settimane una tariffa che il motore non addebitava piu'
+# (vedi il commento dentro `_percentuali`), e il rimedio era stato tenere due copie
+# sorvegliate: quella strada ha lasciato scoperta una terza copia altrove.
+# ⛔ E il verso della dipendenza e' voluto: il codice che distrugge legge il termine dal
+# documento che lo PROMETTE, non viceversa. Cosi' l'informativa non puo' restare indietro
+# rispetto a una cancellazione piu' aggressiva.
+# Deciso dal fondatore il 2026-09-11 («va bene una regola sola»): una regola sola per tutte
+# le comunicazioni. I SOLDI seguono il loro termine, piu' lungo, imposto dalla legge.
+ANNI_CONSERVAZIONE_CHAT = 2
 
 # Dati del titolare: UNA sola volta, riusati in tutte le lingue. Se cambiano, cambiano
 # ovunque insieme — impossibile che una traduzione resti con l'indirizzo vecchio.
@@ -646,6 +660,7 @@ def _componi(modello: str, versione: str) -> str:
         PROMO=p["promo"], GG=p["giorni_promo"], FASE1=p["fase1"],
         REGIME=p["regime"], DIRETTO=p["diretto"], TECNICA=p["tecnica"],
         TECNICA_EST=p["tecnica_estera"], FISSO=p["fisso"],
+        ANNI_CHAT=ANNI_CONSERVAZIONE_CHAT,
         PENALE=_penale())
 
 
@@ -741,6 +756,11 @@ was Sie wann angenommen haben. Rechtsgrundlage ist das berechtigte Interesse am 
 
 4. WIE LANGE
 Kontodaten: solange das Konto besteht, danach 12 Monate.
+Kommunikation und Nachweise zu einer Buchung (Chat-Nachrichten und beigefuegte Fotos):
+{ANNI_CHAT} Jahre ab dem Check-out oder ab dem Abschluss der Streitigkeit, wenn dieser
+spaeter liegt; solange eine Streitigkeit offen ist, werden sie nicht geloescht. E-Mails,
+die Sie uns direkt an {EMAIL} senden, unterliegen derselben Frist und werden von Hand
+geloescht.
 Buchhaltungs- und Steuerdaten: 10 Jahre, wie gesetzlich vorgeschrieben.
 Zustimmungsnachweise: fuer die Dauer der Beziehung und die Verjaehrungsfrist.
 Technische Sicherheitsdaten: 12 Monate.
@@ -821,6 +841,10 @@ interesse legitimo na prova.
 
 4. DURANTE QUANTO TEMPO
 Dados de conta: enquanto a conta existir, depois 12 meses.
+Comunicacoes e provas relativas a uma reserva (mensagens do chat e fotografias anexadas):
+{ANNI_CHAT} anos a contar do check-out, ou do encerramento do litigio se for posterior;
+enquanto um litigio estiver aberto nao sao eliminadas. Os e-mails que nos enviar
+directamente para {EMAIL} seguem o mesmo prazo e sao eliminados a mao.
 Dados contabilisticos e fiscais: 10 anos, conforme a lei exige.
 Provas de aceitacao: durante toda a relacao e o prazo de prescricao.
 Dados tecnicos de seguranca: 12 meses.
@@ -895,6 +919,7 @@ versao ITALIANA.
 
 4. 保存期間
 アカウント情報：アカウントが存在する間、その後12か月。
+予約に関するやり取りおよび証拠（チャットのメッセージと添付写真）：チェックアウトから{ANNI_CHAT}年、紛争の終了がそれより後の場合は終了の日から{ANNI_CHAT}年。紛争が続いている間は削除しません。{EMAIL} に直接お送りいただいたメールも同じ期間保存し、手作業で削除します。
 会計・税務情報：法律の定めにより10年。
 同意の証拠：関係の継続期間および時効期間。
 技術的な安全性の情報：12か月。
@@ -958,6 +983,7 @@ versao ITALIANA.
 
 4. 保存多久
 账户数据：账户存续期间，之后12个月。
+与预订有关的沟通与证据（聊天消息及所附照片）：自退房起{ANNI_CHAT}年；若争议结束更晚，则自争议结束起{ANNI_CHAT}年。争议未结期间不予删除。您直接发送至 {EMAIL} 的邮件适用相同期限，由人工删除。
 会计与税务数据：依法保存10年。
 同意证据：关系存续期间及诉讼时效期间。
 技术安全数据：12个月。
@@ -1027,6 +1053,10 @@ La base giuridica e' il legittimo interesse alla prova.
 
 4. PER QUANTO TEMPO
 Dati di account: finche' l'account esiste, poi 12 mesi.
+Comunicazioni e prove di una prenotazione (messaggi in chat e foto allegate):
+{ANNI_CHAT} anni dal check-out, oppure dalla chiusura della controversia se e' piu' tardi;
+finche' una controversia e' aperta non si cancellano. Le email che ci scrivi direttamente
+a {EMAIL} seguono lo stesso termine e si cancellano a mano.
 Dati contabili e fiscali: 10 anni, come impone la legge.
 Prove di accettazione: per tutta la durata del rapporto e per il periodo di prescrizione.
 Dati tecnici di sicurezza: 12 mesi.
@@ -1103,6 +1133,10 @@ is the legitimate interest in evidence.
 
 4. HOW LONG WE KEEP THEM
 Account data: as long as the account exists, then 12 months.
+Communications and evidence relating to a booking (chat messages and attached photos):
+{ANNI_CHAT} years from check-out, or from the closing of the dispute if that is later;
+while a dispute is open they are not deleted. Emails you send us directly at {EMAIL}
+follow the same period and are deleted manually.
 Accounting and tax data: 10 years, as required by law.
 Evidence of acceptance: for the duration of the relationship and the limitation period.
 Technical security data: 12 months.
@@ -1180,6 +1214,10 @@ el interes legitimo en la prueba.
 
 4. DURANTE CUANTO TIEMPO
 Datos de cuenta: mientras exista la cuenta, despues 12 meses.
+Comunicaciones y pruebas de una reserva (mensajes de chat y fotos adjuntas):
+{ANNI_CHAT} anos desde la salida, o desde el cierre de la controversia si es posterior;
+mientras una controversia este abierta no se borran. Los correos que nos escribas
+directamente a {EMAIL} siguen el mismo plazo y se borran manualmente.
 Datos contables y fiscales: 10 anos, como exige la ley.
 Pruebas de aceptacion: durante toda la relacion y el plazo de prescripcion.
 Datos tecnicos de seguridad: 12 meses.
@@ -1258,6 +1296,10 @@ que vous avez accepte et quand. La base legale est l'interet legitime a la preuv
 
 4. PENDANT COMBIEN DE TEMPS
 Donnees de compte : tant que le compte existe, puis 12 mois.
+Communications et preuves relatives a une reservation (messages du chat et photos
+jointes) : {ANNI_CHAT} ans a compter du depart, ou de la cloture du litige si elle est
+posterieure ; tant qu'un litige est ouvert, elles ne sont pas supprimees. Les e-mails que
+vous nous envoyez directement a {EMAIL} suivent le meme delai et sont supprimes a la main.
 Donnees comptables et fiscales : 10 ans, comme l'impose la loi.
 Preuves d'acceptation : pendant toute la relation et le delai de prescription.
 Donnees techniques de securite : 12 mois.
