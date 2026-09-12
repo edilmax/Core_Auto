@@ -450,6 +450,20 @@ finestra vera interrogando la coda, quindi una divergenza diventa rossa lo stess
 E come per il promemoria: in produzione non è mai partito un invito vero, perché non è mai passata una
 prenotazione pagata.
 
+**In produzione dal 12 settembre, notte, e la prova si è guardata DENTRO.** Suite intera locale da PowerShell
+(`openssl` assente): `Ran 6747 tests in 4194.245s` · `OK (skipped=4)` · `USCITA_DIRETTA=0` — i 5 che mancano al
+caricatore (**6752**) sono la solita classe dei backup, saltata senza `openssl`. Commit `1f8cc99`, PR #177: 16
+controlli, 15 `success`, `zap` **skipped** (non eseguito, mai contato fra i verdi), `gate` `success`; unione
+`2f1ea8e`. Deploy D17: `prima` — punto di ritorno `f11835c` riletto, ⚠️ **`:prec` puntava ancora all'immagine di
+ieri** (`382d9e04…` contro la viva `05b3b1c2…`) e il passo [1b] l'ha ri-agganciato **misurando** (nona volta che
+quel gesto evita un paracadute falso), backup `finanza-20260911-204227.db.gz` aperto (`gzip -t` integro, `SQLite
+format 3`); `scambio` — `:latest` `eaa0dd9b…` diversa da `:prec`, `healthy` dopo 0s, `money_path_pronto: True`,
+`avvisi: []`; `dopo` — `/` 200 · `/api/health` 200 · negativa `/api/bunker/invarianti` **403** ·
+`verifica_produzione` 190 controlli, **0 violazioni**. Dentro il contenitore che gira: file a `2f1ea8e`,
+`GIORNI_INVITO_RECENSIONE = 14` (riga 586), `def invito_recensione_una_passata` (11981), il giro che la chiama
+(11923), le due righe `INVITO RECENSIONE NON CONSEGNATO` (12052 e 12055) e **zero** occorrenze di
+`segna_invito_recensione` e di `date.today` dentro il giro: nessuna copia della logica è rimasta lì.
+
 ### ✉️ IL PROMEMORIA AL CHECK-IN PARTIVA PRIMA DELL'ARRIVO, E UN INVIO FALLITO RISULTAVA FATTO — 11 settembre, sera, «autorizzato»
 
 **Cosa è cambiato.** `fase83_server.py`: il giro orario `_tick_promemoria` ora chiama una funzione sola,
