@@ -362,6 +362,36 @@ class TestLeChatNonRestanoInEternoENonSPARISCONOTroppoPRESTO(unittest.TestCase):
         self.assertEqual(nei_byte(), [],
                          "il testo cancellato si rilegge ancora dai byte del database")
 
+    def test_anche_l_OBLIO_di_un_host_azzera_i_byte(self):
+        """L'oblio del GDPR (art. 17) e' la cancellazione con l'obbligo piu' forte di tutti:
+        la chiede la persona, e la legge dice che deve avvenire. Se resta leggibile nei byte
+        del file, quella cancellazione non e' avvenuta.
+
+        ⛔ Oggi `cancella_messaggi_host` non sovrascrive: il pragma sta soltanto nel giro
+        della conservazione. Cioe' la cancellazione con l'obbligo piu' debole (un termine che
+        ci siamo dati noi) e' fatta meglio di quella con l'obbligo piu' forte."""
+        import glob
+        from fase113_messaggistica import crea_messaggistica
+        percorso = os.path.join(self.dir, "oblio.db")
+        msg = crea_messaggistica(percorso)
+        msg.inizializza_schema()
+        spia = "SPIA-OBLIO-" + "Z" * 12      # niente cifre di fila: le maschera `maschera_pii`
+        self.assertTrue(msg.invia("rif-oblio", "host-da-dimenticare", "ospite", "ospite", spia))
+
+        def nei_byte():
+            dentro = []
+            for f in sorted(glob.glob(percorso + "*")):
+                with open(f, "rb") as fh:
+                    if spia.encode("utf-8") in fh.read():
+                        dentro.append(os.path.basename(f))
+            return dentro
+
+        self.assertTrue(nei_byte(), "il banco non ha scritto niente: misura non valida")
+        self.assertEqual(msg.cancella_messaggi_host("host-da-dimenticare"), 1)
+        self.assertEqual(nei_byte(), [],
+                         "i messaggi cancellati per OBLIO si rileggono ancora dai byte del "
+                         "database")
+
     def test_il_giro_ORARIO_lo_chiama_DAVVERO(self):
         """Costruito non vuol dire collegato: e' il modo di rompersi n.2, e su questo
         progetto e' il piu' frequente di tutti. Un giro perfetto che nessuno chiama non
@@ -386,6 +416,41 @@ class TestLeChatNonRestanoInEternoENonSPARISCONOTroppoPRESTO(unittest.TestCase):
         self.assertTrue(chiamate,
                         "nessun giro periodico chiama la conservazione: il pezzo esiste e "
                         "non e' collegato a niente")
+
+
+class TestIlGiroDellOblioEPercorsoDAVVERO(unittest.TestCase):
+    """⛔ D18 PUNTO 4 — l'esame dell'oblio e' a sua volta sotto guardia.
+
+    `collaudi/esame_oblio.py` percorre il giro intero del «cancellami»: il dato c'era, la
+    cancellazione lo toglie, quello che resta e' dichiarato per legge col suo perche', e
+    non si rilegge dai byte. Senza questa classe quell'esame vivrebbe fuori dalla suite:
+    fra sei mesi lo toglierebbe una «semplificazione» e nessuno se ne accorgerebbe.
+
+    ⛔ E si ESEGUE, nelle due direzioni. Un test che controllasse solo che il file esiste
+    sarebbe soddisfatto da un file vuoto — e sarebbe la guardia ornamentale che questo
+    progetto ha gia' pagato tre volte in un giorno.
+    """
+
+    def _giro(self, argomenti):
+        import contextlib
+        import io as _io
+        from collaudi.esame_oblio import principale
+        muto = _io.StringIO()
+        with contextlib.redirect_stdout(muto):
+            codice = principale(argomenti)
+        return codice, muto.getvalue()
+
+    def test_il_giro_intero_e_verde(self):
+        codice, uscita = self._giro([])
+        self.assertEqual(codice, 0,
+                         "il giro intero dell'oblio non e' verde:\n%s" % uscita[-1500:])
+        self.assertIn("anelli", uscita, "l'esame non dichiara il denominatore")
+
+    def test_e_sa_diventare_ROSSO(self):
+        codice, uscita = self._giro(["--guasto", "salta-oblio"])
+        self.assertEqual(codice, 1,
+                         "col guasto iniettato (l'oblio NON viene eseguito) l'esame resta "
+                         "verde: allora non sta guardando niente")
 
 
 if __name__ == "__main__":

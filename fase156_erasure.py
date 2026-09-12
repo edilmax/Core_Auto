@@ -19,6 +19,45 @@ from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
+# ⛔ GLI ARCHIVI CHE TRATTENGONO IL DATO ANCHE DOPO L'OBLIO, CON IL PERCHE' SCRITTO.
+#
+# Non e' un elenco di eccezioni messo qui per far tornare il conto. E' il punto in cui due
+# regole si contraddicono sullo stesso dato — il diritto alla cancellazione (GDPR art. 17)
+# e l'obbligo di conservare (fisco, DAC7, difesa in giudizio) — e la scelta va SCRITTA una
+# per una, col motivo, perche' nessun meccanismo la puo' dedurre.
+#
+# ⛔ E QUESTO ELENCO NON PUO' MARCIRE IN SILENZIO, che e' la differenza con la lista dei
+# cinque archivi ricontrollati: un archivio che resta sporco e NON e' qui dentro fa uscire
+# `ok=False` e lascia una riga d'ERRORE. Aggiungere un archivio domani non richiede di
+# toccare questo file — ma se quell'archivio trattiene un dato, lo si scopre lo stesso
+# giorno invece che mai.
+#
+# ⚠️ OGNI RIGA QUI DENTRO E' UNA POSIZIONE LEGALE, e va letta da un avvocato. Le due che
+# ci sono oggi non sono inventate: ripetono cio' che l'informativa gia' DICHIARA al suo
+# paragrafo 4, cioe' cio' che la persona ha letto prima di accettare.
+# ⛔ LA CHIAVE E' LA TABELLA, NON IL FILE. Primo tentativo del 2026-09-12: era il nome del
+# file (`accettazioni.db`), e nei banchi quello stesso archivio si chiama `a.db` o
+# `db_accettazioni.db` — il nome dipende dalla CONFIGURAZIONE, non dal prodotto. Risultato:
+# la dichiarazione non combaciava, l'oblio usciva `ok=False` e la rotta rispondeva 409 su
+# un host pulito. Una posizione legale non puo' stare appesa a come qualcuno ha chiamato un
+# file: la tabella sta nello schema ed e' la stessa ovunque.
+TRATTENUTI_PER_LEGGE: Dict[str, str] = {
+    "accettazioni":
+        "prove di accettazione: conservate per la durata del rapporto e per il periodo di "
+        "prescrizione (GDPR art. 17.3.e, difesa in giudizio). Cancellarle significherebbe "
+        "distruggere la prova di cosa la persona ha accettato — cioe' la sua tutela oltre "
+        "che la nostra. L'informativa lo dichiara al paragrafo 4.",
+    "libro_giornale":
+        "scritture contabili: 10 anni dall'ultima registrazione (art. 2220 c.c.), e oltre "
+        "finche' non sono definiti gli accertamenti (art. 22 DPR 600/1973). "
+        "L'informativa lo dichiara al paragrafo 4.",
+    "note_credito":
+        "documenti contabili: stesso termine delle scritture (art. 2220 c.c.).",
+    "debiti_host":
+        "partite contabili aperte verso l'host: stesso termine delle scritture "
+        "(art. 2220 c.c.); cancellarle farebbe sparire un credito o un debito.",
+}
+
 
 def _slug_host(catalogo: Any, host_id: str) -> List[str]:
     try:
@@ -232,6 +271,121 @@ def cancella_attivita_host(sistema: Any, host_id: Any, *, forza: bool = False) -
         residui["host"] = 1 if reg.esiste_host(host_id) else 0
 
     rep["residui"] = residui
-    rep["ok"] = all(v == 0 for v in residui.values()) if residui else False
     rep["verificato_archivi"] = list(residui.keys())
+
+    # --- E ADESSO IL CONTROLLO CHE NON DIPENDE DA QUESTA LISTA ---------------------
+    # ⛔ PERCHE' NON BASTAVA QUELLO SOPRA. I cinque archivi qui sopra sono nominati A MANO
+    # dentro questo file, e questo file DICHIARA di essere resiliente: opera solo sugli
+    # archivi che espongono i metodi giusti, cosi' «aggiungere un archivio nuovo non
+    # richiede toccare questo file». Letta dal lato in cui morde: un archivio nuovo viene
+    # saltato IN SILENZIO e il rapporto dice `ok=True` lo stesso. Misurato il 2026-09-12
+    # percorrendo il giro intero (`collaudi/esame_oblio.py`): il dato della persona era
+    # rimasto in un archivio che questa lista non nomina, e il rapporto diceva ok=True.
+    # ⇒ Qui non si chiede a una lista: si guarda negli archivi VERI, contati come li conta
+    # la produzione (i file `*.db` della cartella dati, stesso criterio di fase202).
+    rimasto = _dove_e_rimasto(sistema, host_id)
+    sporchi = rimasto.get("sporchi", {})
+    rep["archivi_totali"] = rimasto.get("totali", 0)
+    rep["archivi_sporchi"] = sporchi
+    trattenuti: Dict[str, Dict[str, str]] = {}
+    non_dichiarati: Dict[str, List[str]] = {}
+    for _nome, _tabelle in sporchi.items():
+        _con_legge = {t: TRATTENUTI_PER_LEGGE[t] for t in _tabelle
+                      if t in TRATTENUTI_PER_LEGGE}
+        _senza = [t for t in _tabelle if t not in TRATTENUTI_PER_LEGGE]
+        if _con_legge:
+            trattenuti[_nome] = _con_legge
+        if _senza:
+            non_dichiarati[_nome] = _senza
+    rep["trattenuti_per_legge"] = trattenuti
+    rep["sporchi_non_dichiarati"] = non_dichiarati
+    if rimasto.get("motivo"):
+        # Senza cartella dati (archivi in memoria) la scansione non si puo' fare: si
+        # DICHIARA, e chi legge il rapporto lo vede. ⛔ Ma NON si trasforma in un rosso:
+        # legandoci `ok` (primo tentativo del 2026-09-12) ogni sistema in memoria usciva
+        # `ok=False` — nove guardie sane diventate rosse, cioe' un falso allarme, che e' un
+        # difetto quanto un allarme mancato (regola ferrea 10). «Non eseguito» e' una terza
+        # cosa: non e' «pulito» e non e' «sporco», e va detta con la sua parola.
+        rep["scansione_non_eseguita"] = rimasto["motivo"]
+        # ⛔ `info`, non `warning`: non e' un allarme su un passo fallito — di quelli la
+        # guardia `test_ogni_guasto_ISOLATO_lascia_la_traccia_dell_errore` pretende
+        # giustamente la traccia dell'eccezione, e la mia riga non ne ha nessuna perche'
+        # non e' successo niente di male. Scriverla come allarme rendeva rossa una guardia
+        # sana: il livello sbagliato non e' un dettaglio, e' un'informazione falsa.
+        logger.info("OBLIO | host %s | scansione degli archivi veri NON eseguita (%s): "
+                    "`ok` parla solo dei controlli mirati",
+                    _mascherato(host_id), rimasto["motivo"])
+    rep["ok"] = (bool(residui)
+                 and all(v == 0 for v in residui.values())
+                 and not rep["sporchi_non_dichiarati"])
+    if rep["sporchi_non_dichiarati"]:
+        logger.error("OBLIO INCOMPLETO | host %s | il dato e' rimasto in %d archivi che "
+                     "NESSUNA legge dichiara di trattenere (su %d): %s",
+                     _mascherato(host_id), len(rep["sporchi_non_dichiarati"]),
+                     rep["archivi_totali"], sorted(rep["sporchi_non_dichiarati"]))
     return rep
+
+
+def _mascherato(host_id: Any) -> str:
+    """Un identificativo sicuro da scrivere nel registro: il registro dell'oblio non deve
+    diventare il posto dove il dato sopravvive."""
+    t = str(host_id or "")
+    return (t[:3] + "***" + t[-2:]) if len(t) > 6 else "***"
+
+
+def _dove_e_rimasto(sistema: Any, host_id: Any) -> Dict[str, Any]:
+    """Gli archivi VERI in cui l'identificativo della persona compare ancora, cercato in
+    ogni tabella e in ogni colonna di testo. Isolato: non solleva mai, e un archivio che
+    non si legge finisce fra i motivi, mai fra i puliti.
+
+    ⚠️ LIMITE DICHIARATO: cerca l'identificativo dell'host, non ogni dato che lo riguarda —
+    una riga che lo nomina in altro modo non viene vista. E' un pavimento, non un soffitto:
+    quello che trova e' rimasto per certo."""
+    import glob as _glob
+    import os as _os
+    import sqlite3 as _sq
+    ago = str(host_id or "")
+    if not ago:
+        return {"sporchi": {}, "totali": 0, "motivo": "host_id vuoto"}
+    fin = getattr(getattr(sistema, "config", None), "db_finanza", "") or ""
+    if fin in ("", ":memory:"):
+        return {"sporchi": {}, "totali": 0,
+                "motivo": "archivi in memoria: la scansione non e' possibile"}
+    dir_dati = _os.path.dirname(fin)
+    sporchi: Dict[str, List[str]] = {}
+    totali = 0
+    for percorso in sorted(_glob.glob(_os.path.join(dir_dati, "*.db"))):
+        totali += 1
+        nome = _os.path.basename(percorso)
+        try:
+            con = _sq.connect("file:%s?mode=ro" % percorso, uri=True)
+            con.row_factory = _sq.Row
+        except _sq.Error:
+            sporchi.setdefault(nome, []).append("(archivio illeggibile: non giudicato)")
+            continue
+        try:
+            tabelle = [r[0] for r in con.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' "
+                "AND name NOT LIKE 'sqlite_%'")]
+            for t in tabelle:
+                try:
+                    # ⛔ Cio' che si interpola e' un NOME DI TABELLA letto da `sqlite_master`
+                    # dell'archivio stesso, virgolettato e con le virgolette raddoppiate:
+                    # nessun dato dell'utente entra nel testo della query, e l'identificativo
+                    # cercato passa come parametro piu' sotto. Stessa lettura una per una
+                    # prescritta da `ruff.toml` e gia' usata in `fase202`, che mette
+                    # ENTRAMBI i silenziatori — il solo `noqa` zittisce ruff e lascia bandit
+                    # a gridare, e la CI se n'e' accorta il 2026-09-12.
+                    q = 'SELECT * FROM "%s"' % t.replace('"', '""')  # nosec B608  # noqa: S608
+                    for r in con.execute(q):
+                        if any(isinstance(r[k], str) and ago in r[k] for k in r.keys()):
+                            sporchi.setdefault(nome, []).append(t)
+                            break
+                except _sq.Error:
+                    sporchi.setdefault(nome, []).append("(tabella %s illeggibile)" % t)
+        except _sq.Error:
+            sporchi.setdefault(nome, []).append("(archivio illeggibile: non giudicato)")
+        finally:
+            con.close()
+    return {"sporchi": {k: sorted(set(v)) for k, v in sporchi.items()}, "totali": totali,
+            "motivo": ""}

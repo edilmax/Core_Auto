@@ -371,5 +371,164 @@ class TestLaConservazioneDelleComunicazioniInOgniLingua(unittest.TestCase):
                          % (L.LINGUA_CHE_FA_FEDE, atteso, diverse))
 
 
+class TestOgniPromessaDiConservazioneHaIlSuoMeccanismo(unittest.TestCase):
+    """⛔ L'informativa promette PIU' tempi di conservazione. Il codice ne applica UNO.
+
+    Misurato il 12 settembre 2026: le uniche cancellazioni a tempo che esistono sono
+    tecniche (gettoni usa-e-getta, cache, coda, prenotazioni non pagate dopo 26 ore) piu'
+    quella delle comunicazioni, scritta quel giorno. Nessun giro cancella i dati di un
+    account chiuso dopo il termine promesso, ne' i dati tecnici di sicurezza.
+
+    ⛔ QUESTA GUARDIA NON RIPARA IL BUCO: lo tiene CONTATO. E' la differenza fra un debito
+    scritto e un debito dimenticato — e su questo progetto un debito dimenticato e' stato
+    ogni volta il modo in cui si torna indietro. Se domani si aggiunge una promessa
+    all'informativa senza dire con quale meccanismo si mantiene, questa diventa rossa lo
+    stesso giorno; e se una riga sparisce dall'informativa, pure.
+
+    ⚠️ Le righe «nessun meccanismo» qui sotto NON sono assoluzioni: sono lavoro dichiarato,
+    e due di esse chiedono una decisione che nessun programma puo' prendere (che cosa
+    conta come «dati di account» quando restano obblighi fiscali sugli stessi fatti).
+    """
+
+    MECCANISMI = {
+        "Dati di account": (
+            "", "nessun giro cancella i dati di un account chiuso dopo il termine "
+                "promesso. Serve prima una decisione: cosa conta come «dati di account» "
+                "quando sugli stessi fatti restano obblighi fiscali"),
+        "Comunicazioni e prove di una prenotazione (messaggi in chat e foto allegate)": (
+            "fase83_server.conservazione_una_passata", ""),
+        "Dati contabili e fiscali": (
+            "", "qui il termine e' un obbligo di CONSERVARE, non di cancellare: il "
+                "giornale li tiene, e nessuno li toglie dopo. Da decidere se il termine "
+                "promesso vada inteso come un massimo"),
+        "Prove di accettazione": (
+            "", "trattenute per legge e dichiarate in `fase156_erasure."
+                "TRATTENUTI_PER_LEGGE` col loro perche'. Nessun giro le cancella alla fine "
+                "del periodo di prescrizione, e quel periodo non e' ancora scritto"),
+        "Dati tecnici di sicurezza": (
+            "", "indirizzo IP e dispositivo vivono dentro le prove di accettazione e nei "
+                "registri: nessun giro li cancella dopo il termine promesso"),
+    }
+
+    def _categorie(self):
+        """Le categorie dichiarate nel paragrafo 4 dell'informativa che fa fede: ogni riga
+        che apre con un nome seguito da due punti. Si leggono dal TESTO SERVITO, non da un
+        elenco: una promessa aggiunta domani entra nel conto da sola."""
+        testo = L.testo_privacy(L.LINGUA_CHE_FA_FEDE)
+        m = re.search(r"^4\..*?(?=^5\.)", testo, re.S | re.M)
+        self.assertIsNotNone(m, "misura non valida: la sezione 4 non si trova")
+        return [r.split(":", 1)[0].strip()
+                for r in m.group(0).split("\n")[1:]
+                if re.match(r"^[A-Z][^:]{3,}:", r)]
+
+    def test_ogni_categoria_promessa_ha_la_sua_riga(self):
+        categorie = self._categorie()
+        self.assertTrue(categorie, "misura non valida: nessuna categoria nel paragrafo 4")
+        senza = sorted(set(categorie) - set(self.MECCANISMI))
+        self.assertEqual(
+            senza, [],
+            "l'informativa promette un tempo di conservazione per queste categorie e "
+            "nessuno ha scritto con quale meccanismo si mantiene: %s" % senza)
+
+    def test_nessuna_riga_parla_di_una_promessa_che_NON_ESISTE_PIU(self):
+        categorie = self._categorie()
+        fantasmi = sorted(set(self.MECCANISMI) - set(categorie))
+        self.assertEqual(
+            fantasmi, [],
+            "queste righe descrivono promesse che l'informativa non fa piu': %s" % fantasmi)
+
+    def test_dove_il_meccanismo_MANCA_il_motivo_e_scritto(self):
+        vuote = sorted(nome for nome, (meccanismo, motivo) in self.MECCANISMI.items()
+                       if not str(meccanismo).strip() and not str(motivo).strip())
+        self.assertEqual(vuote, [],
+                         "queste categorie non hanno ne' un meccanismo ne' un motivo "
+                         "scritto: una promessa senza nessuno dei due e' una bugia che "
+                         "nessuno ha deciso di dire: %s" % vuote)
+
+    def test_il_meccanismo_DICHIARATO_esiste_davvero(self):
+        """Un nome di funzione scritto qui e mai verificato invecchierebbe come tutto il
+        resto (famiglia 20.3): si importa e si guarda che ci sia."""
+        import importlib
+        for nome, (meccanismo, _motivo) in sorted(self.MECCANISMI.items()):
+            if not str(meccanismo).strip():
+                continue
+            modulo, _, funzione = meccanismo.rpartition(".")
+            try:
+                m = importlib.import_module(modulo)
+            except Exception as e:
+                self.fail("%s dichiara il meccanismo %s, ma %s non si importa: %s"
+                          % (nome, meccanismo, modulo, e))
+            self.assertTrue(callable(getattr(m, funzione, None)),
+                            "%s dichiara il meccanismo %s, che non esiste"
+                            % (nome, meccanismo))
+
+
+class TestLaProvaDelConsensoLegaLeParoleCheLaPersonaHaLETTO(unittest.TestCase):
+    """L'informativa promette, al suo paragrafo 3, che la prova firmata dimostra **cosa hai
+    accettato**: versione del documento e sua impronta crittografica. Qui si misura se lo fa.
+
+    ⛔ IL DIFETTO CHE QUESTA CLASSE DESCRIVE (misurato il 12 settembre 2026). L'impronta del
+    consenso si calcola su `deploy/privacy.html`, che dal giorno in cui le pagine legali sono
+    diventate GUSCI non contiene piu' il testo: le parole arrivano da `/api/legale/documento`,
+    cioe' da `fase185`. Quindi la prova lega la **cornice**, non l'informativa — e due
+    informative diverse servite dalla stessa cornice hanno la stessa impronta. In piu' le due
+    `PRIVACY_VERSIONE` (questo modulo e `fase163`) sono numeri indipendenti: chi si registra
+    legge una versione e firma un'altra.
+    ⛔ E' il modo di rompersi n.3 (testi che mentono) applicato a una PROVA LEGALE, che e' il
+    posto peggiore: un documento che promette di dimostrare qualcosa e non lo dimostra e' piu'
+    dannoso del silenzio, perche' ci si difende in giudizio contando su di lui.
+    """
+
+    def _fase163(self):
+        import fase163_accettazioni as A
+        return A
+
+    def test_la_versione_FIRMATA_e_quella_STAMPATA(self):
+        """Due numeri indipendenti per lo stesso documento sono due verita': la persona legge
+        l'una e la sua prova nomina l'altra."""
+        A = self._fase163()
+        self.assertEqual(
+            A.PRIVACY_VERSIONE, L.PRIVACY_VERSIONE,
+            "la prova del consenso nomina una versione dell'informativa diversa da quella "
+            "che l'utente legge: firmata %r, stampata %r"
+            % (A.PRIVACY_VERSIONE, L.PRIVACY_VERSIONE))
+
+    def test_il_testo_su_cui_si_firma_e_QUELLO_CHE_SI_LEGGE(self):
+        """Non «assomiglia»: contiene le parole. Si cerca l'intestazione della sezione sulla
+        conservazione, che esiste nel testo servito e NON nella cornice."""
+        A = self._fase163()
+        A._privacy_cache.clear()
+        try:
+            firmato = A.testo_privacy()
+        finally:
+            A._privacy_cache.clear()
+        servito = L.testo_privacy(L.LINGUA_CHE_FA_FEDE)
+        m = re.search(r"^4\..*$", servito, re.M)
+        self.assertIsNotNone(m, "misura non valida: il testo servito non ha la sezione 4")
+        self.assertIn(
+            m.group(0).strip(), firmato,
+            "il testo su cui si calcola l'impronta del consenso NON contiene le parole "
+            "dell'informativa servita: la prova lega la cornice della pagina, non il documento")
+
+    def test_se_CAMBIA_il_testo_servito_CAMBIA_l_impronta_della_prova(self):
+        """La proprieta' vera, e l'unica che regge in tribunale: l'impronta deve dipendere dal
+        documento. Se non cambia quando il documento cambia, non lo sta misurando."""
+        A = self._fase163()
+        originale = L._PRIVACY[L.LINGUA_CHE_FA_FEDE]
+        A._privacy_cache.clear()
+        prima = A.privacy_sha256()
+        try:
+            L._PRIVACY[L.LINGUA_CHE_FA_FEDE] = originale + "\n11. CLAUSOLA AGGIUNTA DAL BANCO\n"
+            A._privacy_cache.clear()
+            dopo = A.privacy_sha256()
+        finally:
+            L._PRIVACY[L.LINGUA_CHE_FA_FEDE] = originale
+            A._privacy_cache.clear()
+        self.assertNotEqual(
+            prima, dopo,
+            "aggiunta una clausola all'informativa servita, l'impronta del consenso non e' "
+            "cambiata: quella impronta non dimostra COSA e' stato accettato")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

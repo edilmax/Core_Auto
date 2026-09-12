@@ -72,6 +72,15 @@ class PagamentiPendenti:
             con.execute("PRAGMA journal_mode=WAL")
         except sqlite3.Error:
             pass
+        try:
+            # ⛔ Qui dentro c'e' l'email di chi prenota e il corpo della prenotazione, e un
+            # `DELETE` di SQLite li lascia LEGGIBILI nelle pagine libere del file. Il pragma
+            # sta sulla CONNESSIONE, non dentro le singole cancellazioni: cosi' vale anche
+            # per quelle che nasceranno domani. Una lista di funzioni da ricordare
+            # invecchia; una connessione no.
+            con.execute("PRAGMA secure_delete=ON")
+        except sqlite3.Error:
+            pass
         return con
 
     def inizializza_schema(self) -> None:

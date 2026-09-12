@@ -92,11 +92,21 @@ class Messaggistica:
             con.close()
 
     def cancella_messaggi_host(self, host_id: Any) -> int:
-        """CANCELLAZIONE TOTALE dei messaggi di un host (oblio/pulizia)."""
+        """CANCELLAZIONE TOTALE dei messaggi di un host (oblio/pulizia).
+
+        ⛔ SOVRASCRIVE, come `cancella_thread`. Fino al 2026-09-12 il pragma stava solo nel
+        giro della conservazione: la cancellazione con l'obbligo piu' DEBOLE (un termine che
+        ci siamo dati noi) era fatta meglio di quella con l'obbligo piu' FORTE — l'oblio
+        dell'art. 17, che la persona chiede e la legge impone. Misurato: senza il pragma il
+        testo si rilegge dai byte del file dopo la cancellazione."""
         if not (isinstance(host_id, str) and host_id):
             return 0
         con = self._apri()
         try:
+            try:
+                con.execute("PRAGMA secure_delete=ON")
+            except sqlite3.Error:
+                logger.warning("secure_delete non applicabile su questo database")
             with con:
                 cur = con.execute("DELETE FROM messaggi WHERE host_id=?", (host_id,))
             return cur.rowcount if (cur.rowcount and cur.rowcount > 0) else 0

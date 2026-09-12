@@ -609,6 +609,53 @@ quattro ruoli è l'unico mai percorso da capo a fondo, ed è quello che porta i 
   di rompersi n.3 su una prova legale. Non è stato toccato niente. **E una seconda, più piccola:** anche
   `fase113.cancella_messaggi_host` — la cancellazione per oblio GDPR — non azzera i byte, perché il pragma l'ho messo
   solo nel giro della conservazione.
+  **1c-bis — «CANCELLATO» E «FIRMATO» ERANO DICHIARATI, NON MISURATI. ✅ «autorizzato fino alla fine» (12/9).**
+  🛠️ *Scritto e provato in locale il 12 settembre; lo stato in produzione lo scrive il blocco di consegne quando c'è.*
+  Nasce da una domanda del fondatore — *«si fa una cosa e si ritorna indietro, non funziona così»* — e la risposta
+  misurata è che **riparavamo istanze invece di famiglie**. Il metodo lo dice: è la 20.1 (il giro intero col
+  denominatore) e la 20.3 (la misura che invecchia).
+  🔴 **COSA ERA ROTTO, tutto misurato e niente ricordato.** ① La **prova firmata del consenso** copriva
+  `deploy/privacy.html`, che dal giorno in cui le pagine legali sono diventate gusci **non contiene più il testo**:
+  aggiunta una clausola all'informativa, l'impronta **non cambiava di un carattere** — mentre il paragrafo 3 promette
+  che dimostri *cosa* hai accettato. E le due `PRIVACY_VERSIONE` non coincidevano (`2026-07-20` firmata contro
+  `2026-09-12` stampata): la persona leggeva una versione e firmava l'altra. ② **20 funzioni cancellavano, 4 azzeravano
+  i byte**: un `DELETE` di SQLite lascia il contenuto leggibile nelle pagine libere, e fra quelle che non azzeravano
+  c'era `fase88` — l'**oblio di una persona**: email, telefono, ragione sociale, impronta della password col suo sale.
+  ③ **L'oblio diceva `ok=True` guardando 5 archivi su 27**, nominati a mano dentro il suo file, e il file **dichiarava**
+  che aggiungerne uno non richiede toccarlo: cioè un archivio nuovo saltato **in silenzio**. ④ Il giro della
+  conservazione **non scriveva niente** quando non cancellava: «nessuna riga» voleva dire *«non ha cancellato»* oppure
+  *«non è partito»*, e le due si scrivono uguale. ⑤ L'informativa promette **cinque** tempi di conservazione e il
+  codice ne applica **uno**: le altre cancellazioni a tempo sono tutte tecniche (gettoni, cache, coda, hold di 26 ore).
+  ✅ **COSA È STATO FATTO.** `fase163` prende la versione **da** `fase185` (un numero solo) e firma il **testo servito**
+  nella lingua che fa fede, con la cornice come ripiego · il pragma `secure_delete` sulla **connessione** (non nelle
+  singole funzioni, così vale anche per le cancellazioni che nasceranno) in `fase113`, `fase88`, `fase57`, `fase162`,
+  `fase117`, `fase123`, `fase203` · `fase156_erasure` non si fida più della sua lista: **cerca negli archivi veri**,
+  contati come li conta la produzione, e `ok` diventa falso se resta un archivio sporco **non dichiarato** · e ciò che
+  resta per legge è dichiarato riga per riga in `TRATTENUTI_PER_LEGGE`, col perché (prove di accettazione: GDPR art.
+  17.3.e; scritture contabili: art. 2220 c.c.) · il giro della conservazione scrive il suo **battito**.
+  🧭 **E LA PARTE CHE IMPEDISCE DI TORNARE INDIETRO — tre contatori, non tre riparazioni.**
+  · `collaudi/esame_oblio.py`: **il giro intero del «cancellami», percorso per la prima volta**, con il denominatore.
+  **8 anelli su 8 verdi**, e col guasto iniettato (`--guasto salta-oblio`) **rosso con 4**: provato nelle due direzioni.
+  Conta gli archivi **dai file**, come `fase202`, e cerca il dato in **ogni tabella e ogni colonna di testo**: un
+  archivio nato domani entra nel conto da solo.
+  · `test_pipeline_ci.TestOgniCancellazioneDichiaraSeAzzeraIByte`: ogni modulo che cancella deve avere la sua riga —
+  *contiene dati di una persona? sì/no, e perché*. Uno nuovo non dichiarato è **rosso lo stesso giorno**. Visto rosso
+  togliendo il pragma da `fase117`: *«Lists differ: ['fase117_wishlist.py'] != []»*.
+  · `test_testi_legali.TestOgniPromessaDiConservazioneHaIlSuoMeccanismo`: ogni categoria del paragrafo 4 deve dire con
+  quale meccanismo si mantiene, **o perché non ce l'ha**. Oggi: 1 con meccanismo, 4 dichiarate scoperte.
+  · `test_pulizia_uploads.TestIlGiroDellOblioEPercorsoDAVVERO`: l'esame dell'oblio **gira dentro la suite**, nelle due
+  direzioni — senza, fra sei mesi lo toglierebbe una «semplificazione» (D18 punto 4, che sull'esame era dichiarato
+  mancante e adesso non lo è più).
+  ⚠️ **QUATTRO COSE CHE RESTANO, E TRE SONO DECISIONI TUE, NON LAVORO MIO.**
+  (a) **I quattro tempi dell'informativa senza meccanismo** — account, contabili, prove di accettazione, dati tecnici:
+  per ognuno serve una decisione prima del codice (cosa conta come «dati di account» quando sugli stessi fatti restano
+  obblighi fiscali? quanto dura «il periodo di prescrizione»?). Sono **contati** dalla guardia, non più dimenticati.
+  (b) **`fase15_idempotency`**: la cache tiene anche la **risposta già prodotta**, che in qualche rotta può contenere
+  dati di una persona, e sta sul percorso caldo. Non è misurato **quali** rotte. Dichiarato, non risolto.
+  (c) **`fase16_outbox` e `fase33_persistenza`** passano da un archivio **astratto**, non da sqlite3: il pragma non si
+  applica e serve un rimedio loro.
+  (d) **Le righe di `TRATTENUTI_PER_LEGGE` sono posizioni legali** e vanno lette dall'avvocato: non le ho inventate,
+  ripetono ciò che l'informativa già dichiara, ma ripetere non è validare.
   **1d — Poi le altre 19 catene del pannello admin**, una per volta (la prossima: `/api/admin/prenotazioni`), e le
   catene di host, super admin e cliente.
 
@@ -2445,9 +2492,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: e39f660
+CONSEGNE AGGIORNATE A: 0f69379
 
-SUITE ATTUALE: Ran 6770 test
+SUITE ATTUALE: Ran 6785 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

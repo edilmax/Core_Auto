@@ -12199,4 +12199,12 @@ def conservazione_una_passata(sistema: Any, *, ora_ts: Any = None,
                            "stabilire se il termine e' passato",
                            _rif_per_registro(rif), exc_info=True)
             esito["trattenute"].append(rif)
+    # ⛔ IL BATTITO, e non e' decorazione. Scrivendo solo quando cancella qualcosa, questo
+    # giro era INVISIBILE: «nessuna riga» voleva dire «non ha cancellato niente» OPPURE
+    # «non e' partito», e le due cose si scrivono uguale. Fra sei mesi nessuno saprebbe se
+    # sta ancora girando -- ed e' l'osservabile debole della regola ferrea 9 applicato a un
+    # giro periodico invece che a un errore.
+    logger.info("CONSERVAZIONE | giro fatto | guardate %d conversazioni · cancellate %d · "
+                "trattenute %d · confine %s", len(righe), len(esito["cancellate"]),
+                len(esito["trattenute"]), confine)
     return esito

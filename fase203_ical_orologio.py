@@ -153,6 +153,14 @@ class ArchivioFeed:
             con.execute("PRAGMA journal_mode=WAL")
         except sqlite3.Error:
             pass
+        try:
+            # ⛔ Qui dentro c'e' l'indirizzo del calendario di un host — un link che spesso
+            # porta il suo identificativo presso l'altra piattaforma — e un `DELETE` di
+            # SQLite lo lascia leggibile nelle pagine libere. Il pragma sta sulla
+            # CONNESSIONE, cosi' vale anche per le cancellazioni che nasceranno domani.
+            con.execute("PRAGMA secure_delete=ON")
+        except sqlite3.Error:
+            pass
         return con
 
     def inizializza_schema(self) -> None:
