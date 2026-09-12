@@ -411,8 +411,36 @@ come `{ANNI_CHAT}`, e il §4 dell'informativa dichiara il termine delle comunica
 `prenotazioni_con_ultimo_messaggio`. `fase83_server.py`: `conservazione_una_passata(sistema, *, ora_ts=None,
 limite=50)` in fondo al file, `_conservazione_se_ora` col freno di 24 ore e la chiamata dentro il giro orario.
 Guardie nuove: `test_pulizia_uploads.TestLeChatNonRestanoInEternoENonSPARISCONOTroppoPRESTO` (15) e
-`test_testi_legali.TestLaConservazioneDelleComunicazioniInOgniLingua` (3). **STATO: acceso al prossimo deploy.**
-Parole del fondatore (11 settembre): *«autorizzato»* e *«va bene una regola sola a 2 anni»*.
+`test_testi_legali.TestLaConservazioneDelleComunicazioniInOgniLingua` (3). **STATO: ACCESO, in produzione dal 12
+settembre.** Parole del fondatore (11 settembre): *«autorizzato»* e *«va bene una regola sola a 2 anni»*; il 12,
+*«procedi al commit e tutto quello che serve»*.
+
+**In produzione, e la prova si e' guardata DENTRO.** Suite intera da PowerShell 5.1 senza `openssl`: `Ran 6765 tests in
+2408.108s` · `OK (skipped=4)` · `USCITA_DIRETTA=0` (caricatore **6770**; i 5 che mancano sono la classe del ripristino
+dei backup, saltata in blocco). Commit `71497bd`, PR #179: 16 controlli, **15 `pass`**, `zap` **skipping** (non
+eseguito, mai contato fra i verdi), **`gate` `pass`**; unione `e39f660`. Deploy D17: punto di ritorno
+`PRE_DEPLOY_20260912_111626.commit` = `83d1c48…`; ⚠️ **`:prec` puntava di nuovo all'immagine sbagliata** (`05b3b1c2…`
+contro la viva `eaa0dd9b…`) e il passo [1b] l'ha ri-agganciato **misurando** — **decima volta** in dieci deploy che quel
+gesto evita un paracadute falso, e nessuna di quelle dieci l'ha presa la memoria di qualcuno; backup
+`finanza-20260912-073638.db.gz` riaperto (`gzip -t` integro, `SQLite format 3`, 49.152 byte). Scambio: `:latest`
+`adc80d2f…` diversa da `:prec`, `casavip_app` **healthy**, `money_path_pronto: True`, `avvisi: []`. Dopo: `/` 200 ·
+`/api/health` 200 · negative `/api/bunker/invarianti` **403** e `/api/admin/prenotazioni` **401** (indirizzi che
+rispondono, mai un 404 come prova) · `verifica_produzione` **190 controlli, 0 violazioni** · certificato valido 71
+giorni. Dentro il contenitore: `_conservazione_se_ora` (2419), il giro orario che **la chiama** (11800),
+`conservazione_una_passata` (12098), `ANNI_CONSERVAZIONE_CHAT` (60) usata da `_componi` (663), `cancella_thread` (106)
+col pragma (127), `prenotazioni_con_ultimo_messaggio` (137), e `collaudi/` assente come dichiarato.
+🔑 **E la misura che non si poteva prendere dal disco:** le **8 lingue lette dall'API pubblica del sito vero**, versione
+`2026-09-12`, ognuna con il suo termine — `2 anni`, `2 years`, `2 Jahre`, `2 ans`, `2 anos` (es e pt), `2年` (ja e zh).
+Un verde locale avrebbe detto che il testo esiste; questo dice che **un visitatore lo legge**.
+
+📌 **Caselle scadute per aver toccato tre moduli, e rimesse nello stesso lavoro.** Blocco 5: `esame_legale` (spunte,
+lingue) VERDI, impronta `0a5d490c3ac2`. Blocco 6: `esame_testi_congelati` VERDE (denominatore 72) e
+`esame_plausibilita` VERDE (13 passi), impronta `a1f74517929d`. Blocco 8: `esame_sentinella` **ROSSA 4 su 10** — lo
+stesso motivo di prima, manca un monitor esterno, ed e' una decisione del fondatore, non un guasto; e **`esame_backup`
+CHIUSA VERDE, 19 passi su 19**, col materiale vero che il deploy aveva appena prodotto: archivio ripristinato e
+**letto**, sha256 del `.gz` uguale a quello scritto nel `.sha256`, manifesto dello stesso giro che elenca tutti i 23
+archivi attesi. Quella casella era ferma perche' nessuno aveva portato giu' i file: non serviva codice, serviva
+materiale.
 
 **Cosa era rotto.** Il §1 dichiarava di trattare «comunicazioni con la controparte» e il §4 **non diceva per quanto
 tempo**: non un'informativa generica, un'informativa incompleta (art. 13.2.a GDPR; l'EDPB chiede termini distinti per

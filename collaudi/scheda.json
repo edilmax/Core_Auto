@@ -191,13 +191,29 @@
  "3a547df3a743": {
   "blocco": 8,
   "comando": "python collaudi/esame_backup.py --file <db.gz> --sha <.sha256> --manifest <MANIFEST.txt> --scrivi",
-  "commit": "bfad2ce",
+  "commit": "e39f660",
   "condizione": "il salvataggio e' stato RIPRISTINATO e letto, non solo prodotto",
   "denominatore": 19,
   "esito": true,
-  "impronta": "1e861914e310",
+  "impronta": "b99d9a55b63d",
+  "impronte_moduli": {
+   "fase13_protocollo_finale": "2dce22f058cc",
+   "fase16_outbox": "a47de5874653",
+   "fase178_watchdog": "fdc1565ac6cd",
+   "fase23_datastore": "45f9c0f96325",
+   "fase28_gateway": "650f256a6d9a",
+   "fase29_backpressure": "d905d8e921b7",
+   "fase37_notifiche": "386192b635b2",
+   "fase38_backup": "0482a29682b2",
+   "fase39_whatsapp": "e5c341ed59c6",
+   "fase42_observability": "a557645447a7",
+   "fase60_mcp_server": "56ffc4364819",
+   "fase81_bootstrap_casavip": "dacbc902ed40",
+   "fase83_server": "5debc73aa19b",
+   "fase86_email": "19069663f9d1"
+  },
   "motivo": "",
-  "quando": "2026-09-08T17:59:05"
+  "quando": "2026-09-12T13:22:07"
  },
  "50691c557e6e": {
   "blocco": 1,
@@ -241,13 +257,30 @@
  "506a24febc87": {
   "blocco": 6,
   "comando": "python collaudi/esame_plausibilita.py --scrivi",
-  "commit": "39448a0",
+  "commit": "e39f660",
   "condizione": "ogni numero mostrato ha senso nel mondo vero (modo di rompersi 10)",
-  "denominatore": 24,
+  "denominatore": 13,
   "esito": true,
-  "impronta": "198b6c89a289",
+  "impronta": "a1f74517929d",
+  "impronte_moduli": {
+   "fase107_traduzione_annunci": "e0fc5c8e8eb1",
+   "fase113_messaggistica": "41035a5ff177",
+   "fase117_wishlist": "42a05bdcd030",
+   "fase121_geo_ricerca": "2a001dc8b497",
+   "fase123_web_push": "655f9a31d860",
+   "fase129_traduzione_recensioni": "2d80591ac6cd",
+   "fase137_fedelta_guest": "5394500c8163",
+   "fase139_chatbot_guest": "716261ab2b0d",
+   "fase166_geocoder": "162da4a35b88",
+   "fase175_poi_osm": "c1ad5e11dd94",
+   "fase26_ricerca": "3dc66d4cb1ac",
+   "fase57_vetrina": "57101fd6eb58",
+   "fase61_localizzazione": "6ca2f962ff78",
+   "fase63_recensioni": "5e00244ea3f5",
+   "fase74_sensory_engine": "6f64cb3f6e59"
+  },
   "motivo": "",
-  "quando": "2026-09-07T18:26:41"
+  "quando": "2026-09-12T13:21:06"
  },
  "555972b586e3": {
   "blocco": 2,
@@ -263,13 +296,25 @@
  "5c447a0ee514": {
   "blocco": 5,
   "comando": "python collaudi/esame_legale.py --casella spunte --scrivi",
-  "commit": "39448a0",
+  "commit": "e39f660",
   "condizione": "le 3 spunte obbligatorie sono bloccate lato browser E rifiutate 422 lato server",
   "denominatore": 36,
   "esito": true,
-  "impronta": "2fa799ea69f9",
+  "impronta": "0a5d490c3ac2",
+  "impronte_moduli": {
+   "fase100_dac7": "e5c0be6c61a5",
+   "fase103_reverse_charge": "5ca652e5af5a",
+   "fase145_contratto_pdf": "070792042938",
+   "fase151_alloggiati_web": "32eaf4440a62",
+   "fase154_giurisdizioni_marketing": "7edab3faacdd",
+   "fase156_erasure": "dfcb5443cc24",
+   "fase163_accettazioni": "93e34f12d517",
+   "fase184_marca_temporale": "dd31eb53f86c",
+   "fase185_testi_legali": "4d520fb7df3d",
+   "fase79_dichiarazione": "fdafb04a19ea"
+  },
   "motivo": "",
-  "quando": "2026-09-07T18:26:40"
+  "quando": "2026-09-12T13:20:40"
  },
  "63e1e98393ea": {
   "blocco": 10,
@@ -296,13 +341,25 @@
  "7d0c5b891c14": {
   "blocco": 5,
   "comando": "python collaudi/esame_legale.py --casella lingue --scrivi",
-  "commit": "39448a0",
+  "commit": "e39f660",
   "condizione": "termini e privacy sono leggibili in tutte le lingue dichiarate",
   "denominatore": 43,
   "esito": true,
-  "impronta": "2fa799ea69f9",
+  "impronta": "0a5d490c3ac2",
+  "impronte_moduli": {
+   "fase100_dac7": "e5c0be6c61a5",
+   "fase103_reverse_charge": "5ca652e5af5a",
+   "fase145_contratto_pdf": "070792042938",
+   "fase151_alloggiati_web": "32eaf4440a62",
+   "fase154_giurisdizioni_marketing": "7edab3faacdd",
+   "fase156_erasure": "dfcb5443cc24",
+   "fase163_accettazioni": "93e34f12d517",
+   "fase184_marca_temporale": "dd31eb53f86c",
+   "fase185_testi_legali": "4d520fb7df3d",
+   "fase79_dichiarazione": "fdafb04a19ea"
+  },
   "motivo": "",
-  "quando": "2026-09-07T18:26:40"
+  "quando": "2026-09-12T13:20:40"
  },
  "813b9082642c": {
   "blocco": 1,
@@ -357,11 +414,11 @@
  "a36e3373da1d": {
   "blocco": 8,
   "comando": "python collaudi/esame_sentinella.py --scrivi",
-  "commit": "3a02b0d",
+  "commit": "e39f660",
   "condizione": "una sentinella ESTERNA (non nostra) si accorge se il sito muore",
   "denominatore": 10,
   "esito": false,
-  "impronta": "e445d065e819",
+  "impronta": "b99d9a55b63d",
   "impronte_moduli": {
    "fase13_protocollo_finale": "2dce22f058cc",
    "fase16_outbox": "a47de5874653",
@@ -375,11 +432,11 @@
    "fase42_observability": "a557645447a7",
    "fase60_mcp_server": "56ffc4364819",
    "fase81_bootstrap_casavip": "dacbc902ed40",
-   "fase83_server": "96de68f73c79",
+   "fase83_server": "5debc73aa19b",
    "fase86_email": "19069663f9d1"
   },
   "motivo": "[esiste] un monitor ESTERNO (non GitHub) esiste e guarda bookinvip.com/api/health (nessun monitor esterno nelle letture: serve un conto (UptimeRobot o Better Stack, gratuito), lo apre il fondatore); [sveglia] il monitor esterno controlla almeno ogni 5 minuti e non e' in pausa (nessun monitor esterno); [sveglia] nelle ultime 24 ore i controlli del monitor non hanno buchi > 15 minuti e l'ultimo ha meno di 15 minuti (controlli nelle 24 ore: 0, buco massimo -, ultimo -); [sveglia] GitHub (seconda linea): ultimo giro entro 60 minuti e buco massimo nelle 24 ore sotto i 60 minuti — DECIDE, perche' il",
-  "quando": "2026-09-11T21:10:48"
+  "quando": "2026-09-12T13:21:13"
  },
  "a6c9694a48f1": {
   "blocco": 2,
@@ -553,13 +610,30 @@
  "e0c5eaf17028": {
   "blocco": 6,
   "comando": "python collaudi/esame_testi_congelati.py --scrivi",
-  "commit": "2c60533",
+  "commit": "e39f660",
   "condizione": "nessun testo resta congelato in italiano dove la pagina dichiara 8 lingue: l'occhio del fondatore conta ZERO parole ferme sulle pagine che non sono gusci riempiti dal server",
   "denominatore": 72,
   "esito": true,
-  "impronta": "198b6c89a289",
+  "impronta": "a1f74517929d",
+  "impronte_moduli": {
+   "fase107_traduzione_annunci": "e0fc5c8e8eb1",
+   "fase113_messaggistica": "41035a5ff177",
+   "fase117_wishlist": "42a05bdcd030",
+   "fase121_geo_ricerca": "2a001dc8b497",
+   "fase123_web_push": "655f9a31d860",
+   "fase129_traduzione_recensioni": "2d80591ac6cd",
+   "fase137_fedelta_guest": "5394500c8163",
+   "fase139_chatbot_guest": "716261ab2b0d",
+   "fase166_geocoder": "162da4a35b88",
+   "fase175_poi_osm": "c1ad5e11dd94",
+   "fase26_ricerca": "3dc66d4cb1ac",
+   "fase57_vetrina": "57101fd6eb58",
+   "fase61_localizzazione": "6ca2f962ff78",
+   "fase63_recensioni": "5e00244ea3f5",
+   "fase74_sensory_engine": "6f64cb3f6e59"
+  },
   "motivo": "",
-  "quando": "2026-09-07T16:45:06"
+  "quando": "2026-09-12T13:20:57"
  },
  "ec84faaea398": {
   "blocco": 2,
