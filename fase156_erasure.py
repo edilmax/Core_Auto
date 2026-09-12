@@ -369,7 +369,15 @@ def _dove_e_rimasto(sistema: Any, host_id: Any) -> Dict[str, Any]:
                 "AND name NOT LIKE 'sqlite_%'")]
             for t in tabelle:
                 try:
-                    for r in con.execute('SELECT * FROM "%s"' % t.replace('"', '""')):  # noqa: S608
+                    # ⛔ Cio' che si interpola e' un NOME DI TABELLA letto da `sqlite_master`
+                    # dell'archivio stesso, virgolettato e con le virgolette raddoppiate:
+                    # nessun dato dell'utente entra nel testo della query, e l'identificativo
+                    # cercato passa come parametro piu' sotto. Stessa lettura una per una
+                    # prescritta da `ruff.toml` e gia' usata in `fase202`, che mette
+                    # ENTRAMBI i silenziatori — il solo `noqa` zittisce ruff e lascia bandit
+                    # a gridare, e la CI se n'e' accorta il 2026-09-12.
+                    q = 'SELECT * FROM "%s"' % t.replace('"', '""')  # nosec B608  # noqa: S608
+                    for r in con.execute(q):
                         if any(isinstance(r[k], str) and ago in r[k] for k in r.keys()):
                             sporchi.setdefault(nome, []).append(t)
                             break
