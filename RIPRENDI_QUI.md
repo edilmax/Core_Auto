@@ -480,7 +480,15 @@ quattro ruoli è l'unico mai percorso da capo a fondo, ed è quello che porta i 
   **D20:** guardia scritta → rossa per ImportError (motivo sbagliato, si registra) → passo 0 = estrazione con la logica di
   oggi → guardia **rossa per i motivi giusti** → cura → verde. Le 6 guardie vanno in `test_promemoria_checkin.py`. ⚠️ Le
   variabili `_dt3`/`_j3` del blocco servono ancora a `_tick_invito_recensione`: la riga d'import non si tocca.
-  **1a-bis — 🔧 L'INVITO A RECENSIRE: cura scritta e provata, NON ancora in produzione.** ✅ «autorizzato» del
+  **1a-bis — ✅ FATTO: l'invito a recensire — in produzione dal 12/9, notte.** Commit `1f8cc99`, unione **`2f1ea8e`**
+  (PR #177) uguale su computer, GitHub e VPS. Suite intera `Ran 6747 · OK (skipped=4) · USCITA_DIRETTA=0`
+  (caricatore 6752). CI: 16 controlli, 15 `success`, `zap` **skipped** (non eseguito), `gate` `success`. Deploy D17:
+  `prima` (⚠️ `:prec` puntava ancora all'immagine di ieri, ri-agganciato dal passo [1b] misurando — nona volta) ·
+  `scambio` (`:latest` `eaa0dd9b…` ≠ `:prec`, `healthy`, `money_path_pronto: True`) · `dopo` (200/200, negativa
+  **403**, `verifica_produzione` 190 controlli 0 violazioni). **Dentro il contenitore:** `GIORNI_INVITO_RECENSIONE
+  = 14`, `invito_recensione_una_passata` presente e chiamata dal giro, le due righe `INVITO RECENSIONE NON
+  CONSEGNATO`, e **zero** `segna_invito_recensione`/`date.today` rimasti nel giro. ⚠️ **Non misurato:** un invito
+  vero partito in produzione — lì non è mai passata una prenotazione pagata. ✅ «autorizzato» del
   fondatore (12/9), poi *«correggi tutto … non si torna piu indietro»*, che ha aggiunto il terzo pezzo. Stesso
   difetto n. 2 del promemoria, rimasto in piedi quando quello fu riparato: `invia()` dice False senza sollevare e
   il giro segnava lo stesso. **La cura:** giro estratto in `invito_recensione_una_passata(sistema, router, *,
@@ -495,8 +503,8 @@ quattro ruoli è l'unico mai percorso da capo a fondo, ed è quello che porta i 
   partito più di una volta»* — con ripristino dimostrato (sha256 `8d0ba697…` prima e dopo, due volte su due).
   Cancello statico pulito dopo aver tolto `_dt3`/`_j3`, rimasti orfani (2 rilievi `F401`): resta `threading as
   _th3`. Caricatore: **6752** test. ⚠️ **Limite:** i 14 giorni sono una **copia** del numero scritto a mano in
-  `fase162`, inchiodata da una guardia che misura la finestra vera. **Resta:** suite intera, commit, unione,
-  deploy (tocca codice servito dal contenitore).
+  `fase162`, inchiodata da una guardia che misura la finestra vera. **Niente resta aperto su questo punto:** suite,
+  commit, unione e deploy sono fatti e verificati (le misure stanno nella riga di apertura qui sopra).
   **1b — Video via email + la casella da spuntare. ✅ «autorizzato» per i pezzi 1 e 2.** Le prove oggi sono solo foto
   (`png jpg webp gif`, max 10). Pezzo 1: sul voucher (`fase83.pagina_voucher_html`, sezione chat) il pulsante «manda un
   video» con l'email già compilata a **`info@bookinvip.com`** (già pubblico; non confermato esplicitamente) e l'oggetto
@@ -2355,7 +2363,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: f11835c
+CONSEGNE AGGIORNATE A: 2f1ea8e
 
 SUITE ATTUALE: Ran 6752 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
