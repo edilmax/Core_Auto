@@ -519,8 +519,28 @@ quattro ruoli è l'unico mai percorso da capo a fondo, ed è quello che porta i 
   video, i video stanno fuori dal sistema (punto per l'avvocato). L'admin la chat la può solo leggere, e `fase113.invia`
   rifiuta ogni mittente che non sia host o cliente: non si cambia.
   **1c — Conservazione: UNA REGOLA SOLA A 2 ANNI. ✅ «autorizzato» (11/9) e «va bene una regola sola a 2 anni».**
-  🛠️ **SCRITTO E PROVATO IN LOCALE il 12 settembre, NON ANCORA IN PRODUZIONE:** mancano suite intera, CI, commit,
-  unione e deploy — cioè tutto quello che questa coda chiama «chiuso». Non si scrive ✅ FATTO finché non lo è.
+  ✅ **FATTO — in produzione dal 12 settembre.** Commit `71497bd`, unione **`e39f660`** (PR #179) uguale su computer,
+  GitHub e VPS. Suite intera `Ran 6765 in 2408.108s · OK (skipped=4) · USCITA_DIRETTA=0` (caricatore **6770**: i 5 che
+  mancano sono la classe del ripristino dei backup, saltata in blocco senza `openssl`). CI: **16 controlli, 15 `pass`,
+  `zap` skipping** (non eseguito, mai contato fra i verdi), **`gate` `pass`**. Cancello statico: 674 contro 686
+  congelate, nessuna nuova. Deploy D17: punto di ritorno `PRE_DEPLOY_20260912_111626.commit` = `83d1c48…` ·
+  ⚠️ **`:prec` puntava di nuovo all'immagine sbagliata** (`05b3b1c2…` contro la viva `eaa0dd9b…`) e il passo [1b] l'ha
+  ri-agganciato **misurando** — **decima volta** che quel gesto evita un paracadute falso · backup
+  `finanza-20260912-073638.db.gz` **riaperto** (`gzip -t` integro, `SQLite format 3`, 49.152 byte) · scambio: `:latest`
+  `adc80d2f…` ≠ `:prec` `eaa0dd9b…`, `casavip_app` **healthy**, `money_path_pronto: True`, `avvisi: []` · dopo: `/` 200,
+  `/api/health` 200, negativa `/api/bunker/invarianti` **403** e `/api/admin/prenotazioni` **401** (indirizzi che
+  esistono, mai un 404 come prova), `verifica_produzione` **190 controlli, 0 violazioni**, certificato valido 71 giorni.
+  🔑 **E la prova che vale più di tutte, letta dall'API pubblica e non dal mio disco:** tutte e **8 le lingue** servono
+  la riga, con `versione=2026-09-12` — `2 anni` · `2 years` · `2 Jahre` · `2 ans` · `2 anos` (es e pt) · `2年` (ja e zh).
+  **Dentro il contenitore che gira:** `_conservazione_se_ora` (riga 2419), **il giro orario che la chiama** (11800),
+  `conservazione_una_passata` (12098), `ANNI_CONSERVAZIONE_CHAT = 2` (60) usata da `_componi` (663), `cancella_thread`
+  (106) col `PRAGMA secure_delete=ON` (127), `prenotazioni_con_ultimo_messaggio` (137); e `collaudi/` **non c'è**, come
+  dichiarato. 📌 **Caselle scadute per aver toccato tre moduli, e rimesse subito:** Blocco 5 `esame_legale` (spunte e
+  lingue) VERDI · Blocco 6 `esame_testi_congelati` VERDE (denominatore 72) e `esame_plausibilita` VERDE (13 passi) ·
+  Blocco 8 `esame_sentinella` **ROSSA 4 su 10**, stesso motivo di prima (manca il monitor esterno: è una decisione del
+  fondatore, non un guasto) · e **`esame_backup` chiusa VERDE, 19 passi su 19**, col materiale vero del server appena
+  prodotto dal deploy (archivio ripristinato e **letto**, sha256 combaciante, manifesto dello stesso giro con tutti i 23
+  archivi attesi). Resta da rimisurare solo `esame_deploy`, che non è un lavoro ma una **decisione** già scritta qui sotto.
   Tutte le chat e le prove si cancellano **2 anni dopo il check-out, o dopo la chiusura della controversia se è più
   tardi**; mai finché una controversia è aperta. I SOLDI no: scritture contabili 10 anni (art. 2220 c.c.; DAC7 da 5 a
   10), il giornale di `fase177` li tiene già.
@@ -2425,7 +2445,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 2f1ea8e
+CONSEGNE AGGIORNATE A: e39f660
 
 SUITE ATTUALE: Ran 6770 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
