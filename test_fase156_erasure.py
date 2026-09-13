@@ -593,6 +593,194 @@ class TestErasureConArchiviINCOMPLETI(unittest.TestCase):
                                       % (nome, t))
 
 
+class TestUnHostConPagamentiSTORICIOTTIENELaCancellazione(unittest.TestCase):
+    """⛔ D20 — scritta PRIMA della riparazione e vista ROSSA sul codice di produzione.
+
+    Il difetto piu' grave trovato il 2026-09-12, e non riguarda un dato che resta: riguarda
+    una cancellazione che NON AVVIENE. Un host che ha avuto una prenotazione poi rimborsata
+    non ha piu' nessun obbligo pendente (`obblighi_pendenti` torna `{}`: niente ospiti in
+    arrivo, niente soldi dovuti, niente escrow). Chiede la cancellazione. L'oblio cancella
+    tutto cio' che mira — i cinque residui escono tutti a zero — e poi esce `ok=False`,
+    perche' nelle tabelle `payout` e `pendenti` restano righe che NESSUNA riga di
+    `TRATTENUTI_PER_LEGGE` dichiara. E `fase83_server.py` traduce quel `False` in un
+    **409**: la persona si sente rispondere «errore» a un diritto che per legge deve andare
+    a buon fine.
+
+    ⛔ Non e' la formula di `ok` a essere sbagliata — un dato che resta senza che nessuno
+    sappia perche' NON e' un oblio riuscito, e dire «fatto» sarebbe peggio. A mancare e' la
+    dichiarazione: quelle due tabelle sono documenti della transazione commerciale, della
+    stessa natura di `libro_giornale`, `note` e `debiti`, che il file gia' dichiara.
+
+    Riprodotto misurando (uscita letterale del banco):
+        OBBLIGHI PENDENTI di A prima dell'oblio: {}
+        residui                  {"alloggi": 0, "inventario": 0, "messaggi": 0, "host": 0}
+        ok                       false
+        sporchi_non_dichiarati   {"payout.db": ["payout"], "pendenti.db": ["pendenti"]}
+    """
+
+    def setUp(self):
+        import dataclasses
+        import os
+        self.dir = tempfile.mkdtemp()
+        campi = {f.name: os.path.join(self.dir, f.name[3:] + ".db")
+                 for f in dataclasses.fields(ConfigCasaVIP) if f.name.startswith("db_")}
+        self.sis = crea_sistema(ConfigCasaVIP(
+            abilitato=True, segreto_hmac=SEG, con_registrazione_host=True,
+            commissione_bps=1500, **campi))
+        self.r = crea_router(self.sis, host_key="hk", base_url="https://bookinvip.com")
+        s, c = self.r.gestisci(
+            "POST", "/api/host/registrazione", {},
+            json.dumps({"email": "h@storico.it", "password": "passw0rd!",
+                        "accetta_termini": True, "accetta_clausole": True,
+                        "accetta_privacy": True}), {})
+        self.assertEqual(s, 201, c)
+        self.hid = c["host_id"]
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def test_le_righe_di_PAGAMENTO_storiche_non_fanno_fallire_l_oblio(self):
+        """Si scrivono le righe che una prenotazione CONCLUSA lascia dietro di se' — un
+        payout gia' maturato e un pendente storico — con i metodi veri dei due archivi, e
+        poi si chiede la cancellazione. L'host non ha nulla in sospeso."""
+        from fase156_erasure import obblighi_pendenti
+        rif = "rif-storico-ZZZZ"
+        self.assertTrue(
+            self.sis.payout.registra_maturato(rif, self.hid, 27000, "EUR"),
+            "misura non valida: il payout storico non e' entrato in archivio")
+        # ⛔ «pagato», non «maturato»: `_PAYOUT_IN_BALLO` conta maturato e in_transito come
+        # soldi ancora dovuti, e allora `obblighi_pendenti` blocca la cancellazione — cosa
+        # giusta, ma un altro difetto. Qui il bonifico e' gia' stato fatto: resta solo la
+        # RIGA CONTABILE, ed e' quella che deve smettere di far fallire l'oblio.
+        # ⛔ E si passa dagli stati VERI: `_TRANSIZIONI` non consente di saltare da
+        # «maturato» a «pagato», e fa bene — e' la macchina a stati esplicita che impedisce
+        # di costruire a mano uno stato che il prodotto non puo' raggiungere.
+        for _stato in ("in_transito", "pagato"):
+            self.assertTrue(self.sis.payout.aggiorna_stato(rif, _stato),
+                            "misura non valida: il payout non e' passato a «%s»" % _stato)
+        self.assertTrue(
+            self.sis.pagamenti_pendenti.registra(
+                rif, alloggio_id="casa-storico", check_in="2020-01-01",
+                check_out="2020-01-03", host_id=self.hid, email="ospite@esempio.test",
+                stato="pagato"),
+            "misura non valida: il pendente storico non e' entrato in archivio")
+        # PREMESSA: l'host dev'essere PULITO, altrimenti il 409 sarebbe giusto e non
+        # staremmo misurando questo difetto ma il blocco degli obblighi, che funziona.
+        self.assertEqual(obblighi_pendenti(self.sis, self.hid), {},
+                         "misura non valida: l'host ha obblighi pendenti, il rifiuto "
+                         "sarebbe legittimo e non proverebbe niente")
+
+        rep = cancella_attivita_host(self.sis, self.hid, forza=True)
+
+        self.assertEqual(
+            rep.get("sporchi_non_dichiarati") or {}, {},
+            "restano archivi sporchi che NESSUNA legge dichiara: %s. `ok` esce False e la "
+            "rotta risponde 409 a un host che non ha piu' nulla in sospeso — cioe' il "
+            "diritto alla cancellazione non funziona per chi ha avuto una prenotazione"
+            % (rep.get("sporchi_non_dichiarati"),))
+        self.assertTrue(
+            rep.get("ok"),
+            "l'oblio esce ok=False su un host pulito: la rotta rispondera' 409. "
+            "residui=%r sporchi=%r" % (rep.get("residui"), rep.get("archivi_sporchi")))
+
+
+class TestIlCancellamiTOGLIEancheIlCALENDARIOesterno(unittest.TestCase):
+    """⛔ D20 — scritta PRIMA della riparazione e vista ROSSA sul codice di produzione.
+
+    L'host collega il calendario della sua casa su Airbnb (`POST /api/host/ical`), che salva
+    l'URL in `ical_feed`. Poi chiede la cancellazione dei suoi dati.
+
+    ⛔ La tabella `ical_feed` porta `alloggio_id` e `url`, e NESSUN `host_id` — che e' l'unico
+    ago che la scansione degli archivi veri cerca. Quindi l'oblio non solo non cancella quella
+    riga: non la VEDE nemmeno per dichiararla sporca, e il rapporto esce `ok=True`. Misurato
+    il 2026-09-12 partendo dalla rotta vera: l'indirizzo privato del calendario restava in
+    `ical_feed.db` e alla persona si rispondeva «fatto».
+
+    E' la stessa forma del buco che `fase156` dichiarava di aver chiuso — «un archivio nuovo
+    viene saltato in silenzio» — chiusa per gli archivi che nominano l'host, rimasta aperta
+    per quelli che lo nominano di sbieco, attraverso lo slug del suo alloggio.
+    """
+
+    FEED = "https://www.airbnb.it/calendar/ical/SPIA-OBLIO-ICAL-ZZZZ.ics"
+
+    def setUp(self):
+        import dataclasses
+        import os
+        self.dir = tempfile.mkdtemp()
+        campi = {f.name: os.path.join(self.dir, f.name[3:] + ".db")
+                 for f in dataclasses.fields(ConfigCasaVIP) if f.name.startswith("db_")}
+        self.sis = crea_sistema(ConfigCasaVIP(
+            abilitato=True, segreto_hmac=SEG, con_registrazione_host=True,
+            commissione_bps=1500, **campi))
+        self.r = crea_router(self.sis, host_key="hk", base_url="https://bookinvip.com")
+        s, c = self.g("POST", "/api/host/registrazione",
+                      {"email": "h@ical.it", "password": "passw0rd!",
+                       "accetta_termini": True, "accetta_clausole": True,
+                       "accetta_privacy": True})
+        self.assertEqual(s, 201, c)
+        self.hid, self.tok = c["host_id"], c["token"]
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def g(self, m, p, body=None, h=None):
+        return self.r.gestisci(m, p, {},
+                               json.dumps(body) if body is not None else None, h or {})
+
+    def _feed_in_archivio(self):
+        from fase203_ical_orologio import archivio_di
+        return [f for f in (archivio_di(self.sis).elenco() or [])
+                if f.get("url") == self.FEED]
+
+    def _collega_calendario(self, slug):
+        """⛔ Si salva dall'ARCHIVIO, non dalla rotta `POST /api/host/ical`. La rotta, dopo
+        aver salvato, rilegge subito il feed: il test farebbe una chiamata di RETE VERA
+        (misurato: `HTTP Error 404` verso airbnb.it, 870 ms) e il suo esito dipenderebbe da
+        un servizio di qualcun altro — il modo di rompersi n. 6. Qui il difetto da misurare
+        sta nella CANCELLAZIONE, non nel salvataggio: la rotta e' gia' sorvegliata da
+        `test_fase203`, e questo e' il banco che costruisce lo stato."""
+        from fase203_ical_orologio import archivio_di
+        self.assertTrue(archivio_di(self.sis).salva(slug, self.FEED),
+                        "misura non valida: il banco non ha salvato il feed")
+
+    def test_l_URL_del_calendario_NON_sopravvive_alla_cancellazione(self):
+        s, c = self.g("POST", "/api/host/pubblica",
+                      {"slug": "casa-ical", "titolo": "Casa", "citta": "Roma",
+                       "prezzo_notte_cents": 10000, "capacita": 2},
+                      {"X-Host-Token": self.tok})
+        self.assertIn(s, (200, 201), c)
+        self._collega_calendario("casa-ical")
+        # PREMESSA (sbaglio S1): se il feed non fosse mai stato salvato, «non c'e' dopo»
+        # sarebbe vero per il motivo sbagliato.
+        self.assertEqual(len(self._feed_in_archivio()), 1,
+                         "misura non valida: il feed non e' mai entrato in archivio")
+
+        rep = cancella_attivita_host(self.sis, self.hid, forza=True)
+
+        self.assertEqual(
+            self._feed_in_archivio(), [],
+            "dopo il «cancellami» l'indirizzo privato del calendario dell'host e' ancora "
+            "in archivio. L'oblio ha dichiarato ok=%r e archivi sporchi=%r: quella riga "
+            "non porta l'host_id, quindi non la vede nemmeno per dichiararla"
+            % (rep.get("ok"), rep.get("archivi_sporchi")))
+
+    def test_e_se_resta_l_oblio_NON_puo_dichiarare_ok(self):
+        """L'altra meta', e vale anche il giorno che la cancellazione fallisse per un altro
+        motivo: un dato che sopravvive e un rapporto che dice «fatto» sono la cosa peggiore
+        delle due. O sparisce, o l'oblio lo dichiara — mai «ok» con il dato ancora li'."""
+        s, _ = self.g("POST", "/api/host/pubblica",
+                      {"slug": "casa-ical2", "titolo": "Casa", "citta": "Roma",
+                       "prezzo_notte_cents": 10000, "capacita": 2},
+                      {"X-Host-Token": self.tok})
+        self.assertIn(s, (200, 201))
+        self._collega_calendario("casa-ical2")
+        self.assertEqual(len(self._feed_in_archivio()), 1, "misura non valida")
+        rep = cancella_attivita_host(self.sis, self.hid, forza=True)
+        if self._feed_in_archivio():
+            self.assertFalse(rep.get("ok"),
+                             "l'URL del calendario e' rimasto E l'oblio dichiara ok=True")
+
+
 class TestOgniPosizioneLegaleNOMINAUnaTabellaCHEESISTE(unittest.TestCase):
     """⛔ D20 — scritta PRIMA della riparazione e vista ROSSA sul codice di produzione.
 

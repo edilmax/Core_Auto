@@ -395,7 +395,51 @@ giri di mutazione da 60 e 600 minuti dichiarati. Guardia `TestUnaCasellaSCADUTAD
 vista rossa prima (3 su 3). **Misurato adesso: 9 caselle rilanciabili subito, 2 che vogliono il server.**
 🔑 **Quindi «15 caselle su 39» NON vuol dire che il lavoro sia fermo:** vuol dire che gran parte delle misure è
 scaduta e va rifatta. Il primo lavoro utile è rilanciare quei 9 attrezzi.
-**🧾 12 SETTEMBRE, notte — DUE DIFETTI VIVI CHIUSI, E IL METRO CHE LI AVREBBE DOVUTI VEDERE (ramo: ancora sull'albero di lavoro, «autorizzato fino alla fine rispettare metodo V4»)**
+**🚪 13 SETTEMBRE, notte — IL «CANCELLAMI» RISPONDEVA 409 A CHI NE AVEVA DIRITTO, E NESSUNO L'AVEVA MAI MISURATO («autorizzato fino alla fine», «0 scorciatoie», «ripara»)**
+
+> **Il difetto, e non riguarda un dato che resta: riguarda una cancellazione che NON AVVIENE.** Un host che ha avuto
+> una prenotazione poi rimborsata non ha piu' nessun obbligo pendente (`obblighi_pendenti` = `{}`: niente ospiti in
+> arrivo, niente soldi dovuti, niente escrow). Chiede la cancellazione. L'oblio cancella tutto cio' che mira — i cinque
+> residui escono **tutti a zero** — e poi esce `ok=False`, perche' in `payout` e `pendenti` restano righe che nessuna
+> riga di `TRATTENUTI_PER_LEGGE` dichiarava. E `fase83_server.py:4524` (`return (200 if rep.get("ok") else 409), rep`)
+> traduce quel `False` in un **409**: alla persona si rispondeva «errore» a un diritto che per legge deve riuscire.
+> Riprodotto da me eseguendo il banco: `OBBLIGHI PENDENTI: {}` · `residui {"alloggi":0,"inventario":0,"messaggi":0,
+> "host":0}` · `ok false` · `sporchi_non_dichiarati {"payout.db":["payout"],"pendenti.db":["pendenti"]}`.
+> **Curato dichiarando** le due tabelle (documenti della transazione commerciale, art. 2220 c.c.) ⚠️ **marcate DA
+> VALIDARE DA UN AVVOCATO**: sono scritte per analogia con `libro_giornale`, non da un professionista. Guardia
+> `TestUnHostConPagamentiSTORICIOTTIENELaCancellazione` vista ROSSA prima
+> (`{'payout.db': ['payout'], 'pendenti.db': ['pendenti']} != {}`), poi verde; e il banco che l'aveva trovato ora dice
+> `ok true` · `sporchi_non_dichiarati {}`.
+> ⛔ **Non si e' toccata la formula di `ok`**: un dato che resta senza che nessuno sappia perche' NON e' un oblio
+> riuscito, e dire «fatto» sarebbe stato peggio del 409. A mancare era la dichiarazione.
+
+> **🔎 IL CENSIMENTO CHE L'HA FATTO USCIRE** (22 agenti in sola lettura, nessuna scrittura nel repository). Una macchina
+> ha scritto una riga-spia della persona in **ogni** tabella con una colonna di legame, ha eseguito l'oblio e ha
+> ricontato: **5** svuotate da un passo, **2** dichiarate per legge, **12 ne' l'una ne' l'altra** — e di quelle 12 la
+> scansione ne vede **3** (le uniche con una colonna `host_id`). Le altre **9 sono invisibili**: `admin_account`,
+> `checkin` (nomi e documenti degli OSPITI), `coda`, `liberazioni`, `domanda` (email in chiaro), `garanzia` (denaro in
+> custodia), `kyc`, `partner` (email + ragione sociale), `recensioni`, `split.conti`.
+> ⛔ **E `referral.json` non e' un `.db`**: la scansione fa `glob("*.db")`, quindi e' cieca all'ESTENSIONE, non all'ago
+> — nessun ago la salverebbe. `catalogo.alloggio_immagini` ha `alloggio_id` **INTEGER** e la scansione guarda solo le
+> colonne di testo: invisibile a qualunque ago.
+
+> ⛔ **COSA MANCA, in quest'ordine, e il PRIMO passo non e' tecnico.**
+> ① **Classificare le 9 tabelle invisibili** — per ognuna: si cancella, oppure si dichiara con il suo perche'.
+> Quattro sembrano **cancellabili** senza decisione legale (`domanda`, `partner`, `coda`, `liberazioni`: liste
+> d'attesa e candidature, nessun obbligo di conservarle); `checkin` (Questura), `garanzia` e `split.conti` (denaro),
+> `kyc` (antiriciclaggio) e `recensioni`/`admin_account` **sono posizioni legali e le guarda un avvocato**.
+> ② **Solo DOPO**, i tre aghi in `_dove_e_rimasto` — progettati e misurati: `host_id` come sottostringa (com'e' oggi),
+> lo **slug** per uguaglianza esatta e **solo dove non c'e' gia' una colonna `host_id`**, l'**email** per uguaglianza.
+> Portano la visibilita' da **3 su 12 a 12 su 12** con **zero falsi allarmi**, provati su tre stati (slug che e'
+> prefisso di un altro, slug riciclato da un altro host dopo il DELETE, macchina sana). Sono 3 righe cambiate e 6
+> aggiunte, tutte in `fase156_erasure.py`. ⛔ **Applicarli PRIMA del punto ① peggiora**: i nomi rossi permanenti
+> passerebbero da 0 a 9 e il 409 tornerebbe per tutti — «un messaggio che non funziona», che e' esattamente cio' che
+> il fondatore ha chiesto di non fare.
+> ③ **Minimizzare `pendenti`**: tiene l'email dell'OSPITE, il `quote_token` e il corpo della prenotazione, che alla
+> contabilita' non servono. Conservare tutta la riga e' il modo piu' semplice, non il piu' giusto.
+> ④ `referral.json` e `alloggio_immagini`, che nessun ago puo' raggiungere: servono un passo di cancellazione loro.
+
+**🧾 12 SETTEMBRE, notte — DUE DIFETTI VIVI CHIUSI, E IL METRO CHE LI AVREBBE DOVUTI VEDERE (unito con la PR #182, master `c82343e`)**
 
 > **Come sono usciti.** Il fondatore ha chiesto di controllare il lavoro del 12 col suo criterio — *«un falso verde
 > significa che lo strumento valuta la DESCRIZIONE e non il sistema reale»* — e poi «rispetta il METODO v4», che ha
@@ -436,9 +480,18 @@ scaduta e va rifatta. Il primo lavoro utile è rilanciare quei 9 attrezzi.
 > nomina mai una cancellazione (`grep 'cancell|erasure|oblio|fase156'` su quel file: **zero** su 92 righe, mentre su
 > `fase156_erasure.py` dà 41): quella riga è **[NO]**, e le conferme oggi sono **4 su 23 archivi**; ③ rimisurare la
 > PARTE 12 intera, ferma a `8436dac` del 28 agosto; ④ l'anello che pretenda che una tabella trattenuta stia
-> nell'**archivio che le compete** (oggi la chiave è il nome nudo, valido ovunque); ⑤ **non giudicato**: l'URL privato
-> del calendario Airbnb dell'host sembra sopravvivere a «cancella tutto» (`fase203`, la riga è legata a
-> `alloggio_id`+`url`, mai a `host_id`) — va passato a un refutatore, non infilato dentro un altro intervento.
+> nell'**archivio che le compete** (oggi la chiave è il nome nudo, valido ovunque).
+>
+> ✅ **⑤ GIUDICATO E CHIUSO (unito con la #182 già in master, riparato subito dopo):** l'URL privato del calendario
+> Airbnb **sopravviveva davvero** al «cancella tutto», e l'oblio dichiarava `ok=True`. Misurato dalla rotta vera:
+> `POST /api/host/ical` salva in `ical_feed`, tabella che porta `alloggio_id` e `url` e **nessun `host_id`** — l'unico
+> ago che la scansione cerca — quindi quella riga non veniva cancellata **né dichiarata**: alla persona si rispondeva
+> «fatto» con il suo dato ancora in archivio. Curato in `fase156_erasure` passando dagli `slugs`, che lì sono già noti,
+> e solo se l'host aveva alloggi (`ical_feed` è per alloggio). Guardie viste rosse prima:
+> `TestIlCancellamiTOGLIEancheIlCALENDARIOesterno`, 2 rossi (`'True is not false: l'URL del calendario e' rimasto E
+> l'oblio dichiara ok=True'`). ⛔ Al primo tentativo ha fatto diventare rossa una guardia esistente
+> (`test_archivi_SENZA_METODI_...`, `{} != {'ical_feed': 0}`): **aveva ragione lei** — un rapporto non deve nominare un
+> archivio che non c'era motivo di guardare — e a essere corretta è stata la riparazione, non la guardia.
 
 **🧭 12 SETTEMBRE, sera — PASSAGGIO DI CONSEGNE (D21)**
 
@@ -2597,9 +2650,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 0f69379
+CONSEGNE AGGIORNATE A: c82343e
 
-SUITE ATTUALE: Ran 6789 test
+SUITE ATTUALE: Ran 6792 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

@@ -296,25 +296,25 @@
  "5c447a0ee514": {
   "blocco": 5,
   "comando": "python collaudi/esame_legale.py --casella spunte --scrivi",
-  "commit": "e39f660",
+  "commit": "c82343e",
   "condizione": "le 3 spunte obbligatorie sono bloccate lato browser E rifiutate 422 lato server",
   "denominatore": 36,
   "esito": true,
-  "impronta": "0a5d490c3ac2",
+  "impronta": "784a22f0ba1d",
   "impronte_moduli": {
    "fase100_dac7": "e5c0be6c61a5",
    "fase103_reverse_charge": "5ca652e5af5a",
    "fase145_contratto_pdf": "070792042938",
    "fase151_alloggiati_web": "32eaf4440a62",
    "fase154_giurisdizioni_marketing": "7edab3faacdd",
-   "fase156_erasure": "dfcb5443cc24",
-   "fase163_accettazioni": "93e34f12d517",
+   "fase156_erasure": "4c73cde39b15",
+   "fase163_accettazioni": "b7c3c40a76f6",
    "fase184_marca_temporale": "dd31eb53f86c",
    "fase185_testi_legali": "4d520fb7df3d",
    "fase79_dichiarazione": "fdafb04a19ea"
   },
   "motivo": "",
-  "quando": "2026-09-12T13:20:40"
+  "quando": "2026-09-12T23:49:35"
  },
  "63e1e98393ea": {
   "blocco": 10,
@@ -341,25 +341,25 @@
  "7d0c5b891c14": {
   "blocco": 5,
   "comando": "python collaudi/esame_legale.py --casella lingue --scrivi",
-  "commit": "e39f660",
+  "commit": "c82343e",
   "condizione": "termini e privacy sono leggibili in tutte le lingue dichiarate",
   "denominatore": 43,
   "esito": true,
-  "impronta": "0a5d490c3ac2",
+  "impronta": "784a22f0ba1d",
   "impronte_moduli": {
    "fase100_dac7": "e5c0be6c61a5",
    "fase103_reverse_charge": "5ca652e5af5a",
    "fase145_contratto_pdf": "070792042938",
    "fase151_alloggiati_web": "32eaf4440a62",
    "fase154_giurisdizioni_marketing": "7edab3faacdd",
-   "fase156_erasure": "dfcb5443cc24",
-   "fase163_accettazioni": "93e34f12d517",
+   "fase156_erasure": "4c73cde39b15",
+   "fase163_accettazioni": "b7c3c40a76f6",
    "fase184_marca_temporale": "dd31eb53f86c",
    "fase185_testi_legali": "4d520fb7df3d",
    "fase79_dichiarazione": "fdafb04a19ea"
   },
   "motivo": "",
-  "quando": "2026-09-12T13:20:40"
+  "quando": "2026-09-12T23:49:36"
  },
  "813b9082642c": {
   "blocco": 1,
@@ -437,6 +437,29 @@
   },
   "motivo": "[esiste] un monitor ESTERNO (non GitHub) esiste e guarda bookinvip.com/api/health (nessun monitor esterno nelle letture: serve un conto (UptimeRobot o Better Stack, gratuito), lo apre il fondatore); [sveglia] il monitor esterno controlla almeno ogni 5 minuti e non e' in pausa (nessun monitor esterno); [sveglia] nelle ultime 24 ore i controlli del monitor non hanno buchi > 15 minuti e l'ultimo ha meno di 15 minuti (controlli nelle 24 ore: 0, buco massimo -, ultimo -); [sveglia] GitHub (seconda linea): ultimo giro entro 60 minuti e buco massimo nelle 24 ore sotto i 60 minuti — DECIDE, perche' il",
   "quando": "2026-09-12T13:21:13"
+ },
+ "a5c77ac6c76a": {
+  "blocco": 5,
+  "comando": "python collaudi/esame_oblio.py --scrivi",
+  "commit": "c82343e",
+  "condizione": "il giro del CANCELLAMI e' percorso intero: ogni archivio che conteneva il dato e' pulito oppure DICHIARATO trattenuto per legge col suo perche', e il dato non si rilegge dai byte di quelli da pulire",
+  "denominatore": 7,
+  "esito": true,
+  "impronta": "784a22f0ba1d",
+  "impronte_moduli": {
+   "fase100_dac7": "e5c0be6c61a5",
+   "fase103_reverse_charge": "5ca652e5af5a",
+   "fase145_contratto_pdf": "070792042938",
+   "fase151_alloggiati_web": "32eaf4440a62",
+   "fase154_giurisdizioni_marketing": "7edab3faacdd",
+   "fase156_erasure": "4c73cde39b15",
+   "fase163_accettazioni": "b7c3c40a76f6",
+   "fase184_marca_temporale": "dd31eb53f86c",
+   "fase185_testi_legali": "4d520fb7df3d",
+   "fase79_dichiarazione": "fdafb04a19ea"
+  },
+  "motivo": "",
+  "quando": "2026-09-12T23:49:10"
  },
  "a6c9694a48f1": {
   "blocco": 2,

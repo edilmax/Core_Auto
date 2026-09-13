@@ -421,6 +421,14 @@ BLOCCHI = (
             "le 3 spunte obbligatorie sono bloccate lato browser E rifiutate 422 lato server",
             "termini e privacy sono leggibili in tutte le lingue dichiarate",
             "un avvocato vero ha validato i testi (⛔ non lo puo' dire una macchina)",
+            # ⛔ IN CODA, mai in mezzo: gli attrezzi trovano la propria casella per indice.
+            # La scrive `collaudi/esame_oblio.py --scrivi`, che percorre il giro intero dalle
+            # ROTTE e lo misura in DUE TEMPI (prima il dato c'e', dopo non c'e'): mai una
+            # spunta a mano. Nata il 2026-09-12 dalla regola del fondatore «ogni lavoro deve
+            # avere casella fatto, se no torniamo indietro a fare lavoro fatto».
+            "il giro del CANCELLAMI e' percorso intero: ogni archivio che conteneva il dato "
+            "e' pulito oppure DICHIARATO trattenuto per legge col suo perche', e il dato non "
+            "si rilegge dai byte di quelli da pulire",
         ),
     },
     {
