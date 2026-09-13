@@ -759,8 +759,17 @@ class TestDoppioClicCatalogo(_Base):
                                             corpo, self.admin)
         self.assertEqual(s1, 200, o1)
         self.assertIs(o1["ok"], True)
+        # ⛔ `ical_feed` compare dal 2026-09-13: l'oblio cancella anche i calendari esterni
+        # collegati agli alloggi dell'host. Prima non lo faceva, e l'URL privato del feed
+        # Airbnb sopravviveva a un «cancellami» mentre il rapporto diceva `ok=True`. Qui vale
+        # ZERO perche' questo banco non collega nessun feed — ed e' la stessa forma di
+        # `messaggi: 0`, che questo test gia' accetta: dice «ho guardato e non c'era niente»,
+        # che non e' la stessa cosa di «non ho guardato».
+        # ⛔ E al SECONDO giro (poche righe sotto) la chiave NON c'e', e non e' una svista:
+        # dopo la prima cancellazione l'host non ha piu' alloggi, `ical_feed` e' per
+        # alloggio, e il rapporto non nomina un archivio che non aveva motivo di aprire.
         self.assertEqual(o1["cancellati"], {"inventario": 40, "alloggi": 1,
-                                            "messaggi": 0, "host": 1})
+                                            "messaggi": 0, "host": 1, "ical_feed": 0})
         self.assertEqual(s2, 200, o2)
         self.assertEqual(o2["cancellati"], {"inventario": 0, "alloggi": 0,
                                             "messaggi": 0, "host": 0})

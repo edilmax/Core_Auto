@@ -73,6 +73,30 @@ QUI = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(QUI)
 if REPO not in sys.path:
     sys.path.insert(0, REPO)
+if QUI not in sys.path:
+    sys.path.insert(0, QUI)
+
+import scheda  # noqa: E402
+from piano import BLOCCHI  # noqa: E402
+
+BLOCCO = 5
+MARCA = "CANCELLAMI"
+COMANDO = "python collaudi/esame_oblio.py --scrivi"
+
+
+def condizione():
+    """Il testo ESATTO della casella nel piano, trovato per MARCA invece che ricopiato qui:
+    una copia resta indietro il giorno che la riga cambia (famiglia 20.3 del METODO). Se le
+    caselle che portano la marca non sono esattamente una, ci si ferma invece di indovinare
+    quale spuntare — due blocchi che fanno la stessa domanda si spunterebbero a vicenda."""
+    blocco = [b for b in BLOCCHI if b["ordine"] == BLOCCO]
+    cond = blocco[0]["finito_quando"] if len(blocco) == 1 else ()
+    trovate = [c for c in cond if MARCA in str(c)]
+    if len(trovate) != 1:
+        raise SystemExit(
+            "⛔ FERMO: nel blocco %d le caselle che nominano «%s» sono %d, non 1. "
+            "Non si indovina quale spuntare." % (BLOCCO, MARCA, len(trovate)))
+    return trovate[0]
 
 # Identificatori della persona di prova. ⛔ NIENTE CIFRE DI FILA: `fase113.maschera_pii`
 # scambia una sequenza lunga di numeri per un telefono e la sostituisce, il dato non
@@ -206,6 +230,8 @@ def _banco(dir_dati):
 def principale(argomenti=None):
     p = argparse.ArgumentParser(add_help=True)
     p.add_argument("--guasto", default="", help="salta-oblio: prova che l'esame sa gridare")
+    p.add_argument("--scrivi", action="store_true",
+                   help="registra l'esito nella scheda (blocco 5). Mai a mano.")
     args = p.parse_args(argomenti)
 
     dir_dati = tempfile.mkdtemp(prefix="esame_oblio_")
@@ -388,6 +414,24 @@ def principale(argomenti=None):
         print("     l'esistenza di questo file e le due direzioni, NON il numero di anelli:")
         print("     un guscio che rispondesse 0 e 1 la soddisferebbe lo stesso.")
         print("-" * 78)
+        # ⛔ LA CASELLA LA SPUNTA L'ATTREZZO, MAI UNA MANO — e non la spunta col guasto
+        # dentro: quel rosso e' costruito apposta, registrarlo metterebbe nella scheda un
+        # oblio rotto di proposito. Stessa regola di `esame_backup.py --con-guasto`.
+        if args.scrivi:
+            if args.guasto:
+                print()
+                print("⛔ FERMO: `--guasto` non scrive. Serve a vedere l'esame gridare;")
+                print("   registrare quel rosso metterebbe nella scheda un oblio rotto apposta.")
+                return 1
+            riga = scheda.registra(condizione(), esito=not rossi, denominatore=len(anelli),
+                                   comando=COMANDO, ordine=BLOCCO,
+                                   motivo="; ".join(rossi)[:600] or None)
+            print()
+            print("  SCRITTA nella scheda: blocco %d · esito %s · denominatore %d · impronta %s"
+                  % (riga["blocco"], riga["esito"], riga["denominatore"], riga["impronta"]))
+        elif not rossi:
+            print()
+            print("  (non ho scritto niente: aggiungi --scrivi per registrare nella scheda)")
         if rossi:
             print("VERDETTO: ⛔ ROSSO — anelli %d, rossi %d, denominatore %d"
                   % (len(anelli), len(rossi), len(anelli)))

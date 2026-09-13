@@ -403,6 +403,67 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🚪 IL «CANCELLAMI» RISPONDEVA 409 A CHI NE AVEVA DIRITTO — 13 settembre, «0 scorciatoie», «ripara»
+
+**Cosa è cambiato.** `TRATTENUTI_PER_LEGGE` dichiara anche `payout` e `pendenti`, ⚠️ **marcate DA VALIDARE DA UN
+AVVOCATO**: sono scritte per analogia con `libro_giornale`, non da un professionista, e il commento sopra di loro lo
+dice a chiare lettere.
+
+**Il difetto, ed è di natura diversa da tutti quelli di ieri.** Non è un dato che resta: è una **cancellazione che non
+avviene**. Un host che ha avuto una prenotazione poi rimborsata non ha più nessun obbligo pendente — niente ospiti in
+arrivo, niente soldi dovuti, niente escrow — e chiede di essere cancellato. L'oblio cancella tutto ciò che mira (i
+cinque residui escono **tutti a zero**), poi esce `ok=False` perché in `payout` e `pendenti` restano righe che nessuna
+legge dichiarava; e `fase83_server.py:4524` traduce quel `False` in un **409**. Alla persona si rispondeva «errore»
+mentre la cancellazione era riuscita.
+
+⛔ **Non si è toccata la formula di `ok`, ed è la parte che conta.** Un dato che resta senza che nessuno sappia perché
+non è un oblio riuscito: far dire «fatto» al rapporto sarebbe stato peggio del 409, ed è esattamente il difetto del
+calendario riparato poche ore prima. A mancare era la **dichiarazione**, non il verdetto.
+
+**Com'è uscito, e vale come metodo.** Il fondatore ha chiesto la correzione *definitiva* — *«meglio che funzioni che
+avere un messaggio 24 ore che non funziona»* — di un buco che sembrava riguardare solo il calendario. Un censimento in
+sola lettura ha scritto una riga-spia della persona in **ogni** tabella con una colonna di legame, eseguito l'oblio e
+ricontato: **5** svuotate da un passo, **2** dichiarate, **12 né l'una né l'altra**, e di quelle 12 la scansione ne
+vede **3**. Cercando la cecità della scansione si è trovato un difetto più grave della cecità stessa.
+
+**Perché la scansione NON è stata riparata nello stesso giro.** I tre aghi sono progettati e misurati (visibilità da 3
+su 12 a 12 su 12, zero falsi allarmi su tre stati), ma applicarli prima di classificare le 9 tabelle invisibili
+porterebbe i nomi rossi permanenti da 0 a 9: il 409 tornerebbe **per tutti**. Riparare la vista prima di aver deciso
+cosa si guarda rompe ciò che si è appena fatto funzionare. Le 9 righe sono in `RIPRENDI_QUI.md`, quattro cancellabili
+senza decisione legale e cinque da avvocato.
+
+**E due cose che le guardie hanno insegnato mentre le scrivevo.** ① La prima versione falliva sulla **premessa**:
+`registra_maturato` lascia il payout in stato «maturato», che `_PAYOUT_IN_BALLO` conta come soldi dovuti — quindi
+l'host non era pulito e il 409 sarebbe stato legittimo. La premessa ha impedito una prova che avrebbe misurato
+tutt'altro. ② La macchina a stati di `fase131` non lascia saltare da «maturato» a «pagato»: il percorso vero è
+`maturato → in_transito → pagato`, e fa bene — è la PARTE 16.1 del METODO che impedisce di costruire a mano uno stato
+che il prodotto non può raggiungere.
+
+### 📅 IL CALENDARIO DI AIRBNB SOPRAVVIVEVA AL «CANCELLAMI», E L'OBLIO DICEVA «FATTO» — 12 settembre, «autorizzato fino alla fine», «0 scorciatoie»
+
+**Cosa è cambiato.** `fase156_erasure.cancella_attivita_host` cancella anche i feed iCal dell'host, passando dagli
+`slugs` che a quel punto sono già noti, e **solo se l'host aveva alloggi** (`ical_feed` è per alloggio).
+
+**Perché nessuno lo vedeva.** L'host collega il calendario della sua casa su Airbnb (`POST /api/host/ical`), che salva
+l'URL in `ical_feed`. Quella tabella porta `alloggio_id` e `url` e **nessun `host_id`** — e `host_id` è l'unico ago che
+cerca la scansione degli archivi veri. Quindi la riga non veniva cancellata **né dichiarata sporca**: il rapporto
+usciva `ok=True` con dentro l'indirizzo privato del calendario. Alla persona si rispondeva «fatto» mentre un suo dato
+restava. È la stessa forma del buco che `fase156` dichiarava di aver chiuso — *«un archivio nuovo viene saltato in
+silenzio»* — chiusa per gli archivi che nominano l'host, rimasta aperta per quelli che lo nominano **di sbieco**,
+attraverso lo slug del suo alloggio.
+
+**Com'è stato trovato, e vale come metodo.** Era un **sospetto**, emerso di sbieco da un refutatore mentre refutava
+altro, e come tale era stato scritto nelle consegne: *non giudicato*. Il fondatore ha detto «0 scorciatoie», e un
+sospetto non è un fatto: è stato **misurato** dalla rotta vera prima di scrivere una riga.
+
+**Due cose che la guardia ha insegnato mentre la scrivevo.** ① La prima versione passava da `POST /api/host/ical`, che
+dopo il salvataggio **rilegge il feed**: il test faceva una chiamata di rete vera (misurato: `HTTP Error 404` verso
+airbnb.it, 870 ms) e il suo esito dipendeva da un servizio di qualcun altro — il modo di rompersi n. 6. Riscritto
+salvando dall'archivio: 0,98 s e nessuna rete, e la rotta resta sorvegliata da `test_fase203_ical_orologio`.
+② La riparazione ha fatto diventare rossa una guardia **esistente** (`test_archivi_SENZA_METODI_...`,
+`{} != {'ical_feed': 0}`): **aveva ragione lei** — un rapporto non deve nominare un archivio che non c'era motivo di
+guardare — e a essere corretta è stata la riparazione, non la prova.
+
 ### 🧾 LA GUARDIA DI IERI ERA STATA PROVATA NELL'UNICO PUNTO IN CUI POTEVA FALLIRE — 12 settembre, «autorizzato fino alla fine, rispettare metodo V4»
 
 **Da dove nasce.** Il fondatore ha chiesto di controllare il lavoro del giorno prima con un criterio suo: *«quando i

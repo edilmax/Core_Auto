@@ -67,6 +67,27 @@ TRATTENUTI_PER_LEGGE: Dict[str, str] = {
     "debiti":
         "partite contabili aperte verso l'host: stesso termine delle scritture "
         "(art. 2220 c.c.); cancellarle farebbe sparire un credito o un debito.",
+    # ⛔ LE DUE RIGHE CHE SEGUONO SONO SCRITTE DA NOI IL 2026-09-12 PER ANALOGIA, E NON DA UN
+    # AVVOCATO. Stanno qui perche' senza di loro il diritto all'oblio NON FUNZIONAVA: un host
+    # che aveva avuto una prenotazione poi rimborsata restava con righe in `payout` e
+    # `pendenti` che nessuna legge dichiarava, `ok` usciva False e `fase83_server.py` lo
+    # traduceva in un **409** — cioe' alla persona si rispondeva «errore» mentre la
+    # cancellazione era riuscita su tutto il resto (misurato: i cinque residui mirati a
+    # zero). Un dato che resta senza che nessuno sappia perche' non e' un oblio riuscito, e
+    # dire «fatto» sarebbe stato peggio: quindi si dichiara il perche'.
+    "payout":
+        "registro dei bonifici all'host: importo, valuta e stato di ogni pagamento. E' un "
+        "documento contabile come le scritture (art. 2220 c.c.), e cancellarlo farebbe "
+        "sparire la prova di avere pagato. ⚠️ DA VALIDARE DA UN AVVOCATO: scritta per "
+        "analogia con `libro_giornale`, non da un professionista.",
+    "pendenti":
+        "documenti della transazione commerciale: riferimento, date del soggiorno, importi "
+        "e stato del pagamento; stesso termine delle scritture (art. 2220 c.c.). "
+        "⚠️ DA VALIDARE DA UN AVVOCATO. ⛔ E porta con se' un secondo lavoro, aperto in "
+        "`RIPRENDI_QUI.md`: questa tabella tiene anche l'email dell'OSPITE, il suo "
+        "`quote_token` e il corpo della prenotazione — dati che alla contabilita' non "
+        "servono e che vanno MINIMIZZATI, non conservati per il termine delle scritture. "
+        "Conservare tutta la riga e' il modo piu' semplice, non il piu' giusto.",
 }
 
 
@@ -263,6 +284,34 @@ def cancella_attivita_host(sistema: Any, host_id: Any, *, forza: bool = False) -
         rep["cancellati"]["referral"] = _safe(viral.cancella_host, host_id)
     if reg is not None and hasattr(reg, "cancella_host"):
         rep["cancellati"]["host"] = _safe(reg.cancella_host, host_id)
+    # ⛔ IL CALENDARIO ESTERNO, che non vedeva nessuno. La tabella `ical_feed` porta
+    # `alloggio_id` e `url` e NESSUN host_id — e l'host_id e' l'unico ago che cerca la
+    # scansione degli archivi veri qui sotto. Quindi quella riga non veniva cancellata E non
+    # veniva nemmeno DICHIARATA: il rapporto usciva `ok=True` con dentro l'indirizzo privato
+    # del calendario Airbnb dell'host, cioe' alla persona si rispondeva «fatto». Misurato il
+    # 2026-09-12 partendo dalla rotta vera. E' la stessa forma del buco che questo file
+    # dichiara di aver chiuso — «un archivio nuovo viene saltato in silenzio» — chiusa per
+    # gli archivi che nominano l'host, rimasta aperta per quelli che lo nominano di sbieco,
+    # attraverso lo slug del suo alloggio. Si passa dagli `slugs`, che qui sono gia' noti.
+    # ⛔ `_safe` non va bene qui: `rimuovi` torna un bool, e `_safe` converte i bool in 0.
+    # ⛔ E SOLO SE L'HOST AVEVA ALLOGGI: `ical_feed` e' per alloggio, quindi un host senza
+    # alloggi non ha feed, e il rapporto non deve nominare un archivio che non c'era motivo
+    # di guardare — e' la stessa regola di tutti gli altri passi, e la pretende
+    # `test_archivi_SENZA_METODI_non_fanno_esplodere_e_restano_DICHIARATI_come_dubbi`, che
+    # e' diventata rossa al primo tentativo e aveva ragione lei.
+    if slugs:
+        try:
+            from fase203_ical_orologio import archivio_di
+            _feed = archivio_di(sistema)
+            _tolti = 0
+            for _slug in slugs:
+                for _riga in (_feed.elenco(_slug) or []):
+                    if _feed.rimuovi(_slug, _riga.get("url")):
+                        _tolti += 1
+            rep["cancellati"]["ical_feed"] = _tolti
+        except Exception:
+            logger.warning("erasure: cancellazione dei feed iCal fallita (ISOLATA)",
+                           exc_info=True)
 
     # --- VERIFICA: ricontrolla OGNI archivio (deve essere 0) ---
     residui: Dict[str, int] = {}
