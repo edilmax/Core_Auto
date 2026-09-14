@@ -403,6 +403,22 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### ⏱️ «SE IL DANNO SUCCEDE ADESSO LO DEVO SAPERE SUBITO» — 14 settembre, notte
+
+**Cosa è cambiato nel codice.** `fase178_watchdog.py`: `errori_freschi(dir_dati, minuti=15)` legge `app.log` con lo
+stesso formato e la stessa disciplina di `fase186._guasti_isolati` (date UTC di `main_casavip`, registro assente =
+non misurato) e conta le righe ` ERROR `/` CRITICAL ` degli ultimi 15 minuti (il giro è ogni 10: 15 copre un giro
+saltato); `valuta` grida `errori_freschi` **critico con le righe dentro** (chi lo riceve deve sapere COSA); `diagnosi`
+la raccoglie. Nessun cambio in `deploy/watchdog.sh`: stampa già ogni allarme del JSON su Telegram, con l'anti-spam che
+c'era (al cambio di stato, poi ogni 6 h). **Perché:** il fondatore — *«il Telegram arrivava già, però era a 24 ore: se
+il danno succede adesso io lo devo sapere subito»*. Tutto ciò che conta scrive già una riga ERROR o CRITICAL nel momento
+in cui succede (webhook fallito, controversia, avviso host non partito, Bunker violato, invarianti orari violati): la
+rileggeva solo il Guardiano, una volta al giorno. Guardie `TestUnErroreFrescoArrivaSuTelegramEntroDieciMinuti` (4, viste
+rosse: `'errori_freschi' not found in []`), poi `test_watchdog` **Ran 53 · OK**. Sul registro **vero** del server, in
+sola lettura, 0 righe negli ultimi 15 minuti: l'allarme tace a macchina sana (ferrea 10). Un B112 di bandit chiuso nel
+codice nuovo. ⚠️ Sul VPS `ALERT_EMAIL` è passato da Gmail a `massimo.foti@protonmail.com`, per valore e col conteggio
+delle righe (65 → 65, 1 diversa): vale dal riavvio dell'app.
+
 ### 🔔 TRE ALLARMI CHE NON ARRIVAVANO A NESSUNO — 14 settembre, sera (punto ② della «porta per un uomo solo»)
 
 **Cosa è cambiato nel codice** (sotto l'«autorizzato» pieno del mattino; guardie viste ROSSE prima, 6 nuove):

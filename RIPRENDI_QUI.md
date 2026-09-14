@@ -429,7 +429,13 @@ scaduta e va rifatta. Il primo lavoro utile è rilanciare quei 9 attrezzi.
 > scrive un ERROR strutturato e manda l'email a `ALERT_EMAIL` (provider spento → WARNING + `email_ko`), così il Guardiano
 > la legge entro 24 h; un **avviso all'host che nessun canale ha consegnato** lascia un ERROR
 > (`fase152.avvisa`, `AVVISO HOST NON PARTITO`); e il commento del dedup **dichiara il suo limite** (la riconsegna dopo
-> una prima consegna 503 non è coperta) invece di sovradichiarare. Suite intera da lanciare, poi «procedi al commit».
+> una prima consegna 503 non è coperta) invece di sovradichiarare. Suite verde (`Ran 6811 · OK · uscita 0`), commit
+> `04e8e4e`, PR #185. **E il «subito» chiesto dal fondatore** («il Telegram arrivava già, ma a 24 ore: se il danno
+> succede adesso lo devo sapere subito»): `fase178.errori_freschi` legge le righe ERROR/CRITICAL degli **ultimi 15
+> minuti** del registro e il watchdog (ogni 10 min) grida `errori_freschi` **con la riga dentro**; 4 guardie viste rosse
+> (`'errori_freschi' not found in []`), poi verdi; sul registro vero del server, in sola lettura, 0 righe negli ultimi
+> 15 minuti → tace come deve. Caricatore **6820**. ⚠️ `ALERT_EMAIL` sul VPS cambiato per valore da Gmail a
+> `massimo.foti@protonmail.com` (65 righe prima e dopo, 1 diversa): vale dal riavvio dell'app, cioè dal prossimo deploy.
 > ③ *Fondatore, 1 h,
 > decisioni:* paga in struttura acceso/spento e con quale tariffa; due regole d'esercizio dei primi giorni — **nessun
 > rimborso dal dashboard Stripe senza prima cancellare dal pannello** (nessun ramo `charge.refunded`: l'host verrebbe
@@ -2904,7 +2910,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 ```
 CONSEGNE AGGIORNATE A: b7bd27c
 
-SUITE ATTUALE: Ran 6816 test
+SUITE ATTUALE: Ran 6820 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
