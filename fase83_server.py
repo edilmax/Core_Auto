@@ -3228,8 +3228,19 @@ class RouterHTTP:
         if bunker is None or not bunker.configurato:
             return False
         tok = headers.get("X-Bunker-Session", "") or headers.get("x-bunker-session", "")
+        if not tok:
+            # ⛔ SESSIONE ASSENTE = una porta chiusa che risponde 403, non un'intrusione:
+            # e' ogni scanner che bussa, ed e' il NOSTRO giudice (verifica_produzione.py)
+            # che a ogni deploy sonda queste porte apposta. Scritta CRITICAL, il 2026-09-14
+            # ha fatto gridare il Guardiano «7 stati anomali» per 33 sonde nostre — un
+            # falso allarme fabbricato da noi (ferrea 10). Resta nel registro, come WARNING.
+            logger.warning("BUNKER: accesso NEGATO azione=%s motivo=sessione_assente ip=%s",
+                           azione or "?", ip)
+            return False
         r = bunker.valida_sessione(tok, ip)
         if not r.get("ok"):
+            # Sessione PRESENTE ma non valida (manomessa, scaduta, di un altro IP):
+            # questo si' che e' un tentativo di operare senza il secondo muro.
             logger.critical("BUNKER: accesso NEGATO azione=%s motivo=%s ip=%s",
                             azione or "?", r.get("motivo"), ip)
             return False

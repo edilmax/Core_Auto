@@ -198,6 +198,49 @@ def leggi_esito_guardiano(dir_dati: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+MINUTI_ERRORI_FRESCHI = 15      # il giro e' ogni 10: 15 copre un giro saltato senza doppiare
+MAX_ESEMPI_ERRORI = 3
+
+
+def errori_freschi(dir_dati: str, *, minuti: int = MINUTI_ERRORI_FRESCHI,
+                   ora: Optional[int] = None) -> Optional[Dict[str, Any]]:
+    """Le righe ERROR/CRITICAL scritte nel registro (`app.log`) negli ULTIMI minuti.
+
+    «Se il danno succede adesso lo devo sapere subito» (il fondatore, 2026-09-14). Tutto
+    cio' che conta scrive una riga ERROR o CRITICAL nel momento in cui succede -- il webhook
+    che fallisce, la controversia aperta, l'avviso all'host non partito, il Bunker violato,
+    gli invarianti orari violati -- ma la rileggeva solo il Guardiano, una volta al giorno.
+    Questo lettore gira col watchdog ogni 10 minuti. Stesso formato e stessa disciplina di
+    `fase186._guasti_isolati`: date UTC di `main_casavip`, e registro assente = None
+    (non misurato, non «pulito»)."""
+    import calendar
+    if not dir_dati:
+        return None
+    percorso = os.path.join(dir_dati, "app.log")
+    if not os.path.isfile(percorso):
+        return None
+    ora = ora if isinstance(ora, int) else int(time.time())
+    soglia = ora - max(1, int(minuti)) * 60
+    conta, esempi = 0, []
+    try:
+        with open(percorso, encoding="utf-8", errors="replace") as f:
+            for riga in f:
+                if " ERROR " not in riga and " CRITICAL " not in riga:
+                    continue
+                try:
+                    ts = calendar.timegm(time.strptime(riga[:19], "%Y-%m-%d %H:%M:%S"))
+                except Exception:
+                    ts = None                 # continuazione di traceback: non e' datata
+                if ts is None or ts < soglia:
+                    continue
+                conta += 1
+                if len(esempi) < MAX_ESEMPI_ERRORI:
+                    esempi.append(riga.strip()[:160])
+    except OSError:
+        return None
+    return {"conta": conta, "minuti": int(minuti), "esempi": esempi}
+
+
 def segna_lettura_ci(dir_dati: str, *, ora: Optional[int] = None) -> bool:
     """Timbra che la CI si e' RIUSCITA A LEGGERE. Coppia gemella del battito qui sopra.
 
@@ -345,6 +388,16 @@ def valuta(misure: Dict[str, Any], *, max_eta_backup_sec: int = 8 * 3600,
                         "msg": "il Guardiano dei soldi ha trovato uno stato ANOMALO e finche' "
                                "resta cosi' lo ripeto: %s" % (esito.get("dettaglio") or "?")})
 
+    # Gli errori degli ULTIMI minuti nel registro: e' il «subito» che il Guardiano
+    # quotidiano non puo' dare. La riga stessa va nel messaggio: chi lo riceve deve
+    # sapere COSA, non solo «qualcosa». Chiave assente = registro non letto = non si giudica.
+    ef = misure.get("errori_freschi")
+    if isinstance(ef, dict) and int(ef.get("conta") or 0) > 0:
+        allarmi.append({"cod": "errori_freschi", "grav": "critico",
+                        "msg": "%d riga/e ERROR o CRITICAL nel registro negli ultimi %d minuti: %s"
+                               % (int(ef.get("conta") or 0), int(ef.get("minuti") or 0),
+                                  " | ".join(ef.get("esempi") or []) or "(riga non leggibile)")})
+
     disco = misure.get("disco_pct")
     if isinstance(disco, int) and disco >= max_disco_pct:
         allarmi.append({"cod": "disco", "grav": "critico" if disco >= 95 else "avviso",
@@ -396,6 +449,7 @@ def diagnosi(*, dir_dati: str, dir_backup: str, uptime_ok: Optional[bool] = None
         "eta_backup_sec": eta_backup_sec(dir_backup),
         "eta_battito_guardiano_sec": eta_battito_guardiano_sec(dir_dati),
         "esito_guardiano": leggi_esito_guardiano(dir_dati),
+        "errori_freschi": errori_freschi(dir_dati),
         "disco_pct": spazio_disco_pct(dir_dati),
         "db_presenti": db_presenti(dir_dati),
     }

@@ -308,6 +308,73 @@ class TestIlTickLasciaLEsitoEIlRapportoArrivaSEMPRE(unittest.TestCase):
                         % ([r for r in reg.output if "EMAIL" in r],))
 
 
+class TestUnErroreFrescoArrivaSuTelegramEntroDieciMinuti(unittest.TestCase):
+    """⛔ D20 — scritta PRIMA della riparazione e vista ROSSA sul codice di produzione.
+
+    Il fondatore, 2026-09-14: «il Telegram arrivava gia', ma era a 24 ore: se il danno
+    succede adesso io lo devo sapere subito». Tutto cio' che conta scrive gia' una riga
+    ERROR o CRITICAL nel registro nel momento in cui succede -- il webhook che fallisce,
+    la controversia aperta, l'avviso all'host non partito, l'intrusione nel Bunker, gli
+    invarianti orari violati. Ma quelle righe le rileggeva solo il Guardiano, una volta
+    al giorno (`fase186._guasti_isolati`). Il watchdog gira ogni 10 minuti e ha gia'
+    Telegram: qui impara a leggere il registro degli ULTIMI minuti, e a gridare.
+    Chiave assente = non misurato = non si giudica (dal PC il volume non si vede).
+    """
+
+    def _riga(self, quando_ts, livello, testo):
+        import datetime
+        t = datetime.datetime.utcfromtimestamp(quando_ts).strftime("%Y-%m-%d %H:%M:%S,000")
+        return "%s %s core_auto.server %s" % (t, livello, testo)
+
+    def test_errori_freschi_gridano_critico_e_mostrano_la_riga(self):
+        r = wd.valuta({"errori_freschi": {"conta": 2, "minuti": 15,
+                                          "esempi": ["... ERROR core_auto.server CONTROVERSIA "
+                                                     "APERTA | riferimento: BVI***01"]}})
+        cod = [a["cod"] for a in r["allarmi"]]
+        self.assertIn("errori_freschi", cod,
+                      "due errori negli ultimi minuti e il watchdog tace: si saprebbe domani. %r" % (r,))
+        a = r["allarmi"][cod.index("errori_freschi")]
+        self.assertEqual(a["grav"], "critico")
+        self.assertIn("CONTROVERSIA", a["msg"], "l'allarme non mostra la riga: chi lo riceve "
+                                                 "non sa cosa e' successo: %r" % (a,))
+
+    def test_nessun_errore_fresco_non_fa_gridare(self):
+        """L'altra direzione (D18 punto 2)."""
+        r = wd.valuta({"errori_freschi": {"conta": 0, "minuti": 15, "esempi": []}})
+        self.assertNotIn("errori_freschi", [a["cod"] for a in r["allarmi"]])
+
+    def test_se_il_registro_non_e_stato_letto_non_si_giudica(self):
+        r = wd.valuta({"uptime_ok": True})
+        self.assertNotIn("errori_freschi", [a["cod"] for a in r["allarmi"]])
+
+    def test_la_diagnosi_legge_il_registro_vero_e_distingue_fresco_vecchio_e_avviso(self):
+        import calendar
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        ora = int(time.time())
+        # 1) registro assente -> non misurato, nessun allarme
+        r = wd.diagnosi(dir_dati=d, dir_backup=d, uptime_ok=True)
+        self.assertNotIn("errori_freschi", [a["cod"] for a in r["allarmi"]])
+        # 2) solo un ERROR vecchio di due ore e un WARNING fresco -> silenzio
+        with open(os.path.join(d, "app.log"), "w", encoding="utf-8") as f:
+            f.write(self._riga(ora - 7200, "ERROR", "roba di due ore fa") + "\n")
+            f.write(self._riga(ora - 60, "WARNING", "miniatura non salvata (ISOLATO)") + "\n")
+        r = wd.diagnosi(dir_dati=d, dir_backup=d, uptime_ok=True)
+        self.assertNotIn("errori_freschi", [a["cod"] for a in r["allarmi"]],
+                         "grida su un errore vecchio o su un avviso: falso allarme. %r" % (r["allarmi"],))
+        # 3) un CRITICAL di un minuto fa -> grida, con la riga dentro
+        with open(os.path.join(d, "app.log"), "a", encoding="utf-8") as f:
+            f.write(self._riga(ora - 60, "CRITICAL", "BUNKER: accesso negato (ip mascherato)") + "\n")
+        r = wd.diagnosi(dir_dati=d, dir_backup=d, uptime_ok=True)
+        cod = [a["cod"] for a in r["allarmi"]]
+        self.assertIn("errori_freschi", cod,
+                      "un CRITICAL di un minuto fa nel registro vero e il watchdog non lo dice: %r"
+                      % (r["allarmi"],))
+        self.assertIn("BUNKER", r["allarmi"][cod.index("errori_freschi")]["msg"])
+        self.assertEqual(r["misure"]["errori_freschi"]["conta"], 1)
+        _ = calendar  # il formato delle date e' quello UTC di main_casavip, come in fase186
+
+
 class TestLEsitoDelGuardianoArrivaAUnaPersona(unittest.TestCase):
     """⛔ D20 — scritta PRIMA della riparazione e vista ROSSA sul codice di produzione.
 
