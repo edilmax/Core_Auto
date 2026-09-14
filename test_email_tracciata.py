@@ -302,6 +302,68 @@ class TestSeIlProviderEspentoSiDice(unittest.TestCase):
 # ---------------------------------------------------------------------------
 #  4. LA SALUTE LO DICE A CHI GUARDA DA FUORI
 # ---------------------------------------------------------------------------
+class TestUnaControversiaApertaAvvisaQualcuno(unittest.TestCase):
+    """⛔ D20 — scritta PRIMA della riparazione e vista ROSSA sul codice di produzione.
+
+    L'ospite preme «segnala un problema» dal voucher -> `POST /api/garanzia/contesta` ->
+    la garanzia passa a `contestato` e il bonifico all'host viene trattenuto. E poi NIENTE:
+    nessuna email, nessuna riga ERROR, e il Guardiano cerca le garanzie ferme in
+    `in_garanzia`, non in `contestato` -- per lui «tutto quadra». Soldi dell'host fermi,
+    ospite in attesa, e lo sa solo chi apre a mano il riquadro Controversie.
+    Censimento «porta per un uomo solo» del 2026-09-14, fronte notifiche.
+
+    Qui si stubba la decodifica del voucher e l'archivio garanzia: cio' che si prova e' il
+    CABLAGGIO -- che aprire una controversia produca un ERROR (letto dal Guardiano entro
+    24 h) e un'email a chi decide -- non la logica della garanzia, che ha i suoi test.
+    """
+
+    def _sistema(self, provider):
+        s = crea_sistema(ConfigCasaVIP(abilitato=True, segreto_hmac=SEG,
+                                       email_alert="allarmi@esempio.test"))
+        s.email_provider = provider
+        self.assertIsNotNone(getattr(s, "garanzia", None),
+                             "misura non valida: senza l'archivio garanzia la rotta risponde 503")
+        r = crea_router(s)
+        r._garanzia_da_voucher = lambda body: (("BVIP-TEST-0001", {"motivo": "acqua fredda"}),
+                                               None)
+        s.garanzia.contesta = lambda rif, motivo: {"ok": True, "stato": "contestato",
+                                                   "riferimento": rif}
+        return s, r
+
+    def test_con_il_provider_ACCESO_parte_un_ERROR_e_una_email_a_chi_decide(self):
+        import json as _j
+        import time as _t
+        prov = _ProviderFinto()
+        s, r = self._sistema(prov)
+        with self.assertLogs(LOGGER, level="ERROR") as reg:
+            stato, corpo = r.gestisci("POST", "/api/garanzia/contesta",
+                                      body=_j.dumps({"voucher_token": "x", "motivo": "acqua fredda"}))
+        self.assertEqual(stato, 200, corpo)
+        self.assertTrue([x for x in reg.output if "CONTROVERSIA" in x],
+                        "controversia aperta e nessuna riga ERROR: il Guardiano non la "
+                        "vedra' mai. Righe: %r" % (reg.output,))
+        for _ in range(100):
+            if prov.chiamate:
+                break
+            _t.sleep(0.02)
+        self.assertTrue([o for _d, o in prov.chiamate if "ontroversia" in o],
+                        "controversia aperta e nessuna email a chi decide: %r" % (prov.chiamate,))
+
+    def test_con_il_provider_SPENTO_conta_e_registra(self):
+        import json as _j
+        from fase83_server import email_ko_totale
+        s, r = self._sistema(None)
+        prima = email_ko_totale()
+        with self.assertLogs(LOGGER, level="WARNING") as reg:
+            stato, _ = r.gestisci("POST", "/api/garanzia/contesta",
+                                  body=_j.dumps({"voucher_token": "x", "motivo": "acqua fredda"}))
+        self.assertEqual(stato, 200)
+        self.assertEqual(email_ko_totale(), prima + 1,
+                         "provider spento: l'avviso della controversia e' sparito senza contare")
+        self.assertTrue([x for x in reg.output if "EMAIL NON INVIATA" in x
+                         and "controversia" in x.lower()], reg.output)
+
+
 class TestLaSaluteEspone(unittest.TestCase):
     """Come `guardiano`: una sola richiesta HTTP deve poter dire a una sentinella
     ESTERNA che le email si stanno perdendo. Il volume Docker, da fuori, non si vede."""

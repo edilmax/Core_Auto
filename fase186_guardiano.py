@@ -312,7 +312,10 @@ def _guasti_isolati(sistema: Any, ora_ts: int, ore: int) -> Optional[Dict[str, A
     conta, esempi = 0, []
     with open(percorso, encoding="utf-8", errors="replace") as f:
         for riga in f:
-            if " ERROR " not in riga:
+            # ⛔ ERROR *e* CRITICAL: il livello piu' grave che il codice sa scrivere (Bunker
+            # violato, kill-switch, cancellazione forzata) era l'unico che questo lettore
+            # saltava. Misurato il 2026-09-14 dal censimento «porta per un uomo solo».
+            if " ERROR " not in riga and " CRITICAL " not in riga:
                 continue
             try:
                 # formato di main_casavip: "%(asctime)s %(levelname)s %(name)s %(message)s".

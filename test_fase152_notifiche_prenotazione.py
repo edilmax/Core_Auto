@@ -69,6 +69,56 @@ class CanaleEsplode:
         raise RuntimeError("canale rotto")
 
 
+class TestUnAvvisoAllHostCheNonParteLasciaUnaTraccia(unittest.TestCase):
+    """⛔ D20 — scritta PRIMA della riparazione e vista ROSSA sul codice di produzione.
+
+    `avvisa()` gira sui canali, salta quelli senza contatto, conta i falliti -- e ritorna
+    un conteggio che i chiamanti in `fase83` scartano. Con SMTP guasto e un host che ha
+    dato solo email e telefono (il caso normale), una prenotazione PAGATA non genera nessun
+    avviso e nessuna riga: l'ospite si presenta alla porta e l'host non lo aspettava. E
+    l'email all'host non passa dal punto che conta le email perse (`email_ko`).
+    Censimento «porta per un uomo solo» del 2026-09-14, fronte notifiche, rilievo 4.
+    Qui si pretende la traccia che il Guardiano legge entro 24 ore: un ERROR quando
+    NESSUN canale ha consegnato."""
+
+    def test_nessun_canale_consegna_e_resta_un_ERROR(self):
+        import fase152_notifiche_prenotazione as F
+        n = NotificatorePrenotazione([CanaleEsplode()])
+        with self.assertLogs(F.logger, level="ERROR") as reg:
+            rep = n.avvisa({"email": "h@x.it"}, "Nuova prenotazione", "testo")
+        self.assertEqual(rep["inviati"], 0, "misura non valida: qualcosa ha consegnato")
+        self.assertTrue([x for x in reg.output if "AVVISO HOST NON PARTITO" in x],
+                        "nessun canale ha consegnato e non resta nessuna riga ERROR: %r"
+                        % (reg.output,))
+
+    def test_contatto_mancante_su_tutti_i_canali_e_un_ERROR_lo_stesso(self):
+        import fase152_notifiche_prenotazione as F
+        n = NotificatorePrenotazione([CanaleEsplode()])       # vuole 'email', non c'e'
+        with self.assertLogs(F.logger, level="ERROR") as reg:
+            rep = n.avvisa({"telefono": "+39 333"}, "Nuova prenotazione", "testo")
+        self.assertEqual(rep["inviati"], 0)
+        self.assertTrue([x for x in reg.output if "AVVISO HOST NON PARTITO" in x], reg.output)
+
+    def test_quando_UN_canale_consegna_non_si_grida(self):
+        """L'altra direzione (D18 punto 2): un avviso partito non e' un allarme."""
+        import fase152_notifiche_prenotazione as F
+        import logging as _lg
+
+        class Ok:
+            campo_contatto = "email"
+
+            def invia(self, dest, oggetto, testo):
+                return True
+        n = NotificatorePrenotazione([Ok(), CanaleEsplode()])
+        _lg.getLogger(F.logger.name).error("segnaposto")
+        with self.assertLogs(F.logger, level="ERROR") as reg:
+            _lg.getLogger(F.logger.name).error("segnaposto")
+            rep = n.avvisa({"email": "h@x.it"}, "o", "t")
+        self.assertEqual(rep["inviati"], 1)
+        self.assertEqual([x for x in reg.output if "AVVISO HOST NON PARTITO" in x], [],
+                         "grida anche quando un canale ha consegnato: falso allarme")
+
+
 # ───────────────────────────── modulo ─────────────────────────────
 class TestComposizione(unittest.TestCase):
     def test_localizzato_it_en_con_conferma(self):

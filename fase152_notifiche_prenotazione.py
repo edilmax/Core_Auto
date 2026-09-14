@@ -172,6 +172,13 @@ class NotificatorePrenotazione:
             except Exception:
                 falliti += 1
                 logger.warning("canale notifica host fallito (ISOLATO)", exc_info=True)
+        if inviati == 0:
+            # ⛔ ERROR, non warning: i chiamanti scartano questo conteggio, e un host che non
+            # sa della prenotazione lo scopriva l'ospite alla porta. Il Guardiano legge gli
+            # ERROR entro 24 ore. Misurato il 2026-09-14 («porta per un uomo solo»).
+            logger.error("AVVISO HOST NON PARTITO | codice: nessun_canale_ha_consegnato | "
+                         "canali=%d falliti=%d | messaggio: l'host non sa di «%s»",
+                         len(self._canali), falliti, str(oggetto)[:80])
         return {"inviati": inviati, "falliti": falliti}
 
 

@@ -6859,6 +6859,35 @@ class RouterHTTP:
             except Exception:
                 logger.warning("blocco payout su contestazione fallito (ignorato)",
                                exc_info=True)
+            # ⛔ UNA CONTROVERSIA APERTA DEVE ARRIVARE A UNA PERSONA. Prima qui non c'era
+            # niente: ne' una riga ERROR (il Guardiano cerca le garanzie ferme in
+            # `in_garanzia`, non in `contestato`), ne' un'email. Soldi dell'host fermi e
+            # ospite in attesa, e lo sapeva solo chi apriva a mano il riquadro
+            # Controversie. Misurato il 2026-09-14 («porta per un uomo solo»).
+            logger.error("CONTROVERSIA APERTA | riferimento: %s | messaggio: l'ospite contesta "
+                         "il servizio, il bonifico all'host e' trattenuto e serve una "
+                         "decisione dell'arbitro", _rif_per_registro(res[0]))
+            _cfg = getattr(self._sys, "config", None)
+            _dest = (getattr(_cfg, "email_alert", "") or getattr(_cfg, "email_mittente", "")
+                     or "info@bookinvip.com")
+            _prov = getattr(self._sys, "email_provider", None)
+            if _prov is not None and _dest:
+                import html as _hc
+                _corpo = ("<p>Controversia aperta dall'ospite sulla prenotazione <b>%s</b>.</p>"
+                          "<p>Motivo: %s</p><p>Il bonifico all'host e' trattenuto: serve una "
+                          "decisione dal riquadro Controversie.</p>"
+                          % (_hc.escape(str(res[0])),
+                             _hc.escape(str(res[1].get("motivo", ""))[:500])))
+                threading.Thread(target=_invia_tracciato,
+                                 args=(_prov, _dest,
+                                       "BookinVIP - Controversia aperta: serve una decisione",
+                                       _corpo, "controversia_aperta", str(res[0])),
+                                 daemon=True).start()
+            else:
+                logger.warning("EMAIL NON INVIATA: template=controversia_aperta riferimento=%s "
+                               "-- provider email SPENTO (contata in email_ko, vedi "
+                               "/api/health)", _rif_per_registro(res[0]))
+                _conta_email_ko("controversia_aperta")
         return (200 if out.get("ok") else 409), out
 
     def _garanzia_stato(self, query, headers):
@@ -8099,10 +8128,13 @@ class RouterHTTP:
             if not _registrato:
                 return 503, {"errore": "evento_non_registrato", "sottocodice": "archivio"}
             # ⛔ UN EVENTO GIA' ELABORATO NON SI RIFA'. Stripe riconsegna apposta (anche a
-            #    48 ore): rieseguire la conferma su un evento gia' gestito riscriveva righe
-            #    e allarmi («RIMBORSARE a mano» su un ospite gia' rimborsato). L'archivio
-            #    sa che era elaborato; qui glielo si chiede (2026-09-14, deduplicazione
-            #    sull'EVENTO, casella 8 del blocco SOLDI).
+            #    48 ore): rieseguire la conferma su un evento gia' gestito la rifaceva da
+            #    capo. L'archivio sa che era elaborato; qui glielo si chiede (2026-09-14,
+            #    deduplicazione sull'EVENTO, casella 8 del blocco SOLDI).
+            #    ⚠️ LIMITE DICHIARATO: «elaborato» si segna SOLO su 2xx. Un evento la cui
+            #    prima consegna ha avuto 503 non e' segnato, e alla riconsegna viene
+            #    rielaborato: se nel frattempo la prenotazione e' stata rimborsata, il ramo
+            #    «RIMBORSARE» scrive ancora la sua riga. Quel caso NON e' coperto qui.
             try:
                 _gia = bool(_archivio.elaborato(_evt))
             except Exception:

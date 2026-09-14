@@ -389,6 +389,29 @@ class TestGuastiIsolatiNelRegistro(_Base):
         rep = G.scansiona(sis, ora=lambda: self.now)
         self.assertTrue(rep["pulito"], "grida su un impianto senza registro: %r" % rep["anomalie"])
 
+    def test_il_livello_CRITICO_conta_come_un_guasto_e_non_di_meno(self):
+        """⛔ D20 — scritta PRIMA della riparazione e vista ROSSA sul codice di produzione.
+
+        Il lettore del registro filtrava la parola ` ERROR `. Ma il livello piu' grave che
+        il codice sa scrivere e' `logger.critical`, che `main_casavip` scrive come
+        ` CRITICAL `: un tentativo d'intrusione nel Bunker (`fase83_server.py`, BUNKER),
+        il kill-switch globale, la cancellazione FORZATA di un host con obblighi
+        (`fase156_erasure.py`) finivano nel registro e l'unico lettore automatico li
+        saltava apposta. Il peggio era invisibile e il meno grave no.
+        Censimento «porta per un uomo solo» del 2026-09-14, fronte allarmi, rilievo 1."""
+        sis = self._sistema_con_registro([
+            self._riga(self.now - 300, "CRITICAL",
+                       "BUNKER: accesso negato, chiave admin errata (ip mascherato)"),
+        ])
+        rep = G.scansiona(sis, ora=lambda: self.now)
+        self.assertFalse(rep["pulito"],
+                         "una riga CRITICAL fresca nel registro e il Guardiano tace: il livello "
+                         "piu' grave e' l'unico che nessuno legge. %r" % (rep,))
+        self.assertIn("guasti_isolati", rep["anomalie"], rep["anomalie"])
+        self.assertTrue(any("BUNKER" in e for e in rep["anomalie"]["guasti_isolati"]["esempi"]),
+                        "l'esempio riportato non e' la riga CRITICAL: %r"
+                        % (rep["anomalie"]["guasti_isolati"],))
+
 
 class TestEscrowBloccato(_Base):
 
