@@ -395,7 +395,30 @@ giri di mutazione da 60 e 600 minuti dichiarati. Guardia `TestUnaCasellaSCADUTAD
 vista rossa prima (3 su 3). **Misurato adesso: 9 caselle rilanciabili subito, 2 che vogliono il server.**
 🔑 **Quindi «15 caselle su 39» NON vuol dire che il lavoro sia fermo:** vuol dire che gran parte delle misure è
 scaduta e va rifatta. Il primo lavoro utile è rilanciare quei 9 attrezzi.
-**🚪 13 SETTEMBRE, notte — IL «CANCELLAMI» RISPONDEVA 409 A CHI NE AVEVA DIRITTO, E NESSUNO L'AVEVA MAI MISURATO («autorizzato fino alla fine», «0 scorciatoie», «ripara»)**
+**🧭 13 SETTEMBRE, 01:1x — PASSAGGIO DI CONSEGNE (D21): CINQUE DIFETTI VIVI CHIUSI E IN PRODUZIONE**
+
+> ⛔ **Stima mia, non letta: circa il 46% del contesto.** La percentuale la vede il fondatore con `/context`, io no —
+> quindi questa riga può solo **anticipare** la soglia, mai spostarla. Il blocco si scrive comunque perché il lavoro è
+> arrivato a «commit fatto + posti allineati», che è l'innesco meccanico della D21 e non richiede di misurare niente.
+>
+> **Stato della macchina:** master **`f42ab78`** uguale su computer, GitHub e **VPS**. Due PR unite stanotte: **#182**
+> (`c82343e`) e **#183** (`f42ab78`), tutte e due con CI 16 job — 15 success + `zap` **skipped**, che si riporta NON
+> ESEGUITO e mai fra i verdi — e `gate` success, letti dall'API.
+> **Ultima suite intera: `Ran 6787 in 1721.338s · OK (skipped=4) · USCITA_DIRETTA=0`** (caricatore **6792**; i 5 di
+> scarto sono `TestRipristinoAPezziNonPassa`, saltata in blocco perché su Windows manca `openssl`: il divario ha un
+> nome). ruff ok · bandit ok · pre-volo 7 su 7 · pre-fatto 10 su 10.
+> **Deploy D17 completo (01:1x):** `[1b]` paracadute agganciato **misurando** (`ebc300d1…` = viva, coincidenti prima
+> dello scambio; **dopo**: viva `a3f494a3…` ≠ prec `ebc300d1…`, quindi il ritorno indietro è reale) ·
+> `PRE_DEPLOY_20260913_010932.commit` → `efc5b2c` · backup **fresco** `20260913-011033` verificato **aprendolo**: 27
+> archivi su 27, gzip integro fino in fondo, sha256 coincidente, contenuto «SQLite format 3» · scambio rm-first con
+> `docker compose` v2, uscita 0, `casavip_nginx` intatto · sonde **/** 200, **/api/health** 200, **negativa**
+> `/api/bunker/invarianti` **403** (`/api/admin/ping` dà 404 e non prova niente) · **0 Traceback** ·
+> `verifica_produzione.py` **190 controlli, 0 violazioni**, certificato valido ancora 70 giorni.
+>
+> ⛔ **QUESTO BLOCCO NON È COMMITTATO** e il conteggio dei test qui sopra è quello di prima di scriverlo: scriverlo
+> costa zero, committarlo costa una suite intera (ferrea 6). Lo committa la chat nuova col suo primo lavoro.
+
+**🚪 13 SETTEMBRE, notte — IL «CANCELLAMI» RISPONDEVA 409 A CHI NE AVEVA DIRITTO, E NESSUNO L'AVEVA MAI MISURATO («autorizzato fino alla fine», «0 scorciatoie», «ripara») — ✅ IN PRODUZIONE con la PR #183 (`f42ab78`)**
 
 > **Il difetto, e non riguarda un dato che resta: riguarda una cancellazione che NON AVVIENE.** Un host che ha avuto
 > una prenotazione poi rimborsata non ha piu' nessun obbligo pendente (`obblighi_pendenti` = `{}`: niente ospiti in
@@ -425,9 +448,19 @@ scaduta e va rifatta. Il primo lavoro utile è rilanciare quei 9 attrezzi.
 
 > ⛔ **COSA MANCA, in quest'ordine, e il PRIMO passo non e' tecnico.**
 > ① **Classificare le 9 tabelle invisibili** — per ognuna: si cancella, oppure si dichiara con il suo perche'.
-> Quattro sembrano **cancellabili** senza decisione legale (`domanda`, `partner`, `coda`, `liberazioni`: liste
-> d'attesa e candidature, nessun obbligo di conservarle); `checkin` (Questura), `garanzia` e `split.conti` (denaro),
-> `kyc` (antiriciclaggio) e `recensioni`/`admin_account` **sono posizioni legali e le guarda un avvocato**.
+> ⛔ **MISURATO il 13/9 leggendo gli schemi, e corregge una mia frase precedente: le cancellabili sono TRE, non
+> quattro.** `domanda` (`fase158:86` — email, citta, date: lista d'attesa) · `partner` (`fase201:100` — email PK,
+> nome, tipo, messaggio, consenso: candidatura) · `liberazioni` (`fase67:142` — soli CONTATORI `liberati`/
+> `non_liberati`, nessun dato personale). **`coda` NO**: `fase67:130` ha `deposito_cents`, `voucher_cents` e
+> `ospite_id` — ci sono **soldi veri e una terza persona**, e va decisa come le altre.
+> `checkin` (Questura), `garanzia` e `split.conti` (denaro), `kyc` (antiriciclaggio), `recensioni` e `admin_account`
+> **sono posizioni legali e le guarda un avvocato**.
+>
+> ⛔ **E il fatto che pesa di piu', misurato lo stesso giorno:** `fase158_domanda.py`, `fase201_partner.py` e
+> `fase67_coda_intelligente.py` **non hanno NESSUN metodo di cancellazione** (`grep '^\s+def (cancella|rimuovi|
+> elimina|dimentica|purga)'` → **zero** su tutti e tre). Non e' che l'oblio si dimentica di chiamarli: **non c'e'
+> niente da chiamare.** Ripararlo vuol dire aggiungere funzioni NUOVE a tre moduli di produzione — quindi non e' una
+> riga, e la regola ferrea 1 vieta di farlo di propria iniziativa: **serve il via, e va dichiarato come lavoro suo**.
 > ② **Solo DOPO**, i tre aghi in `_dove_e_rimasto` — progettati e misurati: `host_id` come sottostringa (com'e' oggi),
 > lo **slug** per uguaglianza esatta e **solo dove non c'e' gia' una colonna `host_id`**, l'**email** per uguaglianza.
 > Portano la visibilita' da **3 su 12 a 12 su 12** con **zero falsi allarmi**, provati su tre stati (slug che e'
