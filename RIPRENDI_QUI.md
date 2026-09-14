@@ -434,8 +434,18 @@ scaduta e va rifatta. Il primo lavoro utile è rilanciare quei 9 attrezzi.
 > succede adesso lo devo sapere subito»): `fase178.errori_freschi` legge le righe ERROR/CRITICAL degli **ultimi 15
 > minuti** del registro e il watchdog (ogni 10 min) grida `errori_freschi` **con la riga dentro**; 4 guardie viste rosse
 > (`'errori_freschi' not found in []`), poi verdi; sul registro vero del server, in sola lettura, 0 righe negli ultimi
-> 15 minuti → tace come deve. Caricatore **6820**. ⚠️ `ALERT_EMAIL` sul VPS cambiato per valore da Gmail a
-> `massimo.foti@protonmail.com` (65 righe prima e dopo, 1 diversa): vale dal riavvio dell'app, cioè dal prossimo deploy.
+> 15 minuti → tace come deve. Suite verde (`Ran 6815 · OK · uscita 0`), commit `c67a3c8`. ⚠️ `ALERT_EMAIL` sul VPS
+> cambiato per valore da Gmail a `massimo.foti@protonmail.com` (65 righe prima e dopo, 1 diversa): attivo dal deploy
+> di `effed1e` (PR #185 unita da me, D17 delle 22:20, sonde 200/200/403, 190 controlli 0 violazioni).
+> ⛔ **E il primo falso allarme fabbricato da noi, visto sul server vero:** appena il Guardiano ha letto le righe CRITICAL,
+> ha gridato «7 stati anomali: guasti_isolati» per **33 sonde del nostro giudice** (`verifica_produzione.py` a ogni deploy
+> bussa a `/api/bunker/*` senza sessione, e `_bunker_auth` scriveva CRITICAL per qualunque negazione); il watchdog l'ha
+> mandato su Telegram alle 20:30 UTC — **la catena esito → watchdog → Telegram ha funzionato fino in fondo**, ma il
+> contenuto era rumore (ferrea 10). Riparato: sessione **assente** → WARNING `motivo=sessione_assente` (porta chiusa, 403);
+> sessione **presente ma non valida**, chiave sbagliata, 2FA fallito, break-glass → CRITICAL come prima. Guardia
+> `TestUnaPortaChiusaNonEUnaIntrusione` (2, una per direzione), rossa con `Livelli: ['CRITICAL']`. Caricatore **6822**.
+> ⚠️ Le 33 righe di stasera restano nel registro fino alle 19:19 UTC di domani: il Guardiano le rileggerà al prossimo
+> avvio e dirà ancora ANOMALO, e il watchdog lo ricorderà ogni 6 ore. Non si cancellano (il registro è un archivio).
 > ③ *Fondatore, 1 h,
 > decisioni:* paga in struttura acceso/spento e con quale tariffa; due regole d'esercizio dei primi giorni — **nessun
 > rimborso dal dashboard Stripe senza prima cancellare dal pannello** (nessun ramo `charge.refunded`: l'host verrebbe
@@ -2908,9 +2918,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: b7bd27c
+CONSEGNE AGGIORNATE A: c67a3c8
 
-SUITE ATTUALE: Ran 6820 test
+SUITE ATTUALE: Ran 6822 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
