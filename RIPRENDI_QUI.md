@@ -395,7 +395,61 @@ giri di mutazione da 60 e 600 minuti dichiarati. Guardia `TestUnaCasellaSCADUTAD
 vista rossa prima (3 su 3). **Misurato adesso: 9 caselle rilanciabili subito, 2 che vogliono il server.**
 🔑 **Quindi «15 caselle su 39» NON vuol dire che il lavoro sia fermo:** vuol dire che gran parte delle misure è
 scaduta e va rifatta. Il primo lavoro utile è rilanciare quei 9 attrezzi.
-**🛡️ 14 SETTEMBRE, pomeriggio — LA PORTA PER UN UOMO SOLO: tre buchi muti sui soldi chiusi prima del lancio** *(«vai avanti, chiudi anche quelle due prima del lancio» + «la cosa giusta»; 12 guardie viste rosse e poi verdi; caricatore 6810)*
+**🧭 14 SETTEMBRE, sera — PASSAGGIO DI CONSEGNE (D21): OTTO DIFETTI MUTI IN PRODUZIONE, E LA PORTA PER UN UOMO SOLO**
+
+> ⛔ **Percentuale di contesto: non letta** (la vede il fondatore con `/context`; la mia stima non fa fede). Il blocco si
+> scrive perché il lavoro è a «commit fatto + posti allineati», che è l'innesco meccanico della D21.
+> **Stato della macchina:** master **`b7bd27c`** (merge di `e660163` + `4a48a9b`) uguale su computer, GitHub e **VPS**.
+> PR #184 unita **da me via REST** (`gh api -X PUT .../pulls/184/merge`; il fondatore: «puoi farlo tu l'unione») dopo la
+> CI letta dall'API: **15 pass + `zap` skipping, `gate` pass**, `full-suite` 36m3s, `mutazione` pass.
+> **Ultima suite intera (locale, sullo stato committato): `Ran 6805 in 3409.147s · OK (skipped=4) · USCITA_DIRETTA=0`**
+> (caricatore **6810**; i 5 di scarto sono `TestRipristinoAPezziNonPassa`, saltata in blocco per `openssl` assente su
+> Windows). ruff ok · bandit ok · pre-volo 7/7 · pre-fatto 10/10.
+> **Deploy D17 completo (19:17-19:20, con `deploy/protocollo_d17.sh` prima/scambio/dopo):** `[1b]` il paracadute puntava
+> **ancora** a un'immagine vecchia (`ebc300d1…`, dodicesima volta) ed è stato ri-agganciato **misurando** alla viva
+> (`a3f494a3…`); `PRE_DEPLOY_20260914-191757.commit` → `f42ab78` riletto; backup `finanza-20260914-191226` aperto,
+> gzip integro, `SQLite format 3`; build `fda1338f…` ≠ prec; scambio rm-first con `docker compose` v2, `casavip_nginx`
+> intatto; avvio `money_path_pronto: True · avvisi: []`; sonde **/** 200, **/api/health** 200, **negativa**
+> `/api/bunker/invarianti` **403**; `verifica_produzione.py` **190 controlli, 0 violazioni**; gettone consumato.
+> **Visto sul server vero, non solo spinto:** il tick ha scritto `/data/guardiano_ultimo_esito` = `PULITO tutto quadra`
+> alle 19:18 e `fase178.diagnosi` lo legge (`esito_guardiano: {'pulito': True}`); il registro dice `GUARDIANO: nessuno
+> stato anomalo` **senza** «EMAIL NON INVIATA» → il rapporto quotidiano è partito; le variabili `SMTP_HOST` `SMTP_USER`
+> `EMAIL_MITTENTE` `ALERT_EMAIL` `STRIPE_SECRET_KEY` `STRIPE_WEBHOOK_SECRET` `TELEGRAM_BOT_TOKEN` `TELEGRAM_CHAT_ID`
+> **esistono** nel contenitore (solo i nomi, mai i valori); il cron del watchdog è vivo (`*/10`), ultima riga 19:20 `OK`.
+> ⛔ **`PAGA_STRUTTURA_ATTIVO=1` in produzione: confermato acceso** mentre il registro lo dice spento — decisione del fondatore.
+>
+> ⛔ **COSA MANCA, in quest'ordine (dalla «porta per un uomo solo»: 5 fronti, 34 rilievi confermati dagli avversari, 9
+> caduti — 5 perché già riparati da `e660163` — e 21 trovati in più; la sintesi intera è nel registro della sessione):**
+> **Prima del lancio.** ① *Fondatore, 45 min, zero codice:* UptimeRobot su `https://bookinvip.com/api/health` con un
+> contatto che squilla, **visto suonare una volta** (oggi l'unico allarme che sopravvive alla morte del VPS è l'email di
+> GitHub, dichiarata morta); dire se `TELEGRAM_CHAT_ID` è la chat privata o il canale pubblico del marchio (serve al
+> watchdog **e** ai post di marketing, e ora porta il dettaglio delle anomalie dei conti). ② ✅ **FATTO la sera stessa
+> (guardie viste rosse prima, 6 nuove; caricatore 6816):** `fase186._guasti_isolati` legge anche ` CRITICAL `
+> (1 riga: intrusioni nel Bunker, cancellazioni forzate, kill-switch non sono più invisibili); una **controversia aperta**
+> scrive un ERROR strutturato e manda l'email a `ALERT_EMAIL` (provider spento → WARNING + `email_ko`), così il Guardiano
+> la legge entro 24 h; un **avviso all'host che nessun canale ha consegnato** lascia un ERROR
+> (`fase152.avvisa`, `AVVISO HOST NON PARTITO`); e il commento del dedup **dichiara il suo limite** (la riconsegna dopo
+> una prima consegna 503 non è coperta) invece di sovradichiarare. Suite intera da lanciare, poi «procedi al commit».
+> ③ *Fondatore, 1 h,
+> decisioni:* paga in struttura acceso/spento e con quale tariffa; due regole d'esercizio dei primi giorni — **nessun
+> rimborso dal dashboard Stripe senza prima cancellare dal pannello** (nessun ramo `charge.refunded`: l'host verrebbe
+> bonificato per un soggiorno restituito) e **il pannello Controversie si apre ogni mattina**. ④ *Insieme, 2 h,
+> «autorizzato» per `deploy/`:* una pagina «Quando suona» in `deploy/guida-operativa.html`: per ogni Telegram e per
+> l'email del Guardiano — cosa vuol dire, cosa fa il fondatore da solo, quando chiama l'ingegnere.
+> **La settimana dopo.** ⑤ ramo «rimborso ricevuto» nel webhook che blocca il bonifico; dedup anche sugli eventi rifiutati
+> alla prima consegna e purga a 26 h; invarianti orari su disco; `db_attesi` nel watchdog (l'allarme «archivio sparito»
+> non può scattare mai); tetti su `POST /api/host/registrazione` e `/api/garanzia/contesta`; `/api/health/db` letto
+> dalla sentinella. ⑥ la configurazione che mente: `docker-compose.casavip.ssl.yml` (4 archivi su 25, `name: casavip` →
+> volume vuoto) usato da `deploy/init-letsencrypt.sh`; `.env.casavip.example` con `COMMISSIONE_BPS=1500`;
+> `genera_segreti.sh` senza `ADMIN_KEY`; Mastodon/Nostr da verificare aprendo i profili; WhatsApp promesso in 8 lingue e
+> spento. ⑦ le 5 smentite hanno letto **prima** di `e660163` in 4 fronti su 5: le righe di `fase83` citate sopra ~7940
+> sono spostate di 11-26 posizioni.
+> **L'avvocato** (dopo, come ha detto il fondatore): le sette posizioni legali scritte per analogia; le 18 tabelle né
+> svuotate né dichiarate; `app.log` 5×5 MB come unico archivio dei tentativi d'intrusione; la lingua firmata nella prova
+> privacy; la tariffa di «paga in struttura».
+> ⛔ **QUESTO BLOCCO NON È COMMITTATO** (documenti soli): entra nel commit del punto ②, con la sua suite intera.
+
+**🛡️ 14 SETTEMBRE, pomeriggio — LA PORTA PER UN UOMO SOLO: tre buchi muti sui soldi chiusi prima del lancio** *(«vai avanti, chiudi anche quelle due prima del lancio» + «la cosa giusta»; 12 guardie viste rosse e poi verdi; caricatore 6810; ✅ in produzione con la PR #184, `b7bd27c`)*
 
 > **Come sono usciti.** Il fondatore: *«non voglio che partiamo e arrivano ogni ora allarmi e poi chi li ripara»*. Un
 > censimento di 5 fronti in sola lettura (allarmi · interruttori · rotte pubbliche · Stripe · notifiche) ha prodotto
@@ -2848,9 +2902,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 4a48a9b
+CONSEGNE AGGIORNATE A: b7bd27c
 
-SUITE ATTUALE: Ran 6810 test
+SUITE ATTUALE: Ran 6816 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

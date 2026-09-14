@@ -403,7 +403,25 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
-### 🛡️ LA PORTA PER UN UOMO SOLO: tre buchi muti sui soldi chiusi prima del lancio — 14 settembre, pomeriggio
+### 🔔 TRE ALLARMI CHE NON ARRIVAVANO A NESSUNO — 14 settembre, sera (punto ② della «porta per un uomo solo»)
+
+**Cosa è cambiato nel codice** (sotto l'«autorizzato» pieno del mattino; guardie viste ROSSE prima, 6 nuove):
+· `fase186_guardiano.py`, `_guasti_isolati`: il lettore del registro filtrava solo ` ERROR ` e saltava proprio il livello
+  più grave, ` CRITICAL ` (Bunker violato, kill-switch, cancellazione forzata di un host con obblighi). Una riga.
+  Guardia `test_il_livello_CRITICO_conta_come_un_guasto_e_non_di_meno` in `test_guardiano.py`, rossa con `'pulito': True`.
+· `fase83_server.py`, `_garanzia_contesta`: dopo la trattenuta del payout, ERROR strutturato `CONTROVERSIA APERTA |
+  riferimento` + email a `ALERT_EMAIL` (o mittente, o info@) via `_invia_tracciato` con template `controversia_aperta`;
+  provider spento → WARNING «EMAIL NON INVIATA» + `email_ko`, come ogni altro ramo. Prima: niente — il Guardiano cerca le
+  garanzie ferme in `in_garanzia`, non in `contestato`. Guardie `TestUnaControversiaApertaAvvisaQualcuno` (2) in
+  `test_email_tracciata.py`, rosse con «no logs of level ERROR».
+· `fase152_notifiche_prenotazione.py`, `avvisa`: se nessun canale ha consegnato, ERROR `AVVISO HOST NON PARTITO |
+  codice: nessun_canale_ha_consegnato` (i chiamanti in fase83 scartano il conteggio). Guardie (3, una per direzione) in
+  `test_fase152_notifiche_prenotazione.py`.
+· `fase83_server.py`, commento del dedup: dichiara il limite (riconsegna dopo una prima consegna 503 non coperta) invece
+  di promettere di più — l'avversario del fronte Stripe l'aveva colto.
+Mirati: `test_guardiano` + `test_email_tracciata` + `test_fase152_notifiche_prenotazione` **Ran 63 · OK**; ruff ok; bandit ok.
+
+### 🛡️ LA PORTA PER UN UOMO SOLO: tre buchi muti sui soldi chiusi prima del lancio — 14 settembre, pomeriggio — ✅ IN PRODUZIONE con la PR #184 (`b7bd27c`, deploy D17 delle 19:18: paracadute ri-agganciato da `ebc300d1…` a `a3f494a3…`, immagine nuova `fda1338f…`, 190 controlli 0 violazioni; sul server vero `guardiano_ultimo_esito = PULITO tutto quadra` e il watchdog lo legge)
 
 **Cosa è cambiato nel codice** («vai avanti, chiudi anche quelle due prima del lancio», «la cosa giusta»; sotto
 l'«autorizzato» pieno del mattino). Tutte con la guardia vista ROSSA prima:
