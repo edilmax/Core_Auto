@@ -43,6 +43,11 @@ NOME_BATTITO = "guardiano_ultimo_giro"
 # trasformare un ritardo normale in un allarme, e un allarme che grida per niente viene
 # spento da chi lo riceve (regola ferrea 10, che lo considera grave quanto uno mancato).
 MAX_ETA_BATTITO_SEC = 25 * 3600
+# L'ESITO dell'ultimo giro, accanto al battito. Il battito dice «il Guardiano e' vivo»;
+# questo dice «cosa ha trovato». Serve perche' l'allarme sui soldi aveva UN solo canale
+# (l'email del tick), e con il provider spento moriva in un log: il watchdog, che grida gia'
+# su Telegram, legge questo file e ripete l'allarme finche' non e' risolto (2026-09-14).
+NOME_ESITO = "guardiano_ultimo_esito"
 
 NOME_LETTURA_CI = "ci_ultima_lettura"
 # Il guardiano interroga GitHub a ogni giro (ogni 10 minuti da cron): tre ore sono DICIOTTO
@@ -159,6 +164,38 @@ def eta_battito_guardiano_sec(dir_dati: str, *, ora: Optional[int] = None) -> Op
     except OSError:
         return None
     return max(0, ora - m)
+
+
+def segna_esito_guardiano(dir_dati: str, *, pulito: bool, dettaglio: str = "") -> bool:
+    """Lascia l'ESITO del giro (pulito o no, e cosa e' stato trovato). Stesse regole del
+    battito: senza una cartella vera non si scrive niente, e un guasto qui non solleva mai.
+    Una riga sola, leggibile a occhio da `cat`: `PULITO <dettaglio>` oppure `ANOMALO <dettaglio>`."""
+    if not dir_dati or not os.path.isdir(dir_dati):
+        return False
+    riga = ("PULITO " if pulito else "ANOMALO ") + " ".join(str(dettaglio or "").split())
+    try:
+        with open(os.path.join(dir_dati, NOME_ESITO), "w", encoding="utf-8") as f:
+            f.write(riga[:2000] + "\n")
+        return True
+    except OSError:
+        return False
+
+
+def leggi_esito_guardiano(dir_dati: str) -> Optional[Dict[str, Any]]:
+    """{pulito, dettaglio} dell'ultimo giro, o None se non e' mai stato scritto (e allora
+    non si giudica: e' la disciplina della chiave assente)."""
+    if not dir_dati:
+        return None
+    try:
+        with open(os.path.join(dir_dati, NOME_ESITO), encoding="utf-8") as f:
+            riga = f.readline().strip()
+    except OSError:
+        return None
+    if riga.startswith("PULITO"):
+        return {"pulito": True, "dettaglio": riga[len("PULITO"):].strip()}
+    if riga.startswith("ANOMALO"):
+        return {"pulito": False, "dettaglio": riga[len("ANOMALO"):].strip()}
+    return None
 
 
 def segna_lettura_ci(dir_dati: str, *, ora: Optional[int] = None) -> bool:
@@ -300,6 +337,14 @@ def valuta(misure: Dict[str, Any], *, max_eta_backup_sec: int = 8 * 3600,
                                    "nessuno sta piu' confrontando i nostri conti con Stripe"
                                    % (eb // 3600, max_eta_battito_sec // 3600)})
 
+    # L'esito dell'ultimo giro: un Guardiano VIVO che ha trovato soldi fermi e' piu' grave di
+    # uno muto, e prima lo diceva solo per email. Chiave assente = non misurato = non si giudica.
+    esito = misure.get("esito_guardiano")
+    if isinstance(esito, dict) and esito.get("pulito") is False:
+        allarmi.append({"cod": "guardiano_anomalo", "grav": "critico",
+                        "msg": "il Guardiano dei soldi ha trovato uno stato ANOMALO e finche' "
+                               "resta cosi' lo ripeto: %s" % (esito.get("dettaglio") or "?")})
+
     disco = misure.get("disco_pct")
     if isinstance(disco, int) and disco >= max_disco_pct:
         allarmi.append({"cod": "disco", "grav": "critico" if disco >= 95 else "avviso",
@@ -350,6 +395,7 @@ def diagnosi(*, dir_dati: str, dir_backup: str, uptime_ok: Optional[bool] = None
         "catena": verifica_catena_file(os.path.join(dir_dati, DB_GIORNALE + ".db")),
         "eta_backup_sec": eta_backup_sec(dir_backup),
         "eta_battito_guardiano_sec": eta_battito_guardiano_sec(dir_dati),
+        "esito_guardiano": leggi_esito_guardiano(dir_dati),
         "disco_pct": spazio_disco_pct(dir_dati),
         "db_presenti": db_presenti(dir_dati),
     }

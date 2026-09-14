@@ -492,6 +492,14 @@ Costa meno di 3 minuti a difetto. Alla fine ho la mappa di dove sono cieco — m
 |---|---|---|---|---|
 | 1 | 2026-09-05 · `fase202` I3: la prova firmata cercata solo in `quote_token`, che la prenotazione istantanea non salva (salva `idem_key` e il voucher nel corpo) → email falsa ogni giorno al primo pagamento vero | leggere il codice di CHI SCRIVE la riga (`fase83._registra_hold`) invece di fidarmi della mia idea della riga | una guardia che fa la prenotazione dalle ROTTE VERE e poi chiama l'auditor (esiste: `TestI3SullaProvaFirmataVera`, vista rossa prima) | in parte: chiusa per I3; le guardie di I2 e I5 usano ancora righe scritte a mano |
 | 2 | 2026-09-05 · `scheda.impronta_del_blocco` faceva lo sha256 dei byte grezzi dei moduli: lo STESSO Blocco 1 leggeva 6 su 6 in un albero e 0 su 6 in un altro, perché git su Windows riscrive i fine riga (CRLF/LF) da una cartella all'altra | eseguire lo stesso metro in un SECONDO albero pulito, dopo la domanda del fondatore «cosa vuoi dire con i numeri» | una guardia che calcola l'impronta su due copie uguali salvo i fine riga, e su una con un byte vero in più (esiste: `test_L_IMPRONTA_NON_DIPENDE_DAI_FINE_RIGA_MA_DA_UN_BYTE_VERO_SI`, vista rossa prima) | sì: gli altri hash di file in `collaudi/` sono per albero per costruzione (verificato col grep il 2026-09-05) |
+| 3 | 2026-09-14 · `fase156_erasure.py:283` proteggeva il passo «referral» con `hasattr(viral, "cancella_host")`, metodo che `ViralLoopEngine` non ha: il ramo non scattava mai, il rapporto usciva senza nominarlo, e due file dichiaravano CINQUE residui dove erano QUATTRO | un agente che ha contato le tabelle DAI FILE (`sqlite_master`) invece che dalle liste scritte a mano, e ha notato che `verificato_archivi` erano 4 mentre la docstring diceva 5 | una guardia che legge il sorgente con `ast` e pretende che ogni `hasattr(x, "m")` punti a un metodo che il componente VERO ha (esiste: `test_nessun_hasattr_di_fase156_punta_a_un_metodo_che_il_sistema_VERO_non_ha`, vista rossa prima) | sì, per `fase156`: un `hasattr` che si spegne da solo non può più restare muto lì dentro |
+| 4 | 2026-09-14 · un host che aveva aperto il suo link di invito riceveva **409** al «cancellami» (`viral.db` non dichiarato) — la stessa famiglia della PR #183, su un archivio che nessuno aveva guardato; e la riparazione «ovvia» (cancellare `referral_codici`) avrebbe prodotto un «fatto» FALSO, perché `referral_eventi.codice` conserva il token con dentro l'host_id in base64 e la scansione cercava solo la sottostringa in chiaro | un avversario col mandato di far cadere la scheda che proponeva «cancellare»: ha decodificato il token e mostrato che `'h_…' in token` è False | l'invariante «mai un "fatto" con il dato ancora dentro, token compresi» (esiste: `test_un_host_con_referral_non_riceve_MAI_un_fatto_con_il_dato_ancora_in_viral_db`, vista rossa iniettando quella riparazione), più la scansione che ora decodifica i token | sì: la scansione cerca anche DENTRO i token, e la guardia ha un secondo metro suo |
+| 5 | 2026-09-14 · `fase109_referral_host` scrive `data/referral.json` con l'host_id in chiaro, ed è cablato senza interruttore: non è un `.db`, quindi `glob("*.db")` non lo apriva mai — un «fatto» col dato ancora lì, per ESTENSIONE del file | un agente che ha letto `fase81_bootstrap` riga per riga cercando cos'altro tocca l'host, invece di fidarsi del perimetro «tutti i .db» | una guardia che fa l'invito dalle ROTTE VERE, cancella, e pretende che il rapporto NOMINI il file (esiste: `test_l_invito_su_file_non_sopravvive_in_SILENZIO_al_cancellami`, vista rossa prima) | sì: la scansione legge anche `config.file_referral`, e la guardia sulle chiavi accetta un `.json` solo se è quello configurato |
+| 6 | 2026-09-14 · la revoca del check-in prometteva in docstring «i dati degli ospiti spariscono» e non li toccava (`ON CONFLICT ... DO UPDATE SET completato=0, revocato=1` lasciava `ospiti_json`): nome e documento di terzi restavano per sempre | una scheda che ha confrontato la DOCSTRING con l'SQL, e la prova eseguita: `DOPO la revoca: ('[{"nome": "Mario Rossi", "documento": "AB1234567"}]', 0, 1)` | una guardia che pre-registra, revoca e rilegge la riga (esiste: `TestLaRevocaFaSPARIREDavveroIDatiDegliOspiti`, vista rossa prima) | per l'esemplare sì; la famiglia «docstring che promette una cosa che l'SQL non fa» NON ha un controllo meccanico: è la revisione umana (strato 9) |
+| 7 | 2026-09-14 · `POST /api/domanda` (pubblica) archiviava `check_in`/`check_out` grezzi: testo libero fino al tetto di nginx (1 MB) sotto un'email come chiave primaria, mentre `citta` aveva il tetto a 120 | un avversario che ha applicato alla tabella `domanda` lo stesso criterio con cui era caduta un'altra scheda («non sono date, sono caselle»), e ha misurato 30.061 caratteri archiviati con risposta 201 | una guardia che manda una lettera nel campo della data dalla rotta vera (esiste: `TestLeDateDellaListaDAttesaNONSonoCaselleDiTestoLibero`, vista rossa prima) | per l'esemplare sì; la famiglia «campo senza tetto su rotta pubblica» resta da chiudere con un controllo che enumeri TUTTI i campi di TUTTE le rotte pubbliche |
+| 8 | 2026-09-14 · il webhook rispondeva **200** anche quando `_conferma_pagamento` era esplosa da noi (`except Exception: logger.warning(... ignorata)`, ritorno mai guardato): Stripe legge «gestito» e non ritenta mai più — cliente che ha pagato, conti vuoti; e un evento già elaborato, riconsegnato, veniva rifatto da capo | un censimento che ha seguito il webhook riga per riga chiedendo per ogni ramo «cosa RISPONDE, e Stripe cosa capisce» invece di «cosa fa» | una guardia che fa esplodere la conferma e pretende 503 + evento non elaborato, e una che consegna lo stesso evento due volte e conta le conferme (esistono: `TestIlWebhookNonDiceMaiGestitoSeNoiAbbiamoFallito`, viste rosse prima) | sì per il ramo pagamento; il ramo `identity` risponde ancora 2xx su esito perso per scelta dichiarata (PARTE 12) |
+| 9 | 2026-09-14 · l'allarme sui SOLDI del Guardiano aveva UN canale (email, solo sull'anomalia) e col provider spento moriva in un log senza nemmeno contare; il battito diceva «vivo», non «cosa ho trovato» | la domanda del fondatore «chi li ripara?» rovesciata in «chi li RICEVE?», e un censimento che per ogni `logger.critical` ha cercato l'handler che lo inoltra (nessuno: solo stdout e file) | il tick lascia l'ESITO su disco e il watchdog (Telegram, ogni 10 min) lo grida finché resta anomalo; il rapporto parte ogni giorno; provider spento = WARNING + `email_ko` (esistono: `TestLEsitoDelGuardianoArrivaAUnaPersona`, `TestIlTickLasciaLEsitoEIlRapportoArrivaSEMPRE` col tick vero, viste rosse prima) | sì per il Guardiano; la famiglia «CRITICAL invisibile a `_guasti_isolati`» resta APERTA (legge solo ` ERROR `) |
+| 10 | 2026-09-14 · l'hold della stanza durava 2 minuti, la pagina di pagamento Stripe almeno 30: in mezzo le date venivano liberate e l'ospite riceveva «nessun addebito, riprova» mentre poteva ancora pagare | il confronto fra due costanti in due file diversi (`fase162:25` contro `fase85:86-87`), chiesto dal caso (c) del fronte Stripe | una guardia che fa passare il tempo fino a un istante prima della scadenza della pagina e pretende la stanza ancora bloccata (esiste: `TestLHoldDuraAlmenoQuantoLaPaginaDiPagamento`, vista rossa prima) | sì: la costante è ora ≥ il minimo di Stripe e la guardia lo pretende per comportamento, non per nome |
 
 Poi conto per famiglia. **La famiglia con più difetti è quella dove mi manca uno strato.**
 
@@ -520,24 +528,28 @@ Prima di prendere soldi veri di sconosciuti. Nessuna percentuale: tutte sì o no
 - [SI'] Chiavi di idempotenza con vincolo unico
       `python -m unittest test_fase15_idempotency` · EXIT=0 · Ran 40 · su 8436dac · guardia mai vista rossa
       (il vincolo è `idempotency_key TEXT PRIMARY KEY`, `fase15_idempotency.py:133`)
-- [NO] Deduplicazione webhook che dura almeno 3 giorni
-      `grep -rn "event_id\|eventi_visti" --include=*.py .` · nessuna tabella di eventi Stripe · su 8436dac
-      manca: la deduplicazione c'è ma è sul **fatto**, non sull'**evento** — `evento_id` nel giornale
-             ("commissione:<rif>", "rimborso:<rif>"). Nessun archivio di eventi visti, quindi nessuna
-             finestra di ritenzione: Stripe ritenta per 72 ore e noi non sappiamo se l'abbiamo già visto.
+- [SI'] Deduplicazione webhook che dura almeno 3 giorni
+      `python -m unittest test_fase162_hold_pagamento.TestIlWebhookNonDiceMaiGestitoSeNoiAbbiamoFallito` · EXIT=0 ·
+      2026-09-14 · **guardia VISTA ROSSA** (`2 != 1`): lo stesso `evt_` consegnato due volte conferma UNA volta.
+      L'archivio degli eventi esiste dal 2026-09-08 (`fase204_eventi_stripe`, si scrive PRIMA di rispondere) e non
+      purga mai: la finestra è ben oltre le 72 ore di Stripe. Dal 14/9 il webhook chiede all'archivio «già elaborato?»
+      prima di rifare qualunque cosa (fino ad allora rieseguiva la conferma, e il CAS la rendeva innocua solo sul
+      pagamento, non sugli allarmi «RIMBORSARE a mano» che riscriveva).
+      ⚠️ due Event DIVERSI per lo stesso fatto (fase204, docstring) contano ancora come due: li tiene a bada il CAS
       c'è già: `python -m unittest test_fase15_idempotency` · EXIT=0 · Ran 40 — le chiavi di idempotenza
-      c'è già: `python -m unittest test_movimenti_giornale` · EXIT=0 · Ran 5 — l'`evento_id` non raddoppia le righe
+      c'è già: `python -m unittest test_webhook_evento_archiviato` · EXIT=0 · Ran 5 — l'evento si scrive prima del 2xx
 - [NO] Il gestore webhook fa firma → salva → 200 → elabora dopo
       lettura di `fase83_server.py:7914-7972` · dei quattro passi c'è solo il primo · su 8436dac
       manca: verifica la firma, poi **elabora subito** (`_conferma_pagamento(rif)`) e solo dopo risponde 200.
              L'evento grezzo non viene salvato e non esiste elaborazione differita.
       c'è già: `python -m unittest test_fase87_stripe_webhook` · EXIT=0 · Ran 10 — la firma sul corpo grezzo
       c'è già: `python -m unittest test_crash_recovery_webhook` · EXIT=0 · Ran 3 — un crash a metà non lascia i conti a metà
-- [NO] L'elaborazione fallita **non** risponde 200
-      lettura di `fase83_server.py:7955-7971` · un ramo risponde 200 anche quando fallisce · su 8436dac
-      manca: sul ramo **identity** l'errore è inghiottito di proposito («ISOLATO») e la risposta resta 200:
-             un esito KYC perso non fa ritentare Stripe. Sul ramo **pagamento** invece l'eccezione arriva
-             al router e diventa 500 (`:1985-1986`), quindi lì la regola è rispettata.
+- [SI'] L'elaborazione fallita **non** risponde 200
+      `python -m unittest test_fase162_hold_pagamento.TestIlWebhookNonDiceMaiGestitoSeNoiAbbiamoFallito` · EXIT=0 ·
+      Ran 2 · 2026-09-14 · **guardia VISTA ROSSA** (`200 != 503`): la conferma che esplode da noi risponde 503 e
+      l'evento resta «da elaborare». Fino al 14/9 qui c'era scritto [NO] per il ramo identity e «rispettata» per il
+      ramo pagamento — ed era il contrario: `_conferma_pagamento` ingoiava tutto in un warning e il webhook diceva 200.
+      ⚠️ il ramo **identity** risponde ancora 2xx sugli esiti persi che non sono «non applicato»: scelta dichiarata nel codice
       c'è già: `python -m unittest test_crash_recovery_webhook` · EXIT=0 · Ran 3 — il percorso dei soldi regge al crash
 - [NO] Lo stato si legge dall'API, non dal contenuto dell'evento
       `grep -rn "retrieve" --include=*.py .` (fuori dai test) · nessuna riga · su 8436dac
@@ -549,11 +561,14 @@ Prima di prendere soldi veri di sconosciuti. Nessuna percentuale: tutte sì o no
 - [SI'] Casella d'uscita con tabella dei morti e allarme
       `python -m unittest test_fase16_outbox` · EXIT=0 · Ran 39 · su 8436dac · guardia mai vista rossa
       (`pending → processing → completed | failed | dead_letter`, `logger.critical("DLQ: …")`, allarme con soglia)
-- [NO] Riconciliazione notturna con mail, anche quando è tutto a posto
-      `grep -rn "riconcil" deploy/ .github/ docker-compose.casavip.yml` · solo un pulsante · su 8436dac
-      manca: gira **solo a mano** — `deploy/bunker.html:641` chiama `/api/bunker/riconciliazione`. Nessun
-             lavoro notturno, nessuna mail. È il punto che la PARTE 3.7 dichiara valere «più di tutto il
-             resto della PARTE 3», ed è quello che copre gli eventi che Stripe non consegna mai.
+- [SI' nel codice · NON MISURATO in produzione] Riconciliazione notturna con mail, anche quando è tutto a posto
+      `python -m unittest test_watchdog.TestIlTickLasciaLEsitoEIlRapportoArrivaSEMPRE` · EXIT=0 · Ran 3 · 2026-09-14 ·
+      **guardia VISTA ROSSA** (col tick VERO avviato da `servi()`): il giro giornaliero del Guardiano (fase186, che
+      confronta con Stripe) manda il rapporto **ogni giorno**, anche quando tutto quadra, e dentro elenca i controlli
+      NON eseguiti (per esempio «Stripe: manca la chiave»). Col provider spento fa WARNING + `email_ko`, e l'ESITO va su
+      disco dove il watchdog lo grida su Telegram (`guardiano_anomalo`).
+      ⚠️ NON MISURATO in produzione: che `SMTP_HOST`, `ALERT_EMAIL` e `STRIPE_SECRET_KEY` siano nel `.env.casavip` del
+      VPS non si vede da qui; senza la chiave il rapporto dice «Stripe NON eseguito» — e ora lo DICE, non tace.
       c'è già: `python -m unittest test_riconciliazione` · EXIT=0 · Ran 8 — il confronto con Stripe funziona quando lo si lancia
 - [NO] Scelta A/B/C sulle commissioni nel rimborso, scritta nelle condizioni
       `grep -n -i "rimbors" fase185_testi_legali.py` · la scelta non compare nelle condizioni · su 8436dac
@@ -598,11 +613,16 @@ Prima di prendere soldi veri di sconosciuti. Nessuna percentuale: tutte sì o no
       per il prodotto — un rosso finto, e un rosso finto è un difetto quanto un allarme mancato (ferrea 10)
 
 **Dati**
-- [SI'] Numero archivi nell'elenco = numero conferme di cancellazione
-      `python collaudi/prova_copertura_archivi.py` · EXIT=0 · su 8436dac · **guardia VISTA ROSSA**
-      (l'attrezzo aggiunge un archivio finto e pretende che la sorveglianza cada: «la guardia è CADUTA su
-      'db_fantasma' (1 test rossi)». È l'unica casella di tutta la PARTE 12 la cui prova sa dimostrare
-      da sola di saper fallire)
+- [NO] Numero archivi nell'elenco = numero conferme di cancellazione
+      censimento del 2026-09-14 (44 agenti, 21 schede + 21 smentite) · su f42ab78
+      manca: 35 tabelle nei 23 archivi del banco — **8** svuotate da un passo, **9** dichiarate per legge
+             (6 + le 3 di `viral.db`, più `referral.json`), **18 né l'una né l'altra**; e NESSUNA delle 21
+             rimaste ha un metodo di cancellazione. Il «SI'» che stava qui fino al 14/9 si appoggiava a
+             `prova_copertura_archivi.py`, che misura la PERSISTENZA e non nomina mai una cancellazione
+             (`grep 'cancell|erasure|oblio|fase156'` → 0 su 92 righe): era un verde sulla descrizione.
+      c'è già: `python collaudi/esame_oblio.py` · VERDE 7 anelli su 7 — la scansione vede tutte le tabelle,
+               anche dentro i token e nel JSON di fase109, e un residuo non dichiarato fa uscire ok=False
+      c'è già: `python collaudi/prova_copertura_archivi.py` · EXIT=0 · guardia vista rossa (persistenza, non cancellazione)
 - [SI'] Esportazione dati funzionante
       `python -m unittest test_fase77_portability` · EXIT=0 · Ran 21 · su 8436dac · guardia mai vista rossa
 
@@ -691,6 +711,8 @@ La parte viva. Cresce e mi segue da un software all'altro.
 | Libreria con falle note | dependency scanning | Scansione ad ogni modifica | test | |
 | Misura che dipende dalla cartella, non dal codice | environment-dependent measurement | Fine riga normalizzati nell'impronta + guardia CRLF/LF/byte vero | test | 2026-09-05 |
 | Auditor che giudica la mia idea della riga, non la riga che il prodotto scrive | test through real routes | Guardia che passa dalle rotte vere prima dell'auditor | test | 2026-09-05 (I3; I2/I5 ancora aperte) |
+| Passo difensivo che si spegne da solo e resta muto (`hasattr` su un metodo che non esiste) | dead defensive branch | Guardia `ast` che pretende che ogni `hasattr(x, "m")` punti a un metodo del componente VERO | test | 2026-09-14 (per `fase156`; da estendere agli altri moduli che usano lo stesso schema) |
+| Residuo invisibile alla cancellazione per FORMA (dentro un token) o per ESTENSIONE (file non `.db`) | erasure blind spot | La scansione decodifica i token e legge gli archivi configurati non-SQLite; invariante «mai un "fatto" col dato dentro» con un secondo metro nel test | codice + test | 2026-09-14 |
 
 **Una famiglia chiusa non si riapre.** Se torna, il controllo era debole: lo rinforzo, non ne aggiungo un altro.
 

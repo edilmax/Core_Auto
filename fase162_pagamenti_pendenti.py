@@ -22,7 +22,13 @@ from fase199_invarianti import transizioni_prenotazione as _transizioni_prenotaz
 # in produzione un fail-safe che scatta andava in NameError invece di loggare-e-proseguire.
 logger = logging.getLogger("core_auto.pagamenti_pendenti")
 
-HOLD_SECONDI_DEFAULT = 120           # 2 minuti per pagare, poi la stanza si libera (urgenza tipo Agoda: chi paga prima se la prende)
+# ⛔ L'hold della stanza dura ALMENO quanto la pagina di pagamento di Stripe resta aperta
+# (il minimo che Stripe accetta per `expires_at`: fase85_pagamenti_stripe.py). Prima era
+# molto piu' corto («urgenza tipo Agoda»): fra le due scadenze la macchina liberava le date
+# e mandava «nessun addebito, riprova» all'ospite che poteva ancora pagare sulla pagina
+# aperta — un cliente che paga due volte e un rimborso a mano. Scelto dal fondatore il
+# 2026-09-14 («la cosa giusta»); lo sorveglia `TestLHoldDuraAlmenoQuantoLaPaginaDiPagamento`.
+HOLD_SECONDI_DEFAULT = 1800
 
 # Gli stati da cui ogni evento puo' partire NON si scrivono a mano qui: si DERIVANO dalla
 # macchina a stati di fase199, la stessa su cui i teoremi Z3 sono dimostrati. Prima erano

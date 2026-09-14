@@ -99,5 +99,68 @@ class TestRiscattoNelConcierge(unittest.TestCase):
         self.assertEqual(c["richieste"], 1)
 
 
+class TestLeDateDellaListaDAttesaNONSonoCaselleDiTestoLibero(unittest.TestCase):
+    """⛔ D20 — scritta PRIMA della riparazione e vista ROSSA sul codice di produzione.
+
+    `POST /api/domanda` e' pubblica (nessuna autenticazione: fase83_server.py:7406). L'email
+    ha un tetto a 254 (fase158_domanda.py:64) e la citta' a 120 (fase83_server.py:7425). Ma
+    `check_in` e `check_out` passano GREZZI: `str(dati.get("check_in", ""))` a
+    fase83_server.py:7427-7428, e `str(check_in or "")` a fase158_domanda.py:113. Nessuna
+    pulizia, nessun tetto, nessun controllo che siano date. L'unico limite e' quello di
+    nginx sul corpo intero: `client_max_body_size 1m` (deploy/nginx.casavip.conf:16).
+    ⇒ due caselle di TESTO LIBERO fino a ~un milione di caratteri, da chiunque, salvate
+    sotto un'email come chiave primaria — cioe' legate a una persona identificata — senza
+    consenso e senza un termine di conservazione.
+
+    Trovato il 2026-09-14 dal censimento delle 21 tabelle che il «cancellami» non tocca:
+    e' la stessa forma per cui e' caduta la scheda di `domanda` — «non sono date, sono
+    caselle». Qui si pretende il comportamento che il NOME della colonna promette: cio'
+    che finisce in `check_in`/`check_out` ha la misura di una data, non di una lettera.
+    """
+
+    def setUp(self):
+        import dataclasses
+        import os
+        self.dir = tempfile.mkdtemp()
+        campi = {f.name: os.path.join(self.dir, f.name[3:] + ".db")
+                 for f in dataclasses.fields(ConfigCasaVIP) if f.name.startswith("db_")}
+        self.sis = crea_sistema(ConfigCasaVIP(abilitato=True, segreto_hmac=SEG, **campi))
+        self.r = crea_router(self.sis, host_key="hk", base_url="https://bookinvip.com")
+        self.db = campi["db_domanda"]
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def test_un_romanzo_in_check_in_non_viene_archiviato_come_se_fosse_una_data(self):
+        import sqlite3
+        lettera = ("Mario Rossi, via Verdi 12, Roma, tel 3331234567, allergico a " +
+                   "x" * 30000)
+        s, c = self.r.gestisci("POST", "/api/domanda", {},
+                               json.dumps({"email": "lista@esempio.test", "citta": "Roma",
+                                           "check_in": lettera, "check_out": lettera}), {})
+        # La rotta puo' rifiutare (422) oppure accettare ripulendo: tutte e due vanno bene.
+        # Quello che NON va bene e' archiviare la lettera intera.
+        con = sqlite3.connect("file:%s?mode=ro" % self.db, uri=True)
+        try:
+            riga = con.execute("SELECT check_in, check_out FROM domanda "
+                               "WHERE email='lista@esempio.test'").fetchone()
+        finally:
+            con.close()
+        if s in (200, 201):
+            self.assertIsNotNone(riga, "misura non valida: 200 ma nessuna riga archiviata")
+        if riga is None:
+            self.assertNotIn(s, (200, 201))
+            return
+        for nome, valore in (("check_in", riga[0]), ("check_out", riga[1])):
+            self.assertLessEqual(
+                len(valore or ""), 32,
+                "`%s` ha archiviato %d caratteri di testo libero arrivato da una rotta "
+                "pubblica senza autenticazione: non e' una data, e' una lettera legata a "
+                "un'email. Risposta della rotta: %s %r" % (nome, len(valore or ""), s, c))
+            self.assertNotIn("3331234567", valore or "",
+                             "`%s` conserva un numero di telefono scritto nel campo della "
+                             "data" % nome)
+
+
 if __name__ == "__main__":
     unittest.main()

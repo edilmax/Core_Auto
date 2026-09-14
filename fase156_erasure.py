@@ -88,6 +88,36 @@ TRATTENUTI_PER_LEGGE: Dict[str, str] = {
         "`quote_token` e il corpo della prenotazione — dati che alla contabilita' non "
         "servono e che vanno MINIMIZZATI, non conservati per il termine delle scritture. "
         "Conservare tutta la riga e' il modo piu' semplice, non il piu' giusto.",
+    # ⛔ IL FASCICOLO DEL PROGRAMMA INVITI, dichiarato il 2026-09-14 («autorizzato» del
+    # fondatore) E SCRITTO DA NOI PER ANALOGIA, NON DA UN AVVOCATO. Le tre tabelle di
+    # `viral.db` nascono nella stessa transazione (`fase76_viral_loop.registra_referee`) e
+    # si decidono insieme: cancellarne una sola sostituisce un errore rumoroso (409) con uno
+    # muto — `referral_eventi.codice` conserva il token con dentro l'host_id, e ripulire
+    # `crediti.motivo` rompe la chiave che impedisce di pagare due volte il premio.
+    "referral_codici":
+        "codice di invito dell'host: e' la chiave con cui si prova a CHI spetta un premio "
+        "in denaro (`referral_premio_cents`) e per quale invito. Documento del rapporto "
+        "economico, stesso termine delle scritture (art. 2220 c.c.). ⚠️ DA VALIDARE DA UN "
+        "AVVOCATO: scritta per analogia con `payout`, non da un professionista.",
+    "referral_eventi":
+        "registro di chi si e' iscritto con quale invito: porta il dato di un TERZO "
+        "(l'invitato) e l'anti-doppione che impedisce di incassare due volte il credito di "
+        "benvenuto. Cancellarlo farebbe sparire la prova di un credito gia' maturato. "
+        "⚠️ DA VALIDARE DA UN AVVOCATO: scritta per analogia con `payout`.",
+    "crediti":
+        "crediti in centesimi che riducono la commissione fatturata (`fase83`), con la "
+        "chiave di deduplica del premio in `motivo`: e' denaro, e senza questa riga il "
+        "premio si pagherebbe due volte. Documento contabile (art. 2220 c.c.). ⚠️ DA "
+        "VALIDARE DA UN AVVOCATO: scritta per analogia con `payout`.",
+    # ⛔ E il TERZO programma inviti (`fase109_referral_host`), che non e' una tabella ma un
+    # file JSON: chi ha invitato chi, e i crediti maturati. Stessa natura, stessa analogia.
+    # La chiave e' il NOME DEL FILE che la configurazione usa (`main_casavip.py`), e la
+    # guardia `test_ogni_chiave_e_una_TABELLA_CHE_ESISTE_davvero` lo pretende uguale.
+    "referral.json":
+        "programma inviti su file (fase109): chi ha invitato chi, se l'invitato si e' "
+        "qualificato, e i crediti maturati dal referente. Prova di un credito in denaro, "
+        "stesso termine delle scritture (art. 2220 c.c.). ⚠️ DA VALIDARE DA UN AVVOCATO: "
+        "scritta per analogia con `payout`, non da un professionista.",
 }
 
 
@@ -242,7 +272,6 @@ def cancella_attivita_host(sistema: Any, host_id: Any, *, forza: bool = False) -
     inv = getattr(sistema, "inventario", None)
     reg = getattr(sistema, "registro_host", None)
     msg = getattr(sistema, "messaggistica", None)
-    viral = getattr(sistema, "viral", None)
 
     slugs = _slug_host(cat, host_id)                       # PRIMA di cancellare il catalogo
 
@@ -280,8 +309,11 @@ def cancella_attivita_host(sistema: Any, host_id: Any, *, forza: bool = False) -
         rep["cancellati"]["alloggi"] = _safe(cat.cancella_alloggi_host, host_id)
     if msg is not None and hasattr(msg, "cancella_messaggi_host"):
         rep["cancellati"]["messaggi"] = _safe(msg.cancella_messaggi_host, host_id)
-    if viral is not None and hasattr(viral, "cancella_host"):
-        rep["cancellati"]["referral"] = _safe(viral.cancella_host, host_id)
+    # ⛔ Qui c'era un passo «referral» protetto da `hasattr(viral, "cancella_host")`: quel
+    # metodo NON esiste su `ViralLoopEngine`, quindi il ramo non scattava mai e il rapporto
+    # usciva senza nominarlo (misurato il 2026-09-14). Tolto: un passo che finge di esserci
+    # e' peggio di un passo che manca, perche' nasconde che `viral.db` resta da decidere.
+    # Lo sorveglia `test_nessun_hasattr_di_fase156_punta_a_un_metodo_che_il_sistema_VERO_non_ha`.
     if reg is not None and hasattr(reg, "cancella_host"):
         rep["cancellati"]["host"] = _safe(reg.cancella_host, host_id)
     # ⛔ IL CALENDARIO ESTERNO, che non vedeva nessuno. La tabella `ical_feed` porta
@@ -321,8 +353,6 @@ def cancella_attivita_host(sistema: Any, host_id: Any, *, forza: bool = False) -
         residui["inventario"] = sum(_safe(inv.conta_alloggio, s) for s in slugs)
     if msg is not None and hasattr(msg, "conta_messaggi_host"):
         residui["messaggi"] = _safe(msg.conta_messaggi_host, host_id)
-    if viral is not None and hasattr(viral, "conta_host"):
-        residui["referral"] = _safe(viral.conta_host, host_id)
     if reg is not None and hasattr(reg, "esiste_host"):
         # il secondo `hasattr` che stava qui controllava la STESSA cosa dell'`if` qui sopra:
         # ramo morto, irraggiungibile. Tolto il 2026-08-01 (lo aveva scovato la mutazione,
@@ -334,7 +364,7 @@ def cancella_attivita_host(sistema: Any, host_id: Any, *, forza: bool = False) -
     rep["verificato_archivi"] = list(residui.keys())
 
     # --- E ADESSO IL CONTROLLO CHE NON DIPENDE DA QUESTA LISTA ---------------------
-    # ⛔ PERCHE' NON BASTAVA QUELLO SOPRA. I cinque archivi qui sopra sono nominati A MANO
+    # ⛔ PERCHE' NON BASTAVA QUELLO SOPRA. Gli archivi qui sopra sono nominati A MANO
     # dentro questo file, e questo file DICHIARA di essere resiliente: opera solo sugli
     # archivi che espongono i metodi giusti, cosi' «aggiungere un archivio nuovo non
     # richiede toccare questo file». Letta dal lato in cui morde: un archivio nuovo viene
@@ -400,13 +430,36 @@ def _dove_e_rimasto(sistema: Any, host_id: Any) -> Dict[str, Any]:
 
     ⚠️ LIMITE DICHIARATO: cerca l'identificativo dell'host, non ogni dato che lo riguarda —
     una riga che lo nomina in altro modo non viene vista. E' un pavimento, non un soffitto:
-    quello che trova e' rimasto per certo."""
+    quello che trova e' rimasto per certo.
+
+    ⛔ DUE CECITA' CHIUSE IL 2026-09-14, misurate dal censimento delle 21 tabelle:
+    (1) per FORMA — l'identificativo dentro un token `<base64>.<firma>` (i codici invito di
+    fase76 finiscono cosi' in `referral_eventi.codice`) non e' una sottostringa in chiaro,
+    e la scansione diceva «pulito»: ora il payload si decodifica (non serve nessuna chiave)
+    e si cerca anche li'; (2) per ESTENSIONE — il programma inviti di fase109 non e' un
+    `.db` ma un file JSON (`config.file_referral`), e `glob("*.db")` non lo apriva mai:
+    ora si legge anche quello, con il nome del file come nome dell'archivio."""
+    import base64 as _b64
     import glob as _glob
     import os as _os
+    import re as _re
     import sqlite3 as _sq
     ago = str(host_id or "")
     if not ago:
         return {"sporchi": {}, "totali": 0, "motivo": "host_id vuoto"}
+    _b64_ok = _re.compile(r"^[A-Za-z0-9_-]{16,}=*$")
+
+    def _contiene(valore: str) -> bool:
+        if ago in valore:
+            return True
+        testa = valore.split(".", 1)[0]
+        if not _b64_ok.match(testa):
+            return False
+        try:
+            dentro = _b64.urlsafe_b64decode(testa + "=" * (-len(testa) % 4))
+        except Exception:
+            return False
+        return ago.encode("utf-8") in dentro
     fin = getattr(getattr(sistema, "config", None), "db_finanza", "") or ""
     if fin in ("", ":memory:"):
         return {"sporchi": {}, "totali": 0,
@@ -438,7 +491,7 @@ def _dove_e_rimasto(sistema: Any, host_id: Any) -> Dict[str, Any]:
                     # a gridare, e la CI se n'e' accorta il 2026-09-12.
                     q = 'SELECT * FROM "%s"' % t.replace('"', '""')  # nosec B608  # noqa: S608
                     for r in con.execute(q):
-                        if any(isinstance(r[k], str) and ago in r[k] for k in r.keys()):
+                        if any(isinstance(r[k], str) and _contiene(r[k]) for k in r.keys()):
                             sporchi.setdefault(nome, []).append(t)
                             break
                 except _sq.Error:
@@ -447,5 +500,17 @@ def _dove_e_rimasto(sistema: Any, host_id: Any) -> Dict[str, Any]:
             sporchi.setdefault(nome, []).append("(archivio illeggibile: non giudicato)")
         finally:
             con.close()
+    # Il programma inviti su file (fase109): un archivio a tutti gli effetti, con il nome
+    # del file come nome — ed e' quel nome che `TRATTENUTI_PER_LEGGE` deve dichiarare.
+    fr = getattr(getattr(sistema, "config", None), "file_referral", "") or ""
+    if fr and _os.path.exists(fr):
+        totali += 1
+        nome = _os.path.basename(fr)
+        try:
+            with open(fr, encoding="utf-8") as f:
+                if _contiene(f.read()):
+                    sporchi.setdefault(nome, []).append(nome)
+        except OSError:
+            sporchi.setdefault(nome, []).append("(archivio illeggibile: non giudicato)")
     return {"sporchi": {k: sorted(set(v)) for k, v in sporchi.items()}, "totali": totali,
             "motivo": ""}

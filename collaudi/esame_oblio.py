@@ -3,11 +3,11 @@
 
 PERCHE' ESISTE, e non e' teoria. `fase156_erasure.cancella_attivita_host` dichiara nella
 sua stessa docstring di cancellare l'host «da OGNI archivio del sistema e verifica». I
-residui che ricontrolla sono CINQUE, nominati a mano dentro quel file (annunci,
-inventario, messaggi, referral, anagrafica), e il rapporto dice `ok=True` guardando solo
-quelli. Il server di produzione ne conta **ventisette**. Quindi oggi `ok=True` significa
-«non e' rimasto niente nei cinque che so guardare», non «non e' rimasto niente» — e le
-due frasi si scrivono uguale.
+residui che ricontrolla sono nominati a mano dentro quel file (annunci, inventario,
+messaggi, anagrafica — e fino al 2026-09-14 anche un «referral» che non scattava mai),
+e il rapporto dice `ok=True` guardando solo quelli. Il server di produzione ne conta
+**ventisette**. Quindi oggi `ok=True` significa «non e' rimasto niente nei pochi che so
+guardare», non «non e' rimasto niente» — e le due frasi si scrivono uguale.
 
 ⛔ E il file DICHIARA di essere resiliente: opera solo sugli archivi che espongono i
 metodi giusti, cosi' «aggiungere un archivio nuovo non richiede toccare questo file».
