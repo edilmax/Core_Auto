@@ -223,6 +223,155 @@ class TestBattitoDelGuardiano(unittest.TestCase):
                          "ha scritto un battito in una cartella inesistente")
 
 
+class TestIlTickLasciaLEsitoEIlRapportoArrivaSEMPRE(unittest.TestCase):
+    """⛔ D20 — scritta PRIMA della riparazione e vista ROSSA sul codice di produzione.
+
+    COLLAUDO 2 — CABLAGGIO, come il test gemello del battito: non basta che
+    `segna_esito_guardiano` esista, deve chiamarla il tick. E il rapporto del Guardiano
+    deve partire OGNI giorno, anche quando tutto quadra — altrimenti «tutto quadra» e «il
+    provider email e' morto» si scrivono uguale: silenzio. Se il provider e' spento, il
+    tick lo dice come tutti gli altri rami (WARNING «EMAIL NON INVIATA» + `email_ko`),
+    cosi' la salute lo espone e il watchdog lo grida.
+    """
+
+    class _Provider(object):
+        def __init__(self):
+            self.chiamate = []
+
+        def invia(self, destinatario, oggetto, corpo_html):
+            self.chiamate.append((oggetto, corpo_html))
+            return True
+
+    def _avvia(self, provider):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        sis = crea_sistema(ConfigCasaVIP(
+            abilitato=True, segreto_hmac=b"h" * 32, db_catalogo="%s/c.db" % d,
+            db_inventario="%s/i.db" % d, db_registro_host="%s/r.db" % d,
+            db_pendenti="%s/p.db" % d, db_finanza="%s/finanza.db" % d,
+            email_alert="allarmi@esempio.test"))
+        self.assertIsNotNone(getattr(sis, "pagamenti_pendenti", None),
+                             "premessa non valida: senza pendenti il tick non nasce")
+        sis.email_provider = provider
+        import threading as _thr
+        from fase83_server import servi
+        _thr.Thread(target=servi, args=(sis,), daemon=True,
+                    kwargs={"host": "127.0.0.1", "porta": 0,
+                            "host_key": "hk", "admin_key": "ak"}).start()
+        percorso = os.path.join(d, wd.NOME_ESITO)
+        for _ in range(200):
+            if os.path.exists(percorso):
+                break
+            time.sleep(0.05)
+        return d, percorso
+
+    def test_IL_TICK_LASCIA_DAVVERO_L_ESITO(self):
+        d, percorso = self._avvia(self._Provider())
+        self.assertTrue(os.path.exists(percorso),
+                        "il tick del Guardiano e' girato e NON ha lasciato l'esito: il watchdog "
+                        "non sapra' mai cosa ha trovato (COSTRUITO non e' COLLEGATO)")
+        esito = wd.leggi_esito_guardiano(d)
+        self.assertIsNotNone(esito, "l'esito c'e' sul disco ma non si rilegge")
+        self.assertIn("pulito", esito)
+
+    def test_il_rapporto_parte_ANCHE_quando_tutto_quadra(self):
+        prov = self._Provider()
+        self._avvia(prov)
+        for _ in range(100):
+            if prov.chiamate:
+                break
+            time.sleep(0.05)
+        self.assertTrue(prov.chiamate,
+                        "su una macchina sana il Guardiano non ha mandato NESSUNA email: "
+                        "«tutto quadra» e «provider morto» sono indistinguibili")
+        self.assertTrue(any("Guardiano" in o for o, _ in prov.chiamate),
+                        "l'email partita non e' il rapporto del Guardiano: %r"
+                        % ([o for o, _ in prov.chiamate],))
+
+    def test_col_provider_SPENTO_il_tick_conta_e_registra(self):
+        from fase83_server import email_ko_totale
+        import logging as _lg
+        prima = email_ko_totale()
+        with self.assertLogs("core_auto.server", level="WARNING") as reg:
+            _lg.getLogger("core_auto.server").warning("segnaposto")
+            self._avvia(None)
+            for _ in range(100):
+                if email_ko_totale() > prima:
+                    break
+                time.sleep(0.05)
+        self.assertGreater(email_ko_totale(), prima,
+                           "provider spento: il rapporto del Guardiano e' sparito senza "
+                           "contare, e /api/health non se ne accorge")
+        self.assertTrue([r for r in reg.output if "EMAIL NON INVIATA" in r
+                         and "guardiano" in r.lower()],
+                        "provider spento e nessuna riga sul rapporto del Guardiano: %r"
+                        % ([r for r in reg.output if "EMAIL" in r],))
+
+
+class TestLEsitoDelGuardianoArrivaAUnaPersona(unittest.TestCase):
+    """⛔ D20 — scritta PRIMA della riparazione e vista ROSSA sul codice di produzione.
+
+    Il Guardiano dei soldi trova conti che non tornano con Stripe, escrow bloccati,
+    bonifici fermi — e lo dice con UNA email, SOLO se il provider email e' acceso
+    (`fase83_server._tick_guardiano`). Se il provider e' spento, o la casella non la legge
+    nessuno, l'allarme piu' grave della macchina muore in un log. Il battito (dead man's
+    switch) dice solo «il Guardiano e' vivo», non «cosa ha trovato».
+
+    Qui si chiude l'anello con lo stesso attrezzo del battito: il tick lascia anche l'ESITO
+    dell'ultimo giro in un file accanto al battito, e il watchdog — che gira ogni 10 minuti
+    sul VPS e grida gia' su Telegram — lo legge e grida `guardiano_anomalo` finche' non e'
+    risolto. Un allarme sui soldi che ha un solo canale non e' un allarme.
+    Censimento «porta per un uomo solo» del 2026-09-14, fronti allarmi e notifiche.
+    """
+
+    def test_un_esito_ANOMALO_grida_critico_e_dice_cosa(self):
+        r = wd.valuta({"esito_guardiano": {"pulito": False,
+                                           "dettaglio": "2 stati anomali: escrow_bloccato, "
+                                                        "bonifico_fermo"}})
+        cod = [a["cod"] for a in r["allarmi"]]
+        self.assertIn("guardiano_anomalo", cod,
+                      "il Guardiano ha trovato soldi fermi e il watchdog non lo dice: %r" % (r,))
+        a = r["allarmi"][cod.index("guardiano_anomalo")]
+        self.assertEqual(a["grav"], "critico", "soldi fermi non sono un avviso: sono critico")
+        self.assertIn("escrow_bloccato", a["msg"],
+                      "l'allarme non dice COSA ha trovato il Guardiano: %r" % (a,))
+
+    def test_un_esito_PULITO_non_fa_gridare_nessuno(self):
+        """L'altra direzione (D18 punto 2): a conti che tornano deve TACERE."""
+        r = wd.valuta({"esito_guardiano": {"pulito": True, "dettaglio": "tutto quadra"}})
+        self.assertNotIn("guardiano_anomalo", [a["cod"] for a in r["allarmi"]],
+                         "grida su un Guardiano che ha trovato tutto in ordine: %r" % (r,))
+
+    def test_se_l_esito_NON_e_stato_misurato_non_si_giudica(self):
+        """Chiave assente = non guardato (la stessa disciplina del battito e dei backup):
+        dal PC, che il volume non lo vede, non deve nascere un falso allarme perenne."""
+        r = wd.valuta({"uptime_ok": True})
+        self.assertNotIn("guardiano_anomalo", [a["cod"] for a in r["allarmi"]])
+
+    def test_l_esito_si_SCRIVE_si_RILEGGE_e_la_diagnosi_lo_vede(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        self.assertIsNone(wd.leggi_esito_guardiano(d), "un file mai scritto non e' un esito")
+        self.assertTrue(wd.segna_esito_guardiano(d, pulito=False,
+                                                 dettaglio="1 stato anomalo: bonifico_fermo"))
+        letto = wd.leggi_esito_guardiano(d)
+        self.assertEqual((letto or {}).get("pulito"), False, "esito riletto storto: %r" % (letto,))
+        self.assertIn("bonifico_fermo", (letto or {}).get("dettaglio", ""))
+        # e la diagnosi completa (quella che il bash lancia) lo porta fino all'allarme
+        r = wd.diagnosi(dir_dati=d, dir_backup=d, uptime_ok=True)
+        self.assertIn("guardiano_anomalo", [a["cod"] for a in r["allarmi"]],
+                      "la diagnosi non legge l'esito scritto sul disco: %r" % (r["allarmi"],))
+        # e un esito pulito scritto DOPO spegne l'allarme
+        self.assertTrue(wd.segna_esito_guardiano(d, pulito=True, dettaglio="tutto quadra"))
+        r = wd.diagnosi(dir_dati=d, dir_backup=d, uptime_ok=True)
+        self.assertNotIn("guardiano_anomalo", [a["cod"] for a in r["allarmi"]])
+
+    def test_senza_una_CARTELLA_VERA_l_esito_non_si_scrive(self):
+        """Come il battito: `db_finanza` vale `:memory:` di serie, e la cartella e' la
+        stringa vuota. Un esito timbrato nel nulla sarebbe un segnale finto."""
+        self.assertFalse(wd.segna_esito_guardiano("", pulito=True, dettaglio="x"))
+
+
 class TestLaSaluteDiceSeIlGuardianoEVIVO(unittest.TestCase):
     """DA FUORI SI DEVE POTER VEDERE CHE LA SENTINELLA INTERNA E' MORTA.
 

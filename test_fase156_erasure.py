@@ -684,6 +684,248 @@ class TestUnHostConPagamentiSTORICIOTTIENELaCancellazione(unittest.TestCase):
             "residui=%r sporchi=%r" % (rep.get("residui"), rep.get("archivi_sporchi")))
 
 
+class TestUnHostCheHaUsatoIlLINKDIINVITOOTTIENELaCancellazione(unittest.TestCase):
+    """⛔ D20 — scritta PRIMA della riparazione e vista ROSSA sul codice di produzione.
+
+    LA STESSA FAMIGLIA del 409 chiuso con la PR #183, su un archivio che nessuno aveva
+    guardato. La #183 ha dichiarato `payout` e `pendenti`; `viral.db` e' rimasto fuori, e
+    il difetto e' identico: l'host apre il suo link di invito (la rotta vera e'
+    `GET /api/host/referral`, che porta a `fase76_viral_loop.genera_codice`), poi chiede la
+    cancellazione, e si sente rispondere **409** — cioe' «errore» a un diritto che per legge
+    deve andare a buon fine.
+
+    ⛔ E LA CAUSA E' PEGGIO DEL SINTOMO, perche' e' un passo che FINGE di esserci.
+    `fase156_erasure.py:283` si protegge con `hasattr(viral, "cancella_host")`, ma
+    `ViralLoopEngine` non espone quel metodo: in tutto il repository `def cancella_host`
+    esiste in UN solo posto, `fase88_registro_host.py:636`. Quindi il ramo non e' che
+    fallisce: **non scatta mai**, e nessuno se ne accorge perche' `hasattr` lo salta in
+    silenzio. Per lo stesso motivo `fase156_erasure.py:324` non aggiunge `referral` ai
+    residui — ed e' la ragione per cui `verificato_archivi` sono QUATTRO mentre
+    `fase156_erasure.py:337` e `collaudi/esame_oblio.py:5-7` ne dichiarano CINQUE.
+
+    Riprodotto passando dalla rotta vera, nelle due direzioni (uscita letterale del banco):
+        A) host SENZA referral:  ok True  · sporchi_non_dichiarati {}                  -> 200
+        B) host CON referral:    ok False · sporchi_non_dichiarati
+                                   {'viral.db': ['referral_codici']}                   -> 409
+        registro: OBLIO INCOMPLETO | host h_e***1c | il dato e' rimasto in 1 archivi che
+                  NESSUNA legge dichiara di trattenere (su 24): ['viral.db']
+    In produzione l'archivio e' vivo: `data/viral.db` sul VPS contiene 2 codici referral,
+    1 evento e 2 crediti (contati senza leggere nessun dato personale).
+
+    ⛔ IL 409 NON E' CHIUSO DA QUESTA CLASSE, ed e' voluto. Il fascicolo `viral.db` (tre
+    tabelle nate nella stessa transazione, con dentro DENARO e il dato di un terzo) e'
+    una decisione del fondatore, con o senza avvocato — e la riparazione «ovvia»,
+    cancellare `referral_codici`, e' dimostrata SBAGLIATA: `referral_eventi.codice`
+    conserva lo stesso token, che porta l'host_id in base64, e la scansione di produzione
+    cerca solo la sottostringa in chiaro. Il 409 diventerebbe un «fatto» falso. Quindi
+    qui si sorvegliano le due cose che valgono QUALUNQUE decisione arrivi: (1) nessun passo
+    di `fase156_erasure` finge di esistere dietro un `hasattr` sempre falso (era cosi' il
+    2026-09-14: il ramo «referral» non scattava mai, e due file dichiaravano cinque
+    residui dove erano quattro); (2) l'oblio non risponde mai «fatto» con il dato ancora
+    in `viral.db`, token compresi.
+    """
+
+    def setUp(self):
+        import dataclasses
+        import os
+        self.dir = tempfile.mkdtemp()
+        campi = {f.name: os.path.join(self.dir, f.name[3:] + ".db")
+                 for f in dataclasses.fields(ConfigCasaVIP) if f.name.startswith("db_")}
+        self.sis = crea_sistema(ConfigCasaVIP(
+            abilitato=True, segreto_hmac=SEG, con_registrazione_host=True,
+            commissione_bps=1500, **campi))
+        self.r = crea_router(self.sis, host_key="hk", base_url="https://bookinvip.com")
+        s, c = self.r.gestisci(
+            "POST", "/api/host/registrazione", {},
+            json.dumps({"email": "h@invito.it", "password": "passw0rd!",
+                        "accetta_termini": True, "accetta_clausole": True,
+                        "accetta_privacy": True}), {})
+        self.assertEqual(s, 201, c)
+        self.hid = c["host_id"]
+        self.token = c.get("token")
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def _apre_il_suo_link_di_invito(self):
+        """Passa dalla ROTTA, non dalla funzione: una prova che chiama la funzione dimostra
+        che la funzione va, non che la catena esista."""
+        self.assertTrue(self.token, "misura non valida: la registrazione non ha dato token")
+        s, c = self.r.gestisci("GET", "/api/host/referral", {}, None,
+                               {"X-Host-Token": self.token})
+        self.assertEqual(s, 200,
+                         "misura non valida: la rotta del link di invito non risponde 200, "
+                         "quindi nessuna riga e' stata scritta e il resto non proverebbe "
+                         "niente (%s)" % (c,))
+        self.assertTrue((c or {}).get("codice"),
+                        "misura non valida: la rotta ha risposto 200 senza codice")
+        return c
+
+    def _dove_e_rimasto_in_viral_db(self):
+        """Un SECONDO metro, scritto qui e diverso da quello di produzione: legge ogni
+        tabella di `viral.db` e cerca l'host_id sia in chiaro sia DENTRO i token
+        (`<base64>.<firma>`: il payload si decodifica senza nessuna chiave). La scansione
+        di produzione cerca solo la sottostringa in chiaro, ed e' proprio il buco che
+        questo metro deve vedere."""
+        import base64
+        import sqlite3
+        trovato = []
+        con = sqlite3.connect("file:%s?mode=ro" % self.sis.config.db_viral, uri=True)
+        try:
+            tabelle = [r[0] for r in con.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' "
+                "AND name NOT LIKE 'sqlite_%'")]
+            for t in tabelle:
+                for riga in con.execute('SELECT * FROM "%s"' % t.replace('"', '""')):  # nosec B608  # noqa: S608
+                    for v in riga:
+                        if not isinstance(v, str):
+                            continue
+                        if self.hid in v:
+                            trovato.append((t, "in chiaro"))
+                            break
+                        testa = v.split(".")[0]
+                        try:
+                            dentro = base64.urlsafe_b64decode(testa + "=" * (-len(testa) % 4))
+                        except Exception:
+                            dentro = b""          # non e' un token: niente da decodificare
+                        if self.hid.encode() in dentro:
+                            trovato.append((t, "dentro il token"))
+                            break
+        finally:
+            con.close()
+        return sorted(set(trovato))
+
+    def _iscrive_un_invitato(self):
+        """Un secondo host si iscrive col codice: cosi' il token dell'invitante finisce
+        anche in `referral_eventi.codice`, com'e' in produzione (RIPRENDI_QUI.md: 1 evento)."""
+        codice = self._apre_il_suo_link_di_invito()["codice"]
+        s, c = self.r.gestisci(
+            "POST", "/api/host/registrazione", {},
+            json.dumps({"email": "b@invitato.it", "password": "passw0rd!",
+                        "accetta_termini": True, "accetta_clausole": True,
+                        "accetta_privacy": True, "codice_referral": codice}), {})
+        self.assertEqual(s, 201, c)
+        self.assertTrue((c.get("referral") or {}).get("ok"),
+                        "misura non valida: l'invito non e' stato registrato: %r" % (c,))
+
+    def test_un_host_che_ha_aperto_il_suo_LINK_DI_INVITO_ottiene_la_cancellazione(self):
+        """Il 409 vero e proprio (D20: vista ROSSA prima della decisione «autorizzato» sul
+        fascicolo `viral.db`). Un host pulito che ha soltanto usato il referral deve
+        ottenere la cancellazione: cio' che resta in `viral.db` deve essere DICHIARATO
+        con il suo perche', non lasciato a far uscire `ok=False`."""
+        from fase156_erasure import obblighi_pendenti
+        self._iscrive_un_invitato()
+        self.assertEqual(obblighi_pendenti(self.sis, self.hid), {},
+                         "misura non valida: l'host ha obblighi pendenti, il rifiuto "
+                         "sarebbe legittimo e non proverebbe niente")
+
+        rep = cancella_attivita_host(self.sis, self.hid, forza=True)
+
+        self.assertEqual(
+            rep.get("sporchi_non_dichiarati") or {}, {},
+            "resta sporco un archivio che NESSUNA legge dichiara: %s. `ok` esce False e la "
+            "rotta risponde 409 a un host che ha soltanto usato il suo link di invito"
+            % (rep.get("sporchi_non_dichiarati"),))
+        self.assertTrue(rep.get("ok"),
+                        "l'oblio esce ok=False su un host pulito: la rotta rispondera' 409. "
+                        "residui=%r sporchi=%r" % (rep.get("residui"), rep.get("archivi_sporchi")))
+
+    def test_un_host_con_referral_non_riceve_MAI_un_fatto_con_il_dato_ancora_in_viral_db(self):
+        """L'invariante che vale QUALUNQUE cosa si decida del fascicolo `viral.db`: o il
+        dato della persona esce da tutte le sue tabelle — token compresi — oppure il
+        rapporto dice `ok=False` e nomina `viral.db`. Il 409 di oggi e' onesto; un
+        «fatto» col dato ancora dentro non lo sarebbe, ed e' esattamente cio' che
+        produrrebbe la riparazione «ovvia» (cancellare `referral_codici` e basta:
+        `referral_eventi.codice` conserva lo stesso token, e la scansione di produzione
+        non lo vede). Vista ROSSA iniettando proprio quella riparazione."""
+        codice = self._apre_il_suo_link_di_invito()["codice"]
+        # Un secondo host si iscrive col codice: cosi' il token dell'invitante finisce
+        # anche in `referral_eventi.codice`, com'e' in produzione (RIPRENDI_QUI.md: 1 evento).
+        s, c = self.r.gestisci(
+            "POST", "/api/host/registrazione", {},
+            json.dumps({"email": "b@invitato.it", "password": "passw0rd!",
+                        "accetta_termini": True, "accetta_clausole": True,
+                        "accetta_privacy": True, "codice_referral": codice}), {})
+        self.assertEqual(s, 201, c)
+        self.assertTrue((c.get("referral") or {}).get("ok"),
+                        "misura non valida: l'invito non e' stato registrato: %r" % (c,))
+        prima = self._dove_e_rimasto_in_viral_db()
+        self.assertIn(("referral_eventi", "dentro il token"), prima,
+                      "misura non valida: il token dell'invitante non e' in "
+                      "referral_eventi, il buco che questa prova guarda non esiste: %r" % (prima,))
+
+        rep = cancella_attivita_host(self.sis, self.hid, forza=True)
+
+        dopo = self._dove_e_rimasto_in_viral_db()
+        if not dopo:
+            self.assertTrue(rep.get("ok"),
+                            "viral.db e' pulito ma l'oblio esce ok=False: %r"
+                            % (rep.get("sporchi_non_dichiarati"),))
+            return
+        # Il dato e' rimasto: o il rapporto lo DICHIARA tabella per tabella (trattenuto
+        # per legge, col suo perche'), oppure dice ok=False e nomina viral.db. Un «fatto»
+        # con una tabella che nessuno nomina e' il residuo INVISIBILE — peggio del 409.
+        dichiarate = set((rep.get("trattenuti_per_legge") or {}).get("viral.db") or {})
+        rimaste = {t for t, _ in dopo}
+        if rep.get("ok"):
+            self.assertEqual(
+                rimaste - dichiarate, set(),
+                "l'oblio dice ok=True — alla persona si risponde «fatto» — mentre il suo "
+                "identificativo e' ancora in tabelle di viral.db che il rapporto NON dichiara: "
+                "%r (rimasto in %r, dichiarate %r). E' il residuo INVISIBILE"
+                % (sorted(rimaste - dichiarate), dopo, sorted(dichiarate)))
+        else:
+            self.assertIn("viral.db", rep.get("archivi_sporchi") or {},
+                          "il rapporto non nomina viral.db mentre il dato e' li': %r" % (dopo,))
+
+    def test_nessun_hasattr_di_fase156_punta_a_un_metodo_che_il_sistema_VERO_non_ha(self):
+        """La guardia sulla FAMIGLIA, non sull'esemplare. Un `if hasattr(x, "m")` e' un
+        passo che si spegne da solo quando `m` non c'e': non fallisce, non scrive niente
+        nel rapporto, e nessuno se ne accorge. Qui si legge il SORGENTE di
+        `fase156_erasure` con `ast` (non con una regex: una docstring che nomina `hasattr`
+        non deve poterla ingannare), si ricostruisce quale componente del sistema e' ogni
+        variabile locale (`x = getattr(sistema, "nome", None)`), e per ogni
+        `hasattr(x, "metodo")` si pretende che il componente VERO — quello che
+        `crea_sistema` costruisce davvero — abbia quel metodo. Un componente spento in
+        questo banco non e' giudicabile e viene dichiarato, non contato come buono."""
+        import ast
+        import inspect
+        import fase156_erasure
+        albero = ast.parse(inspect.getsource(fase156_erasure))
+        componenti = {}
+        for n in ast.walk(albero):
+            if (isinstance(n, ast.Assign) and isinstance(n.value, ast.Call)
+                    and getattr(n.value.func, "id", "") == "getattr"
+                    and len(n.value.args) >= 2
+                    and isinstance(n.value.args[0], ast.Name)
+                    and n.value.args[0].id == "sistema"
+                    and isinstance(n.value.args[1], ast.Constant)
+                    and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name)):
+                componenti[n.targets[0].id] = n.value.args[1].value
+        controlli = []
+        for n in ast.walk(albero):
+            if (isinstance(n, ast.Call) and getattr(n.func, "id", "") == "hasattr"
+                    and len(n.args) == 2 and isinstance(n.args[0], ast.Name)
+                    and isinstance(n.args[1], ast.Constant)
+                    and n.args[0].id in componenti):
+                controlli.append((componenti[n.args[0].id], n.args[1].value))
+        self.assertTrue(controlli, "misura non valida: nessun `hasattr` su un componente "
+                                   "del sistema trovato nel sorgente — il metro e' storto")
+        morti, non_giudicati = [], []
+        for attributo, metodo in controlli:
+            oggetto = getattr(self.sis, attributo, None)
+            if oggetto is None:
+                non_giudicati.append((attributo, metodo))
+            elif not hasattr(oggetto, metodo):
+                morti.append((attributo, type(oggetto).__name__, metodo))
+        self.assertEqual(
+            morti, [],
+            "questi passi di `fase156_erasure` sono protetti da un `hasattr` che sul "
+            "sistema VERO e' sempre falso: non falliscono, NON VENGONO ESEGUITI, e il "
+            "rapporto esce senza nominarli. (componente, classe vera, metodo cercato) = %r. "
+            "Non giudicabili in questo banco perche' spenti: %r" % (morti, non_giudicati))
+
+
 class TestIlCancellamiTOGLIEancheIlCALENDARIOesterno(unittest.TestCase):
     """⛔ D20 — scritta PRIMA della riparazione e vista ROSSA sul codice di produzione.
 
@@ -815,10 +1057,15 @@ class TestOgniPosizioneLegaleNOMINAUnaTabellaCHEESISTE(unittest.TestCase):
         self.addCleanup(shutil.rmtree, d, ignore_errors=True)
         campi = {f.name: os.path.join(d, f.name[3:] + ".db")
                  for f in dataclasses.fields(ConfigCasaVIP) if f.name.startswith("db_")}
-        crea_sistema(ConfigCasaVIP(abilitato=True, segreto_hmac=SEG,
-                                   con_registrazione_host=True, commissione_bps=1500,
-                                   **campi))
-        tabelle = {}
+        # ⛔ Il programma inviti di fase109 NON e' una tabella: e' un file JSON, e in
+        # produzione si chiama come dice `main_casavip.py` (`data/referral.json`). Una
+        # posizione legale puo' essere intestata anche a lui, ma SOLO con il nome del file
+        # che la configurazione usa davvero: il nome si prende da li', non dalla memoria.
+        cfg = ConfigCasaVIP(abilitato=True, segreto_hmac=SEG, con_registrazione_host=True,
+                            commissione_bps=1500,
+                            file_referral=os.path.join(d, "referral.json"), **campi)
+        crea_sistema(cfg)
+        tabelle = {os.path.basename(cfg.file_referral): {"(file JSON del programma inviti)"}}
         for p in sorted(glob.glob(os.path.join(d, "*.db"))):
             con = sqlite3.connect(p)
             try:
@@ -856,6 +1103,80 @@ class TestOgniPosizioneLegaleNOMINAUnaTabellaCHEESISTE(unittest.TestCase):
         for tabella, motivo in sorted(TRATTENUTI_PER_LEGGE.items()):
             self.assertTrue(str(motivo).strip(),
                             "la tabella `%s` e' trattenuta senza dire perche'" % tabella)
+
+
+class TestIlCancellamiVEDEancheIlProgrammaInvitiSuFILE(unittest.TestCase):
+    """⛔ D20 — scritta PRIMA della riparazione e vista ROSSA sul codice di produzione.
+
+    Esiste un TERZO programma inviti, `fase109_referral_host`, cablato in
+    `fase81_bootstrap_casavip.py:515-517` senza nessun interruttore, che scrive
+    `data/referral.json` (`main_casavip.py:130`) con l'host_id IN CHIARO: come chiave di
+    chi e' stato invitato e come valore `referrer` di chi lo ha invitato, piu' i crediti.
+    Non e' un `.db`: la scansione dell'oblio fa `glob("*.db")` e non lo apre MAI. Quindi
+    un host che ha invitato qualcuno riceve «fatto» con il suo identificativo ancora li'
+    — il residuo invisibile, per ESTENSIONE del file. Misurato il 2026-09-14 dal
+    censimento delle 21 tabelle. Qui si pretende che il rapporto lo NOMINI: dichiarato con
+    il suo perche', oppure fra gli sporchi non dichiarati — mai in silenzio.
+    """
+
+    def setUp(self):
+        import dataclasses
+        import os
+        self.dir = tempfile.mkdtemp()
+        campi = {f.name: os.path.join(self.dir, f.name[3:] + ".db")
+                 for f in dataclasses.fields(ConfigCasaVIP) if f.name.startswith("db_")}
+        self.file_referral = os.path.join(self.dir, "referral.json")
+        self.sis = crea_sistema(ConfigCasaVIP(
+            abilitato=True, segreto_hmac=SEG, con_registrazione_host=True,
+            commissione_bps=1500, file_referral=self.file_referral, **campi))
+        self.r = crea_router(self.sis, host_key="hk", base_url="https://bookinvip.com")
+        s, c = self.r.gestisci(
+            "POST", "/api/host/registrazione", {},
+            json.dumps({"email": "h@invita.it", "password": "passw0rd!",
+                        "accetta_termini": True, "accetta_clausole": True,
+                        "accetta_privacy": True}), {})
+        self.assertEqual(s, 201, c)
+        self.hid = c["host_id"]
+        self.token = c.get("token")
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def test_l_invito_su_file_non_sopravvive_in_SILENZIO_al_cancellami(self):
+        import os
+        s, c = self.r.gestisci("GET", "/api/host/invito", {}, None,
+                               {"X-Host-Token": self.token})
+        self.assertEqual(s, 200, "misura non valida: la rotta dell'invito non risponde: %r" % (c,))
+        s, c = self.r.gestisci("POST", "/api/host/invito/registra", {},
+                               json.dumps({"codice": c["codice"],
+                                           "nuovo_host_id": "h_invitato_di_prova"}), {})
+        self.assertEqual(s, 201, "misura non valida: l'invito non e' stato registrato: %r" % (c,))
+        self.assertTrue(os.path.exists(self.file_referral),
+                        "misura non valida: il file del programma inviti non e' stato scritto")
+        with open(self.file_referral, encoding="utf-8") as f:
+            self.assertIn(self.hid, f.read(),
+                          "misura non valida: l'host_id non e' nel file, la prova non direbbe nulla")
+
+        rep = cancella_attivita_host(self.sis, self.hid, forza=True)
+
+        with open(self.file_referral, encoding="utf-8") as f:
+            ancora = self.hid in f.read()
+        nominato = ("referral.json" in (rep.get("archivi_sporchi") or {})
+                    or "referral.json" in (rep.get("trattenuti_per_legge") or {})
+                    or "referral.json" in (rep.get("sporchi_non_dichiarati") or {}))
+        if ancora:
+            self.assertTrue(
+                nominato,
+                "l'host_id e' ancora in referral.json e il rapporto NON lo nomina (ok=%r): "
+                "e' il residuo invisibile per estensione del file — la scansione apre solo "
+                "i `.db`. archivi_sporchi=%r" % (rep.get("ok"), rep.get("archivi_sporchi")))
+            if rep.get("ok"):
+                self.assertIn("referral.json", rep.get("trattenuti_per_legge") or {},
+                              "ok=True con il dato ancora nel file e nessuna posizione legale "
+                              "che lo dichiari")
+        else:
+            self.assertTrue(rep.get("ok"), "il file e' pulito ma l'oblio esce ok=False: %r"
+                            % (rep.get("sporchi_non_dichiarati"),))
 
 
 if __name__ == "__main__":

@@ -7424,8 +7424,9 @@ class RouterHTTP:
         from fase158_domanda import pulisci_testo as _pulisci_citta
         citta = _pulisci_citta(citta, 120) if isinstance(citta, str) else citta
         citta_eff = citta.strip() if isinstance(citta, str) and citta.strip() else "(qualsiasi)"
-        if not dom.registra(email, citta_eff, check_in=str(dati.get("check_in", "")),
-                            check_out=str(dati.get("check_out", "")),
+        if not dom.registra(email, citta_eff,
+                            check_in=_pulisci_citta(str(dati.get("check_in", "")), 32),
+                            check_out=_pulisci_citta(str(dati.get("check_out", "")), 32),
                             party=dati.get("party", 1)):
             return 422, {"errore": "email_non_valida"}
         from fase158_domanda import CREDITO_FONDATORE_CENTS
@@ -8097,6 +8098,17 @@ class RouterHTTP:
                              _evt.replace("\n", " "), exc_info=True)
             if not _registrato:
                 return 503, {"errore": "evento_non_registrato", "sottocodice": "archivio"}
+            # ⛔ UN EVENTO GIA' ELABORATO NON SI RIFA'. Stripe riconsegna apposta (anche a
+            #    48 ore): rieseguire la conferma su un evento gia' gestito riscriveva righe
+            #    e allarmi («RIMBORSARE a mano» su un ospite gia' rimborsato). L'archivio
+            #    sa che era elaborato; qui glielo si chiede (2026-09-14, deduplicazione
+            #    sull'EVENTO, casella 8 del blocco SOLDI).
+            try:
+                _gia = bool(_archivio.elaborato(_evt))
+            except Exception:
+                _gia = False
+            if _gia:
+                return 200, {"ricevuto": True, "tipo": tipo, "duplicato": True}
         elif _archivio is not None:
             # ⚠️ WARNING e non ERROR, e il livello e' parte della riparazione: un evento
             #    senza `id` e' malformato, non un nostro guasto, e gridare a ogni consegna
@@ -8166,7 +8178,12 @@ class RouterHTTP:
                 esito_perso = "salvataggio_sessione_fallito"
             logger.info("Stripe: pagamento CONFERMATO per riferimento '%s'",
                         _rif_per_registro(rif))
-            self._conferma_pagamento(rif)
+            # ⛔ IL RITORNO SI GUARDA: `False` vuol dire che la conferma e' esplosa DA NOI
+            #    (archivio bloccato, disco pieno) e i conti sono rimasti vuoti. Prima si
+            #    rispondeva 200 lo stesso, cioe' «gestito, non rimandarlo»: il cliente aveva
+            #    pagato e Stripe non l'avrebbe MAI piu' riproposto (2026-09-14).
+            if self._conferma_pagamento(rif) is False:
+                esito_perso = "conferma_pagamento_fallita"
         elif str(tipo).startswith("identity.verification_session."):
             # STRIPE IDENTITY (Incr.11): il webhook porta l'ESITO (mai il documento).
             # ISOLATO: qualunque errore qui non tocca il resto del webhook.
@@ -8537,8 +8554,16 @@ class RouterHTTP:
                 dj = {}
             self._applica_credito_host(rif, hid_pag, self._commissione_regalabile(dj))
             self._forse_qualifica_referral(hid_pag, pd)
+            return True
         except Exception:
-            logger.warning("conferma pagamento/ledger tassa fallita (ignorata)", exc_info=True)
+            # ⛔ ERROR e non warning, e `False` e non niente: il Guardiano legge solo gli
+            #    ERROR, e il webhook deve poter rispondere 503 perche' Stripe ritenti. Un
+            #    guasto ingoiato qui era un pagamento vero con i conti vuoti, per sempre.
+            logger.error("webhook | codice: conferma_fallita | riferimento: %s | messaggio: "
+                         "la conferma del pagamento e' esplosa da noi, i conti NON sono "
+                         "stati scritti (Stripe ritentera')", _rif_per_registro(rif),
+                         exc_info=True)
+            return False
 
     def _rec_in_struttura(self, rec):
         """True se la prenotazione pendente e' 'paga in struttura' (letto dal corpo_json che
@@ -11858,28 +11883,63 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                     except Exception:
                         logger.warning("ical: feed rotti non aggiunti al rapporto (ignorato)",
                                        exc_info=True)
-                    if not rep.get("pulito"):
+                    _pulito = bool(rep.get("pulito"))
+                    _non_es = [str(x) for x in (rep.get("non_eseguiti") or [])]
+                    if not _pulito:
                         logger.critical("GUARDIANO: %d stato/i anomalo/i -> %s",
                                         rep.get("conta"), rep.get("anomalie"))
-                        cfg = getattr(sistema, "config", None)
-                        dest = (getattr(cfg, "email_alert", "")
-                                or getattr(cfg, "email_mittente", "")
-                                or "info@bookinvip.com")
-                        prov = getattr(sistema, "email_provider", None)
-                        if prov is not None and dest:
-                            # ⛔ L'allarme sui SOLDI e' quello che meno di tutti puo'
-                            # sparire in silenzio: se questa email non parte, nessuno
-                            # sa ne' del buco nei conti ne' dell'email persa
-                            # (referto 20, §3.1). Da qui in poi almeno la seconda
-                            # meta' di quel giro si vede.
-                            _thg.Thread(target=_invia_tracciato,
-                                        args=(prov, dest,
-                                              "BookinVIP - ALLARME Guardiano: stato "
-                                              "anomalo rilevato", riassunto_html(rep),
-                                              "allarme_guardiano", ""),
-                                        daemon=True).start()
+                        _dettaglio = "%s stato/i anomalo/i: %s" % (
+                            rep.get("conta"), ", ".join(sorted(rep.get("anomalie") or {})))
+                        _oggetto = "BookinVIP - ALLARME Guardiano: stato anomalo rilevato"
+                        _template = "allarme_guardiano"
                     else:
                         logger.info("GUARDIANO: nessuno stato anomalo (tutto quadra)")
+                        _dettaglio = "tutto quadra"
+                        _oggetto = "BookinVIP - Guardiano: rapporto del giorno (tutto quadra)"
+                        _template = "rapporto_guardiano"
+                    if _non_es:
+                        _dettaglio += " | NON eseguiti: " + ", ".join(_non_es)
+                    # ⛔ IL RAPPORTO PARTE OGNI GIORNO, anche quando tutto quadra: prima
+                    # l'email partiva SOLO sull'anomalia, e «tutto quadra» e «provider
+                    # email morto» si scrivevano uguale -- silenzio. E se il provider e'
+                    # spento lo si dice come in ogni altro ramo (WARNING + email_ko), cosi'
+                    # /api/health lo espone. Il rapporto porta anche cio' che il Guardiano
+                    # NON ha potuto controllare (2026-09-14, «porta per un uomo solo»).
+                    cfg = getattr(sistema, "config", None)
+                    dest = (getattr(cfg, "email_alert", "")
+                            or getattr(cfg, "email_mittente", "")
+                            or "info@bookinvip.com")
+                    prov = getattr(sistema, "email_provider", None)
+                    import html as _html_g
+                    _corpo = riassunto_html(rep) + (
+                        "<p>Controlli NON eseguiti: %s</p>"
+                        % _html_g.escape(", ".join(_non_es) or "nessuno"))
+                    if prov is not None and dest:
+                        # ⛔ L'allarme sui SOLDI e' quello che meno di tutti puo'
+                        # sparire in silenzio: se questa email non parte, nessuno
+                        # sa ne' del buco nei conti ne' dell'email persa
+                        # (referto 20, §3.1). Da qui in poi almeno la seconda
+                        # meta' di quel giro si vede.
+                        _thg.Thread(target=_invia_tracciato,
+                                    args=(prov, dest, _oggetto, _corpo, _template, ""),
+                                    daemon=True).start()
+                    else:
+                        logger.warning("EMAIL NON INVIATA: template=%s riferimento= -- "
+                                       "provider email SPENTO (contata in email_ko, vedi "
+                                       "/api/health)", _template)
+                        _conta_email_ko(_template)
+                    # L'ESITO accanto al battito: il watchdog (Telegram, ogni 10 minuti)
+                    # lo legge e ripete l'allarme finche' non e' risolto. Un allarme sui
+                    # soldi con un solo canale non e' un allarme. ISOLATO come il battito.
+                    try:
+                        import os as _ose
+                        from fase178_watchdog import segna_esito_guardiano
+                        _dbe = getattr(cfg, "db_finanza", "") or ""
+                        segna_esito_guardiano(_ose.path.dirname(_dbe), pulito=_pulito,
+                                              dettaglio=_dettaglio)
+                    except Exception:
+                        logger.warning("guardiano: esito non scritto su disco (ISOLATO)",
+                                       exc_info=True)
                     # IL BATTITO (dead man's switch), in fondo e SOLO se il giro e' arrivato
                     # fin qui: se `scansiona` esplode, l'except qui sotto prende il controllo
                     # e il battito NON viene lasciato. Cosi' `watchdog.sh` -- che gira ogni

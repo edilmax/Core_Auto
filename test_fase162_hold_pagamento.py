@@ -38,6 +38,126 @@ class TestModulo(unittest.TestCase):
         self.assertTrue(self.p.rimuovi("R1"))
 
 
+class TestLHoldDuraAlmenoQuantoLaPaginaDiPagamento(unittest.TestCase):
+    """⛔ D20 — scritta PRIMA della riparazione e vista ROSSA sul codice di produzione.
+
+    La pagina di pagamento di Stripe vive ALMENO trenta minuti: e' il minimo che Stripe
+    accetta per `expires_at` (fase85_pagamenti_stripe.py, `max(1800, ...)`). L'hold della
+    stanza invece scadeva molto prima (`HOLD_SECONDI_DEFAULT`, «urgenza tipo Agoda»). Nella
+    finestra fra le due scadenze la macchina LIBERAVA le date, toglieva il payout e mandava
+    all'ospite «nessun addebito e' stato effettuato, riprova» — mentre lui poteva ancora
+    pagare sulla pagina aperta. Il codice ha la rete (riblocco, o ordine di RIMBORSO a mano)
+    ma e' un cliente che puo' pagare due volte e un rimborso manuale. Il fondatore ha scelto
+    «la cosa giusta» il 2026-09-14: la stanza resta bloccata almeno quanto la pagina.
+    Censimento «porta per un uomo solo», fronte Stripe, caso (c)."""
+
+    MINIMO_STRIPE_SEC = 1800     # fase85: `scade_sec = max(1800, ...)`, il minimo di Stripe
+
+    def setUp(self):
+        self.clock = {"t": 1000}
+        self.p = crea_pagamenti_pendenti(":memory:", orologio=lambda: self.clock["t"])
+        self.p.inizializza_schema()
+        self.assertTrue(self.p.registra("R-hold", alloggio_id="casa", check_in="2027-01-10",
+                                        check_out="2027-01-12", idem_key="k-hold"),
+                        "misura non valida: l'hold non e' stato registrato")
+
+    def test_un_istante_prima_della_scadenza_della_pagina_la_stanza_e_ANCORA_bloccata(self):
+        self.clock["t"] = 1000 + self.MINIMO_STRIPE_SEC - 1
+        self.assertEqual(
+            [r["riferimento"] for r in self.p.scaduti()], [],
+            "l'hold e' gia' scaduto mentre la pagina di pagamento Stripe e' ancora aperta: "
+            "le date vengono liberate e l'ospite riceve «nessun addebito» mentre puo' "
+            "ancora pagare")
+
+    def test_dopo_la_scadenza_della_pagina_la_stanza_si_libera(self):
+        """L'altra direzione (D18 punto 2): l'hold non deve diventare eterno."""
+        self.clock["t"] = 1000 + 2 * self.MINIMO_STRIPE_SEC
+        self.assertEqual([r["riferimento"] for r in self.p.scaduti()], ["R-hold"],
+                         "l'hold non scade mai: la stanza resta bloccata per sempre")
+
+
+class TestIlWebhookNonDiceMaiGestitoSeNoiAbbiamoFallito(unittest.TestCase):
+    """⛔ D20 — scritta PRIMA della riparazione e vista ROSSA sul codice di produzione.
+
+    Stripe legge il 2xx come «gestito, non riprovare MAI piu'». `_conferma_pagamento`
+    finiva in un `except Exception: logger.warning(... ignorata)` e il webhook non guardava
+    il suo ritorno: se qualcosa esplodeva da noi (archivio bloccato, disco pieno) la
+    risposta era 200 lo stesso — il cliente aveva pagato, i nostri conti dicevano niente,
+    e Stripe non lo avrebbe mai piu' rimandato. In piu' era un WARNING, e il Guardiano
+    legge solo gli ERROR: nemmeno lui lo vedeva. E un evento gia' elaborato, riconsegnato
+    a 48 ore, veniva rifatto da capo. Censimento «porta per un uomo solo», fronte Stripe.
+    """
+
+    def setUp(self):
+        d = self.dir = tempfile.mkdtemp()
+        self.sis = crea_sistema(ConfigCasaVIP(
+            abilitato=True, segreto_hmac=SEG, db_catalogo=f"{d}/c.db", db_inventario=f"{d}/i.db",
+            db_registro_host=f"{d}/r.db", db_viral=f"{d}/v.db", db_messaggi=f"{d}/m.db",
+            db_domanda=f"{d}/dom.db", db_garanzia=f"{d}/g.db", db_pendenti=f"{d}/p.db",
+            db_tassa_comunale=f"{d}/tc.db", db_eventi_stripe=f"{d}/evt.db",
+            file_referral=f"{d}/ref.json", commissione_bps=1500, stripe_webhook_secret=WHSEC))
+        self.sis.concierge._link = lambda dati: "https://pay/" + str(dati.get("riferimento", ""))
+        self.r = crea_router(self.sis, host_key="hk", base_url="https://bookinvip.com")
+        self.g("POST", "/api/host/pubblica", {"host_id": "demo", "slug": "casa", "titolo": "C",
+               "citta": "Roma", "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
+               "servizi": [], "immagini": [], "tassa_pp_notte_cents": 200}, HK)
+        self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": "casa", "da": "2027-02-01",
+               "a": "2027-02-28", "unita_totali": 1, "prezzo_netto_cents": 10000}, HK)
+        _, q = self.g("POST", "/api/concierge/quote", {"alloggio_id": "casa",
+                      "check_in": "2027-02-10", "check_out": "2027-02-12", "party": 2})
+        _, b = self.g("POST", "/api/concierge/book",
+                      {"quote_token": q["quote_token"], "email": "o@x.it"})
+        self.rif = b["riferimento"]
+        self.assertEqual(self.sis.pagamenti_pendenti.info(self.rif)["stato"], "in_attesa",
+                         "misura non valida: l'hold non e' in attesa")
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def g(self, m, p, b=None, h=None, q=None):
+        return self.r.gestisci(m, p, q or {}, json.dumps(b) if b is not None else None, h or {})
+
+    def _webhook(self, evt_id):
+        payload = json.dumps({"id": evt_id, "type": "checkout.session.completed",
+                              "data": {"object": {"metadata": {"riferimento": self.rif}}}})
+        ts = str(int(time.time()))
+        mac = hmac.new(WHSEC.encode(), f"{ts}.{payload}".encode(), hashlib.sha256).hexdigest()
+        return self.r.gestisci("POST", "/api/payments/webhook", {}, payload,
+                               {"Stripe-Signature": "t=%s,v1=%s" % (ts, mac)})
+
+    def test_se_la_conferma_ESPLODE_da_noi_il_webhook_risponde_503_e_l_evento_resta_da_elaborare(self):
+        pp = self.sis.pagamenti_pendenti
+
+        def esplode(*a, **k):
+            raise RuntimeError("archivio bloccato (guasto iniettato)")
+        pp.conferma = esplode
+        s, c = self._webhook("evt_guasto_1")
+        self.assertEqual(s, 503,
+                         "la conferma e' esplosa da noi e il webhook ha risposto %s %r: Stripe "
+                         "legge «gestito» e non rimanda MAI piu' l'evento — il cliente ha pagato "
+                         "e i conti restano vuoti" % (s, c))
+        self.assertFalse(self.sis.eventi_stripe.elaborato("evt_guasto_1"),
+                         "l'evento e' segnato ELABORATO mentre la conferma non e' avvenuta")
+
+    def test_lo_stesso_evento_consegnato_DUE_volte_conferma_UNA_volta_sola(self):
+        pp = self.sis.pagamenti_pendenti
+        vera = pp.conferma
+        conteggio = {"n": 0}
+
+        def contata(*a, **k):
+            conteggio["n"] += 1
+            return vera(*a, **k)
+        pp.conferma = contata
+        s1, _ = self._webhook("evt_doppio_1")
+        self.assertEqual(s1, 200, "misura non valida: la prima consegna non e' andata")
+        self.assertEqual(conteggio["n"], 1, "misura non valida: la prima consegna non ha confermato")
+        s2, c2 = self._webhook("evt_doppio_1")
+        self.assertEqual(s2, 200, "la riconsegna di un evento gia' gestito deve dire 200: %r" % (c2,))
+        self.assertEqual(conteggio["n"], 1,
+                         "lo stesso evento consegnato due volte ha rifatto la conferma da capo: "
+                         "l'archivio di fase204 sa che era gia' elaborato e nessuno glielo chiede")
+
+
 class TestFlussoHold(unittest.TestCase):
     def setUp(self):
         d = self.dir = tempfile.mkdtemp()

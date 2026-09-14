@@ -395,6 +395,171 @@ giri di mutazione da 60 e 600 minuti dichiarati. Guardia `TestUnaCasellaSCADUTAD
 vista rossa prima (3 su 3). **Misurato adesso: 9 caselle rilanciabili subito, 2 che vogliono il server.**
 🔑 **Quindi «15 caselle su 39» NON vuol dire che il lavoro sia fermo:** vuol dire che gran parte delle misure è
 scaduta e va rifatta. Il primo lavoro utile è rilanciare quei 9 attrezzi.
+**🛡️ 14 SETTEMBRE, pomeriggio — LA PORTA PER UN UOMO SOLO: tre buchi muti sui soldi chiusi prima del lancio** *(«vai avanti, chiudi anche quelle due prima del lancio» + «la cosa giusta»; 12 guardie viste rosse e poi verdi; caricatore 6810)*
+
+> **Come sono usciti.** Il fondatore: *«non voglio che partiamo e arrivano ogni ora allarmi e poi chi li ripara»*. Un
+> censimento di 5 fronti in sola lettura (allarmi · interruttori · rotte pubbliche · Stripe · notifiche) ha prodotto
+> **40 rilievi e 60 cose che già funzionano** — ⚠️ le 5 smentite e la sintesi sono morte sul limite di sessione: i 40
+> rilievi sono **NON VERIFICATI** finché un avversario non prova a farli cadere. I tre più gravi li ho verificati io nel
+> codice e chiusi, nell'ordine D20:
+> **① Il webhook diceva «gestito» anche quando la conferma era esplosa da noi.** `_conferma_pagamento` finiva in
+> `except Exception: logger.warning(... ignorata)` e il webhook non guardava il ritorno → **200** → Stripe non ritenta
+> mai più → cliente che ha pagato, conti vuoti, e nemmeno il Guardiano lo vedeva (legge solo gli ERROR). Ora: la conferma
+> ritorna `False` con un **ERROR** strutturato, il webhook risponde **503** (`esito_perso=conferma_pagamento_fallita`) e
+> l'evento resta «da elaborare» in `fase204`. **E un evento già elaborato non si rifà**: `archivio.elaborato(evt)` →
+> 200 `duplicato`. Guardie `TestIlWebhookNonDiceMaiGestitoSeNoiAbbiamoFallito` (2), rosse: `200 != 503` e `2 != 1`.
+> **② L'allarme sui soldi aveva un solo canale, e col provider spento moriva in un log.** Il tick del Guardiano mandava
+> l'email SOLO sull'anomalia; se `email_provider` era `None` non contava e non gridava. Ora: **il rapporto parte ogni
+> giorno** anche quando tutto quadra (con «controlli NON eseguiti» dentro, così «tutto quadra» e «non ho potuto
+> confrontare con Stripe» non si scrivono più uguali); provider spento → WARNING «EMAIL NON INVIATA» + `email_ko` come
+> ogni altro ramo; e **l'esito del giro va su disco** (`fase178.segna_esito_guardiano`, file `guardiano_ultimo_esito`
+> accanto al battito) — **il watchdog, che gira ogni 10 minuti e ha già Telegram, lo legge e grida `guardiano_anomalo`
+> finché non è risolto** (`fase178.valuta` + `diagnosi`; `deploy/watchdog.sh` non cambia: stampa già ogni allarme del
+> JSON). Guardie: 5 in `TestLEsitoDelGuardianoArrivaAUnaPersona` + 3 in `TestIlTickLasciaLEsitoEIlRapportoArrivaSEMPRE`
+> (il tick VERO avviato con `servi()`), tutte rosse prima.
+> **③ L'hold della stanza durava 2 minuti, la pagina Stripe almeno 30** (`fase85:86-87`, minimo di Stripe): in mezzo la
+> macchina liberava le date e mandava «nessun addebito, riprova» a chi poteva ancora pagare — un cliente che paga due
+> volte e un rimborso a mano (la rete c'era: riblocco o `RIMBORSARE`). Il fondatore ha scelto «la cosa giusta»:
+> `HOLD_SECONDI_DEFAULT = 1800`. Guardie `TestLHoldDuraAlmenoQuantoLaPaginaDiPagamento` (2, una per direzione), rossa:
+> `['R-hold'] != []`. I 375 test dei moduli che toccano l'hold restano verdi: nessuno era scritto sui 2 minuti.
+> ⛔ **Non verificabile da qui e da scrivere nero su bianco:** se in produzione `SMTP_HOST`, `ALERT_EMAIL`,
+> `STRIPE_SECRET_KEY` e Telegram del watchdog siano impostati (vivono in `.env.casavip` sul VPS). Il codice ora lo
+> **dice** quando mancano; che qualcuno legga la casella è una cosa del mondo.
+> **Restano dal censimento, NON verificati e non chiusi** (da rilanciare le smentite, poi decidere): il livello
+> CRITICAL invisibile a `fase186._guasti_isolati` (legge solo ` ERROR `); `email_ko` che nessuna sentinella legge; la
+> sentinella GitHub che grida in un canale morto (email GitHub); `docker-compose.casavip.ssl.yml` che imposta 4 archivi
+> su 25; `.env.casavip.example` con `COMMISSIONE_BPS=1500`; il rimborso arrivato prima del pagato (nessun ramo
+> `charge.refunded`); `POST /api/host/registrazione` e `/api/garanzia/contesta` con campi senza tetto; WhatsApp promesso
+> in 8 lingue e spento; nessun documento che dica cosa fare quando un allarme arriva.
+
+**🔗 14 SETTEMBRE — IL 409 NON ERA CHIUSO: LA STESSA FAMIGLIA VIVEVA IN `viral.db`, E IL PERIMETRO NON ERA 12 TABELLE MA 21** *(«autorizzato a b c» e poi «autorizzato» pieno: A il passo che fingeva di esserci · B la revoca del check-in · C la lista d'attesa · D il fascicolo `viral.db` dichiarato «da validare da un avvocato» · E la scansione vede i token e il file JSON di fase109 — sette guardie viste rosse e poi verdi)*
+
+> ✅ **D ed E, dopo l'«autorizzato» pieno del fondatore («devo finire la macchina, fai quello che va fatto»),
+> nell'ordine D20.** Guardie prima, rosse: il 409 (`{'viral.db': ['referral_codici']} != {}`) e il file JSON
+> (`l'host_id e' ancora in referral.json e il rapporto NON lo nomina (ok=True)`). **D**: `TRATTENUTI_PER_LEGGE` dichiara
+> `referral_codici`, `referral_eventi`, `crediti` e **`referral.json`** — tutte ⚠️ **DA VALIDARE DA UN AVVOCATO**, scritte
+> per analogia con `payout` (denaro: `referral_premio_cents`, chiave di deduplica in `crediti.motivo`, dato di un terzo).
+> Sullo stato intermedio D-senza-E la guardia dei token è diventata **rossa da sola** (`referral_eventi` col token
+> non dichiarato, `ok=True`): prova che sorveglia proprio quel buco. **E** (`fase156_erasure._dove_e_rimasto`): (1)
+> **per forma** — l'identificativo si cerca anche **dentro i token** `<base64>.<firma>` (payload decodificato senza
+> chiave); (2) **per estensione** — si legge anche `config.file_referral` (il JSON di fase109), col nome del file come
+> nome dell'archivio; e la guardia sulle chiavi accetta un `.json` **solo** se è il file che la configurazione usa.
+> Dopo: 6 guardie `OK`, `esame_oblio.py` VERDE 7 su 7. Caricatore **6798** da fermo.
+> ⛔ **Resta da avvocato, non da ingegnere:** le 18 tabelle né svuotate né dichiarate (20 «decisione legale» del
+> dossier meno le tre di `viral.db` ora dichiarate, più `liberazioni` che è cancellabile ma senza metodo), e la
+> validazione delle **sette** posizioni scritte per analogia (`payout`, `pendenti`, le tre di `viral.db`,
+> `referral.json`). Il dossier con le 20 domande precise sta nel registro di questa sessione.
+
+> ⛔ **IL DIFETTO VIVO, ed è identico a quello chiuso dalla PR #183 su un archivio che nessuno aveva guardato.** Un host
+> apre il suo link di invito (rotta vera `GET /api/host/referral` → `fase76_viral_loop.genera_codice`), poi chiede la
+> cancellazione: riceve **409**. Riprodotto passando dalla rotta, **nelle due direzioni**:
+> `A)` host SENZA referral → `ok True` · `sporchi_non_dichiarati {}` → **200** (la macchina sana tace);
+> `B)` host CON referral → `ok False` · `sporchi_non_dichiarati {'viral.db': ['referral_codici']}` → **409**;
+> registro: `OBLIO INCOMPLETO | host h_e***1c | il dato e' rimasto in 1 archivi che NESSUNA legge dichiara di
+> trattenere (su 24): ['viral.db']`. ⛔ **Non è ipotetico:** in produzione `data/viral.db` esiste e contiene
+> `referral_codici 2 · referral_eventi 1 · crediti 2` (contati sul VPS senza leggere nessun dato personale).
+>
+> ⛔ **E LA CAUSA È PEGGIO DEL SINTOMO: c'è un passo che FINGE di esserci.** `fase156_erasure.py:283` si protegge con
+> `hasattr(viral, "cancella_host")` — e quel metodo **non esiste**: in tutto il repository `def cancella_host` sta in UN
+> solo posto, `fase88_registro_host.py:636` (`grep -rn "def cancella_host\|def conta_host" --include=*.py .` → tre righe,
+> nessuna su `ViralLoopEngine`). Il ramo non fallisce: **non scatta mai**, e `hasattr` lo salta in silenzio. Stessa cosa a
+> `:324` per i residui. ⇒ **`verificato_archivi` sono QUATTRO** (`alloggi, inventario, messaggi, host`) mentre
+> `fase156_erasure.py:337` e `collaudi/esame_oblio.py:5-7` **dichiarano CINQUE** e nominano «referral»: **due file dicono
+> il falso su se stessi**, ed è il quinto a mancare.
+>
+> ✅ **RIPARAZIONE A («autorizzato a b c»), nell'ordine D20.** Prima la guardia di famiglia
+> `test_nessun_hasattr_di_fase156_punta_a_un_metodo_che_il_sistema_VERO_non_ha`: legge il sorgente con `ast` (non con una
+> regex: una docstring non può ingannarla), ricostruisce quale componente è ogni `getattr(sistema, ...)`, e per ogni
+> `hasattr(x, "m")` pretende che il componente **vero** abbia `m`. Vista ROSSA: `[('viral', 'ViralLoopEngine',
+> 'cancella_host'), ('viral', 'ViralLoopEngine', 'conta_host')] != []`. Poi tolti i due rami morti e la variabile che li
+> alimentava (`fase156_erasure.py`, 6 righe cambiate), e i due commenti che dicevano «cinque» **non nominano più la
+> cifra** (S17). Verde dopo; `esame_oblio.py` VERDE 7 su 7 con `archivi che l'oblio RICONTROLLA: 4`.
+> **La guardia del 409 è stata RISCRITTA come invariante che vale qualunque decisione arrivi**
+> (`test_un_host_con_referral_non_riceve_MAI_un_fatto_con_il_dato_ancora_in_viral_db`): un secondo metro, scritto nel
+> test, cerca l'host_id in ogni tabella di `viral.db` **anche dentro i token** (base64 senza chiave); se resta, l'oblio
+> deve dire `ok=False` e nominare `viral.db`. Un secondo host si iscrive col codice, così il token finisce in
+> `referral_eventi.codice` com'è in produzione. Verde sul codice riparato (il 409 di oggi è **onesto**); vista ROSSA
+> iniettando con l'editor la riparazione «ovvia» (DELETE di `referral_codici` e `crediti` in chiaro): `True is not false
+> : l'oblio dice ok=True ... mentre il suo identificativo e' ancora in viral.db: [('referral_eventi', 'dentro il
+> token')]`. Ripristino **byte-identico**: sha256 `bde13108…88d0` prima e dopo. Caricatore **6796** da fermo (erano 6792).
+> ✅ Il 409 per chi ha usato il referral è poi stato **chiuso con D** (vedi sopra), dopo l'«autorizzato» pieno.
+
+> **📐 IL PERIMETRO RIMISURATO DA ZERO, e corregge il numero da cui partiva tutto.** Non sono **12** le tabelle fuori
+> dall'oblio: sono **21**. `35 tabelle = 8 svuotate + 6 dichiarate per legge + 21 rimaste` (denominatore: le tabelle dei
+> 23 archivi che il banco di `esame_oblio.py::_banco` riempie; **dopo** l'oblio diventano 24 archivi / 36 tabelle, perché
+> è l'oblio stesso a creare `ical_feed.db` a `fase156_erasure.py:304`). Il «12» di prima non era una bugia: contava solo
+> *«le tabelle con una colonna di legame»*, un perimetro che **non è definito da nessuna parte nel repository**.
+> Controllo positivo del metro (D18 punto 1): scrivendo l'host_id in ogni colonna di testo di tutte le tabelle, la
+> scansione ne vede **33 coppie su 35**, e le 2 mancanti sono righe-spia che un `CHECK` ha rifiutato, cioè mai nate.
+> ⇒ `_dove_e_rimasto` **sa vedere tutte le tabelle**: la sua cecità non è in quali legge, è in **cosa cerca** — un ago solo.
+>
+> **🔢 LA DISCREPANZA «9 invisibili» CONTRO UN ELENCO DI DIECI NOMI È SCIOLTA, e l'intruso è `kyc`.** Il 9 era giusto, la
+> lista sbagliata: `kyc` è definita `host_id TEXT PRIMARY KEY` (`fase143_kyc_host.py:62`), quindi per il criterio scritto
+> nella riga stessa apparteneva ai **visibili**. I 3 visibili di allora erano `payout`, `pendenti` e `kyc`. Sul perimetro
+> di oggi le viste sono **quattro**: `kyc` più le tre di `viral.db`, che portano l'host_id sotto **altri nomi di colonna**
+> (`crediti.utente_id`, `referral_codici.referente_id`, `referral_eventi.referee_id`) — un criterio per nome di colonna le
+> avrebbe dichiarate invisibili. E **due tabelle non comparivano in nessuna delle due liste**, trovate solo contando dai
+> file: `split.quote` (`fase65_split_payment.py:109`) e `host_impronte` (`fase88_registro_host.py:142`).
+>
+> ⛔ **E QUESTO CORREGGE LA RIGA QUI SOTTO, scritta poche ore prima: le cancellabili non sono TRE. È UNA.**
+> 21 schede misurate (una per tabella, ognuna col suo avversario dove la sessione è bastata):
+> · **`liberazioni` → cancellare**, confermata dall'avversario: soli contatori, nessun dato personale;
+> · **`domanda` → NON è cancellabile: l'avversario ha fatto cadere la scheda.** `check_in` e `check_out` non sono date,
+>   sono **due caselle di testo libero illimitato su una rotta pubblica** (nessuna pulizia, nessun tetto, mentre `citta`
+>   ha il tetto a 120 e l'email a 254), e la riga è identificata dall'**email come chiave primaria**: quindi anche `party`
+>   e `ts` sono dati di una persona identificata (GDPR art. 4.1). Diventa **decisione_legale**;
+> · **`partner` → decisione_legale**: 2000 caratteri liberi in cui chi scrive può nominare **terze persone**, e la colonna
+>   non distingue fra persona fisica e società — che è ciò che sposta la risposta legale;
+> · le altre 18 → **decisione_legale**.
+> **Il conto finale, dopo che ogni scheda è stata attaccata: 1 cancellabile · 0 dichiarabili · 20 da avvocato.**
+> ✅ Le smentite sono **21 su 21** (il giro è stato ripreso tre volte: rete caduta, poi limite di sessione; `44 agenti su
+> 44, 0 errori`). **Cinque schede sono state RIBALTATE dall'avversario**: `domanda`, `tassa_regola` e `referral_codici`
+> dicevano «cancellare», `marche` diceva «dichiarare_per_legge`, `cauzione` è stata confermata con motivi diversi.
+> 🔑 **E il fatto che vale per tutte e 21: NESSUNA ha un metodo di cancellazione.** Non è che l'oblio si dimentica di
+> chiamarli: non c'è niente da chiamare.
+
+> ⛔ **LA RIPARAZIONE «OVVIA» DI `viral.db` È SBAGLIATA, E LO DIMOSTRA UNA PROVA — non un'opinione.** Cancellare
+> `referral_codici` sostituirebbe **un errore rumoroso con uno muto**. Il codice invito è un token che porta dentro
+> l'host_id, e `referral_eventi.codice` ne conserva una **seconda copia** (`fase76_viral_loop.py:172-173`). Decodificato
+> **senza nessuna chiave**: `{"n":"7257f950ecd0","ref":"h_e696832d7508161c","tipo":"host"}` — ma
+> `'h_e696832d7508161c' in token` → **False**, e la scansione cerca proprio la **sottostringa in chiaro**
+> (`fase156_erasure.py:441`, `ago in r[k]`). ⇒ tolta la riga di `referral_codici`, l'oblio uscirebbe **`ok=True`, 200
+> «fatto»**, con l'identificativo della persona ancora in archivio. **Il 409 di oggi almeno si vede.**
+> ⛔ **E la seconda strada «tecnica» rompe i soldi:** `motivo = "referral_qualifica:" + referee_id`
+> (`fase76_viral_loop.py:197`) **è la chiave di deduplica** del premio (`SELECT 1 FROM crediti WHERE motivo=?` → `gia_qualificato`, `:208-211`).
+> Ripulirlo farebbe pagare **due volte** il premio da 40 € (`referral_premio_cents: int = 4000`, `fase81:57`).
+> 🔑 Le tre tabelle di `viral.db` nascono **nella stessa transazione** (`fase76_viral_loop.py:158-178`): sono **un solo
+> fascicolo** e vanno decise insieme, non una alla volta.
+
+> ⛔ **E UN TERZO PROGRAMMA INVITI, VIVO IN PRODUZIONE, CHE NESSUNA LISTA HA MAI NOMINATO** *(chiuso con E, vedi sopra)*.
+> `fase109_referral_host` è cablato in `fase81_bootstrap_casavip.py:515-517` **senza nessun interruttore** — il viral
+> loop almeno ha `if cfg.con_viral:` (`:357`), questo no — e scrive in `data/referral.json` (`main_casavip.py:130`).
+> **Non è un `.db`**, quindi `glob("*.db")` (`fase156_erasure.py:417`) non lo apre mai: è invisibile all'oblio
+> **per estensione**, e nessun ago lo salverebbe.
+
+> ✅ **DUE DIFETTI VIVI NUOVI, RIPARATI («autorizzato a b c»)** — usciti dalle schede, **riprodotti da me**, guardia D20
+> vista ROSSA prima e VERDE dopo. B: `fase127_checkin_digitale.py:165`, la lapide della revoca ora svuota anche
+> `ospiti_json` nello stesso UPDATE (2 righe). C: `fase83_server.py:7427-7428`, `check_in`/`check_out` passano dallo
+> stesso metro di `citta` con tetto a 32 (3 righe). Il dettaglio, com'era prima:
+> ① `CheckinDigitale.revoca` (`fase127_checkin_digitale.py:145-147`) promette per iscritto «i dati degli ospiti
+> pre-registrati spariscono». La revoca è una lapide — `ON CONFLICT ... DO UPDATE SET completato=0, revocato=1`
+> (`:165`) — e l'UPDATE **non tocca `ospiti_json`**. Misurato: `DOPO la revoca: ('[{"nome": "Mario Rossi",
+> "documento": "AB1234567"}]', 0, 1)`. Nome e **numero di documento di una terza persona** restano, e nessun percorso
+> di cancellazione li raggiunge più. Guardia `test_checkin_revoca.TestLaRevocaFaSPARIREDavveroIDatiDegliOspiti`, rossa:
+> `'Rossi' unexpectedly found in '[{"nome": "Mario Rossi", "documento": "AB1234567"}]'`. ⚠️ La lapide è giusta e
+> resta (impedisce la resurrezione concorrente): va svuotato solo `ospiti_json` nello stesso UPDATE.
+> ② `POST /api/domanda` è pubblica (`fase83_server.py:7406`). `check_in`/`check_out` passano **grezzi** (`:7427-7428`
+> → `fase158_domanda.py:113`): nessuna pulizia, nessun tetto, mentre `citta` ha 120 e l'email 254. L'unico limite è
+> nginx sul corpo intero, **`client_max_body_size 1m`** (`deploy/nginx.casavip.conf:16`): ~un milione di caratteri di
+> testo libero, da chiunque, salvati sotto un'email come chiave primaria. Guardia
+> `test_fase158_domanda.TestLeDateDellaListaDAttesaNONSonoCaselleDiTestoLibero`, rossa: `30061 not less than or
+> equal to 32 : check_in ha archiviato 30061 caratteri ... Risposta della rotta: 201`.
+>
+> ⛔ **COSA NON È STATO ESAMINATO** (D18 punto 3): **la produzione**. Tutto il censimento misura il **banco** (23 archivi);
+> il backup del 13/9 ne registra **27** sul VPS, quindi almeno 3 archivi di produzione non sono mai stati guardati.
+> Inoltre: `referral.json` non è un `.db` e non è nel banco; i residui nei file `-wal`/`-shm`; i dati fuori dagli archivi
+> (file caricati, registri, copie di salvataggio, posta); e se un dato **dovesse** restare, che è la domanda legale.
+
 **🧭 13 SETTEMBRE, 01:1x — PASSAGGIO DI CONSEGNE (D21): CINQUE DIFETTI VIVI CHIUSI E IN PRODUZIONE**
 
 > ⛔ **Stima mia, non letta: circa il 46% del contesto.** La percentuale la vede il fondatore con `/context`, io no —
@@ -2683,9 +2848,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: c82343e
+CONSEGNE AGGIORNATE A: 4a48a9b
 
-SUITE ATTUALE: Ran 6792 test
+SUITE ATTUALE: Ran 6810 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

@@ -159,5 +159,72 @@ class TestCheckinRevoca(unittest.TestCase):
                              "TOCTOU: check-in completato su prenotazione cancellata")
 
 
+class TestLaRevocaFaSPARIREDavveroIDatiDegliOspiti(unittest.TestCase):
+    """⛔ D20 — scritta PRIMA della riparazione e vista ROSSA sul codice di produzione.
+
+    La docstring di `CheckinDigitale.revoca` (fase127_checkin_digitale.py:145-147) promette
+    per iscritto due cose: «elimina la riga» e «i dati degli ospiti pre-registrati
+    spariscono (niente ospiti-fantasma nell'export Alloggiati, privacy)». La seconda e'
+    falsa. La revoca e' una lapide — `ON CONFLICT ... DO UPDATE SET completato=0,
+    revocato=1` — e l'UPDATE non tocca `ospiti_json`: nome e numero di documento di
+    TERZE persone restano nella riga, con `revocato=1` accanto.
+
+    ⛔ La lapide e' giusta e non si tocca: serve a impedire che una pre-registrazione
+    concorrente resusciti il check-in dopo la revoca (difetto provato in concorrenza, e
+    `test_tombstone_blocca_reregistrazione_dopo_revoca` lo sorveglia). Qui si pretende
+    solo cio' che la docstring gia' promette: la lapide resta, i dati degli ospiti no.
+
+    Misurato (uscita letterale):
+        PRIMA della revoca : ('[{"nome": "Mario Rossi", "documento": "AB1234567"}]', 1, 0)
+        DOPO la revoca     : ('[{"nome": "Mario Rossi", "documento": "AB1234567"}]', 0, 1)
+    Trovato il 2026-09-14 dal censimento delle 21 tabelle che il «cancellami» non tocca:
+    `checkin` e' una di quelle, e questa e' l'unica strada per cui i suoi dati escono.
+    """
+
+    def setUp(self):
+        import os
+        from fase127_checkin_digitale import crea_checkin_digitale
+        self.dir = tempfile.mkdtemp()
+        self.ck = crea_checkin_digitale(os.path.join(self.dir, "checkin.db"), None)
+        self.ck.inizializza_schema()
+        self.db = os.path.join(self.dir, "checkin.db")
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def _riga(self):
+        import sqlite3
+        con = sqlite3.connect("file:%s?mode=ro" % self.db, uri=True)
+        try:
+            return con.execute("SELECT ospiti_json, completato, revocato FROM checkin "
+                               "WHERE prenotazione_id='pren-revoca-1'").fetchone()
+        finally:
+            con.close()
+
+    def test_dopo_la_revoca_nome_e_documento_degli_ospiti_NON_sono_piu_nella_riga(self):
+        esito = self.ck.pre_registra("pren-revoca-1", "casa-revoca",
+                                     [{"nome": "Mario Rossi", "documento": "AB1234567"}], 2)
+        self.assertTrue(esito.get("ok"), "misura non valida: la pre-registrazione e' "
+                                         "fallita, non c'e' niente da revocare: %r" % (esito,))
+        prima = self._riga()
+        self.assertIsNotNone(prima, "misura non valida: la riga non esiste prima della revoca")
+        self.assertIn("AB1234567", prima[0],
+                      "misura non valida: il documento non e' entrato, la prova non direbbe nulla")
+
+        self.assertTrue(self.ck.revoca("pren-revoca-1"), "misura non valida: revoca fallita")
+
+        dopo = self._riga()
+        self.assertIsNotNone(dopo, "la lapide deve restare: e' lei che impedisce la resurrezione")
+        self.assertEqual((dopo[1], dopo[2]), (0, 1),
+                         "la lapide deve dire completato=0, revocato=1: %r" % (dopo,))
+        self.assertNotIn("Rossi", dopo[0] or "",
+                         "il NOME dell'ospite e' ancora nella riga dopo la revoca, mentre la "
+                         "docstring promette che «i dati degli ospiti spariscono»: %r" % (dopo,))
+        self.assertNotIn("AB1234567", dopo[0] or "",
+                         "il NUMERO DI DOCUMENTO dell'ospite e' ancora nella riga dopo la "
+                         "revoca: e' il dato di una terza persona, e nessun percorso di "
+                         "cancellazione lo raggiunge piu': %r" % (dopo,))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

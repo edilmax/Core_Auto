@@ -162,7 +162,8 @@ class CheckinDigitale:
                     con.execute(
                         "INSERT INTO checkin (prenotazione_id, alloggio_id, ospiti_json, ts, "
                         "completato, revocato) VALUES (?, '', '[]', ?, 0, 1) "
-                        "ON CONFLICT(prenotazione_id) DO UPDATE SET completato=0, revocato=1",
+                        "ON CONFLICT(prenotazione_id) DO UPDATE SET completato=0, revocato=1, "
+                        "ospiti_json='[]'",
                         (str(prenotazione_id), self._now()))
                 return True
             except Exception:
