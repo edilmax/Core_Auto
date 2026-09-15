@@ -111,7 +111,7 @@ jobs:
     timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: '3.9'
@@ -177,7 +177,7 @@ jobs:
           echo "memoria:      $(free -h | awk '/^Mem:/{print $2}')"
           echo "disco_libero: $(df -h / | awk 'NR==2{print $4}')"
           echo "carico:       $(cat /proc/loadavg)"
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: '3.9'
@@ -329,7 +329,7 @@ jobs:
           echo "memoria:      $(free -h | awk '/^Mem:/{print $2}')"
           echo "disco_libero: $(df -h / | awk 'NR==2{print $4}')"
           echo "carico:       $(cat /proc/loadavg)"
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
@@ -406,7 +406,7 @@ jobs:
       # ------------------------------------------------------------------
       COVERAGE_MIN: '82'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: '3.9'
@@ -461,7 +461,7 @@ jobs:
     timeout-minutes: 25
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       # Nessuna "cache: pip" qui: questo job non installa niente (gira su stdlib pura),
       # quindi la cache sarebbe solo tempo perso a salvarla e ricaricarla.
       - uses: actions/setup-python@v6
@@ -488,7 +488,7 @@ jobs:
       # l'ultimo commit: una chiave revocata resta pubblica in ogni commit in cui
       # e' passata. Con la copia superficiale di serie (depth 1) lo strumento
       # girerebbe su 1 commit su 926 e direbbe "pulito".
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: actions/setup-python@v6
@@ -574,7 +574,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: '3.9'
@@ -625,7 +625,7 @@ jobs:
     timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: '3.9'
@@ -655,7 +655,7 @@ jobs:
     timeout-minutes: 20
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v5
         with:
           node-version: '20'
@@ -778,7 +778,7 @@ jobs:
     # finire e la rete anti-intoppo non serve a niente. Il giro vero costa ~1 min 30 s.
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       # Python 3.9: e' lo stesso del job full-suite e del computer dove la batteria
       # si lancia a mano. Qui serve solo ad ACCENDERE il server visivo, non a
       # giudicare il prodotto: il giudizio lo da' il browser.
@@ -931,7 +931,7 @@ jobs:
     # riparata li' e non cercata altrove: un difetto riparato in un posto solo torna.
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       # Python 3.11: su 3.9 non c'e' la wheel di Atheris e la build da sorgente fallisce
       # (usa Py_IsNone, funzione della CPython >=3.10). I motori-soldi sono Python puro:
       # stesso identico comportamento. clang resta come rete di sicurezza per la build.
@@ -998,7 +998,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Costruisci l'immagine di produzione
         run: docker build -f Dockerfile.casavip -t casavip-app:ci .
       - name: Avvia il container con l'ambiente minimo
