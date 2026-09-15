@@ -412,6 +412,40 @@ class TestGuastiIsolatiNelRegistro(_Base):
                         "l'esempio riportato non e' la riga CRITICAL: %r"
                         % (rep["anomalie"]["guasti_isolati"],))
 
+    def test_il_Guardiano_non_conta_la_sua_riga_ne_le_sonde_DICHIARATE_del_giudice(self):
+        """⛔ D20 — vista ROSSA prima della riparazione (`conta 4 != 3`: leggeva la propria
+        riga-riassunto). Il 14/9, appena ha imparato a leggere i CRITICAL, il Guardiano ha
+        gridato «7 stati anomali» per 33 sonde del NOSTRO giudice
+        (`collaudi/verifica_produzione.py`, a ogni deploy) — e il giorno dopo avrebbe riletto
+        la SUA riga `GUARDIANO: 7 stato/i anomalo/i`, che e' CRITICAL, tenendo l'allarme
+        acceso da solo. Rimedio: il giudice DICHIARA la finestra delle sue sonde
+        (`fase178.dichiara_sonde_giudice`) e il lettore salta quelle righe e la propria. Una
+        negazione NON dichiarata e un ERROR vero contano ancora: le due direzioni in una
+        sola guardia («meno guardie», il fondatore, 15/9)."""
+        import os
+        sis = self._sistema_con_registro([
+            self._riga(self.now - 7200, "CRITICAL",
+                       "GUARDIANO: 7 stato/i anomalo/i -> {'guasti_isolati': {}}"),
+            self._riga(self.now - 3600, "CRITICAL", "BUNKER: accesso NEGATO azione=prove_legali "
+                       "motivo=sessione_assente_o_manomessa ip=203.0.113.9"),
+            self._riga(self.now - 1800, "CRITICAL", "BUNKER: accesso NEGATO azione=prove_legali "
+                       "motivo=sessione_assente_o_manomessa ip=198.51.100.7"),
+            self._riga(self.now - 300, "ERROR", "CONTROVERSIA APERTA | riferimento: BVI***01"),
+        ])
+        gi = G.scansiona(sis, ora=lambda: self.now)["anomalie"].get("guasti_isolati") or {}
+        self.assertEqual(gi.get("conta"), 3,
+                         "il Guardiano conta la propria riga-riassunto, oppure perde una "
+                         "negazione NON dichiarata: %r" % (gi,))
+        # il giudice dichiara la finestra della sonda di un'ora fa: quella sparisce, l'altra resta
+        from fase178_watchdog import dichiara_sonde_giudice
+        dati = os.path.dirname(sis.config.db_finanza)
+        self.assertTrue(dichiara_sonde_giudice(dati, inizio=self.now - 3605, fine=self.now - 3595),
+                        "misura non valida: la dichiarazione non e' stata scritta")
+        gi = G.scansiona(sis, ora=lambda: self.now)["anomalie"].get("guasti_isolati") or {}
+        self.assertEqual(gi.get("conta"), 2,
+                         "una negazione DENTRO la finestra dichiarata conta ancora come "
+                         "intrusione, oppure una FUORI e' sparita: %r" % (gi,))
+
 
 class TestEscrowBloccato(_Base):
 

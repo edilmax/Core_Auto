@@ -395,11 +395,61 @@ giri di mutazione da 60 e 600 minuti dichiarati. Guardia `TestUnaCasellaSCADUTAD
 vista rossa prima (3 su 3). **Misurato adesso: 9 caselle rilanciabili subito, 2 che vogliono il server.**
 🔑 **Quindi «15 caselle su 39» NON vuol dire che il lavoro sia fermo:** vuol dire che gran parte delle misure è
 scaduta e va rifatta. Il primo lavoro utile è rilanciare quei 9 attrezzi.
-**🧭 14 SETTEMBRE, sera — PASSAGGIO DI CONSEGNE (D21): OTTO DIFETTI MUTI IN PRODUZIONE, E LA PORTA PER UN UOMO SOLO**
+**🧭 15 SETTEMBRE, mattina — IL RUMORE DEGLI ALLARMI CHIUSO ALLA RADICE (ramo `rumore-allarmi-2026-09-15`, «autorizzato» del fondatore)**
 
-> ⛔ **Percentuale di contesto: non letta** (la vede il fondatore con `/context`; la mia stima non fa fede). Il blocco si
-> scrive perché il lavoro è a «commit fatto + posti allineati», che è l'innesco meccanico della D21.
-> **Stato della macchina:** master **`b7bd27c`** (merge di `e660163` + `4a48a9b`) uguale su computer, GitHub e **VPS**.
+> **Perché.** La chat della notte (ricontrollo a occhi freschi delle 13 riparazioni delle PR #184-#186: tutte giuste,
+> 201 guardie OK, `esame_oblio` 7/7) aveva trovato un rumore vivo: ogni deploy e ogni batteria dal PC fabbricavano un
+> Telegram e un giorno di `guardiano_anomalo`, perché i due lettori del registro contavano (a) la riga-riassunto del
+> Guardiano stesso («GUARDIANO: N stato/i anomalo/i», misurato: conta 33 = 32 sonde + 1 riga sua) e (b) le 2 sonde col
+> token falso di `collaudi/verifica_produzione.py`. La chat è morta all'1:49 aspettando la parola; è arrivata stamattina.
+> **Cosa è cambiato** (guardie viste ROSSE prima, `4 != 3`, una per lettore con le due direzioni dentro — «meno guardie»,
+> il fondatore, 15/9): `fase178_watchdog.py` +60/-1 — `NOME_SONDE_GIUDICE`, `dichiara_sonde_giudice`,
+> `finestra_sonde_giudice`, `riga_di_rumore_nostro` (l'UNICO criterio) ed `errori_freschi` che lo applica;
+> `fase186_guardiano.py` +11/-3 — `_guasti_isolati` importa il criterio da fase178 e la docstring che diceva il falso
+> («guarda SOLO gli ERROR») è corretta; `collaudi/verifica_produzione.py` +83/-1 — il giudice DICHIARA la finestra delle
+> sue sonde sul server: sull'host scrivendo il file, dal PC via ssh facendo girare lo stesso scrittore sul server con l'ora
+> del server (misurato: scarto PC-server 0 s; prima del deploy la strada ssh fallisce e lo dice, com'è giusto).
+> **Misure:** mirati `test_watchdog test_guardiano test_bunker_controlroom test_esame_accessi` → `Ran 95 · OK`, prima
+> sulle copie fuori dal progetto e poi sui file veri (impronte sha256 identiche); ruff e bandit «nessuna segnalazione
+> nuova»; caricatore **6824**. Sul server, in sola lettura: 1.688 negazioni CRITICAL da luglio, 384 dal server stesso e
+> ~1.290 a raffiche di 15-16 da reti italiane, cioè il giudice lanciato dal PC — è il motivo della strada ssh.
+> **Limiti dichiarati:** (1) le 2 sonde delle 22:14:39 UTC del 14/9 non sono dichiarate da nessuno: il Guardiano le conta
+> finché escono dalla finestra di 24 h al giro giornaliero successivo, e il giro si sposta col riavvio del deploy; (2)
+> un'intrusione vera nei secondi in cui il giudice sonda viene saltata anche lei; (3) dal PC la dichiarazione funziona
+> solo dopo il deploy di questo lavoro. **Non ancora fatto qui:** suite intera (lanciata DOPO questi documenti, da fermo:
+> il suo esito lo dicono la CI della PR e il prossimo blocco), commit, PR, unione via REST, deploy D17, e sul server la
+> prova che dopo il passo «dopo» esista `giudice_ultima_sonda` e che il Guardiano al giro successivo non conti le sonde.
+> **Dopo, col via del fondatore:** il lavoro nuovo del foglio `collaudi/piano.py` (le 8 caselle scadute del blocco Soldi).
+> Il fondatore ha chiesto anche una suite «double-booking · API senza autenticazione · webhook con guasti di rete»:
+> prima l'inventario di ciò che c'è già (D10), poi solo i buchi provati.
+
+**🧭 15 SETTEMBRE, 00:2x — PASSAGGIO DI CONSEGNE (D21): TRE PR UNITE, QUATTRO DEPLOY, E IL «SUBITO» IN PRODUZIONE**
+
+> ⛔⛔ **D21 VIOLATA: contesto all'88% letto con `/context` (91% per il fondatore). La soglia è il 50%.** La sessione ha
+> continuato a lavorare ben oltre metà. **La chat nuova deve RICONTROLLARE questo lavoro, non crederci:** rileggere
+> con occhi freschi i diff delle PR #184, #185 e #186 (`git diff f42ab78..49081c3`); rieseguire le guardie nuove e
+> `collaudi/esame_oblio.py`; verificare sul VPS `guardiano_ultimo_esito`, `errori_freschi` e `ALERT_EMAIL`; e
+> confrontare col codice ogni frase di questo blocco. Sono affidabili le misure degli strumenti (suite lette dal log,
+> CI dall'API, sonde, tre posti su `49081c3`); vanno ricontrollati i giudizi e i testi.
+> ⚠️ Questo blocco è stato scritto all'1 di notte senza commit (la suite sui soli documenti era stata fermata a metà per il
+> `/clear`): viaggia nel commit del 15/9 mattina, col blocco qui sopra, e la suite intera è stata rilanciata da fermo.
+> **Stato della macchina: master `49081c3`** uguale su computer, GitHub e **VPS** (deploy D17 delle 00:14, paracadute
+> ri-agganciato misurando `fda1338f…`→`7eac6a08…`, immagine viva `6625b10c…`, backup `finanza-20260914-202210` aperto,
+> sonde 200/200/403, giudice 190/0). Tre PR unite **da me via REST** (#184 `b7bd27c`, #185 `effed1e`, #186 `49081c3`),
+> ogni volta con `gate: pass` letto dall'API. In produzione da stanotte: il watchdog legge il registro ogni 10 minuti
+> (`errori_freschi`), il Bunker distingue «sessione assente» (WARNING) da «manomessa» (CRITICAL), gli allarmi vanno a
+> `massimo.foti@protonmail.com`. Ultima suite intera: `Ran 6817 · OK (skipped=4) · USCITA_DIRETTA=0` (caricatore 6822).
+> ⛔ **Verificato sul server dopo il deploy, e va detto:** 14 sonde del giudice sono ora `WARNING sessione_assente`, ma
+> **2 restano CRITICAL** — quelle in cui `verifica_produzione.py:143` manda apposta un token falso (`sessione_assente_o_
+> manomessa`): giusto per il mondo, rumore per noi. E `errori_freschi` conta anche la riga CRITICAL del Guardiano stesso
+> («7 stato/i anomalo/i»): lo stesso fatto due volte. ⇒ **dopo ogni deploy arriva un Telegram `errori_freschi`** con
+> 2-3 righe del server stesso, che si spegne da solo in 15 minuti. ⚠️ **Corretto il 15/9 mattina:** il Guardiano NON dice
+> ANOMALO «fino alle 19:19 UTC». Il giro intero è UNA volta al giorno (`fase83:11902`): l'esito resta ANOMALO fino al giro
+> successivo (~22:14 UTC del 15/9), e a quel giro la finestra di 24 h può contenere ancora la riga CRITICAL del Guardiano
+> stesso (22:14:23) e le 2 sonde (22:14:39): non è prevedibile. Le ore di questo blocco sono ITALIANE (UTC+2).
+> **Il rimedio messo a «settimana dopo» è stato fatto il 15/9 mattina** (blocco qui sopra): il giudice dichiara le sue
+> sonde e i due lettori saltano quella finestra e la riga-riassunto del Guardiano.
+> **Stato precedente, per storia:** master **`b7bd27c`** (merge di `e660163` + `4a48a9b`) uguale su computer, GitHub e **VPS**.
 > PR #184 unita **da me via REST** (`gh api -X PUT .../pulls/184/merge`; il fondatore: «puoi farlo tu l'unione») dopo la
 > CI letta dall'API: **15 pass + `zap` skipping, `gate` pass**, `full-suite` 36m3s, `mutazione` pass.
 > **Ultima suite intera (locale, sullo stato committato): `Ran 6805 in 3409.147s · OK (skipped=4) · USCITA_DIRETTA=0`**
@@ -420,10 +470,20 @@ scaduta e va rifatta. Il primo lavoro utile è rilanciare quei 9 attrezzi.
 >
 > ⛔ **COSA MANCA, in quest'ordine (dalla «porta per un uomo solo»: 5 fronti, 34 rilievi confermati dagli avversari, 9
 > caduti — 5 perché già riparati da `e660163` — e 21 trovati in più; la sintesi intera è nel registro della sessione):**
-> **Prima del lancio.** ① *Fondatore, 45 min, zero codice:* UptimeRobot su `https://bookinvip.com/api/health` con un
-> contatto che squilla, **visto suonare una volta** (oggi l'unico allarme che sopravvive alla morte del VPS è l'email di
-> GitHub, dichiarata morta); dire se `TELEGRAM_CHAT_ID` è la chat privata o il canale pubblico del marchio (serve al
-> watchdog **e** ai post di marketing, e ora porta il dettaglio delle anomalie dei conti). ② ✅ **FATTO la sera stessa
+> **Prima del lancio.** ① *Fondatore, con calma («questo mettilo nelle cose da fare»), zero codice — l'account UptimeRobot
+> esiste già dal 12/9 circa:* (1) il **monitor** deve puntare a `https://bookinvip.com/api/health`, **non alla home** (la
+> home risponde anche con l'applicazione morta: `RIPRENDI_QUI.md`, sentinella); (2) *Integrations → Telegram*: si collega
+> il bot col link e il codice che UptimeRobot dà (gratis, fra le 5 integrazioni del piano Free); (3) nei contatti
+> d'allarme del monitor spuntare Telegram, e sul telefono dare a quella chat **suono personalizzato + eccezione al «Non
+> disturbare»**; (4) **prova**: un secondo monitor su `https://bookinvip.com/api/non-esiste-prova` deve far squillare il
+> telefono — un allarme mai visto suonare non è un allarme — poi si cancella. ⚠️ Fonti lette il 14/9: SMS a crediti
+> (3 $ per 10), telefonata **non certa** (le fonti si contraddicono), il piano Free non è pensato per siti aziendali
+> (Solo 9 $/mese). Oggi l'unico allarme che sopravvive alla morte del VPS è l'email di GitHub, dichiarata morta.
+> `TELEGRAM_CHAT_ID` **è la chat privata** (misurato: numero positivo), non il canale «Info BookinVIP»: bene così.
+> ①-bis *Ingegnere, settimana dopo, ~10 righe in `deploy/watchdog.sh`:* **un Telegram al giorno «tutto quadra»** alle 9,
+> letto da `guardiano_ultimo_esito` — perché il silenzio deve essere diverso dalla salute: se un giorno non arriva, è
+> morto qualcosa, anche l'allarme stesso (Netflix: «stato stabile»; il fondatore il 14/9: «troppe cose da aprire» →
+> **una cosa sola da tenere aperta: Telegram**, niente da controllare ogni giorno). ② ✅ **FATTO la sera stessa
 > (guardie viste rosse prima, 6 nuove; caricatore 6816):** `fase186._guasti_isolati` legge anche ` CRITICAL `
 > (1 riga: intrusioni nel Bunker, cancellazioni forzate, kill-switch non sono più invisibili); una **controversia aperta**
 > scrive un ERROR strutturato e manda l'email a `ALERT_EMAIL` (provider spento → WARNING + `email_ko`), così il Guardiano
@@ -2918,9 +2978,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: c67a3c8
+CONSEGNE AGGIORNATE A: 49081c3
 
-SUITE ATTUALE: Ran 6822 test
+SUITE ATTUALE: Ran 6824 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

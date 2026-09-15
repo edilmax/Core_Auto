@@ -25,7 +25,7 @@ import os
 import shutil
 import sqlite3
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 # database il cui giornale va verificato per la catena hash
 DB_GIORNALE = "finanza"
@@ -48,6 +48,15 @@ MAX_ETA_BATTITO_SEC = 25 * 3600
 # (l'email del tick), e con il provider spento moriva in un log: il watchdog, che grida gia'
 # su Telegram, legge questo file e ripete l'allarme finche' non e' risolto (2026-09-14).
 NOME_ESITO = "guardiano_ultimo_esito"
+# LA FINESTRA DELLE SONDE DEL GIUDICE. `collaudi/verifica_produzione.py` prova, a ogni deploy
+# e a ogni batteria, che le porte riservate restino chiuse anche con credenziali FINTE; il
+# server scrive quelle negazioni CRITICAL, com'e' giusto per il mondo. Ma le rileggono DUE
+# lettori nostri (`errori_freschi` qui sotto e `fase186._guasti_isolati`), e il 2026-09-14
+# 33 sonde nostre sono diventate «7 stati anomali» e un Telegram: un falso allarme
+# fabbricato da noi (ferrea 10). Il giudice dichiara qui [inizio, fine] delle sue sonde
+# (`dichiara_sonde_giudice`) e i lettori le saltano SOLO dentro quella finestra
+# (`riga_di_rumore_nostro`): una negazione fuori dalla finestra resta un'intrusione.
+NOME_SONDE_GIUDICE = "giudice_ultima_sonda"
 
 NOME_LETTURA_CI = "ci_ultima_lettura"
 # Il guardiano interroga GitHub a ogni giro (ogni 10 minuti da cron): tre ore sono DICIOTTO
@@ -198,6 +207,53 @@ def leggi_esito_guardiano(dir_dati: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def dichiara_sonde_giudice(dir_dati: str, *, inizio: int, fine: int) -> bool:
+    """Il giudice dichiara la finestra [inizio, fine] (secondi dal 1970, ora del server) delle
+    sue sonde con credenziali finte. Stesse regole del battito: senza una cartella vera non si
+    scrive niente e si ritorna False, e un guasto qui non solleva mai."""
+    if not dir_dati or not os.path.isdir(dir_dati):
+        return False
+    try:
+        with open(os.path.join(dir_dati, NOME_SONDE_GIUDICE), "w") as f:
+            f.write("%d %d\n" % (int(inizio), int(fine)))
+        return True
+    except (OSError, ValueError, TypeError):
+        return False
+
+
+def finestra_sonde_giudice(dir_dati: str) -> Optional[Tuple[int, int]]:
+    """(inizio, fine) dichiarati dal giudice, o None se non ha mai dichiarato niente: e allora
+    NESSUNA riga e' rumore nostro -- si sbaglia nel verso che non zittisce."""
+    if not dir_dati:
+        return None
+    try:
+        with open(os.path.join(dir_dati, NOME_SONDE_GIUDICE)) as f:
+            a, b = f.readline().split()[:2]
+        return int(a), int(b)
+    except (OSError, ValueError):
+        return None
+
+
+def riga_di_rumore_nostro(riga: str, ts: int, finestra: Optional[Tuple[int, int]]) -> bool:
+    """Una riga ERROR/CRITICAL scritta da NOI misurando, non da un guasto. E' l'UNICO criterio,
+    condiviso dai due lettori del registro (`errori_freschi` qui e `fase186._guasti_isolati`):
+    due copie sarebbero due verita', e una resterebbe indietro.
+      1. la riga-riassunto del Guardiano («GUARDIANO: N stato/i anomalo/i»): e' gia' l'allarme
+         `guardiano_anomalo`, letto da `guardiano_ultimo_esito`; riletta il giorno dopo teneva
+         acceso l'allarme da sola (misurato sul server il 2026-09-15: conta 33 = 32 sonde + 1
+         riga sua);
+      2. una negazione del Bunker («BUNKER: accesso NEGATO») DENTRO la finestra che il giudice
+         ha dichiarato. Fuori dalla finestra e' un'intrusione, e conta.
+    ⚠️ Limite dichiarato: un'intrusione vera nei secondi in cui il giudice sonda viene saltata
+    anch'essa. La finestra e' larga quanto le sonde, non di piu', e la dichiara solo chi puo'
+    scrivere nella cartella dei dati del server."""
+    if "GUARDIANO: " in riga and "stato/i anomalo/i" in riga:
+        return True
+    if finestra and "BUNKER: accesso NEGATO" in riga and finestra[0] <= ts <= finestra[1]:
+        return True
+    return False
+
+
 MINUTI_ERRORI_FRESCHI = 15      # il giro e' ogni 10: 15 copre un giro saltato senza doppiare
 MAX_ESEMPI_ERRORI = 3
 
@@ -221,6 +277,7 @@ def errori_freschi(dir_dati: str, *, minuti: int = MINUTI_ERRORI_FRESCHI,
         return None
     ora = ora if isinstance(ora, int) else int(time.time())
     soglia = ora - max(1, int(minuti)) * 60
+    finestra = finestra_sonde_giudice(dir_dati)
     conta, esempi = 0, []
     try:
         with open(percorso, encoding="utf-8", errors="replace") as f:
@@ -232,6 +289,8 @@ def errori_freschi(dir_dati: str, *, minuti: int = MINUTI_ERRORI_FRESCHI,
                 except Exception:
                     ts = None                 # continuazione di traceback: non e' datata
                 if ts is None or ts < soglia:
+                    continue
+                if riga_di_rumore_nostro(riga, ts, finestra):
                     continue
                 conta += 1
                 if len(esempi) < MAX_ESEMPI_ERRORI:

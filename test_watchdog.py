@@ -374,6 +374,44 @@ class TestUnErroreFrescoArrivaSuTelegramEntroDieciMinuti(unittest.TestCase):
         self.assertEqual(r["misure"]["errori_freschi"]["conta"], 1)
         _ = calendar  # il formato delle date e' quello UTC di main_casavip, come in fase186
 
+    def test_il_lettore_non_conta_la_riga_del_Guardiano_ne_le_sonde_DICHIARATE_del_giudice(self):
+        """⛔ D20 — vista ROSSA prima della riparazione (`4 != 3`: contava la riga del
+        Guardiano stesso). Misurato sul server il 14/9: 33 sonde del NOSTRO giudice
+        (`collaudi/verifica_produzione.py`, a ogni deploy) piu' la riga-riassunto del
+        Guardiano sono diventate «7 stati anomali», due Telegram per deploy e un promemoria
+        ogni 6 ore per un giorno intero. Due cose che scriviamo NOI misurando, non guasti:
+        (1) `GUARDIANO: N stato/i anomalo/i` e' gia' l'allarme `guardiano_anomalo`, e riletta
+        si autoalimenta; (2) `BUNKER: accesso NEGATO` dentro una finestra che il giudice ha
+        DICHIARATO e' una sonda nostra. Le due direzioni stanno nella stessa prova: una
+        negazione NON dichiarata e un ERROR vero contano ancora («meno guardie», il
+        fondatore, 15/9: una sola, completa)."""
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        ora = int(time.time())
+        with open(os.path.join(d, "app.log"), "w", encoding="utf-8") as f:
+            f.write(self._riga(ora - 700, "CRITICAL",
+                               "GUARDIANO: 7 stato/i anomalo/i -> {'guasti_isolati': {}}") + "\n")
+            f.write(self._riga(ora - 595, "CRITICAL", "BUNKER: accesso NEGATO azione=prove_legali "
+                               "motivo=sessione_assente_o_manomessa ip=203.0.113.9") + "\n")
+            f.write(self._riga(ora - 300, "CRITICAL", "BUNKER: accesso NEGATO azione=prove_legali "
+                               "motivo=sessione_assente_o_manomessa ip=198.51.100.7") + "\n")
+            f.write(self._riga(ora - 100, "ERROR", "CONTROVERSIA APERTA | riferimento: BVI***01") + "\n")
+        # senza nessuna dichiarazione: la riga del Guardiano non conta, le due negazioni si'
+        r = wd.errori_freschi(d, ora=ora)
+        self.assertEqual(r["conta"], 3,
+                         "il lettore conta la riga-riassunto del Guardiano stesso, oppure perde "
+                         "una negazione NON dichiarata: %r" % (r,))
+        self.assertFalse(any("GUARDIANO" in e for e in r["esempi"]), r["esempi"])
+        # il giudice dichiara la sua finestra: la negazione dentro sparisce, quella fuori resta
+        self.assertTrue(wd.dichiara_sonde_giudice(d, inizio=ora - 600, fine=ora - 590),
+                        "misura non valida: la dichiarazione non e' stata scritta")
+        r = wd.errori_freschi(d, ora=ora)
+        self.assertEqual(r["conta"], 2,
+                         "una negazione DENTRO la finestra dichiarata dal giudice conta ancora "
+                         "come intrusione, oppure una FUORI e' sparita: %r" % (r,))
+        self.assertTrue(any("198.51.100.7" in e for e in r["esempi"])
+                        and any("CONTROVERSIA" in e for e in r["esempi"]), r["esempi"])
+
 
 class TestLEsitoDelGuardianoArrivaAUnaPersona(unittest.TestCase):
     """⛔ D20 — scritta PRIMA della riparazione e vista ROSSA sul codice di produzione.

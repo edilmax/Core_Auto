@@ -289,9 +289,10 @@ def _guasti_isolati(sistema: Any, ora_ts: int, ore: int) -> Optional[Dict[str, A
     doppia chiave, ultime 300 righe di un rotante da 5MB. Un guasto isolato su denaro o
     serrature poteva restare invisibile per sempre. Qui il giro giornaliero lo legge.
 
-    Guarda SOLO gli ERROR, mai i warning: i warning sono ~131 e riguardano anche cose
-    innocue (una miniatura non salvata); gli ERROR sono i casi gravi -- e sul server vero
-    oggi sono ZERO, quindi questo controllo non produce affaticamento da allarmi.
+    Guarda gli ERROR e i CRITICAL, mai i warning: i warning sono ~131 e riguardano anche cose
+    innocue (una miniatura non salvata); ERROR e CRITICAL sono i casi gravi. Salta soltanto le
+    righe che scriviamo NOI misurando -- la propria riga-riassunto e le sonde DICHIARATE dal
+    giudice -- col criterio unico di `fase178.riga_di_rumore_nostro`.
     Registro assente = impianto appena nato -> silenzio (lezione del falso allarme marche).
     """
     import calendar
@@ -309,6 +310,11 @@ def _guasti_isolati(sistema: Any, ora_ts: int, ore: int) -> Optional[Dict[str, A
     if not os.path.isfile(percorso):
         return None
     soglia = ora_ts - max(1, int(ore)) * 3600
+    # Il criterio di «rumore nostro» sta in UN posto solo (fase178, che non importa niente del
+    # prodotto): la riga-riassunto di questo stesso Guardiano, che il 15/9 teneva acceso
+    # l'allarme rileggendo se stesso, e le sonde DICHIARATE dal giudice.
+    from fase178_watchdog import finestra_sonde_giudice, riga_di_rumore_nostro
+    finestra = finestra_sonde_giudice(dati)
     conta, esempi = 0, []
     with open(percorso, encoding="utf-8", errors="replace") as f:
         for riga in f:
@@ -324,6 +330,8 @@ def _guasti_isolati(sistema: Any, ora_ts: int, ore: int) -> Optional[Dict[str, A
             except Exception:
                 continue                      # riga non databile (continuazione di traceback)
             if ts < soglia:
+                continue
+            if riga_di_rumore_nostro(riga, ts, finestra):
                 continue
             conta += 1
             if len(esempi) < MAX_GUASTI_MOSTRATI:
