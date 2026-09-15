@@ -1260,5 +1260,52 @@ class TestUnROSSOGIASUPERATONonPuoGRIDAREPERSEMPRE(unittest.TestCase):
             "ko", "un job SCADUTO non viene piu' visto come rosso")
 
 
+class TestIlWatchdogGuardaLOrologioDelServer(unittest.TestCase):
+    """⛔ D20 — scritta PRIMA del blocco nello script e vista ROSSA senza. Ricerca R3
+    (2026-09-15): se l'orologio del server deriva oltre 5 minuti, Stripe rifiuta i webhook
+    come replay (fase87, tolleranza 300 s = librerie Stripe) e i pagamenti restano fermi SENZA
+    una riga d'errore: un guasto muto per costruzione, che si vede solo da fuori. Il watchdog
+    chiede a `timedatectl`. Qui si eseguono LE RIGHE VERE dello script -- non una copia in
+    Python, non una ricerca di parole (sbaglio S6) -- con l'esito di `timedatectl` finto, e le
+    due direzioni stanno nella stessa prova («meno guardie», il fondatore, 15/9). La shell
+    POSIX si trova e si prova come fa la classe qui sopra, che ne presta i due metodi."""
+
+    SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "deploy", "watchdog.sh")
+    _shell_posix = TestUnROSSOGIASUPERATONonPuoGRIDAREPERSEMPRE._shell_posix
+    _risponde_pronta = TestUnROSSOGIASUPERATONonPuoGRIDAREPERSEMPRE._risponde_pronta
+
+    def _righe_dell_orologio(self):
+        with open(self.SCRIPT, encoding="utf-8", errors="replace") as f:
+            righe = f.read().replace("\r\n", "\n").split("\n")
+        inizio = next((i for i, r in enumerate(righe)
+                       if r.startswith("# ── l'orologio del server")), None)
+        self.assertIsNotNone(inizio, "in %s non c'e' il blocco dell'orologio del server: se "
+                                     "l'hanno spostato questa guardia va ri-ancorata, non tolta"
+                                     % self.SCRIPT)
+        fine = next((i for i in range(inizio, len(righe))
+                     if righe[i].startswith("# ── fine orologio")), None)
+        self.assertIsNotNone(fine, "trovato l'inizio del blocco dell'orologio ma non la fine")
+        return "\n".join(righe[inizio:fine + 1])
+
+    def _allarmi(self, esito_timedatectl):
+        sh = self._shell_posix()
+        self.assertIsNotNone(sh, "nessuna shell POSIX trovata, nemmeno quella di Git: e' un "
+                                 "guasto dell'ambiente da riparare, non un collaudo da saltare")
+        programma = ('REMOTO=0\nattivi=""\nadd(){ attivi="$attivi$1\n"; }\n'
+                     'NTP_SYNC_OVERRIDE=%s\n' % esito_timedatectl
+                     + self._righe_dell_orologio() + '\nprintf "%s" "$attivi"\n')
+        p = subprocess.run(  # nosec B603 - righe ESTRATTE dal nostro script, nessun input esterno  # noqa: S603
+            [sh, "-c", programma], capture_output=True, text=True)
+        self.assertEqual(p.returncode, 0, "le righe estratte non girano: %s" % p.stderr)
+        return p.stdout
+
+    def test_orologio_NON_sincronizzato_grida_e_sincronizzato_tace(self):
+        self.assertIn("ntp|critico|", self._allarmi("no"),
+                      "timedatectl dice `no` e il watchdog tace: i pagamenti si fermerebbero "
+                      "in silenzio, che e' l'allarme mancato")
+        self.assertEqual("", self._allarmi("yes").strip(),
+                         "timedatectl dice `yes` e il watchdog grida: falso allarme (ferrea 10)")
+
+
 if __name__ == "__main__":
     unittest.main()

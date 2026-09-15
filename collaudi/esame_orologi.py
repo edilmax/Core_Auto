@@ -22,7 +22,9 @@ database: `fase162.scadenza_ts` (hold), `fase160.sblocco_auto_ts` (payout, check
 dal calendario, non da un orologio), e IL VERDETTO LO DA' STRIPE, riletto dopo ogni operazione.
 
 I TRE RAMI, e cosa Stripe rilegge:
-  HOLD    prenotazione con hold di 2 minuti su un alloggio a UNA unita'; pagamento VERO di prova
+  HOLD    prenotazione con l'hold del prodotto (`fase162.HOLD_SECONDI_DEFAULT`, letto e non
+          ricopiato: era «2 minuti» fino al 14/9, e` e660163` l'ha portato a 30 senza che questo
+          esame fosse rigirato) su un alloggio a UNA unita'; pagamento VERO di prova
           (pi_); l'orologio del pendente avanza di un'ora -> lo sweeper di produzione
           (`sweep_hold_una_passata`) fa scadere l'hold e libera la stanza -> un secondo ospite la
           prende -> arriva il webhook tardivo del primo pagamento -> `_conferma_pagamento` non
@@ -303,9 +305,15 @@ def ramo_hold(b, con_guasto=False):
     q, bk = b.prenota("villa-hold", "2027-04-05", "2027-04-08")
     rif, totale = bk["riferimento"], int(q["totale_cents"])
     rec = b.sis.pagamenti_pendenti.info(rif) or {}
-    passo("hold", "la prenotazione e' un hold 'in_attesa' con una scadenza di 2 minuti sul NOSTRO orologio",
-          rec.get("stato") == "in_attesa" and 0 < int(rec.get("scadenza_ts") or 0) - b.orologio_hold.ts <= 120,
-          "stato=%s scadenza-orologio=%s s" % (rec.get("stato"), int(rec.get("scadenza_ts") or 0) - b.orologio_hold.ts))
+    # ⛔ LA DURATA SI LEGGE DAL PRODOTTO, NON SI SCRIVE QUI (2026-09-15). C'era `<= 120`: il 14/9
+    # l'hold e' passato a 1800 s e questo passo e' diventato ROSSO su un prodotto giusto, senza
+    # che nessuno lo rigirasse. Rileggendo il registro dopo il giro intero si e' visto.
+    from fase162_pagamenti_pendenti import HOLD_SECONDI_DEFAULT
+    passo("hold", "la prenotazione e' un hold 'in_attesa' con la scadenza del prodotto sul NOSTRO orologio",
+          rec.get("stato") == "in_attesa"
+          and 0 < int(rec.get("scadenza_ts") or 0) - b.orologio_hold.ts <= HOLD_SECONDI_DEFAULT,
+          "stato=%s scadenza-orologio=%s s (hold del prodotto %d s)"
+          % (rec.get("stato"), int(rec.get("scadenza_ts") or 0) - b.orologio_hold.ts, HOLD_SECONDI_DEFAULT))
     pag = b.paga_su_stripe(totale, "hold " + rif)
     if "_errore" in pag:
         passo("hold", "Stripe ha accettato il pagamento di prova", False, repr(pag["_errore"]))

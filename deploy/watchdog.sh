@@ -153,6 +153,23 @@ for a in d.get("allarmi",[]):
   fi
 fi
 
+# ── l'orologio del server (ricerca R3, 2026-09-15) ───────────────────────────
+# Se l'orologio deriva oltre i 5 minuti, Stripe rifiuta i webhook come «replay» (fase87,
+# tolleranza 300 s = librerie Stripe) e i pagamenti restano fermi SENZA una riga d'errore:
+# un guasto muto per costruzione, che si vede solo da fuori. `timedatectl` risponde yes/no.
+# Senza `timedatectl` non si misura e non si grida (sbaglio S7: un vuoto non e' un verde).
+# ⛔ NTP_SYNC_OVERRIDE serve SOLO alla guardia (test_watchdog.py), che esegue QUESTE righe
+#    nelle due direzioni senza dover desincronizzare un server vero (D19).
+if [ "$REMOTO" != "1" ]; then
+  if [ -n "${NTP_SYNC_OVERRIDE:-}" ]; then NTP_SYNC="$NTP_SYNC_OVERRIDE"
+  elif command -v timedatectl >/dev/null 2>&1; then NTP_SYNC="$(timedatectl show -p NTPSynchronized --value 2>/dev/null)"
+  else NTP_SYNC=""; fi
+  if [ "$NTP_SYNC" = "no" ]; then
+    add "ntp|critico|l'orologio del server NON e' sincronizzato via NTP: oltre 5 minuti di scarto Stripe rifiuta i webhook come replay e i pagamenti restano fermi in silenzio"
+  fi
+fi
+# ── fine orologio ─────────────────────────────────────────────────────────────
+
 # normalizza: righe non vuote, ordinate
 attivi="$(printf '%s' "$attivi" | sed '/^$/d' | sort)"
 firma="$(printf '%s' "$attivi" | cut -d'|' -f1 | tr '\n' ',')"

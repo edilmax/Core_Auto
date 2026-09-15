@@ -2,7 +2,12 @@
 # Casa VIP gira su PURA STDLIB Python (zero dipendenze): nessuna installazione di
 # pacchetti, niente build-tools, immagine minuscola, non-root. Server stdlib (fase83).
 
-FROM python:3.11-slim
+# L'immagine base e' bloccata alla sua IMPRONTA (digest), non al solo nome: il nome
+# `3.11-slim` punta ogni settimana a un'immagine diversa, e senza impronta due build dello
+# stesso commit possono dare due produzioni diverse. E' l'unica dipendenza esterna della
+# produzione; l'impronta nuova la propone Dependabot (.github/dependabot.yml) con una PR.
+# Questa e' l'immagine del 2026-09-01 (Python 3.11.16), letta dal registro il 2026-09-15.
+FROM python:3.11-slim@sha256:9534e5a8e315485d4061ed659af0fd78a284c015f9b73661b41d6bab25604534
 
 # Niente .pyc, output non bufferato (log immediati). TUTTI i dati durevoli su /data
 # (il volume): DB + stato scheduler + opt-out outreach. Senza questo, account host,

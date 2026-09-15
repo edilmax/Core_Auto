@@ -1138,6 +1138,60 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
             "la lista tace: e' una divergenza sui conti che non ha nessuno che la guardi. "
             "Allarmi visti: %r" % (allarmi,))
 
+    def test_UN_RIMBORSO_DI_ARBITRATO_DECISO_DA_NOI_NON_E_UNA_DIVERGENZA(self):
+        """⛔ D20 — scritta PRIMA della riparazione e vista ROSSA sul codice di produzione.
+        Trovata il 2026-09-15 rileggendo il registro dopo `collaudi/e2e_rimborso_stripe.py`
+        contro Stripe di prova: dopo il ramo R6 (controversia risolta dall'arbitro, pulsante
+        premuto, Stripe restituisce ESATTAMENTE la cifra decisa) il server scriveva
+        `DIVERGENZA CONTI ... verificare a mano`. Ma quella prenotazione resta 'pagato' per
+        costruzione, perche' il soggiorno c'e' stato, e il rimborso l'abbiamo deciso NOI e
+        scritto nel giornale: non e' una divergenza. In produzione, dalla prima controversia
+        vera, ogni apertura di questa lista avrebbe mandato un falso allarme su Telegram
+        (ferrea 10). Le due direzioni in una prova sola: Stripe restituisce quanto deciso ->
+        nessun allarme; Stripe restituisce PIU' di quanto deciso -> allarme."""
+        import logging
+        rif, vt = self._prenota_e_paga("2026-09-25", "2026-09-27", "pi_arbitrato_15_9")
+        s, c = self.g("POST", "/api/garanzia/contesta", {"voucher_token": vt})
+        self.assertEqual(s, 200, "setup: la contestazione deve riuscire: %r" % (c,))
+        s, out = self.g("POST", "/api/admin/controversia/risolvi",
+                        {"riferimento": rif, "percentuale_ospite": 50}, {"X-Admin-Key": "ak"})
+        self.assertEqual(s, 200, "setup: l'arbitrato deve riuscire: %r" % (out,))
+        deciso = int(out.get("rimborso_cliente_cents") or 0)
+        self.assertGreater(deciso, 0, "setup: al 50%% all'ospite spetta qualcosa: %r" % (out,))
+
+        errori = []
+
+        class _Raccogli(logging.Handler):
+            def emit(self, record):
+                errori.append(record.getMessage())
+
+        raccogli = _Raccogli(level=logging.ERROR)
+        registro = logging.getLogger("core_auto.server")
+        registro.addHandler(raccogli)
+        try:
+            STRIPE_FINTO["rimborsi_per_pi"]["pi_arbitrato_15_9"] = [
+                {"id": "re_arbitrato", "status": "succeeded", "amount": deciso}]
+            allarmi = self._lista().get("allarmi") or []
+            self.assertFalse(
+                any(a.get("riferimento") == rif for a in allarmi),
+                "Stripe ha restituito ESATTAMENTE la cifra decisa dall'arbitro e la lista grida "
+                "«i conti divergono»: e' un falso allarme su un rimborso fatto da noi. "
+                "Allarmi: %r" % (allarmi,))
+            self.assertFalse(any("DIVERGENZA CONTI" in e for e in errori),
+                             "il registro scrive DIVERGENZA CONTI su un rimborso deciso da noi: "
+                             "arriverebbe su Telegram entro 10 minuti. Righe: %r" % (errori,))
+            # l'altra direzione: Stripe ha restituito PIU' di quanto abbiamo deciso
+            STRIPE_FINTO["rimborsi_per_pi"]["pi_arbitrato_15_9"] = [
+                {"id": "re_arbitrato", "status": "succeeded", "amount": deciso},
+                {"id": "re_in_piu", "status": "succeeded", "amount": 1000}]
+            allarmi = self._lista().get("allarmi") or []
+            self.assertTrue(
+                any(a.get("riferimento") == rif for a in allarmi),
+                "Stripe ha restituito PIU' di quanto deciso dall'arbitro e la lista tace: questa "
+                "si' che e' una divergenza. Allarmi: %r" % (allarmi,))
+        finally:
+            registro.removeHandler(raccogli)
+
     # ── PUNTO 3: prima di cliccare si vede tutto ────────────────────────────
     def test_PRIMA_DI_CLICCARE_SI_VEDE_TUTTO(self):
         """Punto 3: pagato · dovuto secondo la politica · da quanto aspetta · date liberate? ·
