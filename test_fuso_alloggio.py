@@ -143,6 +143,21 @@ class TestAncoraggioAiCalcoli(unittest.TestCase):
         hono = _istante_checkin("2026-09-05", "Pacific/Honolulu")
         self.assertNotEqual(tokyo, hono)
 
+    def test_il_cambio_d_ora_non_sposta_le_15_locali(self):
+        """Ricerca R3 (2026-09-15): quindici test in questo file e NESSUNO sul giorno del cambio
+        d'ora, che e' il modo di rompersi n. 7 (il tempo che passa). Le 15:00 locali restano le
+        15:00 locali anche quel giorno: fra il giorno prima e quello del cambio passano 23 ore a
+        marzo (un'ora saltata) e 25 a ottobre (un'ora ripetuta). Un calcolo con uno scarto
+        fisso darebbe 24 in tutt'e due i casi. Date di Europe/Rome nel 2026 secondo IANA: se
+        l'Europa abolira' il cambio, qui si aggiornano le date da IANA, non si cancella."""
+        marzo = _istante_checkin("2026-03-29", "Europe/Rome") - _istante_checkin("2026-03-28", "Europe/Rome")
+        ottobre = _istante_checkin("2026-10-25", "Europe/Rome") - _istante_checkin("2026-10-24", "Europe/Rome")
+        self.assertEqual(marzo / 3600, 23, "a marzo il giorno del cambio dura 23 ore, non %s" % (marzo / 3600))
+        self.assertEqual(ottobre / 3600, 25, "a ottobre il giorno del cambio dura 25 ore, non %s" % (ottobre / 3600))
+        # la mezzanotte da cui si recensisce segue la stessa regola (00:00 di quel giorno)
+        notte = _mezzanotte_checkout("2026-10-26", "Europe/Rome") - _mezzanotte_checkout("2026-10-25", "Europe/Rome")
+        self.assertEqual(notte / 3600, 25, "la mezzanotte locale non segue il cambio d'ora")
+
 
 class TestLeGuardieDeiPuntiScoperti(unittest.TestCase):
     """Una guardia per ogni punto che il Giudice della mutazione ha trovato SCOPERTO

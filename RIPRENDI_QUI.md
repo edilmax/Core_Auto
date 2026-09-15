@@ -395,6 +395,62 @@ giri di mutazione da 60 e 600 minuti dichiarati. Guardia `TestUnaCasellaSCADUTAD
 vista rossa prima (3 su 3). **Misurato adesso: 9 caselle rilanciabili subito, 2 che vogliono il server.**
 🔑 **Quindi «15 caselle su 39» NON vuol dire che il lavoro sia fermo:** vuol dire che gran parte delle misure è
 scaduta e va rifatta. Il primo lavoro utile è rilanciare quei 9 attrezzi.
+**🧭 15 SETTEMBRE, pomeriggio — IL GIRO INTERO COL REGISTRO RILETTO: UN FALSO ALLARME SUI RIMBORSI, UN ESAME FERMO, UN BANCO NELLA CARTELLA SBAGLIATA; E OROLOGIO, CAMBIO D'ORA, IMMAGINE BLOCCATA (ramo `orologio-e-immagine-2026-09-15`, «autorizzato su tutto»)**
+
+> **Chiuso prima, e misurato.** Blocco 1: PR #187 unita via REST con `gate: success` (16 job `success`, `zap` skipped), master
+> `a191e7c`, deploy D17 alle 13:48 italiane: punto di ritorno `49081c3` riletto, paracadute ri-agganciato da `7eac6a08…` a
+> `6625b10c…`, backup `finanza-20260915-101431` aperto, avvio `money_path_pronto True` e `avvisi []`, immagine `f6ce788a…`,
+> sonde 200/200/403, giudice 190 controlli 0 violazioni. Sul server vero il giudice ha scritto `giudice_ultima_sonda`
+> (`1789472949 1789472949`) e, con 3 righe CRITICAL del deploy nel registro, `errori_freschi` in sola lettura dice
+> **`conta 0`** (ieri lo stesso passo dava `conta 3` e un Telegram). ⚠️ Il Guardiano al riavvio ha contato 34 righe di ieri,
+> non dichiarate da nessuno, e resta ANOMALO fino al suo giro delle ~11:48 UTC del 16/9; il watchdog lo ripete ogni 6 ore.
+> Blocco 2: PR #188 (la ricerca R3 nei documenti; suite `Ran 6819 · OK (skipped=4) · USCITA_DIRETTA=0`) unita con
+> `gate: success`: master **`2e4e94d`**, e sul VPS `git pull` da `a191e7c` a `2e4e94d` (solo documenti). Tre posti su `2e4e94d`.
+> **Il giro intero, col registro riletto riga per riga** (il fondatore: «simulazione browser che fa prenotazioni e tutto
+> quello che si può fare e poi vedere i log se ci sono errori»). Gli attrezzi montano il sistema nel proprio processo e non
+> configurano il registro: nessuno rileggeva gli ERROR. Misurato con un involucro fuori dal progetto e il registro nel formato
+> di produzione: clickthrough dei 3 pannelli uscita 0; percorso ospite-host uscita 0 nei due atti (rifiuto senza gateway,
+> conferma); `percorso_e2e` uscita 0; `e2e_credito_stripe` 15/15 e `e2e_rimborso_stripe` 31/31 contro Stripe di prova;
+> `esame_orologi` **ROSSO 1 su 34**. Nei registri, oltre alle righe attese (chiave finta, controversia aperta apposta,
+> pagamento tardivo da rimborsare, prenotazione rifiutata senza gateway), tre cose vere:
+> ① **`DIVERGENZA CONTI` su un rimborso di arbitrato deciso da noi**: difetto VIVO, riparato qui (sotto);
+> ② **l'esame degli orologi pretendeva un hold di 2 minuti**, e dal 14/9 (`e660163`) l'hold del prodotto è di 1800 s: prodotto
+> giusto, esame fermo (METODO PARTE 20.3); ③ **il banco visivo guardava `data/uploads` del computer** (1220 file, 680
+> «orfani»): la pulizia si è fermata solo per il suo paracadute. «AVVISO HOST NON PARTITO» in ogni banco NON è un difetto:
+> lì non c'è posta e l'host non ha LINE né WeChat; in produzione l'avvio dice `avvisi []`, cioè la posta è configurata.
+> **Cosa cambia in questo blocco** (13 file dichiarati, allargati col motivo scritto):
+> · `fase83_server.py`, `_admin_rimborsi_dovuti`: la divergenza si misura contro i rimborsi scritti nel giornale, non contro lo
+>   stato; diverge solo ciò che Stripe ha restituito OLTRE (`deciso_da_noi_cents` nell'allarme e nella riga). Guardia
+>   `test_UN_RIMBORSO_DI_ARBITRATO_DECISO_DA_NOI_NON_E_UNA_DIVERGENZA`, due direzioni, vista ROSSA prima (`Allarmi: [{…
+>   'rimborsato_su_stripe_cents': 45000 …}]`), poi verde; modulo intero 46 OK; `e2e_rimborso_stripe` rifatto: 31/31 e **0**
+>   righe `DIVERGENZA CONTI` nel registro.
+> · `deploy/watchdog.sh`: blocco «l'orologio del server»: se `timedatectl` dice `NTPSynchronized=no` grida `ntp|critico` (oltre
+>   5 minuti di scarto Stripe rifiuta i webhook come replay e i pagamenti restano fermi senza una riga d'errore). Guardia
+>   `TestIlWatchdogGuardaLOrologioDelServer`, che esegue le righe vere: rossa senza il blocco, rossa col guasto iniettato
+>   (`'ntp|critico|' not found in ''`), ripristino byte-identico (`fdf90a1c…`), verde.
+> · `test_fuso_alloggio.py`: `test_il_cambio_d_ora_non_sposta_le_15_locali` (23 ore a marzo, 25 a ottobre, Europe/Rome 2026):
+>   rosso con uno scarto fisso iniettato in memoria (`24.0 != 23`), verde sul prodotto.
+> · `Dockerfile.casavip` e `Dockerfile`: `FROM python:3.11-slim@sha256:9534e5a8…` (immagine del 1° settembre, Python
+>   **3.11.16**; in produzione oggi gira 3.11.15, quindi il deploy di questo blocco aggiorna Python di una patch) e
+>   `.github/dependabot.yml` (docker + github-actions, settimanale): l'unica dipendenza della produzione è bloccata e sorvegliata.
+> · `collaudi/esame_orologi.py`: la durata dell'hold letta da `fase162.HOLD_SECONDI_DEFAULT`; `--autoprova` OK e `--ramo hold`
+>   contro Stripe di prova **13/13**. `collaudi/avvia_server_visivo.py`: `UPLOAD_DIR` dentro `BANCO_DATI` (`data/uploads` con 1220
+>   file prima e dopo, 0 righe «pulizia uploads»). `collaudi/METODO_v4.md`: le lezioni in 3.2, 7.2, 7.4 e PARTE 8, la riga 16
+>   della PARTE 11, il rimando a R3.
+> **Misure prima della suite:** ruff e bandit «nessuna segnalazione nuova»; caricatore **6827**. La suite intera parte dopo
+> questi documenti, da ferma: il suo esito sta nel messaggio di commit e nella CI della PR.
+> **Rimisurato, e cambia la lista ⑤:** C11, C12 e C14 fatti qui; **C6 morto** (i due bombardamenti senza seme non usano il
+> caso); **C7 e C8 rimandati col motivo**: in produzione c'è **un solo annuncio**, `filippine-makati-2`, con paese `XX` e fuso
+> vuoto, quindi il ritardo di tzdata oggi non tocca nessuno; anche l'immagine del 1° settembre ha tzdata **2026b**, e
+> `test_deploy_config.py` vieta `apt-get install` e `pip install` nel Dockerfile: un allarme tzdata griderebbe da subito e per
+> sempre (ferrea 10). Si riapre al primo annuncio con un fuso vero. ⚠️ **L'unico annuncio pubblico del sito è una prova con
+> paese `XX`**: decide il fondatore se toglierlo (D8).
+> **Dopo il deploy di questo blocco, da verificare sul server:** `timedatectl show -p NTPSynchronized --value` = `yes` e nessun
+> `ntp` nel `watchdog.log`; l'immagine nuova con base `9534e5a8…`; sonde e giudice.
+> **Poi:** la CI rilegge il registro dei banchi con un elenco dichiarato delle righe attese (oggi il giro intero è verde anche
+> con un ERROR vero dentro: è così che ① è rimasto nascosto); il foglio `collaudi/piano.py` (le 8 caselle scadute del blocco
+> Soldi, e `esame_orologi` ora si può rispuntare); C1, C3, C4, C5, C9, C16, C19, C15, C18, C10 della lista ⑤.
+
 **🧭 15 SETTEMBRE, mattina — IL RUMORE DEGLI ALLARMI CHIUSO ALLA RADICE (ramo `rumore-allarmi-2026-09-15`, «autorizzato» del fondatore)**
 
 > **Perché.** La chat della notte (ricontrollo a occhi freschi delle 13 riparazioni delle PR #184-#186: tutte giuste,
@@ -430,7 +486,7 @@ scaduta e va rifatta. Il primo lavoro utile è rilanciare quei 9 attrezzi.
 > `TestBombardamentoCalendarioTutti`, `TestConcorrenzaDenaro`), accessi (`TestLEsameDegliAccessiNonPuoBARARE`,
 > `TestBunkerEndpoint`, `TestUnaPortaChiusaNonEUnaIntrusione`), webhook (`TestWebhookGuarigione`,
 > `TestWebhookStripeEsitiPersi`, `TestCrashRecoveryWebhook`, `TestCaosRete`). Niente da riscrivere: solo i buchi provati.
-> **⑤ RICERCA D25 DEL 15/9 — i controlli candidati, con fonte e misura (nessuno iniziato; il fondatore ha scritto
+> **⑤ RICERCA D25 DEL 15/9 — i controlli candidati, con fonte e misura (C11, C12 e C14 fatti il pomeriggio, C6 morto: blocco del pomeriggio qui sopra; il fondatore ha scritto
 > «autorizzato su tutto», ma ogni modifica ai `fase*.py` entra con la guardia vista rossa prima, D20; le fonti per esteso
 > sono nella voce R3 dell'appendice del registro).** Trovato «dove nessuno guardava», misurato il 15/9: **286 gestori
 > `except` MUTI su 987** nei moduli di produzione (AST: corpo = pass/continue/return costante, nessun log né raise; 78 in
@@ -3023,9 +3079,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 49081c3
+CONSEGNE AGGIORNATE A: 7e111c9
 
-SUITE ATTUALE: Ran 6824 test
+SUITE ATTUALE: Ran 6827 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

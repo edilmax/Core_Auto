@@ -37,6 +37,12 @@ def _prepara(porta):
     d = os.environ.get("BANCO_DATI") or tempfile.mkdtemp(prefix="visivo_")
     os.makedirs(d, exist_ok=True)
     print("BANCO_DATI: %s" % d, flush=True)
+    # ⛔ ANCHE LE FOTO STANNO NEL BANCO (2026-09-15). Senza, `UPLOAD_DIR` valeva il ripiego
+    # relativo `data/uploads`, cioe' la cartella del PROGETTO sul computer di chi lancia: la
+    # pulizia automatica all'avvio ci ha contato 680 «orfani» su 1220 file e si e' fermata solo
+    # per il suo paracadute (piu' della meta'). Con meno orfani li avrebbe cancellati davvero.
+    os.environ.setdefault("UPLOAD_DIR", os.path.join(d, "uploads"))
+    os.makedirs(os.environ["UPLOAD_DIR"], exist_ok=True)
     sistema = crea_sistema(ConfigCasaVIP(
         abilitato=True, segreto_hmac=b"V" * 32, con_registrazione_host=True,
         db_catalogo=f"{d}/c.db", db_inventario=f"{d}/i.db", db_registro_host=f"{d}/r.db",

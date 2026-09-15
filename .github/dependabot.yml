@@ -1,0 +1,19 @@
+# Dependabot: l'unica dipendenza esterna della produzione e' l'immagine base dei Dockerfile (la
+# produzione gira su pura libreria standard: misurato il 2026-09-15, zero pacchetti Python nel
+# contenitore oltre a pip, setuptools e wheel). Con la riga FROM bloccata a un'impronta (digest),
+# e' Dependabot a proporre l'impronta nuova quando esce un'immagine nuova, con una PR che passa
+# dalla CI come tutte le altre. Le Actions dei workflow sono la seconda dipendenza esterna.
+# Le librerie Python della CI (requirements.txt) restano a pip-audit, nel cricchetto statico:
+# non entrano nell'immagine di produzione. Ricerca R3 in REGISTRO_INGEGNERIA.md.
+version: 2
+updates:
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 1
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 2

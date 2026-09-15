@@ -403,7 +403,57 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
-### 🔕 IL NOSTRO GIUDICE NON È UN INTRUSO, E IL GUARDIANO NON SI RILEGGE — 15 settembre, mattina, «autorizzato» (ramo `rumore-allarmi-2026-09-15`)
+### 🧾 UN RIMBORSO DECISO DA NOI NON È UNA DIVERGENZA — e l'orologio del server, il cambio d'ora, l'immagine bloccata — 15 settembre, pomeriggio, «autorizzato su tutto» (ramo `orologio-e-immagine-2026-09-15`)
+
+**Com'è uscito, e non è teoria.** Il fondatore ha chiesto una simulazione nel browser «che fa prenotazioni e tutto quello che
+si può fare, e poi vedere i log». Gli attrezzi del giro intero (`avvia_server_visivo`, `percorso_e2e`, `e2e_credito_stripe`,
+`e2e_rimborso_stripe`, `esame_orologi`) montano il sistema nel proprio processo e **non configurano il registro**: gli ERROR
+finivano sul gestore di ripiego di Python e nessuno li rileggeva. Con un involucro fuori dal progetto (registro nel formato di
+`main_casavip`) il giro è stato tutto verde tranne `esame_orologi` (1 rosso su 34), e i registri riletti hanno dato tre cose:
+(1) `DIVERGENZA CONTI | … Stripe ha rimborsato 17007 cents su una prenotazione che per noi e' pagata e viva` dopo il ramo R6 di
+`e2e_rimborso_stripe` (controversia risolta dall'arbitro, pulsante premuto): un **falso allarme** su un rimborso deciso da noi,
+che in produzione sarebbe arrivato su Telegram a ogni apertura della lista dalla prima controversia vera; (2) l'esame degli
+orologi pretendeva `<= 120` secondi di hold, e `e660163` (14/9) aveva portato `HOLD_SECONDI_DEFAULT` da 120 a 1800 senza che
+nessuno lo rigirasse; (3) il banco visivo usava il ripiego relativo `data/uploads`, cioè la cartella del computer: 680
+«orfani» su 1220, pulizia fermata solo dal paracadute. «AVVISO HOST NON PARTITO» in ogni banco non è un difetto: nei banchi
+non c'è posta e l'host non ha LINE né WeChat (`canali=2` sono proprio LINE e WeChat, saltati per contatto mancante); in
+produzione l'avvio ha `avvisi []`, cioè la posta c'è.
+
+**Cosa è cambiato nel codice.**
+· `fase83_server.py`, `_admin_rimborsi_dovuti` (+20/-3): prima di gridare si sommano i movimenti `rimborso` del giornale
+immutabile per quella prenotazione; diverge solo ciò che Stripe ha restituito **oltre** (`quanto <= nostro` → niente allarme;
+giornale illeggibile = 0, nel dubbio si grida). L'allarme e la riga ERROR portano `deciso_da_noi_cents`.
+· `deploy/watchdog.sh` (+17): blocco «l'orologio del server» fra le misure locali e la normalizzazione: `timedatectl show -p
+NTPSynchronized --value` = `no` → `ntp|critico`; senza `timedatectl` non misura e non grida; `NTP_SYNC_OVERRIDE` serve solo
+alla guardia. Motivo: oltre 5 minuti di scarto `fase87` rifiuta i webhook come replay (tolleranza 300 s, come le librerie
+Stripe) e i pagamenti restano fermi senza una riga d'errore.
+· `Dockerfile.casavip` e il gemello `Dockerfile`: `FROM python:3.11-slim@sha256:9534e5a8e315485d4061ed659af0fd78a284c015f9b73661b41d6bab25604534`
+(immagine del 2026-09-01, Python 3.11.16, letta sul VPS con `docker pull` il 15/9); `.github/dependabot.yml` nuovo (docker +
+github-actions, settimanale).
+· `collaudi/esame_orologi.py`: la durata dell'hold si legge da `fase162.HOLD_SECONDI_DEFAULT`. `collaudi/avvia_server_visivo.py`:
+`UPLOAD_DIR` dentro `BANCO_DATI`. `collaudi/METODO_v4.md`: le lezioni della ricerca R3 e di questo giro (3.2, 7.2, 7.4, PARTE 8,
+riga 16 della PARTE 11).
+
+**Guardie** (D20; «meno guardie»: una per difetto, le due direzioni dentro):
+`test_UN_RIMBORSO_DI_ARBITRATO_DECISO_DA_NOI_NON_E_UNA_DIVERGENZA` in `test_admin_rimborso_money.py` — rossa prima (`Allarmi:
+[{'riferimento': '518663578a975a79caea7858', 'payment_intent': 'pi_arbitrato_15_9', 'rimborsato_su_stripe_cents': 45000, …}]`),
+verde dopo, modulo intero 46 OK; un primo rosso per il motivo SBAGLIATO (date di ottobre fuori dalla finestra del banco,
+`KeyError: 'quote_token'`) è stato scartato e non contato. `TestIlWatchdogGuardaLOrologioDelServer` in `test_watchdog.py` —
+esegue le righe vere dello script: rossa senza il blocco, rossa col guasto iniettato con l'editor (`'ntp|critico|' not found in
+''`), ripristino dalla copia byte-identico (sha256 `fdf90a1c…`), verde. `test_il_cambio_d_ora_non_sposta_le_15_locali` in
+`test_fuso_alloggio.py` — rosso con uno scarto fisso iniettato in memoria (`24.0 != 23`), verde sul prodotto.
+**Giudici esterni rifatti:** `e2e_rimborso_stripe` 31/31 con **0** righe `DIVERGENZA CONTI`; `esame_orologi --autoprova` OK e
+`--ramo hold` 13/13 contro Stripe di prova; banco visivo avviato 20 s: `data/uploads` 1220 file prima e dopo, 0 righe «pulizia
+uploads». Dockerfile: `test_parita_ambiente test_deploy_config test_deploy_casavip` Ran 81 OK. Ruff e bandit «nessuna
+segnalazione nuova». Caricatore **6827**.
+**STATO:** tutto acceso al deploy D17 di questo blocco (immagine ricostruita sulla base bloccata; il watchdog gira dal
+repository sul VPS, quindi il blocco NTP vale dal `git pull`); Dependabot si accende all'unione su `master`, l'unico ramo che
+legge. **Limiti dichiarati (D18 punto 3):** la guardia NTP prova le righe con l'esito finto, non `timedatectl` sul server (va
+letto dopo il deploy); con l'impronta bloccata gli aggiornamenti di sicurezza dell'immagine base arrivano solo con la PR
+settimanale di Dependabot; tzdata resta 2026b anche nell'immagine nuova (C7 e C8 rimandati: un solo annuncio, di prova); la
+CI non rilegge ancora il registro dei banchi, quindi un giro verde con un ERROR vero dentro resta possibile altrove.
+
+### 🔕 IL NOSTRO GIUDICE NON È UN INTRUSO, E IL GUARDIANO NON SI RILEGGE — 15 settembre, mattina, «autorizzato» (ramo `rumore-allarmi-2026-09-15`) — ✅ IN PRODUZIONE con la PR #187 (`a191e7c`, deploy D17 delle 11:48 UTC; sul server `giudice_ultima_sonda` scritto e `errori_freschi conta 0` con 3 righe CRITICAL del deploy presenti)
 
 **Cosa è cambiato nel codice.** `fase178_watchdog.py`: costante `NOME_SONDE_GIUDICE` (`giudice_ultima_sonda`, nella
 cartella dei dati, accanto al battito e all'esito); `dichiara_sonde_giudice(dir_dati, inizio=, fine=)`, l'UNICO scrittore

@@ -125,6 +125,9 @@ Non è teoria: Uber ci ha messo 2 anni e 40 ingegneri a passarci; Airbnb 4 anni;
 
 I conti minimi da avere: *Incassi da ospiti*, *Debito verso host*, *Ricavi commissioni*, *Commissioni fornitore*, *Rimborsi*, *Dispute*.
 
+- [ ] **Un conto di transito per ogni flusso** (incasso → trattenuto → versato all'host): il suo saldo deve tornare a **zero**. Una transazione mancante, tardiva o sbagliata lascia un saldo diverso da zero, e la trova **una domanda sola**: «quali conti di transito non sono a zero?». È il metodo del registro interno di Stripe (Ganelin, *Ledger*, Stripe 2024), che così verifica il 99,99% del volume entro 4 giorni.
+- [ ] **Una divergenza si misura contro quello che ho deciso io, non contro lo stato.** «Stripe ha restituito dei soldi su una prenotazione ancora pagata» non è una divergenza se quel rimborso l'ho deciso io (una controversia risolta lascia la prenotazione pagata per costruzione). Diverge solo ciò che Stripe ha restituito **oltre** i rimborsi scritti nel mio registro. Trovato il 15 settembre 2026: il controllo gridava su ogni rimborso di arbitrato.
+
 ## 3.3 — Idempotenza
 
 Il caso che uccide: mando l'addebito, la connessione cade prima della risposta. Ha funzionato? Non lo so.
@@ -408,6 +411,8 @@ Legami veri senza sapere il risultato giusto di nessuna delle due.
 
 **Poche relazioni ben diverse fra loro battono venti relazioni simili.**
 
+Si chiamano **relazioni metamorfiche**, e sono la risposta a chi non conosce il risultato giusto: la rassegna di riferimento (Chen e altri, *ACM Computing Surveys*, 2018) le indica proprio per i calcoli numerici e finanziari, e riporta che relazioni **eterogenee** trovano più difetti di relazioni simili.
+
 ## 7.3 — Modello di riferimento eseguibile
 
 Il metodo usato da Amazon su un componente di S3 da 40.000 righe. Ha impedito a 16 problemi di arrivare in produzione, ed è stato esteso da persone non esperte.
@@ -424,6 +429,9 @@ Da fare su: calcolo prezzo, divisione commissioni, calcolo saldi.
 - [ ] Le invarianti della 7.1 girano ogni ora sui dati veri
 - [ ] Allarme quando una salta
 - [ ] Riconciliazione notturna (PARTE 3.7)
+- [ ] **Ogni allarme si giudica con quattro numeri** (Google, *SRE Workbook*, cap. 5): **precisione** (quanti allarmi erano veri), **richiamo** (quanti guasti veri hanno suonato), **tempo di rilevazione**, **tempo di reset** (quanto continua a suonare dopo che il guasto è finito). Il rumore del 14-15 settembre 2026 era precisione bassa e reset lungo: il nostro stesso verificatore fabbricava un allarme che si ripeteva per un giorno.
+- [ ] **Una sonda che risponde non prova che il prodotto funzioni.** «La sonda di salute può riuscire mentre l'applicazione fallisce» (Huang e altri, *Gray Failure*, HotOS 2017). Accanto alla sonda di salute serve almeno una sonda **dal lato dell'ospite**, in sola lettura.
+- [ ] **Il registro si rilegge anche dopo i collaudi, non solo in produzione.** Un giro intero che finisce verde con righe ERROR nel registro non è verde finché ogni riga non ha un nome. Il 15 settembre 2026 il giro intero era tutto verde, e il registro riletto ha mostrato un falso allarme sui rimborsi, un esame fermo a una durata cambiata il giorno prima e un banco di prova che guardava la cartella delle foto del computer.
 
 ---
 
@@ -438,6 +446,9 @@ Da fare su: calcolo prezzo, divisione commissioni, calcolo saldi.
 - [ ] **Tipi rigorosi** in modo severo
 - [ ] **Tetto alla complessità** per funzione
 - [ ] **Mutation testing** — vedi PARTE 18.1
+- [ ] **Gli errori ingoiati si contano.** Un `except` che non scrive niente è un guasto muto per costruzione: fra gli incidenti di Azure studiati, il 17% dei guasti era corruzione silenziosa senza nessun errore, e il 35% dei difetti nei gestori d'errore era «ignorare la segnalazione» (Liu e altri, HotOS 2019). Nel percorso dei soldi il numero degli `except` muti si misura, e non deve crescere.
+
+Le fonti per esteso di queste righe, con quello che dicono e quello che **non** è stato adottato: `REGISTRO_INGEGNERIA.md`, appendice «Ricerche successive», voce **R3**.
 
 I nomi degli strumenti, tutti gratis, stanno nella PARTE 17.
 
@@ -505,6 +516,7 @@ Costa meno di 3 minuti a difetto. Alla fine ho la mappa di dove sono cieco — m
 | 13 | 2026-09-14 · l'avviso all'host di una prenotazione pagata poteva non partire senza lasciare traccia: `avvisa()` contava i falliti e i chiamanti scartavano il conteggio; l'email all'host non passava dal contatore `email_ko` | l'avversario del fronte notifiche, contando i 13 punti d'invio contro gli 8 tracciati | ERROR quando nessun canale ha consegnato (esiste: `TestUnAvvisoAllHostCheNonParteLasciaUnaTraccia`, 3 guardie, viste rosse prima) | per l'esemplare sì; i 5 punti d'invio fuori da `email_ko` restano |
 | 14 | 2026-09-14 · ogni guasto che conta scriveva una riga ERROR/CRITICAL nel momento in cui succedeva, ma l'unico lettore automatico (il Guardiano) passava una volta al giorno: fino a 24 ore fra il danno e la persona | il fondatore: «se il danno succede adesso lo devo sapere subito» — la domanda «QUANDO lo sa una persona?» applicata alla catena degli allarmi | il watchdog (ogni 10 minuti, Telegram) legge le righe ERROR/CRITICAL degli ultimi 15 minuti e grida con la riga dentro (esiste: `TestUnErroreFrescoArrivaSuTelegramEntroDieciMinuti`, 4 guardie, viste rosse prima; provata anche sul registro vero del server, che tace a macchina sana) | sì: la latenza dell'allarme è ora 10 minuti per tutto ciò che scrive ERROR/CRITICAL |
 | 15 | 2026-09-14 · `_bunker_auth` scriveva CRITICAL per QUALUNQUE negazione, anche a sessione assente: 33 sonde del NOSTRO giudice (`verifica_produzione.py`, a ogni deploy) sono diventate «7 stati anomali» del Guardiano e un Telegram — il primo falso allarme fabbricato da noi, il giorno stesso in cui le righe CRITICAL hanno avuto un lettore | la catena nuova (riga 9 + riga 11) che ha funzionato fino in fondo sul server vero, e la domanda «di chi è quell'IP?» (era il server) | «assente» → WARNING, «presente ma non valida» → CRITICAL; guardia nelle due direzioni (esiste: `TestUnaPortaChiusaNonEUnaIntrusione`, vista rossa prima) | per l'esemplare sì; la famiglia «il nostro strumento di verifica produce righe che un altro nostro strumento legge come guasto» chiusa il 2026-09-15: il giudice DICHIARA la finestra delle sue sonde (`giudice_ultima_sonda`, `fase178.dichiara_sonde_giudice`) e i due lettori del registro la onorano con un solo criterio condiviso (`fase178.riga_di_rumore_nostro`), che salta anche la riga-riassunto del Guardiano — quella con cui, riletta il giorno dopo, si teneva acceso da solo (misurato: `conta 33` = 32 sonde + 1 riga sua). Una guardia per lettore, le due direzioni dentro |
+| 16 | 2026-09-15 · la lista dei rimborsi dovuti gridava «DIVERGENZA CONTI» su ogni rimborso di arbitrato deciso da noi (la prenotazione resta pagata per costruzione): dalla prima controversia vera, un falso allarme su Telegram a ogni apertura della lista | rileggendo il registro dopo il giro intero contro Stripe di prova (`collaudi/e2e_rimborso_stripe.py`, ramo R6), che era verde 31 su 31 | la divergenza si misura contro i rimborsi scritti nel giornale, non contro lo stato (esiste: `test_UN_RIMBORSO_DI_ARBITRATO_DECISO_DA_NOI_NON_E_UNA_DIVERGENZA`, due direzioni, vista rossa prima) | per l'esemplare sì; la famiglia «un collaudo verde con righe ERROR nel registro» resta aperta finché la CI non rilegge il registro dei banchi |
 
 Poi conto per famiglia. **La famiglia con più difetti è quella dove mi manca uno strato.**
 

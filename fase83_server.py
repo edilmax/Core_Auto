@@ -4895,14 +4895,31 @@ class RouterHTTP:
             quanto = int(esito.get("rimborsato_cents") or 0)
             if quanto <= 0:
                 continue
+            # ⛔ UN RIMBORSO DECISO DA NOI NON E' UNA DIVERGENZA (2026-09-15). Una controversia
+            # risolta resta 'pagato' per costruzione (il soggiorno c'e' stato) e il pulsante
+            # restituisce la cifra dell'arbitro, scritta nel giornale: qui si gridava lo stesso,
+            # e dalla prima controversia vera ogni apertura di questa lista avrebbe mandato un
+            # falso allarme su Telegram (ferrea 10). Trovato rileggendo il registro dopo
+            # `collaudi/e2e_rimborso_stripe.py` contro Stripe di prova. Diverge solo cio' che
+            # Stripe ha restituito OLTRE i rimborsi del giornale; un giornale illeggibile vale
+            # zero, cioe' nel dubbio si grida.
+            try:
+                nostro = sum(int(m.get("importo_cents") or 0)
+                             for m in fc.movimenti(str(rec.get("riferimento") or ""))
+                             if (m.get("tipo") or "") == "rimborso")
+            except Exception:
+                nostro = 0
+            if quanto <= nostro:
+                continue
             allarmi.append({"riferimento": rec.get("riferimento"), "payment_intent": pi_,
                             "rimborsato_su_stripe_cents": quanto,
+                            "deciso_da_noi_cents": nostro,
                             "motivo": "Stripe ha restituito dei soldi su una prenotazione che "
                                       "per noi risulta PAGATA e mai cancellata: i conti "
                                       "divergono"})
-            logger.error("DIVERGENZA CONTI | rif %s | Stripe ha rimborsato %d cents su una "
-                         "prenotazione che per noi e' pagata e viva: verificare a mano",
-                         rec.get("riferimento"), quanto)
+            logger.error("DIVERGENZA CONTI | rif %s | Stripe ha rimborsato %d cents (deciso da noi "
+                         "%d) su una prenotazione che per noi e' pagata e viva: verificare a mano",
+                         rec.get("riferimento"), quanto, nostro)
         if not controllabile:
             for r in righe:
                 r["bottone"] = False       # non si preme senza aver potuto verificare
