@@ -13743,6 +13743,107 @@ cablata che ha smesso di essere futura). Come si trovano gli altri, senza gridar
   forte di quella casuale — e infatti e' lei ad aver trovato il caso che il campione mancava.
 
 
+### R3 — 2026-09-15 · Dove nessuno guarda: guasti muti, libro dei soldi, tempo e calendari, voucher, catena di fornitura
+
+**La domanda.** Il fondatore, con l'abbonamento in scadenza e senza budget per una revisione esterna: *«esisterà
+qualcosa? solo con ricerche prolungate da fonti vere e autoritarie… ogni giorno esce qualcosa di nuovo dove nessuno
+guarda»*. Ricerca mirata su cinque domande di QUESTA macchina, ognuna con almeno due fonti primarie e una misura fatta
+lo stesso giorno sul repository o sul server (in sola lettura, durante la suite). Più due elenchi di contromisure
+incollati dal fondatore da un'altra IA, misurati uno per uno invece di crederci.
+
+**Le fonti lette** (2026-09-15):
+- *Gray Failure: The Achilles' Heel of Cloud-Scale Systems*, Huang, Guo, Zhou, Lorch, Dang, Chintalapati, Yao,
+  **HotOS 2017**. https://www.microsoft.com/en-us/research/wp-content/uploads/2017/06/paper-1.pdf
+- *What bugs cause production cloud incidents?*, Liu, Lu, Musuvathi, Nath, **HotOS 2019** (112 incidenti Azure).
+  PDF: https://people.cs.uchicago.edu/~shanlu/paper/hotos19_azure.pdf (certificato non verificabile dal PC: letto
+  tramite la sintesi *the morning paper*, 2019-06-21, https://blog.acolyer.org/2019/06/21/what-bugs-cause-cloud-production-incidents/)
+- Google SRE Book, cap. 6 *Monitoring Distributed Systems* (Ewaschuk, Beyer), https://sre.google/sre-book/monitoring-distributed-systems/
+- Google SRE Workbook, cap. 5 *Alerting on SLOs* (Thurgood et al.), https://sre.google/workbook/alerting-on-slos/
+- Ganelin, *Ledger: Stripe's system for tracking and validating money movement*, **Stripe, 2024-02-16**,
+  https://stripe.dev/blog/ledger-stripe-system-for-tracking-and-validating-money-movement
+- Chen, Kuo, Liu, Poon, Towey, Tse, Zhou, *Metamorphic Testing: A Review of Challenges and Opportunities*,
+  **ACM Computing Surveys 51(1), 2018**, https://dl.acm.org/doi/10.1145/3143561
+- FoundationDB, *Simulation and Testing*, https://apple.github.io/foundationdb/testing.html
+- TigerBeetle, *VOPR* (docs/internals/vopr.md), https://github.com/tigerbeetle/tigerbeetle/blob/main/docs/internals/vopr.md
+- **RFC 5545** §3.6.1 e §3.3.5 (iCalendar), https://www.rfc-editor.org/rfc/rfc5545
+- IANA tz-announce 2026a/b/c/d, https://lists.iana.org/hyperkitty/list/tz-announce@iana.org/latest ; versione
+  corrente: https://data.iana.org/time-zones/tzdb/version
+- Python docs, *zoneinfo — Data sources*, https://docs.python.org/3/library/zoneinfo.html
+- OWASP WSTG (stable) 4.10.0, 4.10.5 BUSL-05, 4.10.6 BUSL-06,
+  https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/10-Business_Logic_Testing/
+- OWASP *Automated Threats to Web Applications* **v1.3, 2026-03-17**, https://owasp.org/www-project-automated-threats-to-web-applications/
+- Stripe docs: *Webhooks* https://docs.stripe.com/webhooks · *Idempotent requests* https://docs.stripe.com/api/idempotent_requests
+- SQLite: *Write-Ahead Logging* https://sqlite.org/wal.html · *busy_timeout* https://sqlite.org/c3ref/busy_timeout.html
+- pip, *Secure installs* (hash-checking mode), https://pip.pypa.io/en/stable/topics/secure-installs/
+- GitHub, *Dependabot options reference*, https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-options-reference
+- IERS, **Bulletin C 72, 2026-07-06**, https://datacenter.iers.org/data/latestVersion/bulletinC.txt
+
+**Cosa dicono.**
+1. **Gray failure** = «some of the system's components fail in ways that some observers see but others don't»;
+   «a health probe may succeed while the application fails»; rimedio: misurare dal lato dell'applicazione, più
+   osservatori; «gray failures often precede major outages».
+2. **Azure, 112 incidenti**: bug software ~40%; fra i guasti, corruzione **silenziosa senza errore 17%**, componenti
+   bloccati 29%; nei gestori d'errore «ignoring error reports 35%, over-reacting 35%, infinite loops 30%»;
+   data-format 21%; 56% risolti mitigando senza patch.
+3. **SRE**: «every page should be actionable»; sintomi (ciò che vede l'utente) per gli allarmi, cause per la
+   diagnosi; un allarme si giudica con **precisione, recall, tempo di rilevazione, tempo di reset**.
+4. **Stripe Ledger**: partita doppia; conti di clearing che devono tornare a zero («Find the clearing Accounts
+   with nonzero balance»); controlli di tempestività e di completezza («every ID in a producer database has a
+   matching Ledger event»); ticket automatici con proprietario; 99.99% del volume verificato entro 4 giorni.
+5. **Metamorphic testing**: relazione fra ingressi e uscite di PIÙ casi; risolve il problema dell'oracolo;
+   relazioni eterogenee trovano più difetti; indicato per calcoli numerici e finanziari.
+6. **FoundationDB / TigerBeetle**: orologio, rete e disco sostituiti da versioni controllabili; seme + commit
+   riproducono il bug; «one minute of VOPR time is equivalent to days of real-world testing».
+7. **RFC 5545**: «The DTEND property for a VEVENT specifies the non-inclusive end of the event»; DTSTART DATE senza
+   DTEND = un giorno; VTIMEZONE obbligatorio per ogni TZID; senza TZID è «floating time».
+8. **IANA 2026**: 2026a (2 mar, Moldova), 2026b (23 apr, British Columbia -07 permanente dal 2026-11-01), 2026c
+   (8 lug, Alberta -06 permanente; Marocco UTC dal 2026-09-20), **2026d (12 set, Northwest Territories -06)**.
+   Python `zoneinfo`: dati di sistema prima, poi il pacchetto PyPI `tzdata`; `PYTHONTZPATH=""` forza il pacchetto.
+9. **OWASP**: le falle di logica «cannot be detected by a vulnerability scanner»; BUSL-05 (funzione usata più volte
+   del dovuto: la risorsa si marca consumata sul server); BUSL-06 (aggirare il flusso: crediti accreditati, poi
+   transazione annullata); OAT-002 «Mass enumeration of coupon numbers, voucher codes, discount tokens».
+10. **Stripe**: ritentativi fino a **3 giorni** con attesa esponenziale (live); ordine **non garantito**; duplicati
+    possibili → registrare gli ID evento; rispondere 2xx prima della logica; «tolleranza predefinita di 5 minuti»
+    sul timestamp; chiavi di idempotenza conservate almeno 24 h e confrontate coi parametri.
+11. **SQLite**: «readers do not block writers and a writer does not block readers»; il WAL cresce senza limite solo
+    con un lettore sempre attivo; checkpoint automatico a ~1000 pagine; WAL non funziona su filesystem di rete;
+    il busy handler «will sleep multiple times until at least 'ms' milliseconds of sleeping have accumulated».
+12. **pip**: `--require-hashes` pretende l'impronta di **tutte** le dipendenze, anche transitive; protegge da
+    manomissione remota. **Dependabot** copre docker, pip e github-actions.
+13. **IERS**: «NO leap second will be introduced at the end of December 2026»; UTC-TAI = -37 s dal 2017.
+
+**Misurato qui lo stesso giorno** (comandi nel registro della sessione): 987 gestori `except` nei 155 moduli di
+produzione, **286 muti** (78 in fase83); contenitore tzdata **2026b**, host 2026c, IANA 2026d; server
+`NTPSynchronized=yes`, fuso UTC; sentinella e watchdog sondano solo `/api/health`; `fase82` tratta DTEND come esclusivo
+(righe 16-17); `fase87` firma HMAC su corpo grezzo + 300 s; `fase76` voucher/referral firmati con `secrets.token_hex(6)`;
+`fase167` consumo atomico con lapide; WAL + synchronous=FULL + timeout 30 s + `BEGIN IMMEDIATE` in 28 moduli;
+«database is locked» nel registro da luglio: 0; nessun WAL a riposo (0 su 27 db); disco 17%; contenitore con **0
+librerie esterne** (Stripe via urllib in fase101/fase143), `FROM python:3.11-slim` senza digest; CI senza impronte;
+`collaudi/fuzz_soldi.py` bersaglia fase188/fase98/fase111; `test_fuso_alloggio.py` 15 test, nessuno sul cambio d'ora;
+`time.monotonic` solo in 4 moduli legacy; nessuna normalizzazione NFC in ingresso, chiave email = `strip().lower()`;
+7 bombardamenti su 9 con seme; 1.688 negazioni CRITICAL del Bunker da luglio, 384 dal server e ~1.290 a raffiche di
+15-16 da reti italiane (il giudice lanciato dal PC).
+
+**Cosa abbiamo deciso.** Niente entra nel codice da questa ricerca senza la guardia vista rossa prima (D20): i
+controlli candidati (C1-C19) stanno in `RIPRENDI_QUI.md`, blocco «15 SETTEMBRE, mattina», punto ⑤, in ordine di
+costo. I quattro più economici sono sorveglianza NTP nel watchdog, sorveglianza della versione tzdata, due test sul
+cambio d'ora, digest sull'immagine base con Dependabot. Il metodo dei metamorfici (lavoro obbligatorio n. 4) ha ora
+la sua fonte.
+
+⛔ **Cosa NON abbiamo adottato e perché.**
+- Simulazione deterministica intera (FoundationDB/TigerBeetle): la loro macchina è distribuita con consenso; la
+  nostra è un processo con SQLite. Resta valido solo il principio del seme riproducibile.
+- Allarmi burn-rate multi-finestra (SRE Workbook): pensati per migliaia di richieste al secondo; qui restano i quattro
+  attributi di un allarme, che sono la lezione del rumore del 14-15/9.
+- Processo di checkpoint WAL in background e backoff con `tenacity` (suggeriti da un'altra IA): connessioni brevi,
+  nessun WAL a riposo, zero «database is locked» in due mesi, dipendenze nuove vietate, busy handler già presente.
+- Orologio monotono per i timeout di prodotto: le scadenze devono essere di parete e persistite (epoch interi);
+  NTP su Linux rallenta o accelera, non salta indietro.
+- Rate limit sulle rotte a token come priorità: i token firmati rendono l'enumerazione non praticabile.
+- Sonde sintetiche che PRENOTANO in produzione: il giudice non scrive sul sito (regola sua); la sonda dal lato
+  dell'ospite (C3) resta in sola lettura.
+
+
 ### Ricerca: Errori delle IA sul codice altrui + storia del repo — 23 regole sopravvissute
 
 **1. Ripristina i test da HEAD prima di validare** *(gravita' alta)*  
