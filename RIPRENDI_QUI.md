@@ -419,9 +419,54 @@ scaduta e va rifatta. Il primo lavoro utile è rilanciare quei 9 attrezzi.
 > solo dopo il deploy di questo lavoro. **Non ancora fatto qui:** suite intera (lanciata DOPO questi documenti, da fermo:
 > il suo esito lo dicono la CI della PR e il prossimo blocco), commit, PR, unione via REST, deploy D17, e sul server la
 > prova che dopo il passo «dopo» esista `giudice_ultima_sonda` e che il Guardiano al giro successivo non conti le sonde.
-> **Dopo, col via del fondatore:** il lavoro nuovo del foglio `collaudi/piano.py` (le 8 caselle scadute del blocco Soldi).
+> **Aggiornamento delle 13:40:** suite intera verde da PowerShell vera, staccata via WMI: `Ran 6819 tests in 5464.147s ·
+> OK (skipped=4) · USCITA_DIRETTA=0` (caricatore 6824: i 5 mancanti sono le guardie sul ripristino dei backup, messe da
+> parte in blocco perché `openssl` non è nel PATH, D23 punto 3); pre-fatto 10 su 10; **commit `7b95175`**, **PR #187**
+> aperta, CI in corso. Unione via REST e deploy D17: esito nel messaggio del commit successivo e nel registro della sessione.
+> Il via del fondatore, scritto: «procedi al comit autorizzato su tutto vps e quello che va fatto non me lo chiedere piu».
+> **Dopo:** il lavoro nuovo del foglio `collaudi/piano.py` (le 8 caselle scadute del blocco Soldi).
 > Il fondatore ha chiesto anche una suite «double-booking · API senza autenticazione · webhook con guasti di rete»:
-> prima l'inventario di ciò che c'è già (D10), poi solo i buchi provati.
+> l'inventario è fatto (D10): double-booking in 43 file di test (`TestGaraSweeperConferma`, `TestStanzaFantasma`,
+> `TestBombardamentoCalendarioTutti`, `TestConcorrenzaDenaro`), accessi (`TestLEsameDegliAccessiNonPuoBARARE`,
+> `TestBunkerEndpoint`, `TestUnaPortaChiusaNonEUnaIntrusione`), webhook (`TestWebhookGuarigione`,
+> `TestWebhookStripeEsitiPersi`, `TestCrashRecoveryWebhook`, `TestCaosRete`). Niente da riscrivere: solo i buchi provati.
+> **⑤ RICERCA D25 DEL 15/9 — i controlli candidati, con fonte e misura (nessuno iniziato; il fondatore ha scritto
+> «autorizzato su tutto», ma ogni modifica ai `fase*.py` entra con la guardia vista rossa prima, D20; le fonti per esteso
+> sono nella voce R3 dell'appendice del registro).** Trovato «dove nessuno guardava», misurato il 15/9: **286 gestori
+> `except` MUTI su 987** nei moduli di produzione (AST: corpo = pass/continue/return costante, nessun log né raise; 78 in
+> `fase83`, 11 in `fase178`, 8 in `fase34`, 6 in `fase162`, 5 in `fase177`); il contenitore ha i fusi orari **2026b**, il
+> server **2026c**, IANA **2026d** (rilascio del 12/9, e il prodotto usa il fuso vero degli alloggi in `fase187`);
+> sentinella e watchdog sondano **solo `/api/health`**; **nessuno controlla che NTP resti sincronizzato** (oggi sì: se
+> deriva oltre 5 minuti i webhook Stripe sono rifiutati come replay e i pagamenti restano fermi in silenzio);
+> `test_fuso_alloggio.py` ha 15 test e **nessuno sul giorno del cambio d'ora**; la produzione ha **zero librerie esterne**
+> (Stripe via urllib) e l'unica dipendenza, `FROM python:3.11-slim`, non è bloccata a un digest; la CI installa
+> `requirements.txt` senza impronte. Verificato a posto con la fonte accanto: DTEND esclusivo in `fase82` (RFC 5545
+> §3.6.1); firma webhook su corpo grezzo con tolleranza 300 s (`fase87` = librerie Stripe); voucher e referral firmati
+> HMAC con nonce casuale (`fase76`: OWASP OAT-002 non praticabile); credito monouso atomico con lapide (`fase167` = OWASP
+> BUSL-05); WAL + `synchronous=FULL` + timeout 30 s + `BEGIN IMMEDIATE` in 28 moduli, «database is locked» nel registro
+> da luglio: **0**; IERS Bulletin C 72: nessun secondo intercalare a dicembre 2026. **In ordine di costo:**
+> · **C11** il watchdog controlla `timedatectl show -p NTPSynchronized` e grida se `no` (3 righe in `deploy/watchdog.sh`);
+> · **C7** il watchdog confronta la versione tzdata del contenitore (`/usr/share/zoneinfo/tzdata.zi`, riga 1) con
+>   `https://data.iana.org/time-zones/tzdb/version` e avvisa se differiscono; **C8** al build: pacchetto PyPI `tzdata` +
+>   `PYTHONTZPATH=""` (docs Python `zoneinfo`, «Data sources»), oppure aggiornamento del tzdata di sistema;
+> · **C12** due test in `test_fuso_alloggio.py`: check-in 15:00 a Europe/Rome il 29/3 e il 25/10 → scarto UTC 2 h e 1 h;
+> · **C14** `FROM python:3.11-slim@sha256:…` + `.github/dependabot.yml` (docker, pip, github-actions);
+> · **C6** i 2 bombardamenti senza seme prendono il seme e lo stampano nel messaggio di rosso (riproducibilità);
+> · **C1** censimento degli `except` muti nel PERCORSO DEI SOLDI (`fase177`, `fase162`, `fase34`, `fase160`, `fase167`):
+>   ognuno logga con codice e sottocodice (ferrea 9) oppure porta il motivo scritto; guardia: il numero non cresce;
+> · **C3** una sonda «dal lato dell'ospite» (un preventivo vero, sola lettura) ogni 10 minuti oltre a `/api/health`;
+> · **C4** relazioni metamorfiche sull'aritmetica (scala ×k, additività per notti, permutazione, cambio andata-ritorno,
+>   monotonia) = lavoro obbligatorio n. 4, ora col metodo di riferimento;
+> · **C5** un conto di clearing a saldo zero per ogni flusso (incasso → escrow → bonifico), interrogato dal Guardiano;
+> · **C9** test «credito accreditato, poi prenotazione annullata» (OWASP BUSL-06): prima leggere `test_credito_single_use.py`;
+> · **C16** il parser del webhook fra i bersagli di `collaudi/fuzz_soldi.py`;
+> · **C19** normalizzazione Unicode NFC in `pulisci_testo` (`fase158`) e sulla chiave email (`fase88`, `fase83`);
+> · **C15** impronte (`--require-hashes`) nel `requirements.txt` della CI; **C18** job `full-suite` senza rete, dopo aver
+>   contato i test che aprono connessioni; **C10** rate limit alto sulle rotte pubbliche a token.
+> **Scartati, col motivo:** simulazione deterministica intera alla TigerBeetle (non siamo distribuiti: resta il seme);
+> allarmi burn-rate multi-finestra di Google (traffico troppo basso: restano i 4 attributi di un allarme); processo di
+> checkpoint WAL (connessioni brevi, nessun WAL a riposo); backoff con `tenacity` (dipendenza vietata, e il busy handler
+> di SQLite già dorme e ritenta fino a 30 s); rate limit sui voucher come priorità (token firmati bastano).
 
 **🧭 15 SETTEMBRE, 00:2x — PASSAGGIO DI CONSEGNE (D21): TRE PR UNITE, QUATTRO DEPLOY, E IL «SUBITO» IN PRODUZIONE**
 
