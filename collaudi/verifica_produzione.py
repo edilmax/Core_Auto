@@ -10,12 +10,17 @@ dall'esterno, in SOLA LETTURA, e si pretende che ogni cosa importante risponda g
   P5  LA COERENZA      - le percentuali dette al pubblico sono quelle del motore
   P6  ROBUSTEZZA       - input assurdi non fanno cadere niente
 
-NON crea prenotazioni, NON tocca denaro, NON scrive nulla. Sola lettura.
+NON crea prenotazioni, NON tocca denaro, NON scrive nulla SUL SITO. L'unica cosa che scrive
+sta sul disco del server: la DICHIARAZIONE delle proprie sonde con credenziali finte
+(`giudice_ultima_sonda` nella cartella dei dati, vedi `_dichiara_le_sonde`), perche' i due
+lettori del registro (fase186, fase178) non le contino come intrusioni. Sull'host la scrive
+direttamente; dal PC la scrive per ssh con l'ORA DEL SERVER, come gli altri attrezzi.
 """
 import json
 import re
 import ssl
 import os
+import subprocess  # nosec B404 - una riga sul server via ssh, argomenti in lista, mai input esterno
 import sys
 
 try:  # Windows: console cp1252 non regge box-drawing/emoji -> uscita UTF-8 tollerante
@@ -122,7 +127,14 @@ def p2_porte_aperte():
                 check("P2", "catalogo-json-valido", False, str(e))
 
 
+_PRIMA_SONDA = None     # l'inizio della PRIMA sonda P3 di questo processo, nell'ora del server:
+                        # con --giri=N la finestra dichiarata copre tutti i giri, non solo l'ultimo
+
+
 def p3_porte_chiuse():
+    global _PRIMA_SONDA
+    if _PRIMA_SONDA is None:        # le sonde di questo blocco si DICHIARANO (vedi in fondo)
+        _PRIMA_SONDA = _ora_del_server()
     riservate = [
         "/api/bunker/stato", "/api/bunker/prove_legali", "/api/bunker/scaglioni_host",
         "/api/bunker/costi_tecnici", "/api/bunker/marche_temporali",
@@ -148,6 +160,76 @@ def p3_porte_chiuse():
         st, _, _ = chiedi(p, metodo="POST")
         check("P3", "scrittura-riservata-bloccata-%s" % p,
               st in (401, 403, 404, 405), "stato %d" % st)
+    _dichiara_le_sonde(_PRIMA_SONDA)
+
+
+# Dove sta la cartella dei dati sul server (la stessa di `deploy/watchdog.sh`), e come ci si
+# arriva dal PC: le stesse variabili e la stessa chiave di `collaudi/esame_produzione.py`.
+CARTELLA_DATI_VPS = os.environ.get("DATA_DIR", "/var/lib/docker/volumes/bookinvip_casavip_data/_data")
+CARTELLA_VPS = "/var/www/bookinvip"
+VPS = os.environ.get("BOOKINVIP_VPS", "root@76.13.44.167")
+CHIAVE_SSH = os.environ.get("BOOKINVIP_CHIAVE_SSH",
+                            os.path.join(os.path.expanduser("~"), ".ssh", "id_ed25519"))
+
+
+def _sul_server():
+    """True se questo processo gira DOVE sta la cartella dei dati (l'host del deploy)."""
+    return os.path.isdir(CARTELLA_DATI_VPS)
+
+
+def _ssh(comando):
+    """Una riga sul server, senza domande (BatchMode): (uscita, stdout). Mai solleva."""
+    try:
+        e = subprocess.run(["ssh", "-i", CHIAVE_SSH, "-o", "IdentitiesOnly=yes",  # nosec B603 B607
+                            "-o", "BatchMode=yes", "-o", "ConnectTimeout=20", VPS, comando],
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=60)
+        return e.returncode, e.stdout.decode("utf-8", "replace").strip()
+    except (OSError, subprocess.SubprocessError) as ex:
+        return -1, "%s: %s" % (type(ex).__name__, ex)
+
+
+def _ora_del_server():
+    """L'ora con cui si dichiara e' quella della macchina che SCRIVE il registro: sull'host e'
+    questa (il contenitore ha lo stesso orologio); dal PC si chiede al server, cosi' uno scarto
+    fra i due orologi non sposta la finestra. None = non misurabile, e allora non si dichiara."""
+    if _sul_server():
+        return int(time.time())
+    rc, out = _ssh("date +%s")
+    return int(out) if rc == 0 and out.isdigit() else None
+
+
+def _dichiara_le_sonde(inizio):
+    """Le porte chiuse si provano anche con credenziali FINTE, e il server le scrive CRITICAL,
+    com'e' giusto per il mondo. Ma quelle righe le leggono DUE nostri lettori (fase186 una
+    volta al giorno, fase178 ogni 10 minuti) e il 14/9 sono diventate «7 stati anomali» e un
+    Telegram: un falso allarme fabbricato da noi (ferrea 10). Qui il giudice DICHIARA la
+    finestra delle sue sonde nella cartella dei dati e i lettori la onorano
+    (`fase178.riga_di_rumore_nostro`). A scriverla e' SEMPRE `fase178.dichiara_sonde_giudice`,
+    un solo scrittore: sull'host direttamente, dal PC facendolo girare sul server via ssh.
+    Se non si riesce, lo si dice: quelle sonde conteranno come intrusioni finche' invecchiano."""
+    if inizio is None:
+        print("  ⚠ sonde P3 NON dichiarate: l'ora del server non si e' potuta leggere (ssh). "
+              "Watchdog e Guardiano conteranno queste sonde come intrusioni finche' non invecchiano.")
+        return
+    percorso = CARTELLA_DATI_VPS.rstrip("/") + "/giudice_ultima_sonda"
+    if _sul_server():
+        radice = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if radice not in sys.path:
+            sys.path.insert(0, radice)
+        from fase178_watchdog import NOME_SONDE_GIUDICE, dichiara_sonde_giudice
+        percorso = os.path.join(CARTELLA_DATI_VPS, NOME_SONDE_GIUDICE)
+        ok = dichiara_sonde_giudice(CARTELLA_DATI_VPS, inizio=inizio, fine=int(time.time()))
+        print("  sonde P3 dichiarate in %s: %s" % (percorso, ok))
+        return
+    rc, out = _ssh("cd %s && python3 -c \"import time; from fase178_watchdog import "
+                   "dichiara_sonde_giudice as d; print(d('%s', inizio=%d, fine=int(time.time())))\""
+                   % (CARTELLA_VPS, CARTELLA_DATI_VPS, inizio))
+    if rc == 0 and out.endswith("True"):
+        print("  sonde P3 dichiarate via ssh in %s: True" % percorso)
+    else:
+        ultima = (out.strip().splitlines() or ["(nessuna uscita)"])[-1][:200]
+        print("  ⚠ sonde P3 NON dichiarate via ssh (uscita %d: %s). Watchdog e Guardiano "
+              "conteranno queste sonde come intrusioni finche' non invecchiano." % (rc, ultima))
 
 
 def p4_corazza():

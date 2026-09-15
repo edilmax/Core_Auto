@@ -403,7 +403,34 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
-### 🚪 UNA PORTA CHIUSA NON È UN'INTRUSIONE — 14 settembre, notte (il primo falso allarme fabbricato da noi)
+### 🔕 IL NOSTRO GIUDICE NON È UN INTRUSO, E IL GUARDIANO NON SI RILEGGE — 15 settembre, mattina, «autorizzato» (ramo `rumore-allarmi-2026-09-15`)
+
+**Cosa è cambiato nel codice.** `fase178_watchdog.py`: costante `NOME_SONDE_GIUDICE` (`giudice_ultima_sonda`, nella
+cartella dei dati, accanto al battito e all'esito); `dichiara_sonde_giudice(dir_dati, inizio=, fine=)`, l'UNICO scrittore
+(False senza cartella vera, mai solleva); `finestra_sonde_giudice(dir_dati)` (None se mai dichiarata: si sbaglia nel verso
+che non zittisce); `riga_di_rumore_nostro(riga, ts, finestra)`, l'UNICO criterio di «riga scritta da noi misurando»: la
+riga-riassunto del Guardiano («GUARDIANO: N stato/i anomalo/i», che è già l'allarme `guardiano_anomalo` letto da
+`guardiano_ultimo_esito`) e una `BUNKER: accesso NEGATO` DENTRO la finestra dichiarata; `errori_freschi` lo applica.
+`fase186_guardiano.py`, `_guasti_isolati`: importa il criterio da fase178 (che non importa niente del prodotto) e lo
+applica; docstring corretta (diceva «guarda SOLO gli ERROR» mentre dal 14/9 legge anche i CRITICAL).
+`collaudi/verifica_produzione.py`: P3 prende l'ora della PRIMA sonda (con `--giri=N` la finestra copre tutti i giri) e alla
+fine dichiara: sull'host scrive il file; dal PC fa girare lo stesso scrittore SUL SERVER via ssh (`BOOKINVIP_VPS`,
+`BOOKINVIP_CHIAVE_SSH`, le stesse variabili di `esame_produzione.py`) con l'ORA DEL SERVER, così uno scarto d'orologio non
+sposta la finestra; se non riesce lo stampa e dice le conseguenze (prima del deploy: `ImportError` sul server, giusto).
+**Perché.** Misurato sul server in sola lettura: 1.688 negazioni CRITICAL del Bunker da luglio, 384 dal server (deploy) e
+~1.290 a raffiche di 15-16 da reti italiane, cioè il giudice lanciato dal PC; e la riga del Guardiano riletta il giorno dopo
+(conta 33 = 32 sonde + 1 riga sua). Ogni deploy e ogni batteria: un Telegram e un giorno di `guardiano_anomalo`.
+**Guardie** (D20: viste ROSSE prima con `4 != 3`; una per lettore, le due direzioni dentro — «meno guardie», il fondatore):
+`test_il_lettore_non_conta_la_riga_del_Guardiano_ne_le_sonde_DICHIARATE_del_giudice` in `test_watchdog.py` e
+`test_il_Guardiano_non_conta_la_sua_riga_ne_le_sonde_DICHIARATE_del_giudice` in `test_guardiano.py`. Mirati sui 4 moduli
+toccati (`test_watchdog test_guardiano test_bunker_controlroom test_esame_accessi`): **Ran 95 · OK**, prima sulle copie fuori
+dal progetto e poi sui file veri (sha256 identiche); ruff e bandit «nessuna segnalazione nuova».
+**STATO:** acceso appena deployato, niente da configurare: i lettori onorano la finestra da soli e il giudice la dichiara a
+ogni P3. Nessuna variabile nuova sul server. **Limiti dichiarati (D18 punto 3):** un'intrusione vera nei secondi delle sonde
+è saltata anch'essa (la finestra è larga quanto le sonde); le 2 sonde delle 22:14:39 UTC del 14/9 restano contate finché
+escono dalle 24 h; dal PC la dichiarazione funziona solo dopo il deploy di questo lavoro.
+
+### 🚪 UNA PORTA CHIUSA NON È UN'INTRUSIONE — 14 settembre, notte (il primo falso allarme fabbricato da noi) — ✅ IN PRODUZIONE con la PR #186 (`49081c3`, deploy D17 delle 00:14 del 15/9; sul server: 14 sonde WARNING, 2 CRITICAL sul token falso del giudice — il rumore residuo è chiuso il 15/9 mattina, voce qui sopra)
 
 **Cosa è cambiato nel codice.** `fase83_server.py`, `_bunker_auth`: se l'intestazione `X-Bunker-Session` è **assente**,
 la negazione si scrive WARNING con `motivo=sessione_assente` (403 come prima); se è **presente ma non valida** resta
@@ -416,9 +443,11 @@ delle 19:19: l'IP è il server, l'ora è il passo «dopo» del deploy, cioè `co
 (ferrea 10: grave quanto uno mancato, perché insegna a ignorare il rosso). Guardia `TestUnaPortaChiusaNonEUnaIntrusione`
 in `test_bunker_controlroom.py`, due direzioni, rossa con `Livelli: ['CRITICAL']`. Mirati bunker+admin+guardiano
 **Ran 72 · OK**. Un B106 (password letterale nel banco) chiuso con una costante, come fa `test_fase180_bunker`.
-⚠️ Le 33 righe restano nel registro fino alle 19:19 UTC del 15/9: fino ad allora il Guardiano le conta ancora.
+⚠️ Le 33 righe restano nel registro 24 ore: il Guardiano le conta finché escono dalla sua finestra al giro giornaliero
+successivo (~22:14 UTC del 15/9, non «19:19»: corretto il 15/9 mattina); e dal 15/9 mattina non conta più né la propria
+riga-riassunto né le sonde dichiarate dal giudice (voce sopra).
 
-### ⏱️ «SE IL DANNO SUCCEDE ADESSO LO DEVO SAPERE SUBITO» — 14 settembre, notte
+### ⏱️ «SE IL DANNO SUCCEDE ADESSO LO DEVO SAPERE SUBITO» — 14 settembre, notte — ✅ IN PRODUZIONE con la PR #186 (`49081c3`); `errori_freschi` misurata sul server subito dopo il deploy: `conta 3` (le righe del deploy stesso), l'allarme è partito come previsto
 
 **Cosa è cambiato nel codice.** `fase178_watchdog.py`: `errori_freschi(dir_dati, minuti=15)` legge `app.log` con lo
 stesso formato e la stessa disciplina di `fase186._guasti_isolati` (date UTC di `main_casavip`, registro assente =
@@ -434,7 +463,7 @@ sola lettura, 0 righe negli ultimi 15 minuti: l'allarme tace a macchina sana (fe
 codice nuovo. ⚠️ Sul VPS `ALERT_EMAIL` è passato da Gmail a `massimo.foti@protonmail.com`, per valore e col conteggio
 delle righe (65 → 65, 1 diversa): vale dal riavvio dell'app.
 
-### 🔔 TRE ALLARMI CHE NON ARRIVAVANO A NESSUNO — 14 settembre, sera (punto ② della «porta per un uomo solo»)
+### 🔔 TRE ALLARMI CHE NON ARRIVAVANO A NESSUNO — 14 settembre, sera (punto ② della «porta per un uomo solo») — ✅ IN PRODUZIONE con la PR #185 (`effed1e`, deploy D17 delle 22:20; `ALERT_EMAIL` → Proton attivo)
 
 **Cosa è cambiato nel codice** (sotto l'«autorizzato» pieno del mattino; guardie viste ROSSE prima, 6 nuove):
 · `fase186_guardiano.py`, `_guasti_isolati`: il lettore del registro filtrava solo ` ERROR ` e saltava proprio il livello
