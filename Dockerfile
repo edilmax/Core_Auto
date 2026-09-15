@@ -4,7 +4,7 @@
 
 # L'immagine base e' bloccata alla sua IMPRONTA (digest), come nel gemello Dockerfile.casavip:
 # due gemelli che partono da basi diverse sono due produzioni diverse (test_parita_ambiente).
-FROM python:3.11-slim@sha256:9534e5a8e315485d4061ed659af0fd78a284c015f9b73661b41d6bab25604534
+FROM python:3.14-slim@sha256:cad9a2c871761c413caa6fdd6441c783451e740a48aaeba60ae62a8b53525ef6
 
 # Niente .pyc, output non bufferato (log immediati). TUTTI i dati durevoli su /data
 # (il volume): DB + stato scheduler + opt-out outreach. Senza questo, account host,
