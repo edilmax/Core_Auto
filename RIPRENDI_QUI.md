@@ -395,6 +395,86 @@ giri di mutazione da 60 e 600 minuti dichiarati. Guardia `TestUnaCasellaSCADUTAD
 vista rossa prima (3 su 3). **Misurato adesso: 9 caselle rilanciabili subito, 2 che vogliono il server.**
 🔑 **Quindi «15 caselle su 39» NON vuol dire che il lavoro sia fermo:** vuol dire che gran parte delle misure è
 scaduta e va rifatta. Il primo lavoro utile è rilanciare quei 9 attrezzi.
+**🧭 15 SETTEMBRE, sera — PASSAGGIO DI CONSEGNE (D21): LE PR #187, #188 E #189 RICONTROLLATE A OCCHI FRESCHI, LA #189 UNITA E IN PRODUZIONE (ramo `consegne-d21-2026-09-15`)**
+
+> ⛔ **D21 VIOLATA dalla sessione del pomeriggio: 79% di contesto, letto dal fondatore con `/context`.** Questa sessione è
+> ripartita da `/clear` per RICONTROLLARE quel lavoro, non per crederci; la sua percentuale non è letta (la vede il
+> fondatore). Le ore di questo blocco sono UTC.
+> **Stato della macchina:** master **`9768421`** (la #189 unita via REST con la testa bloccata a `2d8c246`: genitori
+> `2e4e94d` e `2d8c246`, albero identico a `2d8c246`) su **GitHub** (`git ls-remote origin refs/heads/master`), sul **VPS**
+> («commit dei file: 9768421» nel passo `dopo`) e sul **computer** (`git rev-parse --short` su HEAD, `master` e
+> `origin/master`: `9768421` tutte e tre; `git status` pulito prima di scrivere questo blocco). CI lette dall'API: la PR su
+> `2d8c246` (`event=pull_request`) e `master` su `9768421` (`event=push`), `gate: success` tutte e due; `zap` **skipped**,
+> cioè non eseguito, non verde.
+> **Ultima suite intera sul lavoro della #189, riletta dal suo registro** (`suite_intera_3.log` della sessione precedente,
+> non il suo racconto): `Ran 6822 tests in 6702.393s · OK (skipped=4) · FINE · USCITA_DIRETTA=0`; caricatore 6827, e i 5 di
+> scarto sono le guardie sul ripristino dei backup messe da parte perché `openssl` non è nel PATH (D23 punto 3). La suite di
+> questo blocco, solo documenti, sta nel messaggio di commit e nella CI della sua PR.
+> **Il ricontrollo.** Riletti `git diff 2e4e94d..2d8c246` (#189) e `git diff 49081c3..2e4e94d` (#187, #188); le guardie nuove
+> rieseguite in due copie FUORI dal progetto (`git archive 2d8c246`; la copia «vecchia» differisce solo per
+> `fase83_server.py` preso da `2e4e94d` e per un guasto iniettato con l'editor nel blocco dell'orologio di
+> `deploy/watchdog.sh`): 5 guardie delle PR #187 e #189 **verdi** sul codice nuovo (`Ran 5 · OK · USCITA_DIRETTA=0`); la
+> guardia dei rimborsi **ROSSA** sul `fase83` vecchio (`Allarmi: [{… 'rimborsato_su_stripe_cents': 45000 …}]`); quella
+> dell'orologio **ROSSA** col guasto (`'ntp|critico|' not found in ''`). **Giudizio: le riparazioni sono giuste e i commenti
+> dicono il vero.** Nessuna delle righe `tipo="rimborso"` di `fase83_server.py` (`grep -n`) sta dentro
+> `_admin_rimborsa_dovuto`, e quella dell'arbitrato ha il suo `evento_id`: il confronto nuovo non può nascondere un doppio
+> rimborso vero. Le date del test nuovo non scadono: il preventivo rifiuta solo date incoerenti
+> (`fase58_channel_manager.notti`) e la contestazione dipende dallo stato (`fase160_escrow_garanzia.contesta`). Controllate
+> nel codice anche tre frasi della #188: tolleranza di 300 s (`fase87_stripe_webhook.py`), DTEND esclusivo
+> (`fase82_ical_sync.py`), `secrets.token_hex(6)` (`fase76_viral_loop.py`).
+> **Deploy D17 della #189, 17:15-17:20, con `deploy/protocollo_d17.sh`:** `prima` uscita 0 (punto di ritorno `2e4e94d`
+> riletto; paracadute ri-agganciato misurando da `6625b10c…` alla viva `f6ce788a…`; backup `finanza-20260915-114847`
+> aperto: gzip integro, `SQLite format 3`); `scambio` staccato sul server, uscita 0 (`:latest` `44361417…` diversa da
+> `:prec`; rm-first con `docker compose` v2, nginx intatto; `money_path_pronto: True · avvisi: []`; sito fermo circa 30
+> secondi); `dopo` staccato, uscita 0 (sonde 200 e 200, negativa `/api/bunker/invarianti` 403, giudice 190 controlli 0
+> violazioni). **Visto sul server, in sola lettura:** Python nel contenitore **3.11.16** (prima 3.11.15); l'immagine nuova
+> parte davvero dalla base bloccata (gli strati di `python:3.11-slim@sha256:9534e5a8…` sono il prefisso di `:latest`:
+> `True`; di `:prec`: `False`); `timedatectl show -p NTPSynchronized --value` = `yes` sia dalla shell sia con
+> `env -i PATH=/usr/bin:/bin`, come nel cron; 0 righe `ntp` in `watchdog.log`; `giudice_ultima_sonda` = `1789492791
+> 1789492792`, e le 2 sonde CRITICAL del giudice delle 17:19:52 ci stanno dentro; `errori_freschi` in sola lettura =
+> `{"conta": 0}` con quelle righe e con la riga del Guardiano nel registro.
+> ⚠️ **Il Guardiano dice ancora ANOMALO, e il suo orario si è spostato col deploy.** Il giro intero parte all'avvio e poi
+> ogni 24 ore (`_tick_guardiano` in `fase83_server.py`, `giro % 24`); il contenitore è ripartito alle 17:16:50, e all'avvio
+> ha contato `conta 34`. Misurato con `awk` sulle righe CRITICAL ed ERROR di `app.log` delle 24 ore prima dell'avvio, senza
+> la sua riga: 16 alle 19:19 e 16 alle 20:22 del 14/9, 2 alle 22:14 del 14/9, 2 alle 11:49 di oggi; queste ultime cadono
+> nella finestra dichiarata di stamattina e non contano, 36 − 2 = 34. **Al prossimo giro, domani verso le 17:17, deve dire
+> PULITO**: le 34 saranno fuori dalle 24 ore e le sonde di stasera sono dichiarate. Fino ad allora il watchdog ripete
+> `guardiano_anomalo` (Telegram ogni 6 ore). Se domani dice ancora ANOMALO, gli esempi dell'ultima riga `GUARDIANO:` di
+> `app.log` dicono quali righe ha contato.
+>
+> **⛔ COSA RESTA, in quest'ordine:**
+> ① **NON unire la PR #191** di Dependabot, «Bump python from 3.11-slim to 3.14-slim», aperta alle 17:14, appena l'unione
+> della #189 ha acceso Dependabot: porterebbe la produzione da Python 3.11 a 3.14, non è un'impronta nuova. Il commento del
+> Dockerfile («l'impronta nuova la propone Dependabot») racconta solo metà di quello che fa. Aperte anche la #190
+> (`actions/checkout` da 4 a 7) e la #192 (`actions/setup-java` da 5 a 6): cambiano la CI e si leggono prima di unirle.
+> Lavoro candidato, prima le fonti (D25: le opzioni di Dependabot nella documentazione GitHub): in `.github/dependabot.yml`
+> tenere l'immagine sulla 3.11 e lasciare a Dependabot solo l'impronta nuova.
+> ② **Il giudice dichiara UNA sola finestra**: `fase178.dichiara_sonde_giudice` riscrive `giudice_ultima_sonda` a ogni giro.
+> Se `collaudi/verifica_produzione.py` gira due volte prima del giro intero del Guardiano (o due volte in 15 minuti per
+> `errori_freschi`), le sonde CRITICAL del primo giro tornano a contare come intrusioni: un Telegram e un giorno di
+> `guardiano_anomalo`, cioè il rumore che la #187 ha chiuso. Limite NON dichiarato dalla #187: letto nel codice, non provato
+> con un giro. **Finché non è riparato, il giudice sul server si lancia UNA volta, dentro `protocollo_d17.sh dopo`.**
+> Riparazione candidata in `fase178`: le finestre delle ultime 24 ore invece dell'ultima sola, con la guardia vista rossa
+> prima (D20).
+> ③ **Le righe di Dependabot si attaccano al commit di `master`**: nella tabella di `9768421` ci sono 4 righe «Dependabot»
+> (`event=dynamic`) e una `.github/dependabot.yml`. Il watchdog giudica la CI su tutte le righe di
+> `commits/master/check-runs`, quindi un giro di Dependabot fallito diventerebbe «CI rossa su master» senza che il nostro
+> codice c'entri (ferrea 10). Non è ancora successo: si guarda alla prima riga di Dependabot non verde.
+> ④ Due note minori: il blocco NTP del watchdog tace e non lascia traccia se `timedatectl` risponde vuoto; il nuovo `except`
+> di `_admin_rimborsi_dovuti` sbaglia nel verso giusto (l'allarme parte) ma non scrive che il giornale era illeggibile.
+> ⑤ **Uno sbaglio di strumento, stasera:** il ciclo che aspettava lo scambio ha scritto `MORTO` al primo controllo mentre lo
+> scambio era vivo, poi finito con `USCITA_SCAMBIO=0`: `pgrep -f '[p]rotocollo_d17.sh scambio'` non ha trovato il processo.
+> Causa non accertata, verdetto non usato. **Chi aspetta un giro staccato sul VPS aspetta la sua riga d'uscita nel
+> registro, non il processo.**
+> ⑥ **Decisioni del fondatore:** B4, chi paga la commissione Stripe sul rimborso pieno (la sessione del pomeriggio ha trovato
+> una strada tecnica candidata, l'autorizzazione non catturata: mai costruita, `capture_method` compare 0 volte nei
+> `fase*.py` e in `main_casavip.py`, e le sue fonti Stripe vanno rilette prima di proporla); l'annuncio di prova
+> `filippine-makati-2` (paese `XX`, fuso vuoto), da togliere o completare prima degli ospiti veri. Stasera la prova vera da
+> 1 € del fondatore: mentre è in corso niente deploy e niente `git pull` sul VPS, e il registro del server si legge in
+> diretta.
+> ⑦ Poi il foglio `python collaudi/piano.py`, e i controlli C1, C3, C4, C5, C9, C16, C19, C15, C18, C10 del punto ⑤ del
+> blocco del mattino.
+
 **🧭 15 SETTEMBRE, pomeriggio — IL GIRO INTERO COL REGISTRO RILETTO: UN FALSO ALLARME SUI RIMBORSI, UN ESAME FERMO, UN BANCO NELLA CARTELLA SBAGLIATA; E OROLOGIO, CAMBIO D'ORA, IMMAGINE BLOCCATA (ramo `orologio-e-immagine-2026-09-15`, «autorizzato su tutto»)**
 
 > **Chiuso prima, e misurato.** Blocco 1: PR #187 unita via REST con `gate: success` (16 job `success`, `zap` skipped), master
@@ -3079,7 +3159,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 7e111c9
+CONSEGNE AGGIORNATE A: 9768421
 
 SUITE ATTUALE: Ran 6827 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»

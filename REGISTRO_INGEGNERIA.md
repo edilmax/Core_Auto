@@ -403,7 +403,24 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
-### 🧾 UN RIMBORSO DECISO DA NOI NON È UNA DIVERGENZA — e l'orologio del server, il cambio d'ora, l'immagine bloccata — 15 settembre, pomeriggio, «autorizzato su tutto» (ramo `orologio-e-immagine-2026-09-15`)
+### 👀 LE PR #187, #188 E #189 RICONTROLLATE A OCCHI FRESCHI, E LA #189 IN PRODUZIONE — 15 settembre, sera (dopo la sessione arrivata al 79% di contesto)
+
+**Cosa è stato fatto.** Nessuna riga di codice. I diff delle tre PR riletti con le domande del fondatore (è giusta? rompe
+altro? il commento dice il vero?); le guardie nuove rieseguite in due copie fuori dal progetto, verdi sul codice nuovo e rosse
+sul `fase83` vecchio e sul guasto iniettato nel watchdog; la #189 unita via REST con la testa bloccata al commit di cui era
+stata letta la CI, e deployata col protocollo D17. Le misure, una per una, stanno nel blocco «15 SETTEMBRE, sera» di
+`RIPRENDI_QUI.md`.
+**Cosa è emerso, e resta aperto là.** (1) `giudice_ultima_sonda` tiene una finestra sola: due giri del giudice prima del giro
+intero del Guardiano rifabbricano il rumore chiuso dalla #187, e la #187 non lo dichiarava. (2) Dependabot, acceso
+dall'unione, ha aperto subito la #191, che porta l'immagine a Python 3.14: il commento del Dockerfile diceva solo «l'impronta
+nuova». (3) Le righe di Dependabot si attaccano al commit di `master` che il watchdog giudica. (4) Il Guardiano gira
+all'avvio e poi ogni 24 ore, quindi ogni deploy ne sposta l'orario: una previsione «torna PULITO alle …» vale solo fino al
+riavvio successivo.
+**Sbaglio di strumento.** Il ciclo che aspettava lo scambio del deploy ha dichiarato `MORTO` un processo vivo (`pgrep -f`
+senza risultato, causa non accertata): non ha fatto danno perché si è letto il registro. Un giro staccato si aspetta dalla
+sua riga d'uscita, non dal processo.
+
+### 🧾 UN RIMBORSO DECISO DA NOI NON È UNA DIVERGENZA — e l'orologio del server, il cambio d'ora, l'immagine bloccata — 15 settembre, pomeriggio, «autorizzato su tutto» (ramo `orologio-e-immagine-2026-09-15`) — ✅ IN PRODUZIONE con la PR #189 (`9768421`, deploy D17 delle 17:16 UTC del 15/9; sul server Python 3.11.16 sulla base bloccata, verificata sugli strati; `NTPSynchronized=yes`; `errori_freschi conta 0`)
 
 **Com'è uscito, e non è teoria.** Il fondatore ha chiesto una simulazione nel browser «che fa prenotazioni e tutto quello che
 si può fare, e poi vedere i log». Gli attrezzi del giro intero (`avvia_server_visivo`, `percorso_e2e`, `e2e_credito_stripe`,
