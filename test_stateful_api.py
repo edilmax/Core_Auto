@@ -205,7 +205,7 @@ class MacchinaBookinVIP(RuleBasedStateMachine):
         self._passo()
         s, o = self._g("POST", "/api/host/alloggio_elimina", {"slug": slug}, self.tok)
         # 409 = prenotazioni vive o escrow aperto: e' un rifiuto LEGITTIMO, non un difetto
-        assert s in (200, 409), "elimina: %d %r" % (s, o)
+        assert s in (200, 409), "elimina: %d %r" % (s, o)  # nosec B101 - qui l'assert e' il mestiere
         if s == 200:
             if slug in self._slugs:
                 self._slugs.remove(slug)
@@ -222,12 +222,12 @@ class MacchinaBookinVIP(RuleBasedStateMachine):
         s, o = self._g("POST", "/api/host/pubblica",
                        {"slug": slug, "titolo": "Rinata %s" % slug, "citta": "Roma",
                         "prezzo_notte_cents": prezzo, "capacita": 2}, self.tok)
-        assert s == 201, "ricrea: %d %r" % (s, o)
+        assert s == 201, "ricrea: %d %r" % (s, o)  # nosec B101 - qui l'assert e' il mestiere
         scheda = self.sis.catalogo.dettaglio_owner(slug) or {}
-        assert scheda.get("prezzo_notte_cents") == prezzo, \
-            "EREDITA' VIETATA: annuncio ricreato col nome %r, scritto %d, in vetrina %r: e' " \
-            "il prezzo del calendario di quello eliminato" \
-            % (slug, prezzo, scheda.get("prezzo_notte_cents"))
+        assert scheda.get("prezzo_notte_cents") == prezzo, (  # nosec B101 - il mestiere
+            "EREDITA' VIETATA: annuncio ricreato col nome %r, scritto %d, in vetrina %r: e' "
+            "il prezzo del calendario di quello eliminato"
+            % (slug, prezzo, scheda.get("prezzo_notte_cents")))
         self._slugs.append(slug)
         return slug
 
@@ -471,10 +471,10 @@ class MacchinaBookinVIP(RuleBasedStateMachine):
         # senza annuncio, questa riga lo dice subito e con il nome del colpevole.
         for morto in self._eliminati:
             restanti = self.sis.inventario.conta_alloggio(morto)
-            assert restanti == 0, \
-                "DATI CHE SOPRAVVIVONO AL PADRONE: l'annuncio %r e' stato eliminato e il suo " \
-                "calendario ha ancora %d giorni: chi ricrea quel nome se li trova addosso" \
-                % (morto, restanti)
+            assert restanti == 0, (  # nosec B101 - il mestiere della macchina a stati
+                "DATI CHE SOPRAVVIVONO AL PADRONE: l'annuncio %r e' stato eliminato e il suo "
+                "calendario ha ancora %d giorni: chi ricrea quel nome se li trova addosso"
+                % (morto, restanti))
 
 
 # Budget: ~20 mondi x ~20 passi ≈ 20-40s tipici (sotto il minuto anche sotto carico: il
