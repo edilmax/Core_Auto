@@ -131,6 +131,9 @@ COSA_NON_GUARDA = (
     "`collaudi/bombe_a_tempo.py` (cercarle davvero costa ~25 minuti). Se quello schedario e' "
     "vecchio di piu' di 30 giorni questo controllo diventa ROSSO invece di tacere, perche' "
     "una misura scaduta non e' una misura",
+    "le caselle SCADUTE le guarda SOLO quando si dichiara uno scopo (`--scopo`) che tocca la "
+    "produzione: senza `--scopo` questo pre-volo non blocca niente, e `--nonostante \"<motivo>\"` "
+    "sblocca lasciando il motivo scritto nella traccia",
 )
 
 
@@ -524,12 +527,15 @@ def controllo_7_bombe_a_tempo(radice=RADICE, schedario=None):
 # --------------------------------------------------------------------------------------
 # la traccia dello scopo
 # --------------------------------------------------------------------------------------
-def scrivi_scopo(file_dichiarati, radice=RADICE, percorso=None):
-    """Lascia scritto cosa si e' promesso di toccare. Lo rilegge il pre-fatto."""
+def scrivi_scopo(file_dichiarati, radice=RADICE, percorso=None, nonostante=None):
+    """Lascia scritto cosa si e' promesso di toccare. Lo rilegge il pre-fatto. Se lo scopo tocca la
+    produzione con caselle scadute e il fondatore ha sbloccato, il MOTIVO resta scritto qui."""
     percorso = percorso or TRACCIA_SCOPO
     testa = _git(radice, "rev-parse", "--short", "HEAD")
     righe = ["# scopo dichiarato (regola ferrea 15) — lo rilegge prima_di_dire_fatto.py",
              "# dichiarato al commit: %s" % (testa.strip() if testa else "sconosciuto")]
+    if nonostante:
+        righe.append("# nonostante le caselle scadute, motivo del fondatore: %s" % " ".join(nonostante.split()))
     righe.extend(sorted(f.replace("\\", "/") for f in file_dichiarati))
     with io.open(percorso, "w", encoding="utf-8") as f:
         f.write("\n".join(righe) + "\n")
@@ -547,6 +553,62 @@ def leggi_scopo(percorso=None):
         if riga and not riga.startswith("#"):
             dichiarati.append(riga)
     return dichiarati
+
+
+# --------------------------------------------------------------------------------------
+# il blocco: con caselle SCADUTE non si dichiara uno scopo che tocca la PRODUZIONE
+# --------------------------------------------------------------------------------------
+# Regola del fondatore, 2026-09-16: «dopo ogni unione, PRIMA di aprire lavoro nuovo, si
+# rilanciano tutti gli attrezzi con --scrivi; e si bloccano le modifiche al codice finche' la
+# rimisura non e' fatta». Dall'11 al 16/9 diciotto unioni e nessuna rimisura avevano portato il
+# conto delle caselle da 25 su 42 a 3 su 43 senza che una prova fallisse. Una regola scritta in
+# un documento si rompe di nuovo (S19, D22): questa e' agganciata al gesto che gia' precede ogni
+# lavoro, `--scopo`. ⛔ Lo sblocco esiste -- un allarme vivo non aspetta dieci ore di mutazione --
+# ma solo con un MOTIVO scritto, che resta nella traccia e lo rilegge il pre-fatto.
+PRODUZIONE = re.compile(r"^(fase\d+_[^/]*\.py|main_casavip\.py|deploy/.+)$")
+
+
+def _caselle_scadute(radice=RADICE):
+    """I comandi delle caselle scadute, letti da `collaudi/scheda.py` (la fonte, mai una copia).
+    `None` se la scheda non si legge: e allora NON si sblocca, il vuoto non e' un verde (S1)."""
+    percorso = os.path.join(radice, "collaudi", "scheda.py")
+    try:
+        spec = importlib.util.spec_from_file_location("_scheda_prevolo", percorso)
+        modulo = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(modulo)
+        eseguibili, a_mano = modulo.da_rimisurare()
+    except Exception:  # noqa: BLE001 - qualunque guasto nella lettura e' «non so», mai «tutto a posto»
+        return None
+    comandi = []
+    for voce in list(eseguibili) + list(a_mano):
+        if voce["comando"] not in comandi:
+            comandi.append(voce["comando"])
+    return comandi
+
+
+def caselle_scadute_bloccano(scopo, nonostante=None, scadute=None, radice=RADICE):
+    """(bloccato, righe). Blocca solo uno scopo che tocca la produzione, e solo se ci sono caselle
+    scadute; `nonostante` (un motivo non vuoto) sblocca e resta scritto."""
+    nomi = [f.replace("\\", "/") for f in scopo]
+    di_produzione = sorted(n for n in (n[2:] if n.startswith("./") else n for n in nomi)
+                           if PRODUZIONE.match(n))
+    if not di_produzione:
+        return False, ["lo scopo non tocca la produzione: il blocco delle caselle scadute non si applica"]
+    scadute = _caselle_scadute(radice) if scadute is None else scadute
+    if scadute is None:
+        return True, ["la scheda delle caselle NON si legge: senza sapere se ci sono misure scadute non "
+                      "si apre la produzione (S1: il vuoto non e' un valore)"]
+    if not scadute:
+        return False, ["nessuna casella scaduta: la produzione si puo' toccare"]
+    righe = ["%d file di produzione nello scopo (%s) e %d comando/i di rimisura in sospeso:"
+             % (len(di_produzione), ", ".join(di_produzione), len(scadute))]
+    righe.extend("   · %s" % c[:110] for c in scadute)
+    if nonostante and nonostante.strip():
+        righe.append("SBLOCCATO dal fondatore, motivo scritto nella traccia: %s" % nonostante.strip())
+        return False, righe
+    righe.append("⛔ prima si rimisura:  python collaudi/rimisura.py   (oppure `--nonostante \"<motivo>\"` "
+                 "prima di `--scopo`: il motivo resta scritto)")
+    return True, righe
 
 
 # --------------------------------------------------------------------------------------
@@ -657,9 +719,14 @@ def verdetto(esiti):
     return rossi, non_eseguiti
 
 
-def main(argv=None):
+def main(argv=None, traccia=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     radice = RADICE
+    nonostante = None
+    if "--nonostante" in argv:
+        i = argv.index("--nonostante")
+        nonostante = argv[i + 1] if i + 1 < len(argv) else ""
+        del argv[i:i + 2]
     scopo = None
     if "--scopo" in argv:
         scopo = argv[argv.index("--scopo") + 1:]
@@ -676,18 +743,31 @@ def main(argv=None):
     inizio = time.time()
     # PRIMA di iniziare l'operazione: i sei divieti, per intero.
     stampa_divieti(radice)
+    if scopo is not None:
+        bloccato, righe = caselle_scadute_bloccano(scopo, nonostante=nonostante, radice=radice)
+        if bloccato:
+            print("=" * 86)
+            print("⛔ SCOPO NON DICHIARATO — ci sono caselle SCADUTE e lo scopo tocca la produzione")
+            for r in righe:
+                print("   %s" % r)
+            print("   Regola del fondatore (2026-09-16): dopo ogni unione si rimisura PRIMA di aprire")
+            print("   lavoro nuovo. Il conto delle caselle deve dire la verita' di oggi, non di ieri.")
+            print("=" * 86)
+            return 1
     esiti = giro(radice)
     secondi = time.time() - inizio
     stampa(esiti, secondi)
 
     rossi, non_eseguiti = verdetto(esiti)
     if scopo is not None:
-        percorso = scrivi_scopo(scopo, radice)
+        percorso = scrivi_scopo(scopo, radice, percorso=traccia, nonostante=nonostante)
         print("-" * 86)
         print("📋 SCOPO DICHIARATO (regola ferrea 15) — %d file, scritto in %s"
               % (len(scopo), percorso))
         for f in sorted(scopo):
             print("   · %s" % f)
+        if nonostante:
+            print("   ⚠️ dichiarato NONOSTANTE le caselle scadute, motivo: %s" % nonostante)
         print("   Lo rilegge `collaudi/prima_di_dire_fatto.py` al momento del commit.")
     print("=" * 86)
     if rossi or non_eseguiti:

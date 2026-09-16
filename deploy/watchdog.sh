@@ -195,8 +195,12 @@ scope="$([ "$REMOTO" = 1 ] && echo 'esterno' || echo 'vps')"
 if [ -n "$attivi" ]; then
   log "ALLARME ($scope): $(printf '%s' "$attivi" | tr '\n' ';')"
   if [ "$manda" = "1" ]; then
+    # ⛔ `printf '%s\n'`, con l'a-capo: `attivi` esce da `$(...)`, che toglie l'a-capo finale, e
+    #    `read` sull'ultima riga senza a-capo NON esegue il corpo del `while` -> l'ultima riga di
+    #    ogni allarme si perdeva SEMPRE (dal 18/7: 330 Telegram su 386 arrivati VUOTI, 2026-09-16).
+    #    Guardia: test_watchdog.TestIlTelegramPortaTutteLeRigheAncheLUltima (esegue queste righe).
     testo="🚨 BookinVIP WATCHDOG ($scope)
-$(printf '%s' "$attivi" | while IFS='|' read -r c g m; do
+$(printf '%s\n' "$attivi" | while IFS='|' read -r c g m; do
     ic='⚠️'; [ "$g" = 'critico' ] && ic='🔴'; echo "$ic $m"; done)
 — $(date '+%Y-%m-%d %H:%M') UTC"
     telegram "$testo"

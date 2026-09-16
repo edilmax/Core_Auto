@@ -403,6 +403,121 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🔁 LE CASELLE SI RIMISURANO DOPO OGNI UNIONE, E I DUE ALLARMI CHE MENTIVANO — 16 settembre, mezzogiorno
+
+**Da dove nasce.** Il fondatore, riaprendo la chat: *«mi sembra che ci sono 18 commit da fare»*. Non erano commit da
+fare: erano le **18 unioni in `master` dall'11/9** (misurate: `git log --oneline --merges --since=2026-09-11 master` →
+18, dalla PR #174 alla #194). Ogni casella del piano è legata all'impronta dei moduli del suo blocco; un'unione che li
+tocca la fa **scadere**, e nessuna sessione rilanciava gli attrezzi: il conto era passato da 25 su 42 (11/9) a **3 su
+43** (16/9 mattina) senza che una sola prova fallisse. Il numero misurava «quanto sono fresche le misure», non «quanto
+lavoro è finito», e nessuno lo diceva. Rilanciati i 21 attrezzi con `--scrivi` sul commit `eeea05f` (5 minuti, ogni
+uscita letta diretta, 17 a zero e 4 a uno con motivo scritto nella scheda): **21 spuntate su 43**. Zero righe di codice.
+
+**`collaudi/rimisura.py` — NUOVO, ACCESO.** Si lancia a mano, **dopo ogni unione e prima di aprire lavoro nuovo**:
+`python collaudi/rimisura.py`. *Logica:* `scheda.da_rimisurare()` (la fonte, mai una copia) → `elenca` (senza doppioni)
+→ `dividi` (i giri di mutazione fuori finché non li si chiede con `--anche-mutazione`; `--salta PAROLA` toglie per
+parola, dichiarando) → `esegui` (uno alla volta, `subprocess` con l'interprete corrente, uscita diretta, registro per
+comando in `%TEMP%\bookinvip_rimisure\<ora>\`, tetto per i giri di mutazione letto dai loro `--minuti`) → `caselle_di`
+(rilegge dalla scheda se la casella è tornata spuntata) → `verdetto` (0 = FINITO solo se ogni comando è uscito 0, ogni
+casella è spuntata e niente è saltato o «a mano»; altrimenti 1). *Dipendenze:* `scheda.py`, `piano.py`; nessuna
+libreria. *D18:* `precondizioni` (git, scheda con righe, piano, interprete) fermano il giro con uscita 2; `--autoprova`
+9 casi nelle due direzioni su comandi finti; `NON_GUARDA` stampato a ogni giro; guardia
+`test_pipeline_ci.TestLaRimisuraNonPuoBARARE` (2 test). Escluso dal conto dei collaudi in `regole_avvio.NON_SONO_COLLAUDI`
+col motivo (è un lanciatore, come la batteria).
+
+**`collaudi/prima_di_lanciare.py` — il blocco delle modifiche al codice, meccanico.** Regola del fondatore: *«blocca
+ogni nuova modifica al codice finché la rimisura non è fatta»*. Nuove `PRODUZIONE` (espressione: `fase*.py`,
+`main_casavip.py`, `deploy/…`), `_caselle_scadute` (legge `scheda.da_rimisurare` via importlib; `None` se non si legge, e
+`None` **blocca**: il vuoto non è un verde, S1) e `caselle_scadute_bloccano(scopo, nonostante, scadute, radice)`. In
+`main`: se lo scopo dichiarato tocca la produzione e ci sono comandi di rimisura in sospeso → uscita 1 **senza scrivere la
+traccia**, con l'elenco dei comandi e il gesto da fare. Sblocco: `--nonostante "<motivo>"` prima di `--scopo`; il motivo
+finisce in una riga di commento della traccia (`scrivi_scopo(nonostante=)`), che `leggi_scopo` salta e il pre-fatto
+rilegge. `main(argv, traccia=None)` per la guardia, che esegue il `main` vero con una traccia temporanea. Provato sul
+lavoro stesso: lo scopo con `deploy/watchdog.sh` rifiutato (6 comandi in sospeso), poi dichiarato col motivo. Guardia
+`TestIlPreVoloBloccaLaProduzioneFincheCiSonoCaselleScadute` (2 test, due direzioni + il main). *Limite dichiarato:* guarda
+solo al momento di `--scopo`; senza `--scopo` il pre-volo non blocca niente (scritto in `COSA_NON_GUARDA`).
+
+**`.github/workflows/sentinella.yml` — tre tentativi prima di gridare.** Il falso rosso del 15 e del 16/9 (un solo
+`curl -m 20` scaduto su un sito vivo) era il difetto della voce qui sotto. Ora il blocco `# ── bussa` … `# ── fine bussa`
+bussa `TENTATIVI` (3) volte a `PAUSA` (20 s), stampa ogni tentativo col suo codice e si ferma al primo 200; il resto dello
+step non cambia. Fonti lette prima (D25): everything.curl.dev, capitolo «Retry» (Stenberg, 2026) — `--retry` riprova solo
+su timeout e 408/429/5xx, `--retry-delay` fissa la pausa, `--max-time` vale **per tentativo**; actions/runner-images,
+Ubuntu 24.04 (GitHub, immagine 20260907: curl 8.5.0, python 3.12.3). Il ciclo è esplicito invece di `--retry 2
+--retry-delay 20` perché con `--retry` si legge solo l'ultimo esito (ferrea 9). Guardia D20
+`TestLaSentinellaEsterna.test_BUSSA_TRE_VOLTE_PRIMA_DI_GRIDARE_e_SMETTE_al_primo_200`: estrae le righe vere fra i due
+ancoraggi e le esegue in `sh` con `curl` e `sleep` sostituite da funzioni (000 000 000 → 3 tentativi, 2 pause, allarme;
+000 200 → 2, 1, nessun allarme; 200 → 1, 0); vista ROSSA prima, poi la classe intera `Ran 7 · OK`. Due sbagli dello
+strumento trovati e corretti prima di credergli (S3): il contatore della `curl` finta viveva nella sottoshell `$(...)` e
+contava 0 tentativi su 3 fatti; il file del conto scritto da Python su Windows portava un `\r`. Le guardie preesistenti
+della classe (programmata, minuti dispari, interroga la salute, può fallire, `muto`, campo assente) restano verdi.
+
+**`deploy/watchdog.sh` — la riga del Telegram, applicata alle 11:48Z con l'«AUTORIZZATO» del fondatore (11:47Z).** Misurato sul registro del VPS dalla
+chat precedente: 386 allarmi dal 18/7, 330 con una riga sola, arrivati **vuoti**. Causa: `printf '%s' "$attivi" | while
+IFS='|' read …` — `attivi` esce da `$(...)`, che toglie l'a-capo finale; `read` sull'ultima riga senza a-capo riempie le
+variabili ma ritorna 1, e il corpo del `while` non gira. Guardia D20 `test_watchdog.TestIlTelegramPortaTutteLeRigheAncheLUltima`:
+estrae le righe vere da `testo="` a `telegram "$testo"`, le esegue in `sh` con `telegram` e `date` sostituite da funzioni,
+e pretende che fra intestazione e data ci siano **esattamente** gli allarmi; vista ROSSA (`['🔴 PRIMA RIGA'] != ['🔴 PRIMA
+RIGA', '⚠️ ULTIMA RIGA']`). La riparazione è `printf '%s\n'` più quattro righe di commento che spiegano il perché; `deploy/` è
+produzione (B4): la parola è stata chiesta e scritta dal fondatore, poi la riga applicata e il modulo intero `test_watchdog`
+riletto verde (`Ran 56 · OK`). Vale sul server dal deploy di questo lavoro: il cron legge il file dal repository sul VPS.
+
+**Misure della sessione.** ruff e bandit (cricchetto): «nessuna segnalazione nuova». Caricatore **6843** (erano 6837: sei
+guardie). Pre-volo dalla PowerShell vera: il controllo 1 ha gridato «dichiara 6837, il caricatore ne raccoglie 6843»
+**prima** della suite, come deve (S14), e la cifra è stata corretta. I quattro rossi della rimisura sono misure vere:
+`casa-test` a 1,00 € in vetrina (Blocco 6), il monitor UptimeRobot sulla home invece di `/api/health` (Blocco 8), il
+Guardiano ancora ANOMALO per le righe del 14-15/9 (Blocco 1, si pulisce al giro di domani), 19 rotte del pannello admin
+su 21 senza catena (Blocco 3, debito dichiarato). Restano scadute 6 caselle, ognuna col suo perché in `RIPRENDI_QUI.md`.
+
+**Un errore mio, scritto qui perché non si ripeta:** controllando se una variabile d'ambiente fosse presente ho scritto
+`${VAR:+presente}${VAR:-assente}`, e la seconda espansione stampa il **valore** quando la variabile c'è. La chiave di sola
+lettura di UptimeRobot è finita nel registro della sessione (D6). La forma giusta è `${VAR:+presente}` da sola, o
+`[ -n "${VAR:-}" ] && echo presente || echo assente`.
+
+### 🚨 UNA SENTINELLA CHE BUSSA UNA VOLTA SOLA, E UN GIRO DELL'HOST CHE MISURAVA PRESENZE — 16 settembre, mattina
+
+**Nessuna riga di produzione toccata.** Il fondatore ha scritto «PROCEDI» e «FAI LA COSA GIUSTA»: nessuna delle due è
+«autorizzato» (B4), quindi i due lavori su `deploy/host.html` e `fase83_server.py` sono stati **preparati e lasciati
+fermi**. Modificato solo `collaudi/esame_host_da_solo.py`, che è strumentazione di collaudo (D20).
+
+**Il falso allarme, e perché conta.** Il watchdog ha segnalato «CI su `master` ROSSA». Letta dall'API su `eeea05f`: una
+sola `failure`, il job `il-sito-risponde-e-la-sentinella-e-viva` del giro `Sentinella esterna` delle 05:12:04Z, con
+`curl: (28) Connection timed out after 20001 milliseconds` → `HTTP 000`. **Il sito era vivo.** La prova sta nel gemello
+del 15/9 (`failure` alle 05:20:15Z): la sonda interna `GET /api/health` ha avuto **200 alle 05:20:01**, cioè mentre la
+curl di GitHub era ancora in attesa, e **UptimeRobot** — esterno e non nostro — **200 alle 05:21:07**. Il 16/9 nginx ha
+servito **103 righe** fra le 05:00 e le 05:22. Scagionati con la misura accanto: carico `0.00`, CPU 98% idle (`sar`),
+`fail2ban` inactive, UFW aperto su 80/443, **0** risposte 503/429, `certbot` alle 06:14 e 19:33 (non alle 05:1x), nginx
+fermo dal 20/08. **È un difetto lo stesso** (regola ferrea 10): la sentinella ha **un solo tentativo**, e un intoppo di
+rete fra GitHub e noi diventa una CI rossa più un Telegram. Due notti di fila, sempre verso le 05:15. La riparazione
+candidata — tre tentativi a ~20 s, grida solo se cadono tutti — è annotata in `RIPRENDI_QUI.md`, non costruita: non era
+nello scopo dichiarato.
+
+**`collaudi/esame_host_da_solo.py` — da presenze a differenze (METODO_v4 PARTE 20.1).** Il metodo pretende che ogni
+anello sia una **differenza** («PRIMA non c'è, DOPO c'è»), perché un codice HTTP 200 dice che la rotta ha risposto, non
+che il fatto sia avvenuto. Fino a ieri l'unico anello così era il denaro (7-ter/8-bis, dal 2026-09-06). Aggiunti tre
+anelli, **sei passi**, ognuno che legge lo stato prima e dopo lo **stesso** gesto: la vetrina
+(`catalogo.dettaglio('casa')` da `None` a presente), il calendario (`inventario.conta_alloggio` da `0` a `29` giorni) e
+le date (`inventario.disponibile` da `True` a `False` dopo la prenotazione). **L'osservazione** si prende dagli oggetti
+del sistema, **l'azione** resta sempre sulle rotte: guardare il catalogo da dentro non aiuta l'host a pubblicare, e se lo
+aiutasse il passo 4-bis (la chiave globale non dev'essere necessaria) diventerebbe rosso.
+
+Il denominatore passa da 17 a **23 anelli dichiarati** e la riga della misura ora dice «ANELLI … 23 su 23 dichiarati».
+Nessun passo è stato tolto né rinominato — solo aggiunti — ed è il motivo per cui la guardia
+`test_pipeline_ci.TestLEsameDellHostDaSoloNonPuoBARARE` regge: pretende almeno 17 passi e certi nomi esatti.
+Provato nelle due direzioni: `--autoprova` uscita **0**, `--con-guasto` **ROSSO** con `4 passi su 23 falliscono` e uscita
+**1**, la guardia `Ran 4 · OK · uscita 0`.
+
+**Un difetto introdotto e chiuso nello stesso giro.** La riga nuova stampava «misurati in DUE TEMPI: 8» a tre righe da un
+commento che diceva «sono QUATTRO»: due cifre entrambe giuste — 8 passi, 4 coppie — che all'occhio si contraddicevano.
+È lo sbaglio **S4** (un numero deve dichiarare *cosa* conta). Ora stampa «8 passi = 4 anelli prima/dopo», e il commento
+sopra il calcolo spiega perché si stampano tutte e due.
+
+**La famiglia del falso rosso ⑦, enumerata da una macchina.** Un attrezzo usa-e-getta (fuori dal repository) legge i test
+con l'**AST**, non con una espressione regolare — `assertIn(pin, h)` e `assertIn("pin", h)` si scrivono quasi uguali e
+sono due cose diverse — e cerca un valore corto dentro una pagina intera: **130 casi in 422 file**, di cui **7 rossi**
+(cifre nude). Quattro dei sette stanno in `test_gate_email_notifica.py`; i due peggiori sono `assertIn("200", h)` e
+`assertIn("100", testo)`, tre cifre che una pagina contiene per caso molto più spesso del PIN `1967` che ha prodotto il
+falso rosso del 15/9. L'elenco completo e le esclusioni dichiarate stanno in `RIPRENDI_QUI.md`.
+
 ### 🛠️ IL PANNELLO HOST RIPARATO ALLA RADICE — 16 settembre, «AUTORIZZO TUTTO» del fondatore (ramo `pannello-host-riparato-2026-09-16`)
 
 **Da dove nasce.** I sei difetti che il fondatore ha trovato in mezz'ora di pannello vero la sera del 15/9, sotto ~6800 test

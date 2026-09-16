@@ -24,11 +24,11 @@
  "159ad2c8ab8f": {
   "blocco": 1,
   "comando": "python collaudi/esame_produzione.py --casella ogni-ora --scrivi",
-  "commit": "8358c04",
+  "commit": "eeea05f",
   "condizione": "gli invarianti sui dati veri girano in produzione almeno OGNI ORA, non una volta al giorno, e l'ultimo giro si legge dal registro del server con la sua ora",
   "denominatore": 13,
   "esito": true,
-  "impronta": "2835740729f0",
+  "impronta": "f18f622230ff",
   "impronte_moduli": {
    "fase101_stripe_connect": "30d6d6acc8ee",
    "fase102_motore_autonomo": "5f821fcc906f",
@@ -38,14 +38,14 @@
    "fase149_deposito_cauzionale": "272fe8e92880",
    "fase15_idempotency": "bfcd5e8ca68b",
    "fase160_escrow_garanzia": "dbf2a26f8a0a",
-   "fase162_pagamenti_pendenti": "c26dc3e3eb98",
+   "fase162_pagamenti_pendenti": "bfb1d8443d21",
    "fase167_credito_single_use": "4c767fea639e",
    "fase177_financial_controller": "c49d832d573c",
    "fase17_money": "4f56d5c69a04",
    "fase181_audit_console": "f03c9196f159",
    "fase182_riconciliazione": "360574b705b8",
    "fase183_carta_offsession": "cad1b678abff",
-   "fase186_guardiano": "72d34d3c1ed0",
+   "fase186_guardiano": "0dc20d8aae10",
    "fase188_paga_struttura": "b06f26f76cda",
    "fase191_blocco_globale": "0e25d2e0ab6f",
    "fase199_invarianti": "00192bca45b2",
@@ -58,7 +58,7 @@
    "fase99_multicurrency": "61a3b5a0c820"
   },
   "motivo": "",
-  "quando": "2026-09-10T11:18:19"
+  "quando": "2026-09-16T13:09:38"
  },
  "16d2c823889f": {
   "blocco": 1,
@@ -102,11 +102,11 @@
  "224ae0884a0b": {
   "blocco": 1,
   "comando": "python collaudi/esame_orologi.py --scrivi",
-  "commit": "8358c04",
+  "commit": "eeea05f",
   "condizione": "hold, payout e penale scadono davvero in un giro contro Stripe di PROVA con l'orologio NOSTRO spostato, e i tre esiti si rileggono da Stripe (rimborso dell'hold, bonifico all'host, penale addebitata)",
   "denominatore": 34,
   "esito": true,
-  "impronta": "2835740729f0",
+  "impronta": "f18f622230ff",
   "impronte_moduli": {
    "fase101_stripe_connect": "30d6d6acc8ee",
    "fase102_motore_autonomo": "5f821fcc906f",
@@ -116,14 +116,14 @@
    "fase149_deposito_cauzionale": "272fe8e92880",
    "fase15_idempotency": "bfcd5e8ca68b",
    "fase160_escrow_garanzia": "dbf2a26f8a0a",
-   "fase162_pagamenti_pendenti": "c26dc3e3eb98",
+   "fase162_pagamenti_pendenti": "bfb1d8443d21",
    "fase167_credito_single_use": "4c767fea639e",
    "fase177_financial_controller": "c49d832d573c",
    "fase17_money": "4f56d5c69a04",
    "fase181_audit_console": "f03c9196f159",
    "fase182_riconciliazione": "360574b705b8",
    "fase183_carta_offsession": "cad1b678abff",
-   "fase186_guardiano": "72d34d3c1ed0",
+   "fase186_guardiano": "0dc20d8aae10",
    "fase188_paga_struttura": "b06f26f76cda",
    "fase191_blocco_globale": "0e25d2e0ab6f",
    "fase199_invarianti": "00192bca45b2",
@@ -136,16 +136,16 @@
    "fase99_multicurrency": "61a3b5a0c820"
   },
   "motivo": "",
-  "quando": "2026-09-10T11:17:22"
+  "quando": "2026-09-16T13:10:08"
  },
  "227c35ec4353": {
   "blocco": 1,
   "comando": "python collaudi/esame_percorso_ruoli.py --casella coerenza --scrivi",
-  "commit": "4adb7c8",
+  "commit": "eeea05f",
   "condizione": "lo stesso fatto sui soldi -- una prenotazione, un rimborso, un bonifico -- letto dal pannello dell'host, da quello dell'admin e dal bunker da' lo STESSO numero al centesimo, riga per riga e non solo nei totali (due errori che si compensano danno un totale giusto), e le letture si enumerano dal codice, non a memoria",
   "denominatore": 4,
   "esito": true,
-  "impronta": "2835740729f0",
+  "impronta": "f18f622230ff",
   "impronte_moduli": {
    "fase101_stripe_connect": "30d6d6acc8ee",
    "fase102_motore_autonomo": "5f821fcc906f",
@@ -155,14 +155,14 @@
    "fase149_deposito_cauzionale": "272fe8e92880",
    "fase15_idempotency": "bfcd5e8ca68b",
    "fase160_escrow_garanzia": "dbf2a26f8a0a",
-   "fase162_pagamenti_pendenti": "c26dc3e3eb98",
+   "fase162_pagamenti_pendenti": "bfb1d8443d21",
    "fase167_credito_single_use": "4c767fea639e",
    "fase177_financial_controller": "c49d832d573c",
    "fase17_money": "4f56d5c69a04",
    "fase181_audit_console": "f03c9196f159",
    "fase182_riconciliazione": "360574b705b8",
    "fase183_carta_offsession": "cad1b678abff",
-   "fase186_guardiano": "72d34d3c1ed0",
+   "fase186_guardiano": "0dc20d8aae10",
    "fase188_paga_struttura": "b06f26f76cda",
    "fase191_blocco_globale": "0e25d2e0ab6f",
    "fase199_invarianti": "00192bca45b2",
@@ -175,18 +175,28 @@
    "fase99_multicurrency": "61a3b5a0c820"
   },
   "motivo": "",
-  "quando": "2026-09-10T16:44:41"
+  "quando": "2026-09-16T13:07:44"
  },
  "24faa37bd025": {
   "blocco": 7,
   "comando": "python collaudi/esame_host_da_solo.py --scrivi",
-  "commit": "bfad2ce",
+  "commit": "eeea05f",
   "condizione": "un host si iscrive, carica un annuncio e incassa SENZA che nessuno lo aiuti",
-  "denominatore": 17,
+  "denominatore": 23,
   "esito": true,
-  "impronta": "f59dead49141",
+  "impronta": "31a9bb89e5a8",
+  "impronte_moduli": {
+   "fase109_referral_host": "5f390a47ceef",
+   "fase115_dashboard_metriche": "582b15ad00df",
+   "fase141_onboarding_wizard": "d42c7f91a98e",
+   "fase70_turnover": "e6dd2a9ff349",
+   "fase72_digital_twin": "9004ef285f00",
+   "fase75_guardian_engine": "c6b61d9e6d89",
+   "fase78_sleep_guarantee": "05e5c1b2a549",
+   "fase88_registro_host": "9f2dbb87d572"
+  },
   "motivo": "",
-  "quando": "2026-09-08T17:10:08"
+  "quando": "2026-09-16T13:07:53"
  },
  "3a547df3a743": {
   "blocco": 8,
@@ -218,11 +228,11 @@
  "50691c557e6e": {
   "blocco": 1,
   "comando": "python collaudi/esame_soldi.py --scrivi",
-  "commit": "8358c04",
+  "commit": "eeea05f",
   "condizione": "le dimostrazioni z3 sugli invarianti GIRANO in CI, e i test che le portano NON risultano saltati",
   "denominatore": 54,
   "esito": true,
-  "impronta": "2835740729f0",
+  "impronta": "f18f622230ff",
   "impronte_moduli": {
    "fase101_stripe_connect": "30d6d6acc8ee",
    "fase102_motore_autonomo": "5f821fcc906f",
@@ -232,14 +242,14 @@
    "fase149_deposito_cauzionale": "272fe8e92880",
    "fase15_idempotency": "bfcd5e8ca68b",
    "fase160_escrow_garanzia": "dbf2a26f8a0a",
-   "fase162_pagamenti_pendenti": "c26dc3e3eb98",
+   "fase162_pagamenti_pendenti": "bfb1d8443d21",
    "fase167_credito_single_use": "4c767fea639e",
    "fase177_financial_controller": "c49d832d573c",
    "fase17_money": "4f56d5c69a04",
    "fase181_audit_console": "f03c9196f159",
    "fase182_riconciliazione": "360574b705b8",
    "fase183_carta_offsession": "cad1b678abff",
-   "fase186_guardiano": "72d34d3c1ed0",
+   "fase186_guardiano": "0dc20d8aae10",
    "fase188_paga_struttura": "b06f26f76cda",
    "fase191_blocco_globale": "0e25d2e0ab6f",
    "fase199_invarianti": "00192bca45b2",
@@ -252,69 +262,84 @@
    "fase99_multicurrency": "61a3b5a0c820"
   },
   "motivo": "",
-  "quando": "2026-09-10T11:13:51"
+  "quando": "2026-09-16T13:06:17"
  },
  "506a24febc87": {
   "blocco": 6,
   "comando": "python collaudi/esame_plausibilita.py --scrivi",
-  "commit": "e39f660",
+  "commit": "eeea05f",
   "condizione": "ogni numero mostrato ha senso nel mondo vero (modo di rompersi 10)",
-  "denominatore": 13,
-  "esito": true,
-  "impronta": "a1f74517929d",
+  "denominatore": 14,
+  "esito": false,
+  "impronta": "9d6084750989",
   "impronte_moduli": {
    "fase107_traduzione_annunci": "e0fc5c8e8eb1",
-   "fase113_messaggistica": "41035a5ff177",
-   "fase117_wishlist": "42a05bdcd030",
+   "fase113_messaggistica": "c3a8712be969",
+   "fase117_wishlist": "59bc3013d29e",
    "fase121_geo_ricerca": "2a001dc8b497",
-   "fase123_web_push": "655f9a31d860",
+   "fase123_web_push": "674827600458",
    "fase129_traduzione_recensioni": "2d80591ac6cd",
    "fase137_fedelta_guest": "5394500c8163",
    "fase139_chatbot_guest": "716261ab2b0d",
    "fase166_geocoder": "162da4a35b88",
    "fase175_poi_osm": "c1ad5e11dd94",
    "fase26_ricerca": "3dc66d4cb1ac",
-   "fase57_vetrina": "57101fd6eb58",
+   "fase57_vetrina": "f5e82f1a19f3",
    "fase61_localizzazione": "6ca2f962ff78",
    "fase63_recensioni": "5e00244ea3f5",
    "fase74_sensory_engine": "6f64cb3f6e59"
   },
-  "motivo": "",
-  "quando": "2026-09-12T13:21:06"
+  "motivo": "[mostrati] casa-test: prezzo a notte in banda (5..5000 EUR) (100 EUR = 1.00 EUR)",
+  "quando": "2026-09-16T13:07:51"
  },
  "555972b586e3": {
   "blocco": 2,
   "comando": "python collaudi/esame_feed_due_versi.py --scrivi",
-  "commit": "a1dcf97",
+  "commit": "eeea05f",
   "condizione": "il feed esterno vale nei due versi: una notte chiusa da un feed si riapre quando sparisce da QUEL feed (e da nessun altro), con lo stato di prima, e solo se l'host non l'ha toccata nel frattempo; i blocchi esterni sono oggetti con origine, non sovrascritture dell'inventario; l'eco del nostro calendario riesportato dall'OTA non chiude le nostre notti; un feed che passa da N eventi a zero non riapre niente e diventa un'anomalia",
   "denominatore": 14,
   "esito": true,
-  "impronta": "6927427232b8",
+  "impronta": "42dfa326ee8d",
+  "impronte_moduli": {
+   "fase111_cancellazione": "cdaa0ff5cea8",
+   "fase135_ical_bidirezionale": "7400c7b99498",
+   "fase152_notifiche_prenotazione": "d43723ad39d6",
+   "fase187_fuso_orario": "831d20429805",
+   "fase203_ical_orologio": "a6fd5a3dde7a",
+   "fase34_prenotazioni": "87f010d9f3cd",
+   "fase36_booking_api": "519033218af6",
+   "fase58_channel_manager": "67b6e2fc5fcb",
+   "fase59_concierge": "1c588de5a993",
+   "fase62_predictive_noshow": "c24b0e7953a2",
+   "fase67_coda_intelligente": "3fa3954e9d4e",
+   "fase71_commitment": "5377fc684e79",
+   "fase82_ical_sync": "1402326ece2b"
+  },
   "motivo": "",
-  "quando": "2026-09-07T23:20:28"
+  "quando": "2026-09-16T13:07:43"
  },
  "5c447a0ee514": {
   "blocco": 5,
   "comando": "python collaudi/esame_legale.py --casella spunte --scrivi",
-  "commit": "c82343e",
+  "commit": "eeea05f",
   "condizione": "le 3 spunte obbligatorie sono bloccate lato browser E rifiutate 422 lato server",
   "denominatore": 36,
   "esito": true,
-  "impronta": "784a22f0ba1d",
+  "impronta": "c6a66f968ea0",
   "impronte_moduli": {
    "fase100_dac7": "e5c0be6c61a5",
    "fase103_reverse_charge": "5ca652e5af5a",
    "fase145_contratto_pdf": "070792042938",
    "fase151_alloggiati_web": "32eaf4440a62",
    "fase154_giurisdizioni_marketing": "7edab3faacdd",
-   "fase156_erasure": "4c73cde39b15",
+   "fase156_erasure": "d20180c27f1c",
    "fase163_accettazioni": "b7c3c40a76f6",
    "fase184_marca_temporale": "dd31eb53f86c",
    "fase185_testi_legali": "4d520fb7df3d",
    "fase79_dichiarazione": "fdafb04a19ea"
   },
   "motivo": "",
-  "quando": "2026-09-12T23:49:35"
+  "quando": "2026-09-16T13:07:47"
  },
  "63e1e98393ea": {
   "blocco": 10,
@@ -341,34 +366,34 @@
  "7d0c5b891c14": {
   "blocco": 5,
   "comando": "python collaudi/esame_legale.py --casella lingue --scrivi",
-  "commit": "c82343e",
+  "commit": "eeea05f",
   "condizione": "termini e privacy sono leggibili in tutte le lingue dichiarate",
   "denominatore": 43,
   "esito": true,
-  "impronta": "784a22f0ba1d",
+  "impronta": "c6a66f968ea0",
   "impronte_moduli": {
    "fase100_dac7": "e5c0be6c61a5",
    "fase103_reverse_charge": "5ca652e5af5a",
    "fase145_contratto_pdf": "070792042938",
    "fase151_alloggiati_web": "32eaf4440a62",
    "fase154_giurisdizioni_marketing": "7edab3faacdd",
-   "fase156_erasure": "4c73cde39b15",
+   "fase156_erasure": "d20180c27f1c",
    "fase163_accettazioni": "b7c3c40a76f6",
    "fase184_marca_temporale": "dd31eb53f86c",
    "fase185_testi_legali": "4d520fb7df3d",
    "fase79_dichiarazione": "fdafb04a19ea"
   },
   "motivo": "",
-  "quando": "2026-09-12T23:49:36"
+  "quando": "2026-09-16T13:07:47"
  },
  "813b9082642c": {
   "blocco": 1,
   "comando": "python collaudi/esame_produzione.py --scrivi",
-  "commit": "8358c04",
+  "commit": "eeea05f",
   "condizione": "gli invarianti sono verificati in PRODUZIONE, non solo nei test",
   "denominatore": 14,
-  "esito": true,
-  "impronta": "2835740729f0",
+  "esito": false,
+  "impronta": "f18f622230ff",
   "impronte_moduli": {
    "fase101_stripe_connect": "30d6d6acc8ee",
    "fase102_motore_autonomo": "5f821fcc906f",
@@ -378,14 +403,14 @@
    "fase149_deposito_cauzionale": "272fe8e92880",
    "fase15_idempotency": "bfcd5e8ca68b",
    "fase160_escrow_garanzia": "dbf2a26f8a0a",
-   "fase162_pagamenti_pendenti": "c26dc3e3eb98",
+   "fase162_pagamenti_pendenti": "bfb1d8443d21",
    "fase167_credito_single_use": "4c767fea639e",
    "fase177_financial_controller": "c49d832d573c",
    "fase17_money": "4f56d5c69a04",
    "fase181_audit_console": "f03c9196f159",
    "fase182_riconciliazione": "360574b705b8",
    "fase183_carta_offsession": "cad1b678abff",
-   "fase186_guardiano": "72d34d3c1ed0",
+   "fase186_guardiano": "0dc20d8aae10",
    "fase188_paga_struttura": "b06f26f76cda",
    "fase191_blocco_globale": "0e25d2e0ab6f",
    "fase199_invarianti": "00192bca45b2",
@@ -397,8 +422,8 @@
    "fase87_stripe_webhook": "d597430f8f64",
    "fase99_multicurrency": "61a3b5a0c820"
   },
-  "motivo": "",
-  "quando": "2026-09-10T12:09:32"
+  "motivo": "l'ULTIMO giro INTERO del Guardiano e' finito pulito (GUARDIANO: nessuno stato anomalo), ha meno di 25 h e ha verificato gli invarianti (la sua riga INVARIANTI ARCHIVI lo precede) (GUARDIANO: 4 stato/i anomalo/i -> {'guasti_isolati': {'conta · eta 9.5 h · riga INVARIANTI ARCHIVI subito prima: si')",
+  "quando": "2026-09-16T13:09:36"
  },
  "8267c64a367a": {
   "blocco": 4,
@@ -414,15 +439,15 @@
  "a36e3373da1d": {
   "blocco": 8,
   "comando": "python collaudi/esame_sentinella.py --scrivi",
-  "commit": "e39f660",
+  "commit": "eeea05f",
   "condizione": "una sentinella ESTERNA (non nostra) si accorge se il sito muore",
   "denominatore": 10,
   "esito": false,
-  "impronta": "b99d9a55b63d",
+  "impronta": "3eae8dfd80df",
   "impronte_moduli": {
    "fase13_protocollo_finale": "2dce22f058cc",
    "fase16_outbox": "a47de5874653",
-   "fase178_watchdog": "fdc1565ac6cd",
+   "fase178_watchdog": "9520cebec63b",
    "fase23_datastore": "45f9c0f96325",
    "fase28_gateway": "650f256a6d9a",
    "fase29_backpressure": "d905d8e921b7",
@@ -432,34 +457,34 @@
    "fase42_observability": "a557645447a7",
    "fase60_mcp_server": "56ffc4364819",
    "fase81_bootstrap_casavip": "dacbc902ed40",
-   "fase83_server": "5debc73aa19b",
+   "fase83_server": "5737bb471831",
    "fase86_email": "19069663f9d1"
   },
   "motivo": "[esiste] un monitor ESTERNO (non GitHub) esiste e guarda bookinvip.com/api/health (nessun monitor esterno nelle letture: serve un conto (UptimeRobot o Better Stack, gratuito), lo apre il fondatore); [sveglia] il monitor esterno controlla almeno ogni 5 minuti e non e' in pausa (nessun monitor esterno); [sveglia] nelle ultime 24 ore i controlli del monitor non hanno buchi > 15 minuti e l'ultimo ha meno di 15 minuti (controlli nelle 24 ore: 0, buco massimo -, ultimo -); [sveglia] GitHub (seconda linea): ultimo giro entro 60 minuti e buco massimo nelle 24 ore sotto i 60 minuti — DECIDE, perche' il",
-  "quando": "2026-09-12T13:21:13"
+  "quando": "2026-09-16T13:09:42"
  },
  "a5c77ac6c76a": {
   "blocco": 5,
   "comando": "python collaudi/esame_oblio.py --scrivi",
-  "commit": "c82343e",
+  "commit": "eeea05f",
   "condizione": "il giro del CANCELLAMI e' percorso intero: ogni archivio che conteneva il dato e' pulito oppure DICHIARATO trattenuto per legge col suo perche', e il dato non si rilegge dai byte di quelli da pulire",
   "denominatore": 7,
   "esito": true,
-  "impronta": "784a22f0ba1d",
+  "impronta": "c6a66f968ea0",
   "impronte_moduli": {
    "fase100_dac7": "e5c0be6c61a5",
    "fase103_reverse_charge": "5ca652e5af5a",
    "fase145_contratto_pdf": "070792042938",
    "fase151_alloggiati_web": "32eaf4440a62",
    "fase154_giurisdizioni_marketing": "7edab3faacdd",
-   "fase156_erasure": "4c73cde39b15",
+   "fase156_erasure": "d20180c27f1c",
    "fase163_accettazioni": "b7c3c40a76f6",
    "fase184_marca_temporale": "dd31eb53f86c",
    "fase185_testi_legali": "4d520fb7df3d",
    "fase79_dichiarazione": "fdafb04a19ea"
   },
   "motivo": "",
-  "quando": "2026-09-12T23:49:10"
+  "quando": "2026-09-16T13:07:50"
  },
  "a6c9694a48f1": {
   "blocco": 2,
@@ -490,11 +515,11 @@
  "bf93b1c1b0ce": {
   "blocco": 7,
   "comando": "python collaudi/esame_pannello_soldi.py --scrivi",
-  "commit": "4adb7c8",
+  "commit": "eeea05f",
   "condizione": "il pannello dice sempre la verita' sui suoi soldi (nessun saldo stimato)",
   "denominatore": 21,
   "esito": true,
-  "impronta": "f59dead49141",
+  "impronta": "31a9bb89e5a8",
   "impronte_moduli": {
    "fase109_referral_host": "5f390a47ceef",
    "fase115_dashboard_metriche": "582b15ad00df",
@@ -503,19 +528,19 @@
    "fase72_digital_twin": "9004ef285f00",
    "fase75_guardian_engine": "c6b61d9e6d89",
    "fase78_sleep_guarantee": "05e5c1b2a549",
-   "fase88_registro_host": "d241ca990d66"
+   "fase88_registro_host": "9f2dbb87d572"
   },
   "motivo": "",
-  "quando": "2026-09-10T15:26:41"
+  "quando": "2026-09-16T13:07:54"
  },
  "c3cf3da4543f": {
   "blocco": 1,
   "comando": "python collaudi/esame_soldi.py --scrivi",
-  "commit": "8358c04",
+  "commit": "eeea05f",
   "condizione": "esistono le relazioni metamorfiche sull'aritmetica del denaro",
   "denominatore": 15,
   "esito": true,
-  "impronta": "2835740729f0",
+  "impronta": "f18f622230ff",
   "impronte_moduli": {
    "fase101_stripe_connect": "30d6d6acc8ee",
    "fase102_motore_autonomo": "5f821fcc906f",
@@ -525,14 +550,14 @@
    "fase149_deposito_cauzionale": "272fe8e92880",
    "fase15_idempotency": "bfcd5e8ca68b",
    "fase160_escrow_garanzia": "dbf2a26f8a0a",
-   "fase162_pagamenti_pendenti": "c26dc3e3eb98",
+   "fase162_pagamenti_pendenti": "bfb1d8443d21",
    "fase167_credito_single_use": "4c767fea639e",
    "fase177_financial_controller": "c49d832d573c",
    "fase17_money": "4f56d5c69a04",
    "fase181_audit_console": "f03c9196f159",
    "fase182_riconciliazione": "360574b705b8",
    "fase183_carta_offsession": "cad1b678abff",
-   "fase186_guardiano": "72d34d3c1ed0",
+   "fase186_guardiano": "0dc20d8aae10",
    "fase188_paga_struttura": "b06f26f76cda",
    "fase191_blocco_globale": "0e25d2e0ab6f",
    "fase199_invarianti": "00192bca45b2",
@@ -545,19 +570,19 @@
    "fase99_multicurrency": "61a3b5a0c820"
   },
   "motivo": "",
-  "quando": "2026-09-10T11:13:51"
+  "quando": "2026-09-16T13:06:17"
  },
  "d22022c687dd": {
   "blocco": 3,
   "comando": "python collaudi/esame_catene_admin.py --scrivi",
-  "commit": "6b613b3",
+  "commit": "eeea05f",
   "condizione": "ogni gesto del pannello admin -- rotte, bottoni e campi CONTATI dalla pagina a ogni giro, non da un elenco scritto a mano -- ha le sue tre colonne dichiarate (cosa deve succedere e dove finisce il dato · quali importi si muovono e cosa deve coincidere al centesimo · in quale archivio si scrive, se ci resta, se si cancella e per quale legge) e la catena PERCORSA anello per anello, dove ogni anello e' una differenza fra prima e dopo; una voce nuova senza catena e' rossa lo stesso giorno",
   "denominatore": 81,
   "esito": false,
-  "impronta": "01970b37c064",
+  "impronta": "bd8e4e6661ff",
   "impronte_moduli": {
    "fase105_identity_gate": "a3ab7f1e6819",
-   "fase127_checkin_digitale": "316a826c975f",
+   "fase127_checkin_digitale": "e1d23d1a333b",
    "fase143_kyc_host": "9024eed56447",
    "fase179_rate_limit": "d676ae5e7797",
    "fase180_bunker": "12b50f910968",
@@ -567,7 +592,7 @@
    "fase80_sentinel": "ebc8a451110f"
   },
   "motivo": "19 rotte del pannello su 21 non hanno ancora una catena percorsa (debito dichiarato, tetto 19): /api/admin/audit, /api/admin/cancella_attivita, /api/admin/controversia/risolvi, /api/admin/controversie, /api/admin/messaggi, /api/admin/prenotazioni, /api/admin/rimborsa_dovuto, /api/admin/rimborsi_dovuti, /api/admin/rimborso, /api/admin/search, /api/admin/storno_penale, /api/admin/verifica_stato, /api/admin/verifiche, /api/admin/verifiche/dettaglio, /api/admin/verifiche/fascicolo, /api/bunker/login, /api/bunker/logout, /api/gate/logout, /api/marketing/campagna",
-  "quando": "2026-09-11T00:08:11"
+  "quando": "2026-09-16T13:07:46"
  },
  "d4e612aafcd1": {
   "blocco": 9,
@@ -583,11 +608,11 @@
  "d70ecb7a31cc": {
   "blocco": 1,
   "comando": "python collaudi/esame_rimborsi.py --scrivi",
-  "commit": "8358c04",
+  "commit": "eeea05f",
   "condizione": "i soldi tornano DAVVERO all'ospite da OGNI strada che porta a un rimborso, non solo da quella che qualcuno si e' ricordato di provare (il 2026-08-16 le strade erano due e ne funzionava una). ⛔ L'AUTOMATICO NON e' la riga d'arrivo di questo blocco: e' una decisione del fondatore, e si accende dopo -- prima si guadagna la fiducia, poi si toglie il dito",
   "denominatore": 38,
   "esito": true,
-  "impronta": "2835740729f0",
+  "impronta": "f18f622230ff",
   "impronte_moduli": {
    "fase101_stripe_connect": "30d6d6acc8ee",
    "fase102_motore_autonomo": "5f821fcc906f",
@@ -597,14 +622,14 @@
    "fase149_deposito_cauzionale": "272fe8e92880",
    "fase15_idempotency": "bfcd5e8ca68b",
    "fase160_escrow_garanzia": "dbf2a26f8a0a",
-   "fase162_pagamenti_pendenti": "c26dc3e3eb98",
+   "fase162_pagamenti_pendenti": "bfb1d8443d21",
    "fase167_credito_single_use": "4c767fea639e",
    "fase177_financial_controller": "c49d832d573c",
    "fase17_money": "4f56d5c69a04",
    "fase181_audit_console": "f03c9196f159",
    "fase182_riconciliazione": "360574b705b8",
    "fase183_carta_offsession": "cad1b678abff",
-   "fase186_guardiano": "72d34d3c1ed0",
+   "fase186_guardiano": "0dc20d8aae10",
    "fase188_paga_struttura": "b06f26f76cda",
    "fase191_blocco_globale": "0e25d2e0ab6f",
    "fase199_invarianti": "00192bca45b2",
@@ -617,7 +642,7 @@
    "fase99_multicurrency": "61a3b5a0c820"
   },
   "motivo": "",
-  "quando": "2026-09-10T11:16:15"
+  "quando": "2026-09-16T13:07:26"
  },
  "df0678e71e35": {
   "blocco": 9,
@@ -633,63 +658,104 @@
  "e0c5eaf17028": {
   "blocco": 6,
   "comando": "python collaudi/esame_testi_congelati.py --scrivi",
-  "commit": "e39f660",
+  "commit": "eeea05f",
   "condizione": "nessun testo resta congelato in italiano dove la pagina dichiara 8 lingue: l'occhio del fondatore conta ZERO parole ferme sulle pagine che non sono gusci riempiti dal server",
   "denominatore": 72,
   "esito": true,
-  "impronta": "a1f74517929d",
+  "impronta": "9d6084750989",
   "impronte_moduli": {
    "fase107_traduzione_annunci": "e0fc5c8e8eb1",
-   "fase113_messaggistica": "41035a5ff177",
-   "fase117_wishlist": "42a05bdcd030",
+   "fase113_messaggistica": "c3a8712be969",
+   "fase117_wishlist": "59bc3013d29e",
    "fase121_geo_ricerca": "2a001dc8b497",
-   "fase123_web_push": "655f9a31d860",
+   "fase123_web_push": "674827600458",
    "fase129_traduzione_recensioni": "2d80591ac6cd",
    "fase137_fedelta_guest": "5394500c8163",
    "fase139_chatbot_guest": "716261ab2b0d",
    "fase166_geocoder": "162da4a35b88",
    "fase175_poi_osm": "c1ad5e11dd94",
    "fase26_ricerca": "3dc66d4cb1ac",
-   "fase57_vetrina": "57101fd6eb58",
+   "fase57_vetrina": "f5e82f1a19f3",
    "fase61_localizzazione": "6ca2f962ff78",
    "fase63_recensioni": "5e00244ea3f5",
    "fase74_sensory_engine": "6f64cb3f6e59"
   },
   "motivo": "",
-  "quando": "2026-09-12T13:20:57"
+  "quando": "2026-09-16T13:07:50"
  },
  "ec84faaea398": {
   "blocco": 2,
   "comando": "python collaudi/esame_prenotazioni.py --scrivi",
-  "commit": "a1dcf97",
+  "commit": "eeea05f",
   "condizione": "la macchina a stati copre cancellazioni, modifiche, no-show e sovra-affitto",
   "denominatore": 34,
   "esito": true,
-  "impronta": "6927427232b8",
+  "impronta": "42dfa326ee8d",
+  "impronte_moduli": {
+   "fase111_cancellazione": "cdaa0ff5cea8",
+   "fase135_ical_bidirezionale": "7400c7b99498",
+   "fase152_notifiche_prenotazione": "d43723ad39d6",
+   "fase187_fuso_orario": "831d20429805",
+   "fase203_ical_orologio": "a6fd5a3dde7a",
+   "fase34_prenotazioni": "87f010d9f3cd",
+   "fase36_booking_api": "519033218af6",
+   "fase58_channel_manager": "67b6e2fc5fcb",
+   "fase59_concierge": "1c588de5a993",
+   "fase62_predictive_noshow": "c24b0e7953a2",
+   "fase67_coda_intelligente": "3fa3954e9d4e",
+   "fase71_commitment": "5377fc684e79",
+   "fase82_ical_sync": "1402326ece2b"
+  },
   "motivo": "",
-  "quando": "2026-09-07T23:20:58"
+  "quando": "2026-09-16T13:07:31"
  },
  "eec63adbaf5b": {
   "blocco": 3,
   "comando": "python collaudi/esame_accessi.py --casella scrive --scrivi",
-  "commit": "ae69c1f",
+  "commit": "eeea05f",
   "condizione": "nessuna rotta pubblica SCRIVE senza identita': l'elenco delle rotte che scrivono viene letto dal codice, e ognuna senza credenziali risponde 401/403/422, mai 200",
   "denominatore": 59,
   "esito": true,
-  "impronta": "01970b37c064",
+  "impronta": "bd8e4e6661ff",
+  "impronte_moduli": {
+   "fase105_identity_gate": "a3ab7f1e6819",
+   "fase127_checkin_digitale": "e1d23d1a333b",
+   "fase143_kyc_host": "9024eed56447",
+   "fase179_rate_limit": "d676ae5e7797",
+   "fase180_bunker": "12b50f910968",
+   "fase192_admin_accounts": "d781a60fe796",
+   "fase64_smartpass": "62f32d2a9183",
+   "fase73_firma_agile": "16cd09e0ed5d",
+   "fase80_sentinel": "ebc8a451110f"
+  },
   "motivo": "",
-  "quando": "2026-09-07T12:54:38"
+  "quando": "2026-09-16T13:09:44"
  },
  "f10f35b6a7b3": {
   "blocco": 2,
   "comando": "python collaudi/esame_ical.py --scrivi",
-  "commit": "a1dcf97",
+  "commit": "eeea05f",
   "condizione": "iCal ha una difesa dal RITARDO 15 min-2 ore (oggi: zero, e' la finestra delle prenotazioni fantasma)",
   "denominatore": 24,
   "esito": true,
-  "impronta": "6927427232b8",
+  "impronta": "42dfa326ee8d",
+  "impronte_moduli": {
+   "fase111_cancellazione": "cdaa0ff5cea8",
+   "fase135_ical_bidirezionale": "7400c7b99498",
+   "fase152_notifiche_prenotazione": "d43723ad39d6",
+   "fase187_fuso_orario": "831d20429805",
+   "fase203_ical_orologio": "a6fd5a3dde7a",
+   "fase34_prenotazioni": "87f010d9f3cd",
+   "fase36_booking_api": "519033218af6",
+   "fase58_channel_manager": "67b6e2fc5fcb",
+   "fase59_concierge": "1c588de5a993",
+   "fase62_predictive_noshow": "c24b0e7953a2",
+   "fase67_coda_intelligente": "3fa3954e9d4e",
+   "fase71_commitment": "5377fc684e79",
+   "fase82_ical_sync": "1402326ece2b"
+  },
   "motivo": "",
-  "quando": "2026-09-07T23:21:26"
+  "quando": "2026-09-16T13:07:43"
  },
  "f132bc4f619c": {
   "blocco": 10,
@@ -705,25 +771,40 @@
  "f5d22a937896": {
   "blocco": 2,
   "comando": "python collaudi/esame_gare.py --scrivi",
-  "commit": "a1dcf97",
+  "commit": "eeea05f",
   "condizione": "il blocco atomico regge sotto gara (misurato: 10 giri x 24 agenti, 1 conferma)",
   "denominatore": 51,
   "esito": true,
-  "impronta": "6927427232b8",
+  "impronta": "42dfa326ee8d",
+  "impronte_moduli": {
+   "fase111_cancellazione": "cdaa0ff5cea8",
+   "fase135_ical_bidirezionale": "7400c7b99498",
+   "fase152_notifiche_prenotazione": "d43723ad39d6",
+   "fase187_fuso_orario": "831d20429805",
+   "fase203_ical_orologio": "a6fd5a3dde7a",
+   "fase34_prenotazioni": "87f010d9f3cd",
+   "fase36_booking_api": "519033218af6",
+   "fase58_channel_manager": "67b6e2fc5fcb",
+   "fase59_concierge": "1c588de5a993",
+   "fase62_predictive_noshow": "c24b0e7953a2",
+   "fase67_coda_intelligente": "3fa3954e9d4e",
+   "fase71_commitment": "5377fc684e79",
+   "fase82_ical_sync": "1402326ece2b"
+  },
   "motivo": "",
-  "quando": "2026-09-07T23:21:16"
+  "quando": "2026-09-16T13:07:41"
  },
  "fb42414c3b6b": {
   "blocco": 3,
   "comando": "python collaudi/esame_percorso_ruoli.py --casella giro --scrivi",
-  "commit": "4adb7c8",
+  "commit": "eeea05f",
   "condizione": "l'admin e il super admin portano a termine il loro giro INTERO, non solo l'accesso: l'admin legge le prenotazioni, risolve una controversia, rimborsa il dovuto e rilegge i conti; il super admin crea un admin, cambia uno scaglione e rilegge gli invarianti. Ogni anello lascia una traccia, e il verde misura la DIFFERENZA fra prima e dopo, mai la presenza di una pagina che mostra sempre qualcosa",
   "denominatore": 12,
   "esito": true,
-  "impronta": "01970b37c064",
+  "impronta": "bd8e4e6661ff",
   "impronte_moduli": {
    "fase105_identity_gate": "a3ab7f1e6819",
-   "fase127_checkin_digitale": "316a826c975f",
+   "fase127_checkin_digitale": "e1d23d1a333b",
    "fase143_kyc_host": "9024eed56447",
    "fase179_rate_limit": "d676ae5e7797",
    "fase180_bunker": "12b50f910968",
@@ -733,6 +814,6 @@
    "fase80_sentinel": "ebc8a451110f"
   },
   "motivo": "",
-  "quando": "2026-09-10T16:44:41"
+  "quando": "2026-09-16T13:07:45"
  }
 }

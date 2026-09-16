@@ -36,6 +36,29 @@ cerchiamo, non un ostacolo da aggirare.
 
 (finito dalla chat A il 2026-09-07: i passi 11-13, il guasto vero, il FERMO, l'ambiente intatto, la guardia)
 
+⛔ GLI ANELLI IN DUE TEMPI (METODO_v4 PARTE 20.1, aggiunti il 2026-09-16). Il metodo chiede che
+   ogni anello sia una DIFFERENZA -- «PRIMA non c'e', DOPO c'e'» -- e non una presenza, perche'
+   un elenco che mostra righe sembra sano anche quando non ha letto niente (modo di rompersi
+   n. 1, i dati effimeri). Un codice HTTP 200 dice che la rotta ha risposto, NON che il fatto
+   sia avvenuto: e' la meta' del lavoro con l'aria di averlo fatto tutto.
+   Fino al 2026-09-15 l'unico anello misurato cosi' era il denaro (7-ter/8-bis). Adesso sono
+   quelli qui sotto -- il loro CONTO lo stampa la misura, non questo commento (sbaglio S17:
+   una cifra scritta a mano diventa falsa in silenzio) -- e ognuno legge lo stato PRIMA e
+   DOPO lo stesso gesto:
+
+     vetrina      4-prima `catalogo.dettaglio('casa')` e' None   -> 4-dopo non lo e' piu'
+     calendario   5-prima `inventario.conta_alloggio` e' 0       -> 5-dopo ha i giorni aperti
+     date         7-prima `inventario.disponibile` e' True       -> 7-quater e' False
+     denaro       7-ter il maturato e' ZERO                      -> 8-bis e' > 0
+
+   ⛔ L'OSSERVAZIONE si fa dagli oggetti del sistema, l'AZIONE sempre dalle rotte. Non e' una
+      scorciatoia: e' la stessa forma gia' usata da 7-ter/8-bis dal 2026-09-06. Guardare il
+      catalogo da dentro non aiuta l'host a pubblicare -- e se lo aiutasse, il passo 4-bis
+      (la chiave globale NON dev'essere necessaria) diventerebbe rosso.
+
+   🔑 IL DENOMINATORE SI CHIAMA ANELLI, non «controlli», e si dichiara «N su N»: e' il numero
+      di passi del contratto, non di quelli che sono andati bene.
+
 ⛔ IL PASSO 4 SI FA COL **TOKEN DELL'HOST**, MAI CON LA CHIAVE GLOBALE `X-Host-Key`. La casella
    dice «senza che nessuno lo aiuti»: pubblicare con la chiave d'amministrazione sarebbe
    esattamente l'aiuto che la casella vieta, e un esame che la usasse direbbe verde su un
@@ -84,6 +107,9 @@ NON_GUARDA = (
     "non fa il KYC: l'onboarding Connect (documenti, verifica identita') resta fuori",
     "non guarda le PAGINE: prova le rotte, non che i pulsanti del pannello le chiamino",
     "non misura il tempo ne' la fatica: dice che il percorso ESISTE, non che sia facile",
+    "gli anelli misurati in DUE TEMPI (prima/dopo) sono vetrina, calendario, date occupate e",
+    "  denaro -- il loro conto lo stampa la misura, non questa riga: gli altri passi restano",
+    "  una PRESENZA (un codice HTTP) e questo esame non dice se abbiano cambiato davvero lo stato",
 )
 
 CHIAMATE_STRIPE = []
@@ -176,25 +202,48 @@ def percorri(salta=None, chiave_stripe="sk"):
         annuncio = {"slug": "casa", "titolo": "Casa", "citta": "Roma", "descrizione": "x",
                     "prezzo_netto_cents": 10000, "prezzo_notte_cents": 10000, "capacita": 4,
                     "servizi": [], "immagini": [], "politica_cancellazione": "flessibile"}
+        # ANELLO «vetrina», primo tempo: prima di pubblicare l'annuncio NON esiste per nessuno.
+        # `dettaglio` torna None se assente O non 'pubblicato' -- la stessa cosa che vede un ospite.
+        in_vetrina_prima = sis.catalogo.dettaglio("casa")
+        p("4-prima l'annuncio NON e' in vetrina", in_vetrina_prima is None,
+          "dettaglio=%s" % ("None" if in_vetrina_prima is None else "PRESENTE"))
         s, _ = g("POST", "/api/host/pubblica", annuncio, HT)
         p("4 pubblica col SUO token", s in (200, 201), "http %s" % s)
+        in_vetrina_dopo = sis.catalogo.dettaglio("casa")
+        p("4-dopo l'annuncio E' in vetrina", in_vetrina_dopo is not None,
+          "titolo=%s" % ((in_vetrina_dopo or {}).get("titolo") or "-"))
 
         s2, _ = g("POST", "/api/host/pubblica", dict(annuncio, slug="senza_token"), {})
         p("4-bis senza autenticazione NON pubblica", s2 not in (200, 201), "http %s" % s2)
 
+        # ANELLO «calendario», primo tempo: `conta_alloggio` conta le RIGHE dell'inventario,
+        # cioe' i GIORNI aperti. Prima di aprire il periodo devono essere zero.
+        giorni_prima = sis.inventario.conta_alloggio("casa")
+        p("5-prima il calendario e' VUOTO", giorni_prima == 0, "giorni=%d" % giorni_prima)
         s, _ = g("POST", "/api/host/disponibilita_range",
                  {"alloggio_id": "casa", "da": "2026-11-01", "a": "2026-11-30",
                   "unita_totali": 1, "prezzo_netto_cents": 10000}, HT)
         p("5 apre il calendario", s == 200, "http %s" % s)
+        giorni_dopo = sis.inventario.conta_alloggio("casa")
+        p("5-dopo il calendario ha i giorni aperti", giorni_dopo > giorni_prima,
+          "giorni %d -> %d" % (giorni_prima, giorni_dopo))
 
         s, q = g("POST", "/api/concierge/quote",
                  {"alloggio_id": "casa", "check_in": "2026-11-10",
                   "check_out": "2026-11-12", "party": 2})
         p("6 l'ospite chiede il prezzo", s == 200 and q.get("quote_token"), "http %s" % s)
 
+        # ANELLO «date», primo tempo: quelle notti sono libere FINCHE' nessuno prenota.
+        libere_prima = sis.inventario.disponibile("casa", "2026-11-10", "2026-11-12")
+        p("7-prima quelle date sono LIBERE", libere_prima is True, "disponibile=%s" % libere_prima)
         s, b = g("POST", "/api/concierge/book",
                  {"quote_token": (q or {}).get("quote_token"), "email": "ospite@esame.it"})
         p("7 l'ospite prenota", s in (200, 201) and b.get("riferimento"), "http %s" % s)
+        # ...secondo tempo: e dopo NON lo sono piu'. Senza questo, «ha prenotato» sarebbe un
+        # codice HTTP, non un posto occupato -- e due ospiti nella stessa stanza non si vedrebbero.
+        libere_dopo = sis.inventario.disponibile("casa", "2026-11-10", "2026-11-12")
+        p("7-quater dopo la prenotazione quelle date NON sono piu' libere", libere_dopo is False,
+          "disponibile %s -> %s" % (libere_prima, libere_dopo))
 
         chiesto = any("/checkout/sessions" in c["url"] or "/payment" in c["url"]
                       for c in CHIAMATE_STRIPE)
@@ -279,11 +328,17 @@ PASSI_ATTESI = (
     "1 legge il contratto",
     "2 si registra con le 3 spunte",
     "3 entra col suo utente",
+    "4-prima l'annuncio NON e' in vetrina",
     "4 pubblica col SUO token",
+    "4-dopo l'annuncio E' in vetrina",
     "4-bis senza autenticazione NON pubblica",
+    "5-prima il calendario e' VUOTO",
     "5 apre il calendario",
+    "5-dopo il calendario ha i giorni aperti",
     "6 l'ospite chiede il prezzo",
+    "7-prima quelle date sono LIBERE",
     "7 l'ospite prenota",
+    "7-quater dopo la prenotazione quelle date NON sono piu' libere",
     "7-bis il pagamento e' stato CHIESTO a Stripe",
     "7-ter prima del pagamento il maturato e' ZERO",
     "8 Stripe conferma il pagamento",
@@ -424,7 +479,15 @@ def main(argv=None):
         verde, motivo = False, "l'ambiente (os.environ) e' cambiato durante il viaggio"
     print("")
     print("MISURA")
-    print("  passi percorsi (il denominatore) : %d su %d attesi" % (denominatore, len(PASSI_ATTESI)))
+    print("  ANELLI percorsi (il denominatore) : %d su %d dichiarati" % (denominatore, len(PASSI_ATTESI)))
+    # ⛔ UN NUMERO DICHIARA COSA CONTA (sbaglio S4). Qui i PASSI sono il doppio delle COPPIE,
+    #    e stampare solo «8» accanto a un commento che dice «quattro anelli» fa sembrare
+    #    incoerenti due cifre entrambe giuste. Si stampano tutte e due, col loro nome.
+    _due_tempi = [n for n in PASSI_ATTESI
+                  if "-prima" in n or "-dopo" in n
+                  or n.startswith(("7-ter", "7-quater", "8-bis"))]
+    print("  di cui in DUE TEMPI               : %d passi = %d anelli prima/dopo"
+          % (len(_due_tempi), len(_due_tempi) // 2))
     print("  chiamate a Stripe registrate     : %d" % len(CHIAMATE_STRIPE))
     print("  esito                            : %s" % ("VERDE" if verde else "ROSSO"))
     if motivo:
