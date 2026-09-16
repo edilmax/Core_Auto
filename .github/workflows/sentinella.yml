@@ -60,7 +60,29 @@ jobs:
           set -u
           # NIENTE `|| true` (regola ferrea 12: nasconde i fallimenti). L'esito si legge
           # diretto, mai attraverso un tubo (regola ferrea 7).
-          CODE="$(curl -sS -m 20 -o corpo.json -w '%{http_code}' "$URL")" || CODE=000
+          # ── bussa TRE volte prima di gridare (2026-09-16) ──────────────────────────
+          # Due notti di fila (15/9 05:20Z, 16/9 05:12Z) UN solo `curl -m 20` e' scaduto
+          # (`curl: (28)` -> HTTP 000) su un sito che rispondeva -- sonda interna 200 e
+          # UptimeRobot 200 nello stesso minuto -- e l'intoppo di rete fra GitHub e noi e'
+          # diventato una CI rossa di master piu' un Telegram (ferrea 10: un falso allarme
+          # insegna a ignorare i segnali). Un guasto vero dura piu' di un minuto, un intoppo
+          # no: si bussa TENTATIVI volte a PAUSA secondi e si grida solo se cadono tutte.
+          # Fonti (D25): everything.curl.dev, capitolo «Retry» (Stenberg, 2026): `--retry`
+          # riprova solo sugli errori «transient» (timeout, 408/429/5xx) e `--max-time` vale
+          # PER tentativo; actions/runner-images, Ubuntu 24.04 (GitHub, immagine 20260907):
+          # curl 8.5.0. Il ciclo e' scritto a mano invece di `--retry 2 --retry-delay 20`
+          # per STAMPARE ogni tentativo col suo codice (ferrea 9): con `--retry` si vede
+          # solo l'ultimo. Guardia: test_pipeline_ci.TestLaSentinellaEsterna (esegue queste
+          # righe con una curl finta, nelle due direzioni).
+          TENTATIVI="${TENTATIVI:-3}"; PAUSA="${PAUSA:-20}"; CODE=000; n=1
+          while [ "$n" -le "$TENTATIVI" ]; do
+            CODE="$(curl -sS -m 20 -o corpo.json -w '%{http_code}' "$URL")" || CODE=000
+            echo "tentativo $n/$TENTATIVI: HTTP $CODE"
+            [ "$CODE" = "200" ] && break
+            [ "$n" -lt "$TENTATIVI" ] && sleep "$PAUSA"
+            n=$((n + 1))
+          done
+          # ── fine bussa ─────────────────────────────────────────────────────────────
           echo "HTTP $CODE"
           echo "--- corpo ---"
           cat corpo.json || true   # solo diagnosi: il verdetto NON dipende da questa riga

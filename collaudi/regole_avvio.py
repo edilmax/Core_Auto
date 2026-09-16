@@ -518,6 +518,8 @@ NON_SONO_COLLAUDI = {
     "prima_di_dire_fatto": "gancio del commit: lo esegue git, non la batteria",
     "guardia_commit": "gancio di git",
     "batteria": "e' la batteria stessa",
+    "rimisura": "lanciatore: dopo ogni unione rilancia in fila gli attrezzi delle caselle scadute e ne "
+                "rilegge gli esiti, come la batteria fa coi collaudi",
     "sentinella_ci": "guarda i job della CI su GitHub, non il prodotto in locale",
     "avvia_server_visivo": "non giudica niente: accende il banco perche' altri lo giudichino",
     "_srv_caos": "avviatore di servizio per il collaudo del caos",

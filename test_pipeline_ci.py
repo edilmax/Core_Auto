@@ -902,6 +902,89 @@ class TestLaSentinellaEsterna(unittest.TestCase):
                          "perdono per il campo assente, tolto il 2026-08-15 dopo il deploy. "
                          "Rimetterlo rende questa testa cieca a meta'")
 
+    def _shell_posix(self):
+        """Una shell POSIX PROVATA prima di usarla (D18 punto 1), come in `test_watchdog.py`: su
+        Windows la porta Git, e `bash` dal PATH e' quasi sempre il lanciatore di WSL, che si lancia
+        e non e' una shell."""
+        candidate = [c for c in (shutil.which("sh"),) if c]
+        git = shutil.which("git")
+        if git:
+            radice = os.path.dirname(os.path.dirname(git))
+            candidate += [os.path.join(radice, *p) for p in
+                          (("bin", "sh.exe"), ("usr", "bin", "sh.exe"), ("bin", "bash.exe"))]
+        candidate += [c for c in (shutil.which("bash"),) if c]
+        for c in candidate:
+            if not os.path.exists(c):
+                continue
+            try:
+                p = subprocess.run([c, "-c", "printf pronta"],  # nosec B603 - comando costante  # noqa: S603
+                                   capture_output=True, text=True, timeout=20)
+            except (OSError, subprocess.SubprocessError):
+                continue
+            if p.returncode == 0 and p.stdout.strip() == "pronta":
+                return c
+        return None
+
+    def _righe_che_bussano(self):
+        """Il blocco dello step `run` fra `# ── bussa` e `# ── fine bussa`: ESTRATTO, non ricopiato."""
+        s = "\n".join(riga for job in (self._doc().get("jobs") or {}).values()
+                      for passo in (job.get("steps") or [])
+                      for riga in (passo.get("run") or "").splitlines())
+        inizio, fine = s.find("# ── bussa"), s.find("# ── fine bussa")
+        self.assertTrue(inizio >= 0 and fine > inizio,
+                        "nella sentinella non c'e' il blocco `# ── bussa` ... `# ── fine bussa`: bussa UNA "
+                        "volta sola, e un intoppo di rete fra GitHub e noi diventa una CI rossa piu' un "
+                        "Telegram (15/9 05:20Z e 16/9 05:12Z: `curl: (28)` -> HTTP 000 su un sito vivo)")
+        return s[inizio:fine]
+
+    def _bussa(self, risposte):
+        """Esegue le righe VERE con una `curl` finta che risponde `risposte` in ordine (000 = timeout,
+        come curl 28) e una `sleep` che non dorme. Torna (tentativi, pause, CODE finale, uscita)."""
+        sh = self._shell_posix()
+        self.assertIsNotNone(sh, "nessuna shell POSIX trovata, nemmeno quella di Git: e' un guasto "
+                                 "dell'ambiente da riparare, non un collaudo da saltare")
+        # Lo script chiama `curl` DENTRO `$(...)`, cioe' in una sottoshell: un contatore in una
+        # variabile morirebbe con lei (misurato: 0 tentativi contati su 3 fatti, sbaglio S3). Il
+        # conto vive in un FILE, letto e scritto solo con `read`/`echo` (nessun attrezzo esterno).
+        d = tempfile.mkdtemp()
+        try:
+            cf = os.path.join(d, "conta").replace("\\", "/")
+            # `newline="\n"`: su Windows il modo testo scriverebbe CRLF, e `read` si porterebbe dietro
+            # un `\r` che rompe l'aritmetica della shell (misurato: la riga CONTA usciva spezzata)
+            with io.open(cf, "w", encoding="utf-8", newline="\n") as f:
+                f.write("0\n")
+            programma = ("URL=https://esempio.invalid/api/health\nset -u\nn_sleep=0\n"
+                         "CF='%s'\nrisposte='%s'\n" % (cf, " ".join(risposte))
+                         + "curl(){ read n < \"$CF\"; n=$((n+1)); echo \"$n\" > \"$CF\"; i=0; "
+                         "for r in $risposte; do i=$((i+1)); [ \"$i\" -eq \"$n\" ] && break; done; "
+                         "printf '%s' \"$r\"; [ \"$r\" = 000 ] && return 28; return 0; }\n"
+                         "sleep(){ n_sleep=$((n_sleep+1)); }\n"
+                         + self._righe_che_bussano()
+                         + "\nread n_curl < \"$CF\"\nprintf '\\nCONTA %s %s %s\\n' \"$n_curl\" \"$n_sleep\" \"$CODE\"\n")
+            p = subprocess.run([sh, "-s"], input=programma, capture_output=True, text=True,  # nosec B603 - righe ESTRATTE dal nostro workflow, nessun input esterno  # noqa: S603
+                               encoding="utf-8", errors="replace")
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+        self.assertEqual(p.returncode, 0, "le righe estratte non girano: %s" % p.stderr)
+        conta = [r for r in p.stdout.splitlines() if r.startswith("CONTA ")]
+        self.assertEqual(len(conta), 1, "manca la riga di conteggio: %r" % p.stdout)
+        _, n_curl, n_sleep, code = conta[0].split()
+        return int(n_curl), int(n_sleep), code, p.stdout
+
+    def test_BUSSA_TRE_VOLTE_PRIMA_DI_GRIDARE_e_SMETTE_al_primo_200(self):
+        """⛔ D20 (2026-09-16), regola ferrea 10 nelle due direzioni: un intoppo che passa al secondo
+        colpo NON e' un allarme; tre timeout di fila lo sono ancora; a sito sano si bussa una volta,
+        senza pause. E ogni tentativo si STAMPA col suo codice (ferrea 9)."""
+        self.assertEqual(self._bussa(["000", "000", "000"])[:3], (3, 2, "000"),
+                         "tre timeout di fila: attesi 3 tentativi, 2 pause, CODE 000 (l'allarme resta)")
+        n_curl, n_sleep, code, uscita = self._bussa(["000", "200", "000"])
+        self.assertEqual((n_curl, n_sleep, code), (2, 1, "200"),
+                         "intoppo al primo colpo e 200 al secondo: attesi 2 tentativi, 1 pausa, CODE 200 "
+                         "(nessun allarme), letto %r" % ((n_curl, n_sleep, code),))
+        self.assertIn("tentativo 1/", uscita, "ogni tentativo va stampato col suo codice: %r" % uscita)
+        self.assertEqual(self._bussa(["200"])[:3], (1, 0, "200"),
+                         "a sito sano si bussa UNA volta sola, senza pause")
+
 
 class TestTrigger(unittest.TestCase):
     """Il gate deve girare sui push E sulle pull request, senza vie di fuga."""
@@ -6811,6 +6894,62 @@ class TestIlPreVoloVedeIProblemiPRIMA(_GuardieSugliAttrezziDelLavoro):
         # e sulla radice vera la funzione c'e' e risponde
         self.assertEqual(pv.OK, pv.controllo_3_skip_interni(radice=self.RADICE)[0],
                          "sulla radice vera il criterio deve rispondere, non fermarsi")
+
+
+class TestIlPreVoloBloccaLaProduzioneFincheCiSonoCaselleScadute(_GuardieSugliAttrezziDelLavoro):
+    """⛔ REGOLA DEL FONDATORE, 2026-09-16: «dopo ogni unione, PRIMA di aprire lavoro nuovo, si rilanciano
+    tutti gli attrezzi; e si bloccano le modifiche al codice finche' la rimisura non e' fatta». Una regola
+    scritta in un documento si rompe di nuovo (S19, D22): qui e' agganciata al gesto che gia' precede ogni
+    lavoro, `prima_di_lanciare.py --scopo`. Non si legge il sorgente: si chiama la funzione con le caselle
+    INIETTATE, nelle due direzioni, e poi il `main` vero con la traccia in una cartella temporanea."""
+
+    SCADUTE = ["python collaudi/esame_soldi.py --scrivi"]
+
+    def test_blocca_la_PRODUZIONE_con_caselle_scadute_e_lascia_passare_tutto_il_resto(self):
+        pv = self.pv()
+        for scopo in (["fase83_server.py"], ["deploy/watchdog.sh"], ["main_casavip.py"],
+                      ["RIPRENDI_QUI.md", "fase65_split_payment.py"]):
+            bloccato, righe = pv.caselle_scadute_bloccano(scopo, scadute=self.SCADUTE)
+            self.assertTrue(bloccato, (scopo, righe))
+            self.assertTrue(any("rimisura.py" in r for r in righe), "deve dire COSA fare: %r" % (righe,))
+        # l'altra direzione: collaudi, test e documenti passano; e senza scadute passa anche la produzione
+        self.assertFalse(pv.caselle_scadute_bloccano(["collaudi/rimisura.py", "test_watchdog.py",
+                                                      "RIPRENDI_QUI.md", ".github/workflows/sentinella.yml"],
+                                                     scadute=self.SCADUTE)[0])
+        self.assertFalse(pv.caselle_scadute_bloccano(["fase83_server.py"], scadute=[])[0])
+        # lo sblocco esiste, ma solo con un MOTIVO scritto, che resta nelle righe
+        bloccato, righe = pv.caselle_scadute_bloccano(["fase83_server.py"], nonostante="allarme vivo sui soldi",
+                                                      scadute=self.SCADUTE)
+        self.assertFalse(bloccato)
+        self.assertTrue(any("allarme vivo sui soldi" in r for r in righe), righe)
+        self.assertTrue(pv.caselle_scadute_bloccano(["fase83_server.py"], nonostante="", scadute=self.SCADUTE)[0],
+                        "un motivo VUOTO non sblocca niente")
+        # e se la scheda non si legge NON si sblocca: il vuoto non e' un verde (S1)
+        vuota = tempfile.mkdtemp()
+        try:
+            self.assertTrue(pv.caselle_scadute_bloccano(["fase83_server.py"], radice=vuota)[0])
+        finally:
+            shutil.rmtree(vuota, ignore_errors=True)
+
+    def test_il_MAIN_vero_non_scrive_lo_scopo_se_e_bloccato_e_lo_scrive_col_motivo_se_sbloccato(self):
+        pv = self.pv()
+        pv._caselle_scadute = lambda radice=None: list(self.SCADUTE)
+        d = tempfile.mkdtemp()
+        try:
+            traccia = os.path.join(d, "scopo.txt")
+            with contextlib.redirect_stdout(io.StringIO()):
+                uscita = pv.main(["--scopo", "fase83_server.py"], traccia=traccia)
+            self.assertEqual(uscita, 1)
+            self.assertFalse(os.path.exists(traccia), "bloccato, ma lo scopo e' stato scritto lo stesso")
+            with contextlib.redirect_stdout(io.StringIO()):
+                pv.main(["--nonostante", "allarme vivo", "--scopo", "fase83_server.py"], traccia=traccia)
+            self.assertTrue(os.path.exists(traccia), "sbloccato col motivo, ma lo scopo non e' stato scritto")
+            with io.open(traccia, encoding="utf-8") as f:
+                testo = f.read()
+            self.assertIn("allarme vivo", testo)
+            self.assertEqual(pv.leggi_scopo(traccia), ["fase83_server.py"], "il motivo non deve contare come file")
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
 
 
 class TestLeBombeATempo(_GuardieSugliAttrezziDelLavoro):
@@ -13621,6 +13760,49 @@ class TestLEsameDellaSentinellaNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
             self.assertNotIn(testo, f.read())
         self.assertTrue(all(isinstance(r, str) and r.strip() for r in esame.NON_GUARDA))
         self.assertTrue(esame.workflow_letto())
+
+
+class TestLaRimisuraNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
+    """⛔ D18 PUNTO 4 PER `collaudi/rimisura.py`, il comando che DOPO OGNI UNIONE rilancia in fila gli
+    attrezzi delle caselle scadute (regola del fondatore, 2026-09-16: dall'11 al 16/9 diciotto unioni e
+    nessuna rimisura avevano portato il conto da 25 su 42 a 3 su 43 senza che una prova fallisse).
+    Niente rete e niente attrezzi veri: comandi finti che escono 0 o 1. Si pretende che il lanciatore
+    legga i codici d'uscita DIRETTI, dica ROSSO se uno solo fallisce, VERDE se passano tutti, salti i
+    giri di mutazione di default DICHIARANDOLO, non esegua mai i comandi «a mano», e si sappia provare."""
+
+    def _rimisura(self):
+        return self._carica("rimisura.py", "_rimisura_sotto_guardia")
+
+    def _finto(self, codice):
+        return 'python -c "import sys; sys.exit(%d)"' % codice
+
+    def test_L_AUTOPROVA_PASSA_e_il_verdetto_segue_i_codici_d_uscita(self):
+        r = self._rimisura()
+        riuscita, righe = r.autoprova()
+        self.assertTrue(riuscita, righe)
+        d = tempfile.mkdtemp()
+        try:
+            esiti = r.esegui([self._finto(0), self._finto(1)], d)
+            self.assertEqual([e["uscita"] for e in esiti], [0, 1])
+            self.assertTrue(all(os.path.isfile(e["registro"]) for e in esiti), "ogni comando lascia il suo registro")
+            self.assertEqual(r.verdetto(esiti, saltati=[], a_mano=[]), 1, "un comando rosso e il verdetto e' verde")
+            self.assertEqual(r.verdetto(r.esegui([self._finto(0)], d), saltati=[], a_mano=[]), 0)
+            self.assertEqual(r.verdetto([], saltati=["x"], a_mano=[]), 1, "con comandi saltati non e' FINITO")
+            self.assertEqual(r.verdetto([], saltati=[], a_mano=["y"]), 1, "con comandi a mano non e' FINITO")
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_LA_MUTAZIONE_SI_SALTA_DI_DEFAULT_e_i_saltati_si_dichiarano(self):
+        r = self._rimisura()
+        comandi = ["python collaudi/esame_soldi.py --scrivi",
+                   "python collaudi/mutazione_prodotto.py --modulo fase65_split_payment.py --tetto 1 --minuti 60"]
+        da_fare, saltati = r.dividi(comandi, anche_mutazione=False, salta=())
+        self.assertEqual(da_fare, comandi[:1])
+        self.assertEqual(saltati, comandi[1:])
+        self.assertEqual(r.dividi(comandi, anche_mutazione=True, salta=())[0], comandi)
+        da_fare, saltati = r.dividi(comandi, anche_mutazione=True, salta=("esame_soldi",))
+        self.assertEqual((da_fare, saltati), (comandi[1:], comandi[:1]))
+        self.assertTrue(all(isinstance(x, str) and x.strip() for x in r.NON_GUARDA))
 
 
 class TestLEsameDellHostDaSoloNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):

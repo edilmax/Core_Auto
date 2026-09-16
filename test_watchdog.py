@@ -1307,5 +1307,71 @@ class TestIlWatchdogGuardaLOrologioDelServer(unittest.TestCase):
                          "timedatectl dice `yes` e il watchdog grida: falso allarme (ferrea 10)")
 
 
+class TestIlTelegramPortaTutteLeRigheAncheLUltima(unittest.TestCase):
+    """⛔ D20 — scritta PRIMA della riparazione e vista ROSSA sullo script di produzione (2026-09-16).
+
+    IL DIFETTO, misurato sul registro del VPS: dal 18/7 il watchdog ha composto 386 allarmi
+    Telegram e 330 avevano UNA riga sola -- e sono arrivati al fondatore VUOTI (intestazione e
+    data, nessun motivo). Con due allarmi si leggeva solo il primo. Il Guardiano dei soldi, che
+    e' quasi sempre l'ultima riga, non e' MAI stato letto da nessuno.
+
+    La causa e' una riga: `printf '%s' "$attivi" | while read ...`. `attivi` esce da una
+    sostituzione `$(...)`, che toglie l'a-capo finale; `read` sull'ultima riga senza a-capo
+    riempie le variabili ma ritorna 1, e il `while` non esegue il corpo: l'ultima riga si perde
+    SEMPRE. Nessuna guardia lo controllava: c'erano prove sul CANALE (`curl -f`), nessuna sul
+    TESTO che arriva a una persona.
+
+    Qui si ESEGUONO le righe vere che compongono il messaggio, con `telegram` sostituita da una
+    funzione che stampa il testo e `date` fissata: le due direzioni stanno nella stessa prova
+    (con due allarmi si leggono tutti e due, con uno si legge quello, e non compare niente in
+    piu'). La shell POSIX si trova e si prova come nelle classi qui sopra.
+    """
+
+    SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "deploy", "watchdog.sh")
+    _shell_posix = TestUnROSSOGIASUPERATONonPuoGRIDAREPERSEMPRE._shell_posix
+    _risponde_pronta = TestUnROSSOGIASUPERATONonPuoGRIDAREPERSEMPRE._risponde_pronta
+
+    def _righe_che_compongono(self):
+        with open(self.SCRIPT, encoding="utf-8", errors="replace") as f:
+            righe = f.read().replace("\r\n", "\n").split("\n")
+        inizio = next((i for i, r in enumerate(righe) if r.strip().startswith('testo="')), None)
+        self.assertIsNotNone(inizio, "in %s non c'e' piu' la riga `testo=\"` che compone il Telegram: "
+                                     "questa guardia va ri-ancorata, non tolta" % self.SCRIPT)
+        fine = next((i for i in range(inizio, len(righe)) if 'telegram "$testo"' in righe[i]), None)
+        self.assertIsNotNone(fine, "trovato `testo=\"` ma non la riga `telegram \"$testo\"`")
+        return "\n".join(righe[inizio:fine + 1])
+
+    def _corpo_del_messaggio(self, *allarmi):
+        """Le righe FRA l'intestazione e la data: devono essere esattamente gli allarmi."""
+        sh = self._shell_posix()
+        self.assertIsNotNone(sh, "nessuna shell POSIX trovata, nemmeno quella di Git: e' un guasto "
+                                 "dell'ambiente da riparare, non un collaudo da saltare")
+        # `attivi` si costruisce come nello script, dentro `$(...)`: e' proprio quella sostituzione a
+        # togliere l'a-capo finale. Costruirlo in un altro modo proverebbe un'altra cosa (sbaglio S3).
+        programma = ("scope=vps\n"
+                     "attivi=\"$(printf '%s' " + shlex.quote("\n".join(sorted(allarmi))) + ")\"\n"
+                     "telegram(){ printf '%s' \"$1\"; }\n"
+                     "date(){ echo 2026-09-16 12:00; }\n"
+                     + self._righe_che_compongono() + "\n")
+        p = subprocess.run(  # nosec B603 - righe ESTRATTE dal nostro script, nessun input esterno  # noqa: S603
+            [sh, "-s"], input=programma, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        self.assertEqual(p.returncode, 0, "le righe estratte non girano: %s" % p.stderr)
+        righe = p.stdout.split("\n")
+        self.assertTrue(len(righe) >= 2 and "WATCHDOG" in righe[0] and righe[-1].endswith("UTC"),
+                        "il messaggio non ha la forma attesa (intestazione ... data UTC): %r" % p.stdout)
+        return righe[1:-1]
+
+    def test_con_due_allarmi_si_leggono_TUTTI_E_DUE_e_con_uno_si_legge_QUELLO(self):
+        corpo = self._corpo_del_messaggio("a|critico|PRIMA RIGA", "b|avviso|ULTIMA RIGA")
+        self.assertEqual(corpo, ["\U0001f534 PRIMA RIGA", "⚠️ ULTIMA RIGA"],
+                         "il Telegram NON porta tutte le righe: e' il messaggio vuoto o a meta' che il "
+                         "fondatore riceve dal 18/7 (330 allarmi su 386 arrivati vuoti). Corpo letto: %r"
+                         % (corpo,))
+        self.assertEqual(self._corpo_del_messaggio("guardiano_anomalo|critico|SOLA RIGA"),
+                         ["\U0001f534 SOLA RIGA"],
+                         "con un allarme solo il Telegram arriva VUOTO: e' proprio il caso del Guardiano dei "
+                         "soldi, che non e' mai stato letto")
+
+
 if __name__ == "__main__":
     unittest.main()

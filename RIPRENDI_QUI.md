@@ -394,7 +394,202 @@ cosa rilanciare, separando i due attrezzi che vogliono materiale dal server. Ele
 giri di mutazione da 60 e 600 minuti dichiarati. Guardia `TestUnaCasellaSCADUTADiceQUALIFileLHannoFattaScadere`
 vista rossa prima (3 su 3). **Misurato adesso: 9 caselle rilanciabili subito, 2 che vogliono il server.**
 🔑 **Quindi «15 caselle su 39» NON vuol dire che il lavoro sia fermo:** vuol dire che gran parte delle misure è
-scaduta e va rifatta. Il primo lavoro utile è rilanciare quei 9 attrezzi.
+scaduta e va rifatta. Il primo lavoro utile è rilanciare quei 9 attrezzi. → **Dal 16/9 lo fa un comando solo,
+`python collaudi/rimisura.py`, e va lanciato dopo OGNI unione** (blocco «16 SETTEMBRE, mezzogiorno» qui sotto).
+
+**🔁 16 SETTEMBRE, mezzogiorno — LE CASELLE SI RIMISURANO DOPO OGNI UNIONE (da 3 a 21 su 43 senza toccare una riga di codice), IL BLOCCO MECCANICO DELLE MODIFICHE, E I DUE ALLARMI CHE MENTIVANO**
+
+> **Ore UTC. Percentuale di contesto: NON letta dall'IA** (la legge il fondatore con `/context`); consegne scritte alla
+> chiusura del blocco di lavoro, come vuole D21 («a ogni blocco chiuso», non alla percentuale). `git status`: **10 file
+> modificati + 1 nuovo** (`collaudi/rimisura.py`), sopra `master eeea05f`, identico su computer, GitHub e VPS (riletti alle
+> 11:00Z). **Nulla committato.** Suite intera: parte DOPO questi documenti, da ferma; il suo esito sta nel messaggio di
+> commit e nella CI della PR. Caricatore **6843** da fermo (erano 6837: sei guardie nuove). Il via del fondatore:
+> **«AUTORIZZATO» scritto alle 11:47Z per `deploy/watchdog.sh`** (chiesto alle 11:2x), riga applicata e `test_watchdog`
+> intero `Ran 56 · OK`; **«procedi al commit» non ancora chiesto** (si chiede con la suite verde in mano).
+>
+> **Da dove nasce — la domanda del fondatore («mi sembra che ci sono 18 commit da fare»).** Non erano commit: erano le
+> **18 unioni in `master` dall'11/9** (`git log --oneline --merges --since=2026-09-11 master` → `18`, dalla #174 alla
+> #194). Ogni unione che tocca i moduli di un blocco fa **scadere** le sue caselle — giusto: la misura parlava del codice
+> di allora — e **nessuna sessione le rimisurava**: il conto era sceso da 25 su 42 (11/9) a **3 su 43** senza che una sola
+> prova fallisse. Rilanciati i 21 attrezzi con `--scrivi` su `eeea05f` (5 minuti in tutto, uscite lette dirette, 17 a zero
+> e 4 a uno): `python collaudi/piano.py` → **21 spuntate, 22 vuote** (10 mai misurate · 6 rosse col motivo · 6 scadute).
+> Zero righe di codice cambiate: rimisurare **non è rifare il lavoro**, è rilanciare gli attrezzi sul commit di oggi.
+>
+> **La regola nuova del fondatore, e il gesto che la regge (S19: una regola affidata alla memoria si rompe di nuovo):**
+> ① **Dopo ogni unione, PRIMA di aprire lavoro nuovo: `python collaudi/rimisura.py`** (NUOVO). Legge da
+> `scheda.da_rimisurare()` — la stessa fonte di `scheda.py --rimisura`, mai una copia — i comandi delle caselle scadute,
+> li esegue **uno alla volta**, legge ogni uscita **diretta**, scrive i registri fuori dal repository
+> (`%TEMP%\bookinvip_rimisure\<ora>\`), rilegge la scheda e dice **FINITO (0)** solo se ogni comando è uscito 0, ogni
+> casella è spuntata e niente è stato saltato o lasciato «a mano». I giri di mutazione li **salta e lo dichiara**
+> (`--anche-mutazione` per farli, `--salta PAROLA` per tenerne fuori uno dichiarandolo, `--elenca` per guardare soltanto,
+> `--autoprova` = 9 casi nelle due direzioni, verde).
+> ② **Le modifiche al codice sono BLOCCATE finché ci sono caselle scadute:** `prima_di_lanciare.py --scopo` **rifiuta**
+> (uscita 1, senza scrivere la traccia) uno scopo che tocca `fase*.py`, `main_casavip.py` o `deploy/` se la scheda ha
+> comandi di rimisura in sospeso. Lo sblocco esiste — un allarme vivo non aspetta dieci ore di mutazione — ma solo con
+> `--nonostante "<motivo>"` **prima** di `--scopo`, e il motivo resta scritto nella traccia che il pre-fatto rilegge.
+> **Provato su questo stesso lavoro:** lo scopo con `deploy/watchdog.sh` è stato **rifiutato** («6 comando/i di rimisura
+> in sospeso»), poi dichiarato col motivo («riparazione urgente degli allarmi chiesta dal fondatore il 16/9»).
+> Guardie, viste rosse per assenza e poi verdi: `TestLaRimisuraNonPuoBARARE` (2) e
+> `TestIlPreVoloBloccaLaProduzioneFincheCiSonoCaselleScadute` (2, la seconda esegue il `main` vero con una traccia
+> temporanea), tutte in `test_pipeline_ci.py`. `rimisura` è escluso dal conto dei collaudi in `regole_avvio.py` col motivo
+> (è un lanciatore, come la batteria).
+>
+> **I due allarmi che mentivano.**
+> · **Sentinella esterna (`.github/workflows/sentinella.yml`): bussa TRE volte a 20 s e grida solo se cadono tutte.**
+>   Due notti di fila (15/9 05:20Z, 16/9 05:12Z) un solo `curl -m 20` era scaduto su un sito vivo → CI di `master` rossa
+>   + Telegram. Guardia `TestLaSentinellaEsterna.test_BUSSA_TRE_VOLTE_PRIMA_DI_GRIDARE_e_SMETTE_al_primo_200`: esegue le
+>   righe **vere** fra `# ── bussa` e `# ── fine bussa` con una `curl` finta (000 000 000 → 3 tentativi, 2 pause, l'allarme
+>   resta · 000 200 → 2 tentativi, 1 pausa, nessun allarme · 200 → 1 tentativo, 0 pause) e pretende che ogni tentativo sia
+>   stampato col suo codice; vista **ROSSA** prima, poi la classe intera `Ran 7 · OK`. Fonti D25: everything.curl.dev,
+>   capitolo «Retry» (Stenberg, 2026: `--retry` riprova solo su timeout e 408/429/5xx, `--max-time` vale per tentativo) e
+>   actions/runner-images, Ubuntu 24.04 (GitHub, immagine 20260907: curl 8.5.0); il ciclo è scritto a mano per stampare
+>   ogni tentativo (ferrea 9). **Due sbagli dello strumento corretti prima di credergli (S3):** il contatore della curl finta
+>   viveva in una sottoshell (`$(...)`) e contava 0; il file del conto scritto da Windows portava un `\r` che spezzava la riga.
+> · **Telegram vuoti (`deploy/watchdog.sh`, riga del `testo=`): `printf '%s'` senza a-capo + `while read` butta l'ULTIMA
+>   riga di ogni allarme.** Con un allarme solo il messaggio arriva **vuoto** (i tuoi del 15/9 10:20Z, 16/9 08:40Z e 10:10Z);
+>   con due si legge solo il primo. Guardia `test_watchdog.TestIlTelegramPortaTutteLeRigheAncheLUltima`: esegue le righe
+>   vere che compongono il messaggio, con `telegram` e `date` sostituite da funzioni; vista **ROSSA**
+>   (`['🔴 PRIMA RIGA'] != ['🔴 PRIMA RIGA', '⚠️ ULTIMA RIGA']`). **La riparazione è `printf '%s\n'`**, una riga più il
+>   commento che la spiega, applicata alle 11:48Z dopo l'**«AUTORIZZATO»** del fondatore (B4: `deploy/` è produzione;
+>   «sistema subito» non era la parola, ed è stata chiesta). Guardia verde, `test_watchdog` intero `Ran 56 · OK`.
+>   ⚠️ Vale in produzione **solo dopo il deploy**: il cron del VPS legge `deploy/watchdog.sh` dal repository sul server.
+>
+> **I 4 rossi nuovi della rimisura (misure vere, scritte nella scheda col loro motivo) e cosa decide il fondatore:**
+> · Blocco 6 `esame_plausibilita`: il sito mostra `casa-test` a **1,00 € a notte** (fuori dalla banda 5..5000 €): è la
+>   prova da 1 € del fondatore, da togliere o completare prima degli ospiti veri (D8).
+> · Blocco 8 `esame_sentinella`: il monitor **UptimeRobot punta alla home**, non a `/api/health` — nel conto, letto con
+>   la chiave di sola lettura, non c'è nessun monitor sulla salute. Zero codice: si cambia l'indirizzo del monitor nel sito
+>   di UptimeRobot (era il punto ① del 14/9). GitHub da solo non basta: 6 giri nelle 24 ore, l'ultimo 65 minuti prima.
+> · Blocco 1 `esame_produzione`: il Guardiano sul server dice ancora «4 stati anomali» (le righe del 14-15/9 e le sonde):
+>   si pulisce da solo al suo giro delle ~01:37 UTC di domani; poi `python collaudi/esame_produzione.py --scrivi`.
+> · Blocco 3 `esame_catene_admin`: 19 rotte del pannello su 21 senza catena percorsa (debito dichiarato, tetto 19): è
+>   lavoro da fare, non un guasto.
+>
+> **⛔ COSA RESTA da rimisurare — 6 comandi (`python collaudi/rimisura.py --elenca` li stampa) — e perché non oggi:**
+> · **2 giri di mutazione** (Blocco 1: 60 min · Blocco 2: 600 min): si lanciano **staccati** (WMI, memoria «lanciare
+>   staccato») dopo l'unione, e mentre girano non si tocca niente (ferrea 4):
+>   `python collaudi/rimisura.py --anche-mutazione --salta esame_accessi`.
+> · **2 del Blocco 3** (`esame_accessi --casella matrice` e `--casella sonde`): sondano il sito VERO con tre credenziali
+>   inventate, che lasciano righe CRITICAL nel registro del server; la finestra dichiarata (`giudice_ultima_sonda`) è
+>   **UNA sola** e oggi copre le 2 sonde del deploy delle 01:38Z, che il Guardiano rilegge fino al giro di domani. Si fanno
+>   **domani dopo le 01:40 UTC**, dichiarando la finestra come fa `verifica_produzione._dichiara_le_sonde`. La terza casella
+>   del blocco («scrive») è stata rimisurata oggi in `--locale`, che per lei basta: giudica il router locale.
+> · **2 del Blocco 8** (`esame_backup`, `esame_deploy`): vogliono un archivio di salvataggio vero e le letture del deploy
+>   prese sul server.
+>
+> **Un mio errore, dichiarato (D6):** controllando la presenza della chiave di UptimeRobot, un `${VAR:-assente}` ne ha
+> stampato il **valore** nel registro della sessione. È la chiave di SOLA LETTURA e non è finita in nessun file del progetto;
+> il fondatore può rigenerarla nel sito di UptimeRobot e aggiornare la variabile d'ambiente sul computer.
+
+**🚨 16 SETTEMBRE, mattina — LA SENTINELLA HA GRIDATO SU UN SITO VIVO; E IL GIRO DELL'HOST ORA MISURA DIFFERENZE, NON PRESENZE**
+
+> **Ore UTC.** Percentuale di contesto: **48%, letta dal fondatore con `/context`** a fine sessione → consegne scritte
+> **prima** del 50% (D21), `/clear` proposto. `git status`: **3 file modificati** (`RIPRENDI_QUI.md`, `REGISTRO_INGEGNERIA.md`,
+> `collaudi/esame_host_da_solo.py`), nessun file nuovo, **nulla committato**: le modifiche stanno solo su questo computer,
+> sopra `master` **`eeea05f`** — identico su GitHub (`git ls-remote`) e sul VPS (`git rev-parse` in `/var/www/bookinvip`),
+> riletti stamattina. **Suite intera: NON eseguita** (tenuta per coprire in un giro solo anche i due punti che aspettano
+> «autorizzato»). **Il via del fondatore**: non chiesto per il commit, perché il lavoro non è chiuso — mancano la suite e
+> le sette prove qui sotto.
+>
+> **⛔ L'AUDIT «senza fronzoli» chiesto dal fondatore, e la sua obiezione — che è giusta.** Ho consegnato un rapporto in
+> quattro punti (gusci vuoti · motivi di collasso · debito · lista della verità). Il fondatore: *«stai mentendo, non hai
+> controllato: devi controllare il codice SENZA leggere quello già scritto»*. I numeri hanno tutti il comando dietro, ma la
+> parola sbagliata è mia: ho scritto **«cablato»** dove dovevo scrivere **«cablato, comportamento NON provato»**. Ho
+> verificato che i fili ci siano (grep, commenti, `piano.py`, il REGISTRO, gli attrezzi di audit del progetto) — non ho
+> fatto **funzionare** i pezzi contro un atteso scritto prima da me. **Eseguito davvero:** giro host 23/23 · catalogo vivo
+> (**1** annuncio, `casa-test`, 1,00 €) · Stripe LIVE letto dal server (conto `IT/eur`, `payouts_enabled`; **1 webhook
+> iscritto a UN solo evento**, `checkout.session.completed`; **0** conti Connect; ultimo pagamento vero 1,00 € il 16/8) ·
+> impronte sito = repo (dopo aver tolto i `\r` di Windows) · errori del server 24 h: 0 Traceback. **Solo letto:** date
+> flessibili, raggio, la matematica di `/api/trasparenza`, la finestra iCal, la dedup dei webhook, e tutte le caselle di
+> `piano.py`. Due falsi allarmi miei smontati prima di riferirli (`| head` che taglia; fine-riga CRLF).
+>
+> **🎯 PROSSIMA SESSIONE — VERIFICARE ESEGUENDO, NON LEGGENDO (ordine del fondatore).** Regole: ⛔ `piano.py`, il REGISTRO
+> e i commenti **non sono prove**; ⛔ l'atteso si scrive **prima** di lanciare e con un conto **indipendente** (memoria: «la
+> guardia che coincide con l'ipotesi»); ⛔ nessun POST in produzione (la prova da 1 € del fondatore vuole il registro
+> pulito); si monta il sistema in una cartella temporanea come fa `collaudi/esame_host_da_solo.percorri()` (`crea_sistema`
+> + `crea_router`) e si chiamano **le rotte**. Sette prove, ognuna con «cosa mi darebbe torto»:
+> ① **date flessibili** — calendario aperto solo su tre notti di novembre; `/api/catalogo` con check-in/out **due giorni
+> dopo** senza `flex_giorni` → 0 risultati; con `flex_giorni=3` → 1 risultato con `finestra_ci` sulle notti aperte. Torto
+> se i due esiti coincidono.
+> ② **raggio** — due annunci con coordinate (uno in centro, uno a 50 km); `lat_micro/lon_micro/raggio_km=5` → 1;
+> `raggio_km=100` → 2. Torto se il conteggio non cambia col raggio.
+> ③ **trasparenza** — `/api/trasparenza?prezzo_cents=10000&ota=booking`: ricalcolare **a mano** netto OTA
+> (`10000 − 10000×1800/10000`) e netto nostro (prezzo − commissione della rampa − tariffa tecnica **con** i 25 cent fissi) e
+> pretendere l'uguaglianza al centesimo; poi un annuncio in **JPY**: la risposta porta la valuta? (`host.html:412,1250,1257`
+> stampano `€` fisso). Torto se i cent non tornano o se la valuta non c'è.
+> ④ **iCal, la finestra** — importare un feed che blocca tre notti; prenotare dalle rotte le **stesse** notti → rifiuto;
+> poi far arrivare nel feed una notte **già prenotata da noi** → cosa fa `feed_applica`? (casella 73 dice «oggi: zero»
+> difesa). Torto: nessun rifiuto o nessuna anomalia.
+> ⑤ **webhook doppio** — lo stesso `checkout.session.completed` mandato **due volte** con firma valida → **una** riga di
+> payout; un evento con `riferimento` sconosciuto → salvato da `fase204` o perso? (caselle 37-43 «mai misurate»).
+> ⑥ **le due caselle prezzo** — pubblicare a 10000, aprire il calendario a 5000: `/api/catalogo` mostra 5000 (specchio
+> `rispecchia_prezzo`)? il preventivo addebita 5000? Torto se vetrina e cassa divergono.
+> ⑦ **chargeback** — mandare `charge.dispute.created` al webhook: la risposta e il libro giornale (`fase177`) devono
+> dimostrare che **nessuno lo gestisce** (nel prodotto non esiste una stringa `charge.dispute`).
+> Poi, solo dopo i sette esiti: suite intera dalla PowerShell vera, e i due punti fermi in attesa di «autorizzato»
+> (casella prezzo unica · costante dei 100 km).
+> ⛔ **In questa chat NON è stato toccato niente di produzione.** Il fondatore ha scritto «PROCEDI» e «FAI LA COSA GIUSTA»:
+> nessuna delle due è **«autorizzato»** (B4), e B1 non si delega per messaggio. I due punti che toccano `deploy/host.html` e
+> `fase83_server.py` sono **studiati, misurati e fermi**, in attesa di quella parola.
+>
+> **🚨 L'ALLARME E COS'ERA DAVVERO.** Il watchdog ha gridato «la CI su `master` è ROSSA» alle **05:20** e alle **08:50**.
+> Tabella letta dall'API su `eeea05f`: tutte le righe `success`, `zap` **skipped**, e **una sola `failure`** —
+> `il-sito-risponde-e-la-sentinella-e-viva`, giro `Sentinella esterna` delle **05:12:04Z**. Il suo registro:
+> `curl: (28) Connection timed out after 20001 milliseconds` → `HTTP 000`.
+> **Il sito NON era giù, e lo dicono tre testimoni indipendenti.** Il gemello del 15/9 (`failure` alle **05:20:15Z**) è la
+> prova più netta: la sonda interna `GET /api/health` ha avuto **200 alle 05:20:01**, cioè **mentre la curl di GitHub era
+> ancora in attesa**; **UptimeRobot** (esterno, non nostro) **200 alle 05:21:07**; e il 16/9, nella finestra 05:00-05:22,
+> nginx ha servito **103 righe**.
+> **Scagionati uno per uno, ognuno con la sua misura:** carico `0.00` e CPU **98% idle** (`sar`) · rete 2 pacchetti/s ·
+> `fail2ban` **inactive, non installato** · UFW apre 80/443 a chiunque · **0** risposte `503`/`429` dal 15/9 in poi ·
+> `certbot` ha girato alle **06:14** e alle **19:33** del 15/9, non alle 05:1x, e il certificato scade il **22/11** ·
+> nginx non si riavvia dal **20/08** · `casavip_app` **Up 8 hours**, cioè dal deploy dell'01:2x.
+> 🔑 **Verdetto: falso allarme — e per questo è un DIFETTO** (regola ferrea 10: un falso allarme insegna a ignorare i
+> segnali). La sentinella **bussa UNA volta sola**: un intoppo di rete fra GitHub e noi tinge di rosso la CI di `master` e
+> fa partire il Telegram. È successo **due notti di fila, sempre verso le 05:15**. Alla terza nessuno ci crede più.
+> ⚠️ **Limite dichiarato (D18 punto 3):** il registro di nginx mostra solo le richieste **arrivate**; «il pacchetto di
+> GitHub non è arrivato» e «GitHub non l'ha mandato» si scrivono tutti e due come silenzio. Ciò che è **dimostrato** è che
+> il server serviva regolarmente ai due capi della finestra, non quale dei due sia successo.
+>
+> **✅ FATTO — il giro dell'host secondo la PARTE 20.1 del metodo** (`collaudi/esame_host_da_solo.py`: è `collaudi/`, non
+> produzione, quindi vale D20 e non serviva «autorizzato»). Prima **un solo** anello era una differenza (il denaro,
+> 7-ter/8-bis); adesso sono **quattro**. L'osservazione si prende dagli oggetti del sistema, l'azione resta **sempre** sulle
+> rotte — la stessa forma già usata da 7-ter dal 2026-09-06:
+> ```
+> 4-prima l'annuncio NON e' in vetrina      OK  dettaglio=None
+> 4-dopo  l'annuncio E' in vetrina          OK  titolo=Casa
+> 5-prima il calendario e' VUOTO            OK  giorni=0
+> 5-dopo  il calendario ha i giorni aperti  OK  giorni 0 -> 29
+> 7-prima quelle date sono LIBERE           OK  disponibile=True
+> 7-quater ...NON sono piu' libere          OK  disponibile True -> False
+> ANELLI percorsi (il denominatore) : 23 su 23 dichiarati
+> di cui in DUE TEMPI               : 8 passi = 4 anelli prima/dopo
+> esito                             : VERDE          USCITA_DIRETTA=0
+> ```
+> Provato nelle **due direzioni** (D18 punto 2): `--autoprova` «l'esame distingue tutti i casi», uscita **0**;
+> `--con-guasto` **ROSSO** con `4 passi su 23 falliscono`, uscita **1**; la guardia
+> `TestLEsameDellHostDaSoloNonPuoBARARE` **Ran 4 · OK · uscita 0**. La guardia pretende **almeno 17** passi: se ne sono
+> **aggiunti** sei, nessuno tolto né rinominato, ed è il motivo per cui regge.
+> 💡 **E un difetto MIO, trovato e chiuso nello stesso giro:** la riga nuova stampava «DUE TEMPI: **8**» accanto a un
+> commento che diceva «sono **QUATTRO**». Due cifre entrambe giuste che si contraddicevano all'occhio: è lo **sbaglio S4**
+> (un numero deve dichiarare **cosa** conta). Ora stampa «8 passi = 4 anelli prima/dopo».
+>
+> **✅ FATTO — la famiglia di ⑦ enumerata da una MACCHINA.** Un attrezzo usa-e-getta legge i test con l'**AST**, non con una
+> espressione regolare — `assertIn(pin, h)` e `assertIn("pin", h)` si scrivono quasi uguali e sono due cose diverse — e
+> cerca un valore **corto** dentro una **pagina intera**. Denominatore: **130 casi in 422 file di test** (64 letterali
+> corti · 59 variabili di valore ignoto · **7 ROSSI**, cifre nude). I sette, che sono la famiglia vera:
+> · `test_gate_email_notifica.py:46` → `assertIn("200", h)` — **tre cifre**
+> · `test_plausibilita.py:123` → `assertIn("100", testo)` — **tre cifre**
+> · `test_gate_email_notifica.py:22` → `assertNotIn("9999", h)`
+> · `test_gate_email_notifica.py:30` → `assertIn("4321", h)`
+> · `test_gate_email_notifica.py:62` → `assertNotIn("7777", testo)`
+> · `test_gate_email_notifica.py:66` → `assertIn("7777", testo)`
+> · `test_fase162_hold_pagamento.py:364` → `assertIn("9900", corpo)`
+> **Quattro dei sette stanno nello stesso file**, e i due da **tre cifre** sono peggio del PIN che ha dato il falso rosso il
+> 15/9: `200` e `100` compaiono per caso molto più spesso di `1967`. ⚠️ **È un MINIMO, non un totale:** l'attrezzo dichiara
+> le sue esclusioni (solo `assertIn`/`assertNotIn`; pagliaio solo come nome nudo; ago solo costante o nome nudo; solo i
+> `test_*.py` della radice). Le f-string, i `.format()` e i pagliai scritti `r.text` **non** sono stati guardati.
+
 **🛠️ 16 SETTEMBRE — IL PANNELLO HOST RIPARATO: SEI DIFETTI CHIUSI COME FAMIGLIE (ramo `pannello-host-riparato-2026-09-16`, «AUTORIZZO TUTTO COMMIT VPS E TUTTO QUELLO CHE VA FATTO» del fondatore)**
 
 > **Percentuale di contesto: NON letta** (la vede il fondatore con `/context`). La mia stima dice oltre metà: dopo la suite
@@ -419,19 +614,37 @@ scaduta e va rifatta. Il primo lavoro utile è rilanciare quei 9 attrezzi.
 > usano la chiave da operatore**, con i 3 rossi di `TestOnboarding` riparati (scrivevano il calendario di un annuncio mai
 > pubblicato: erano loro a descrivere il comportamento vecchio). `git status`: **12 file modificati, nessun file nuovo**.
 >
-> **⛔ COSA RESTA, in quest'ordine:**
-> ① **I due calendari orfani già in produzione** (`filippine-makati` 60 giorni, `filippine-makati-2` 59, misurati il 15/9):
-> la riparazione impedisce che se ne creino altri, **non** cancella quelli vecchi. Si tolgono sul server dopo un backup
-> verificato, e chi ricreasse uno di quei due nomi prima di allora ne erediterebbe ancora i prezzi.
-> ② **Il pezzo 3 di B1: una sola casella prezzo nel pannello** (rimandato dal fondatore il 23/8). Oggi le caselle sono tre e
-> nessuna parte scritta, ma restano tre: toglie l'effetto, non la causa.
-> ③ **Il collaudo del giro intero dell'host** come lo chiede la PARTE 20.1 del metodo: traccia osservabile per ogni anello,
-> prova in due tempi (prima non c'è, dopo c'è) e denominatore dichiarato («N anelli su N»). Le mosse nella macchina a stati
-> sono un'altra cosa: generano sequenze, non misurano la catena.
-> ④ **Il confine dei 100 km è scritto in due punti** di `fase83_server.py` (guardia del pin e distanza mostrata): va
-> unificato in una costante, o è «valori scritti a mano in più posti» (METODO, PARTE 10 direzione 7).
-> ⑤ **La famiglia di ⑦** — una guardia che cerca un valore corto dentro **tutta** una pagina — è chiusa sull'esemplare:
-> nessuno enumera gli altri test che potrebbero farlo.
+> **⛔ COSA RESTA, in quest'ordine** *(aggiornato il 16/9 mattina: ① ③ e ⑤ chiusi, ⑥ nuovo)*:
+> ① ✅ **CHIUSO 16/9, 01:40** — i due calendari orfani sono stati tolti dalla produzione (copia di sicurezza
+> `/root/inventario-prima-pulizia-20260916-014039.db`, **119 righe rilette**; storico prenotazioni intatto: 4+2 movimenti).
+> ② ⛔ **APERTO, e serve «autorizzato»: il pezzo 3 di B1, una sola casella prezzo** (rimandato dal fondatore il 23/8).
+> **Rimisurato il 16/9, e la voce di prima diceva due cose imprecise.** Le caselle prezzo sono **quattro**, non tre:
+> `p_prezzo` (riga 378 → `prezzo_notte_cents`, la vetrina), `d_prezzo` (425 → `prezzo_netto_cents`, un giorno),
+> `r_prezzo` (438 → `prezzo_netto_cents`, un periodo) e `tr_prezzo` (412) — ma **`tr_prezzo` non salva niente**: è
+> l'ingresso del calcolatore «vs Booking», e il suo `value="100"` è corretto, non una svista.
+> ⛔ **E «una casella sola» NON è cancellare due input:** `fase57_vetrina.valida_scheda` righe **230-236** pretende il
+> prezzo (`prezzo_non_intero` se manca, `prezzo_nullo` se ≤ 0) e la colonna è `NOT NULL` (riga 462). È un cambio di
+> contratto fra pannello e server, più **8 lingue** per ogni etichetta. La forma più piccola che realizza la frase del
+> fondatore: `p_prezzo` diventa il **prezzo base**, `d_prezzo` e `r_prezzo` diventano **l'eccezione dichiarata**,
+> pre-riempita col prezzo base. Nessuna rotta nuova, nessun campo nuovo nel database.
+> ③ ✅ **CHIUSO 16/9 mattina** — il giro dell'host secondo la PARTE 20.1: **4 anelli in due tempi** (prima erano 1),
+> `23 su 23` anelli dichiarati, verde con uscita 0 e rosso col guasto dentro. Il racconto sta nel blocco qui sopra.
+> ④ ⛔ **APERTO, e serve «autorizzato»: il confine dei 100 km in due punti** di `fase83_server.py` — riga **9557**
+> (`return d if d <= 100_000 else None`, la distanza mostrata) e riga **9591**
+> (`if not (isinstance(d_m, int) and d_m > 100_000)`, la guardia del pin). Da unire in una costante di modulo, nello stile
+> già usato lì (`PENALE_HOST_BPS`, `HOLD_APPROVAZIONE_SEC`).
+> ⛔ **Due avvertenze misurate il 16/9.** (1) Alla riga **9616** c'è un fratello, `d_m > 30000` (la guardia dei 30 km
+> sull'indirizzo): **non** è nello scopo dichiarato e non va toccato di passaggio (regola ferrea 15). (2) I test che
+> scrivono `100000` a mano — `test_geocoder_mappa.py:268,275` e `test_pin_manuale.py:112,197` — **devono continuare a
+> scriverlo a mano**: se importassero la costante resterebbero verdi anche cambiandola, cioè diventerebbero «la guardia che
+> coincide con l'ipotesi che dovrebbe controllare». La costante unifica la **produzione**, mai le guardie.
+> ⑤ ✅ **CHIUSO 16/9 mattina** — la famiglia di ⑦ è enumerata da una macchina: **130 casi, 7 rossi**, elencati nel blocco
+> qui sopra. Restano da **decidere** (non da indagare): i due da tre cifre, `assertIn("200", h)` e `assertIn("100", testo)`.
+> ⑥ ✅ **CHIUSO 16/9 mezzogiorno** — la sentinella esterna bussa **tre volte** a 20 s e grida solo se cadono tutte
+> (guardia vista rossa prima, poi `Ran 7 · OK`): il racconto sta nel blocco «16 SETTEMBRE, mezzogiorno».
+> ⑦ ✅ **CHIUSO 16/9 alle 11:48Z, con l'«AUTORIZZATO» del fondatore: i Telegram VUOTI** — `deploy/watchdog.sh`, la riga
+> che compone il messaggio: `printf '%s'` → `printf '%s\n'` (l'ultima riga di ogni allarme non si perde più). Guardia
+> `test_watchdog.TestIlTelegramPortaTutteLeRigheAncheLUltima` vista ROSSA prima, verde dopo. In produzione dal deploy.
 
 **🧭 15 SETTEMBRE, sera — PASSAGGIO DI CONSEGNE (D21): LE PR #187, #188 E #189 RICONTROLLATE A OCCHI FRESCHI, LA #189 UNITA E IN PRODUZIONE (ramo `consegne-d21-2026-09-15`)**
 
@@ -3197,9 +3410,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: eda6de3
+CONSEGNE AGGIORNATE A: eeea05f
 
-SUITE ATTUALE: Ran 6837 test
+SUITE ATTUALE: Ran 6843 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
