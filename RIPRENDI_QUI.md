@@ -395,6 +395,44 @@ giri di mutazione da 60 e 600 minuti dichiarati. Guardia `TestUnaCasellaSCADUTAD
 vista rossa prima (3 su 3). **Misurato adesso: 9 caselle rilanciabili subito, 2 che vogliono il server.**
 🔑 **Quindi «15 caselle su 39» NON vuol dire che il lavoro sia fermo:** vuol dire che gran parte delle misure è
 scaduta e va rifatta. Il primo lavoro utile è rilanciare quei 9 attrezzi.
+**🛠️ 16 SETTEMBRE — IL PANNELLO HOST RIPARATO: SEI DIFETTI CHIUSI COME FAMIGLIE (ramo `pannello-host-riparato-2026-09-16`, «AUTORIZZO TUTTO COMMIT VPS E TUTTO QUELLO CHE VA FATTO» del fondatore)**
+
+> **Percentuale di contesto: NON letta** (la vede il fondatore con `/context`). La mia stima dice oltre metà: dopo la suite
+> si fa `/clear`. Le ore di questo blocco sono UTC quando lo dico, italiane quando cito il fondatore.
+> **Da dove nasce:** i difetti che il fondatore ha trovato in mezz'ora di pannello vero la sera del 15/9, sotto ~6800 test
+> verdi. Ognuno riparato con l'ordine D20 — guardia scritta, **vista ROSSA sul codice di produzione**, poi la riparazione —
+> e chiuso come **famiglia** (METODO v4: «non riparo l'esemplare, chiudo la famiglia»). Il racconto per esteso, coi rossi
+> testuali, sta nel `REGISTRO_INGEGNERIA.md`; le righe 17-22 della PARTE 11 del metodo e la famiglia nuova nella PARTE 13.
+> **Cosa è cambiato, in breve:** ⑥ le tre caselle prezzo non partono più scritte **e** rifiutano il vuoto (senza il rifiuto
+> sarebbe stato peggio: `BV.toCents('')` vale zero, cioè notti in regalo), con la frase in 8 lingue; ② le scritture host su
+> un annuncio **che non esiste** rispondono 404 (`_alloggio_in_catalogo`), e il perimetro è sorvegliato dal conto dei
+> chiamanti; ① eliminare un annuncio porta via il **calendario** (`fase58.svuota_calendario`) e **non** lo storico delle
+> prenotazioni; ④ «Trattenuto (cancellata)» è diventato «Fermo (cancellazione o controversia)» in tutte le lingue, con la
+> legenda che lo spiega, perché quello stato lo scrivono **tre** cause; ③ una distanza dal centro oltre il confine già usato
+> per i pin non si mostra più; ⑦ il test del voucher cerca la **riga del PIN**, non quattro cifre nude.
+> **Misure, tutte lette senza tubi:** pre-volo da PowerShell **7 controlli, 0 rossi, 0 non eseguiti**; cricchetti `ruff` e
+> `bandit` «nessuna segnalazione nuova», uscita 0; caricatore **6837**; click-through dei 3 pannelli col browser vero (PC e
+> mobile) **0 difetti**; percorso ospite→host col browser **completo**; macchina a stati (`test_stateful_api`) con le due
+> mosse nuove — elimina e ricrea con lo stesso nome — **24-30 mondi, ~410 passi, verde**, e **col guasto rimesso dentro
+> grida da sola** (`DATI CHE SOPRAVVIVONO AL PADRONE … ha ancora 14 giorni`); ripristini **byte-identici** verificati con
+> sha256 (`deploy/host.html` `08ea2ca7…`, `fase83_server.py` `154687450…`); regressione mirata **593 test nei 45 file che
+> usano la chiave da operatore**, con i 3 rossi di `TestOnboarding` riparati (scrivevano il calendario di un annuncio mai
+> pubblicato: erano loro a descrivere il comportamento vecchio). `git status`: **12 file modificati, nessun file nuovo**.
+>
+> **⛔ COSA RESTA, in quest'ordine:**
+> ① **I due calendari orfani già in produzione** (`filippine-makati` 60 giorni, `filippine-makati-2` 59, misurati il 15/9):
+> la riparazione impedisce che se ne creino altri, **non** cancella quelli vecchi. Si tolgono sul server dopo un backup
+> verificato, e chi ricreasse uno di quei due nomi prima di allora ne erediterebbe ancora i prezzi.
+> ② **Il pezzo 3 di B1: una sola casella prezzo nel pannello** (rimandato dal fondatore il 23/8). Oggi le caselle sono tre e
+> nessuna parte scritta, ma restano tre: toglie l'effetto, non la causa.
+> ③ **Il collaudo del giro intero dell'host** come lo chiede la PARTE 20.1 del metodo: traccia osservabile per ogni anello,
+> prova in due tempi (prima non c'è, dopo c'è) e denominatore dichiarato («N anelli su N»). Le mosse nella macchina a stati
+> sono un'altra cosa: generano sequenze, non misurano la catena.
+> ④ **Il confine dei 100 km è scritto in due punti** di `fase83_server.py` (guardia del pin e distanza mostrata): va
+> unificato in una costante, o è «valori scritti a mano in più posti» (METODO, PARTE 10 direzione 7).
+> ⑤ **La famiglia di ⑦** — una guardia che cerca un valore corto dentro **tutta** una pagina — è chiusa sull'esemplare:
+> nessuno enumera gli altri test che potrebbero farlo.
+
 **🧭 15 SETTEMBRE, sera — PASSAGGIO DI CONSEGNE (D21): LE PR #187, #188 E #189 RICONTROLLATE A OCCHI FRESCHI, LA #189 UNITA E IN PRODUZIONE (ramo `consegne-d21-2026-09-15`)**
 
 > ⛔ **D21 VIOLATA dalla sessione del pomeriggio: 79% di contesto, letto dal fondatore con `/context`.** Questa sessione è
@@ -3161,7 +3199,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 ```
 CONSEGNE AGGIORNATE A: 9768421
 
-SUITE ATTUALE: Ran 6827 test
+SUITE ATTUALE: Ran 6837 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

@@ -9543,7 +9543,18 @@ class RouterHTTP:
                 return None
             from fase121_geo_ricerca import distanza_m
             d = distanza_m(lat_u, lon_u, centro[0], centro[1])
-            return d if isinstance(d, int) and d >= 0 else None
+            if not (isinstance(d, int) and d >= 0):
+                return None
+            # ⛔ PLAUSIBILITA' (2026-09-15, «autorizzato»): quel giorno la pagina pubblica
+            # diceva «11144.3 km dal centro» su un annuncio con citta' «test». Il numero era
+            # calcolato bene e la FRASE era falsa: nessun alloggio sta a undicimila chilometri
+            # dal centro della SUA citta' (modo di rompersi n. 10, dato assurdo). Oltre il
+            # confine si TACE invece di stampare una cifra senza senso.
+            # 🔑 Stesso confine che `_geocodifica_se_serve` usa gia' per scartare un pin
+            # assurdo: due numeri diversi per la stessa domanda sarebbero due verita'.
+            # Guardia: test_geocoder_mappa.test_una_distanza_ASSURDA_non_si_mostra, vista
+            # ROSSA prima (4690085 metri finiti in vetrina).
+            return d if d <= 100_000 else None
         except Exception:
             return None
 
@@ -9791,6 +9802,8 @@ class RouterHTTP:
             return 422, {"errore": "campi_non_validi"}
         if not self._verifica_proprieta(headers, alloggio):
             return 403, {"errore": "non_tuo"}
+        if not self._alloggio_in_catalogo(alloggio):
+            return 404, {"errore": "alloggio_mancante"}
         ok = self._sys.inventario.imposta_disponibilita(
             alloggio, giorno, unita_totali=unita, prezzo_netto_cents=prezzo,
             chiuso=bool(dati.get("chiuso", False)))
@@ -9819,6 +9832,8 @@ class RouterHTTP:
             return 422, {"errore": "min_notti_non_valido"}
         if not self._verifica_proprieta(headers, alloggio):
             return 403, {"errore": "non_tuo"}
+        if not self._alloggio_in_catalogo(alloggio):
+            return 404, {"errore": "alloggio_mancante"}
         try:
             d0 = datetime.date.fromisoformat(da)
             d1 = datetime.date.fromisoformat(a)
@@ -10562,6 +10577,22 @@ class RouterHTTP:
             return True
         return owner is None or owner == hid
 
+    def _alloggio_in_catalogo(self, slug) -> bool:
+        """ESISTE un annuncio con questo nome? `_verifica_proprieta` risponde a un'ALTRA
+        domanda — «e' tuo?» — e lascia passare `owner is None`, cioe' anche un nome che non
+        esiste. Il 2026-09-15 il fondatore ha aperto due periodi su un annuncio non ancora
+        creato (nginx: 18:41:48 e 18:42:03, risposta 200) e il pannello ha detto «✅»: i
+        giorni non sono andati dove credeva, e quel nome sarebbe rimasto occupato per l'host
+        che lo usera' domani. Le scritture ora chiedono anche questo.
+        ⛔ Se l'archivio non risponde NON blocca: un guasto nostro non ferma un host in regola
+        (stessa scelta di `_verifica_proprieta`, e sbaglia nel verso che non fa danno)."""
+        if not (isinstance(slug, str) and slug.strip()):
+            return False
+        try:
+            return self._sys.catalogo.host_di_alloggio(slug) is not None
+        except Exception:
+            return True
+
     def _host_alloggio_dettaglio(self, query, headers):
         """Dettaglio COMPLETO di un alloggio del proprietario (per pre-riempire il form di
         modifica). Host-auth + verifica proprietà."""
@@ -10774,6 +10805,19 @@ class RouterHTTP:
                 if aperte:
                     return 409, {"errore": "escrow_aperto", "quanti": aperte}
             ok = self._sys.catalogo.elimina_alloggio(slug)
+            if ok:
+                # ⛔ IL CALENDARIO SE NE VA CON L'ANNUNCIO (2026-09-15, «autorizzato»).
+                # Restando, un annuncio nuovo con lo STESSO nome ne ereditava i giorni e la
+                # vetrina mostrava il prezzo di quello morto (`rispecchia_prezzo` legge la
+                # notte prenotabile piu' economica). Lo storico delle prenotazioni
+                # (`movimenti`) NON si tocca: serve ai conti e alla conservazione.
+                # Niente `hasattr` qui: un ramo difensivo che si spegne da solo resta muto
+                # (METODO v4, PARTE 11 riga 3). Se il pezzo manca, l'eccezione lo dice.
+                try:
+                    self._sys.inventario.svuota_calendario(slug)
+                except Exception:
+                    logger.error("elimina alloggio: calendario NON svuotato (ISOLATO)",
+                                 exc_info=True)
         except Exception:
             logger.error("elimina alloggio: eccezione ISOLATA", exc_info=True)
             return 503, {"errore": "service_unavailable"}
@@ -10952,6 +10996,8 @@ class RouterHTTP:
             return 422, {"errore": "campi_non_validi"}
         if not self._verifica_proprieta(headers, alloggio):
             return 403, {"errore": "non_tuo"}
+        if not self._alloggio_in_catalogo(alloggio):
+            return 404, {"errore": "alloggio_mancante"}
         if isinstance(url, str):
             # LA DIFESA DAL RITARDO (fase203, 2026-09-05, «autorizzato»): l'host salva l'URL del
             # feed (Airbnb/Booking/Vrbo) e da qui in poi la macchina lo rilegge da sola -- ogni

@@ -236,6 +236,47 @@ class TestDistanzaCentro(unittest.TestCase):
         self.assertNotIn("centro_distanza_m", det2)
         shutil.rmtree(d, ignore_errors=True)
 
+    def test_una_distanza_ASSURDA_non_si_mostra(self):
+        """⛔ D20 — scritta PRIMA della riparazione e vista ROSSA sul codice di produzione.
+
+        Il 2026-09-15 la pagina pubblica diceva «11144.3 km dal centro» su un annuncio con
+        citta' «test». Il numero e' calcolato bene (haversine fra due punti veri) e la FRASE
+        e' falsa: nessun alloggio sta a undicimila chilometri dal centro della SUA citta'.
+        E' il modo di rompersi n. 10 — formato giusto, numero senza senso — e l'ha trovato
+        il fondatore guardando il sito, non un test.
+
+        La soglia non e' inventata qui: il prodotto scarta gia' un pin a piu' di 100 km dal
+        centro della citta' dichiarata (`fase83_server._geocodifica_se_serve`). Si RIUSA
+        quel confine, cosi' non nascono due numeri diversi per la stessa domanda.
+        ⛔ COSA NON ESAMINA (D18 punto 3): da dove vengano le coordinate sbagliate (citta'
+        inventata, omonimia, geocoder confuso). Questa guarda cosa LEGGE una persona.
+        """
+        d = tempfile.mkdtemp()
+        sys_ = crea_sistema(ConfigCasaVIP(abilitato=True, segreto_hmac=b"S" * 32,
+                                          db_catalogo=f"{d}/c.db", db_inventario=f"{d}/i.db"))
+        r = crea_router(sys_)
+        sys_.geocoder = _FakeGeocoder((41890000, 12490000))     # il "centro" della sua citta'
+        from fase57_vetrina import SchedaAlloggio
+        sys_.catalogo.pubblica(SchedaAlloggio(
+            host_id="h1", slug="lontano", titolo="Lontano", citta="test",
+            prezzo_notte_cents=100, capacita=1,
+            lat_micro=1000000, lon_micro=1000000))              # a migliaia di chilometri
+        s, det = r.gestisci("GET", "/api/catalogo/lontano", {}, None, {})
+        self.assertEqual(s, 200, det)
+        distanza = det.get("centro_distanza_m")
+        self.assertTrue(
+            distanza is None or distanza <= 100000,
+            "la scheda pubblica dichiara %s metri dal centro della citta': nessun alloggio "
+            "e' cosi' lontano dal centro della SUA citta', e chi legge crede al numero"
+            % (distanza,))
+        s, res = r.gestisci("GET", "/api/catalogo", {"citta": "test"}, None, {})
+        card = res["risultati"][0]
+        self.assertTrue(
+            card.get("centro_distanza_m") is None or card["centro_distanza_m"] <= 100000,
+            "la SCHEDA nella lista dichiara %s metri dal centro: stessa bugia, altra pagina"
+            % (card.get("centro_distanza_m"),))
+        shutil.rmtree(d, ignore_errors=True)
+
 
 class TestGuardiaIndirizzo(unittest.TestCase):
     def test_indirizzo_sbagliato_ripiega_sul_centro(self):

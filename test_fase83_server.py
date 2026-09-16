@@ -768,6 +768,20 @@ class TestOnboarding(unittest.TestCase):
         self.sys = _sistema()
         self.r = crea_router(self.sys, host_key="hk")
         self.h = {"X-Host-Key": "hk"}
+        # ⛔ 2026-09-15: l'annuncio ORA deve ESISTERE prima che gli si apra il calendario.
+        # Fino a quel giorno queste prove scrivevano giorni sotto un nome mai pubblicato —
+        # cioe' proprio il difetto che il fondatore ha trovato dal pannello: il sistema
+        # rispondeva «✅» e i giorni finivano sotto un nome che nessuno possiede
+        # (`fase83_server._alloggio_in_catalogo`). Con l'annuncio pubblicato,
+        # `test_range_invalido` torna a misurare il RANGE, non l'assenza dell'annuncio.
+        # ⛔ L'host_id va nel CORPO: con la sola chiave da operatore non c'e' un token da cui
+        # ricavarlo (`_host_pubblica`: `hid = self._host_id_da_token(headers)`, e senza token
+        # resta quello del corpo). Misurato il 2026-09-16: senza, la rotta risponde
+        # `422 scheda_non_valida / host_id_non_valido` e l'annuncio non nasce.
+        st, _c = self.r.gestisci("POST", "/api/host/pubblica", headers=self.h, body=json.dumps(
+            {"slug": "casa", "titolo": "Casa", "citta": "Roma", "host_id": "h_onboarding0001",
+             "prezzo_notte_cents": 9000, "capacita": 2}))
+        self.assertIn(st, (200, 201), _c)   # premessa del banco: senza annuncio non si misura
 
     def test_apri_periodo(self):
         s, c = self.r.gestisci("POST", "/api/host/disponibilita_range", headers=self.h,
@@ -1012,8 +1026,16 @@ class TestRecensioni(unittest.TestCase):
         # GATE STATO-PAGAMENTO (fondatore): senza pagamento CONFERMATO, il voucher NON espone il PIN
         # reale né i tasti di controversia — solo riepilogo + invito a pagare. (Il caso PAGATO->PIN
         # sbloccato è provato in test_email_ciclo con setup di pagamento completo.)
+        # ⛔ IL PIN SI CERCA COME *RIGA DEL PIN*, NON COME QUATTRO CIFRE NUDE (2026-09-15).
+        # Quel giorno la CI e' andata ROSSA su questo test: il PIN casuale del giro era
+        # «1967» e coincideva con l'ultimo gruppo del codice prenotazione «BVIP-F279-1967»
+        # — il sito non esponeva niente. Una pagina e' piena di cifre e un PIN di quattro ci
+        # finisce dentro per caso (~1 su 1500, misurato il 2026-08-15): il prodotto lo sa
+        # gia' e la sua rete difensiva cerca `riga_pin_voucher`, che esiste apposta. Questo
+        # test era l'ultimo pezzo rimasto col confronto ingenuo. Un falso allarme e' un
+        # difetto quanto un allarme mancato (regola ferrea 10).
         from fase59_concierge import codice_prenotazione
-        from fase83_server import pagina_voucher_html
+        from fase83_server import pagina_voucher_html, riga_pin_voucher
         _, corpo = self._prenota()
         rif = corpo["riferimento"]
         pin = self.sys.firma.pin_checkin(rif)
@@ -1021,7 +1043,11 @@ class TestRecensioni(unittest.TestCase):
         self.assertIn("Prenotazione confermata", h)
         self.assertIn(codice_prenotazione(rif), h)         # codice leggibile BVIP-XXXX-XXXX
         self.assertIn("PIN check-in", h)                   # l'etichetta c'è...
-        self.assertNotIn(pin, h)                           # ...ma il PIN REALE no (bloccato pre-pagamento)
+        # PREMESSA: la forma cercata deve contenere davvero il PIN, se no «non lo trovo»
+        # sarebbe vero per il motivo sbagliato (una guardia che cerca una forma vuota).
+        self.assertIn(pin, riga_pin_voucher(pin))
+        self.assertNotIn(riga_pin_voucher(pin), h)         # ...ma il PIN REALE no (bloccato pre-pagamento)
+        self.assertIn(riga_pin_voucher("\U0001F512"), h)   # al suo posto c'è il lucchetto
         self.assertNotIn("/api/garanzia/", h)              # nessun tasto controversia pre-pagamento
         self.assertIn("Completa il pagamento", h)
         self.assertIn("BookinVIP", h)
