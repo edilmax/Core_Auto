@@ -403,6 +403,31 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🛠️ IL PANNELLO HOST RIPARATO ALLA RADICE — 16 settembre, «AUTORIZZO TUTTO» del fondatore (ramo `pannello-host-riparato-2026-09-16`)
+
+**Da dove nasce.** I sei difetti che il fondatore ha trovato in mezz'ora di pannello vero la sera del 15/9, sotto ~6800 test
+verdi. Ognuno riparato con l'ordine D20 — guardia scritta, **vista rossa** sul codice di produzione, poi la riparazione — e
+ognuno chiuso come **famiglia**, non come esemplare (METODO v4, «COME SI USA»: *«non riparo l'esemplare, chiudo la famiglia»*).
+Le righe nuove della PARTE 11 del metodo sono la 17, 18, 19, 20, 21 e 22.
+
+| # | cos'era | com'è riparato | il rosso visto prima |
+|---|---|---|---|
+| ⑥ | le tre caselle prezzo del pannello partivano **già scritte** (dal commit `ae36668` del 13/7, mai tolte): chi non le cambia vende alla cifra di un altro | caselle vuote **e** rifiuto del vuoto nei tre gestori — `BV.toCents('')` vale **zero**, quindi svuotarle e basta avrebbe aperto le notti in regalo — con la frase in tutte e 8 le lingue | `['d_prezzo=95', 'p_prezzo=95', 'r_prezzo=90'] != []`, e col guasto iniettato con l'editor `['r_prezzo'] != []` (ripristino byte-identico, sha256 `08ea2ca7…`) |
+| ② | le scritture dell'host riuscivano su un annuncio **che non esiste**: `_verifica_proprieta` risponde `owner is None or owner == hid` | `_alloggio_in_catalogo` in `fase83_server`, chiamato dalle tre scritture col nome nel corpo → **404**; il perimetro è sorvegliato dal conto dei chiamanti | `/api/host/disponibilita → 200 {'stato': 'ok'}`, `disponibilita_range → 200 {'giorni_impostati': 4}`, `ical → 200 {'eventi': 1, 'giorni_bloccati': 2}` |
+| ① | eliminare un annuncio lasciava il **calendario**: un annuncio ricreato con lo stesso nome ereditava i prezzi del morto | `fase58_channel_manager.svuota_calendario` (giorni, blocchi esterni, stato messo da parte) chiamato da `_host_alloggio_elimina`. ⛔ **`movimenti` NON si tocca**: è lo storico delle prenotazioni che l'host legge nel pannello | `10 != 0` (calendario sopravvissuto) e `9000 != 100` (il prezzo del morto in vetrina) |
+| ④ | il pannello chiamava «Trattenuto (cancellata)» — in 8 lingue — uno stato scritto da **tre** cause: cancellazione, controversia, subentro | etichetta «Fermo (cancellazione o controversia)» in tutte le lingue e legenda che lo spiega; la guardia lega il **testo** al **codice** e conta le cause nel sorgente | `8 != 0` (otto etichette bugiarde) e la legenda che saltava lo stato |
+| ③ | la pagina pubblica mostrava «11144.3 km dal centro» (città «test»): numero giusto, frase falsa | tetto di plausibilità dentro `_distanza_centro`, **lo stesso confine** che il prodotto usa già per scartare un pin assurdo | `la scheda pubblica dichiara 4690085 metri dal centro` |
+| ⑦ | falso rosso in CI: il PIN `1967` coincideva con l'ultimo gruppo del codice `BVIP-F279-1967` | il test cerca la **riga del PIN** (`riga_pin_voucher`, che esiste apposta e lo dichiara), non quattro cifre nude | il rosso era il falso allarme stesso: `'1967' unexpectedly found in '<!DOCTYPE html>…` |
+
+**L'effetto collaterale, misurato invece che temuto.** La riparazione di ② ha fatto cadere **3** test (`TestOnboarding`), che
+aprivano il calendario di un annuncio mai pubblicato — cioè descrivevano il comportamento appena dichiarato sbagliato. Per
+sapere se fossero i soli, ho eseguito **tutti** i 45 file che usano la chiave da operatore: `Ran 593 tests`, rossi **3**,
+sempre quelli. Il banco ora pubblica l'annuncio (l'`host_id` va nel **corpo**: senza token non c'è da dove ricavarlo, e la
+rotta rispondeva `422 host_id_non_valido`).
+
+**Misure.** Cricchetti `ruff` e `bandit`: «nessuna segnalazione nuova», uscita 0 tutti e due. Caricatore: **6837** test
+(erano 6827: +10 guardie nuove). `git diff --numstat` a fine riparazioni: 9 file, nessun file nuovo.
+
 ### 👀 LE PR #187, #188 E #189 RICONTROLLATE A OCCHI FRESCHI, E LA #189 IN PRODUZIONE — 15 settembre, sera (dopo la sessione arrivata al 79% di contesto)
 
 **Cosa è stato fatto.** Nessuna riga di codice. I diff delle tre PR riletti con le domande del fondatore (è giusta? rompe

@@ -118,6 +118,7 @@ class MacchinaBookinVIP(RuleBasedStateMachine):
         self._pren = {}               # rif -> {vt, slug, ci, co, totale, visto_pagato}
         self._n_partner = 0
         self._partner_attesi = 0
+        self._eliminati = []          # nomi di annunci eliminati e non ancora ricreati
 
     def teardown(self):
         _stripe.ProviderStripe._fetch_reale = self._orig_fetch
@@ -192,6 +193,43 @@ class MacchinaBookinVIP(RuleBasedStateMachine):
                         "a": _giorno(off + giorni), "unita_totali": unita,
                         "prezzo_netto_cents": prezzo}, self.tok)
         assert s == 200, "apri/chiudi: %d %r" % (s, o)
+
+    # ── 2026-09-16: LE DUE MOSSE CHE MANCAVANO, ed erano proprio quelle del fondatore ──
+    # Il 15/9 ha eliminato un annuncio e ne ha ricreato uno con lo STESSO nome: il nuovo si e'
+    # preso il calendario del morto e la vetrina ha mostrato il prezzo di quello. La macchina
+    # non sapeva eliminare, quindi quella sequenza non poteva nascere: nessuna delle ~6800
+    # prove poteva trovarla, e infatti l'ha trovata una persona. Adesso la macchina la genera
+    # da sola, in ordini che nessuno ha pensato (METODO v4, PARTE 20.1).
+    @rule(slug=consumes(annunci))
+    def elimina_annuncio(self, slug):
+        self._passo()
+        s, o = self._g("POST", "/api/host/alloggio_elimina", {"slug": slug}, self.tok)
+        # 409 = prenotazioni vive o escrow aperto: e' un rifiuto LEGITTIMO, non un difetto
+        assert s in (200, 409), "elimina: %d %r" % (s, o)  # nosec B101 - qui l'assert e' il mestiere
+        if s == 200:
+            if slug in self._slugs:
+                self._slugs.remove(slug)
+            self._eliminati.append(slug)
+
+    @rule(target=annunci, prezzo=st.sampled_from([100, 3300, 87000]))
+    def ricrea_con_lo_stesso_nome(self, prezzo):
+        """Il gesto del fondatore, senza aprire date: la vetrina puo' dire solo il prezzo
+        appena scritto. Se ne dice un altro, e' quello del calendario di quello eliminato."""
+        self._passo()
+        if not self._eliminati:
+            return multiple()
+        slug = self._eliminati.pop(0)
+        s, o = self._g("POST", "/api/host/pubblica",
+                       {"slug": slug, "titolo": "Rinata %s" % slug, "citta": "Roma",
+                        "prezzo_notte_cents": prezzo, "capacita": 2}, self.tok)
+        assert s == 201, "ricrea: %d %r" % (s, o)  # nosec B101 - qui l'assert e' il mestiere
+        scheda = self.sis.catalogo.dettaglio_owner(slug) or {}
+        assert scheda.get("prezzo_notte_cents") == prezzo, (  # nosec B101 - il mestiere
+            "EREDITA' VIETATA: annuncio ricreato col nome %r, scritto %d, in vetrina %r: e' "
+            "il prezzo del calendario di quello eliminato"
+            % (slug, prezzo, scheda.get("prezzo_notte_cents")))
+        self._slugs.append(slug)
+        return slug
 
     @rule(target=preventivi, slug=annunci,
           off=st.integers(min_value=0, max_value=11),
@@ -426,6 +464,17 @@ class MacchinaBookinVIP(RuleBasedStateMachine):
         assert s == 200 and o.get("totale") == self._partner_attesi, \
             "partner: attesi %d, trovati %r (scrittura senza consenso?)" \
             % (self._partner_attesi, o.get("totale"))
+
+        # ── 2026-09-16: un annuncio ELIMINATO non lascia il suo calendario ──────────
+        # Famiglia «dati che sopravvivono al loro padrone» (METODO v4, PARTE 13). Verificata
+        # dopo OGNI passo: se una sequenza qualunque riesce a lasciare giorni sotto un nome
+        # senza annuncio, questa riga lo dice subito e con il nome del colpevole.
+        for morto in self._eliminati:
+            restanti = self.sis.inventario.conta_alloggio(morto)
+            assert restanti == 0, (  # nosec B101 - il mestiere della macchina a stati
+                "DATI CHE SOPRAVVIVONO AL PADRONE: l'annuncio %r e' stato eliminato e il suo "
+                "calendario ha ancora %d giorni: chi ricrea quel nome se li trova addosso"
+                % (morto, restanti))
 
 
 # Budget: ~20 mondi x ~20 passi ≈ 20-40s tipici (sotto il minuto anche sotto carico: il

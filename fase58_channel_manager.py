@@ -222,6 +222,33 @@ class ChannelManager:
         finally:
             con.close()
 
+    def svuota_calendario(self, alloggio_id: Any) -> int:
+        """Toglie il CALENDARIO di un alloggio — giorni, blocchi esterni e lo stato messo da
+        parte — e NON tocca `movimenti`: quello e' lo storico delle prenotazioni, che l'host
+        legge dal suo pannello (`elenco_prenotazioni`) e che resta anche quando l'annuncio
+        non c'e' piu'.
+
+        ⛔ Nasce il 2026-09-15 («autorizzato» del fondatore): eliminare un annuncio lasciava
+        i suoi giorni in archivio, e un annuncio ricreato con lo STESSO nome se li trovava
+        addosso — `rispecchia_prezzo` ci leggeva la notte prenotabile piu' economica e la
+        vetrina mostrava il prezzo di quello morto. In produzione erano rimasti due calendari
+        orfani. Guardia: `test_elimina_annuncio.TestUnAnnuncioCANCELLATOSPARISCEDAVVERO`
+        (vista ROSSA prima: `10 != 0` e `9000 != 100`).
+        ⛔ NON e' `cancella_alloggio`: quella porta via anche i movimenti ed e' giusta per
+        l'oblio (fase156), non per un host che cancella un annuncio sbagliato."""
+        if not (isinstance(alloggio_id, str) and alloggio_id):
+            return 0
+        con = self._apri()
+        try:
+            with con:
+                cur = con.execute("DELETE FROM inventario WHERE alloggio_id=?", (alloggio_id,))
+                con.execute("DELETE FROM blocchi_esterni WHERE alloggio_id=?", (alloggio_id,))
+                con.execute("DELETE FROM inventario_prima_del_blocco WHERE alloggio_id=?",
+                            (alloggio_id,))
+            return max(0, cur.rowcount)
+        finally:
+            con.close()
+
     def conta_alloggio(self, alloggio_id: Any) -> int:
         if not (isinstance(alloggio_id, str) and alloggio_id):
             return 0

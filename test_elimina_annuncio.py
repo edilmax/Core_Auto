@@ -133,6 +133,71 @@ class TestUnAnnuncioCANCELLATOSPARISCEDAVVERO(unittest.TestCase):
             "l'host ha cancellato il suo annuncio e l'indirizzo di casa sua si rilegge "
             "ancora nei byte di c.db: la riga non si interroga piu', il dato c'e'")
 
+    def _giorni(self, slug):
+        return self.sys.inventario.conta_alloggio(slug)
+
+    def _apri_periodo(self, slug, prezzo_cents):
+        import datetime
+        oggi = datetime.date.today()
+        da = (oggi + datetime.timedelta(days=10)).isoformat()
+        a = (oggi + datetime.timedelta(days=20)).isoformat()
+        return self.g("POST", "/api/host/disponibilita_range",
+                      {"alloggio_id": slug, "da": da, "a": a, "unita_totali": 1,
+                       "prezzo_netto_cents": prezzo_cents}, {"X-Host-Token": self.tok})
+
+    def test_il_CALENDARIO_non_sopravvive_all_annuncio_eliminato(self):
+        """⛔ D20 — scritta PRIMA della riparazione e vista ROSSA sul codice di produzione.
+
+        Il caso vero del 2026-09-15: l'host elimina un annuncio e ne ricrea uno con lo stesso
+        nome; il calendario di prima resta e il nuovo se lo trova addosso. In produzione sono
+        rimasti DUE calendari orfani (60 e 59 giorni) sotto nomi senza annuncio.
+        E' la famiglia «Cancellazione incompleta» del METODO v4 PARTE 13, scritta come chiusa
+        senza data: una famiglia che torna vuole il controllo RINFORZATO, non uno in piu'.
+        ⛔ COSA NON ESAMINA (D18 punto 3): lo storico delle prenotazioni (`movimenti`), che con
+        l'annuncio NON si cancella — serve ai conti e alla conservazione.
+        """
+        s, d = self.g("POST", "/api/host/pubblica",
+                      {"slug": "casa-orfana", "titolo": "Orfana", "citta": "Roma",
+                       "prezzo_notte_cents": 100, "capacita": 2}, {"X-Host-Token": self.tok})
+        self.assertIn(s, (200, 201), d)
+        s, d = self._apri_periodo("casa-orfana", 9000)
+        self.assertEqual(s, 200, d)
+        # PREMESSA (sbaglio S1: il vuoto non e' una misura). Senza giorni PRIMA, «non ci sono
+        # dopo» sarebbe vero in tutti e due i tempi, cioe' un verde che non ha guardato.
+        self.assertGreater(self._giorni("casa-orfana"), 0,
+                           "misura non valida: il periodo non ha scritto nessun giorno")
+        s, d = self.g("POST", "/api/host/alloggio_elimina", {"slug": "casa-orfana"},
+                      {"X-Host-Token": self.tok})
+        self.assertEqual(s, 200, d)
+        self.assertEqual(
+            self._giorni("casa-orfana"), 0,
+            "l'annuncio e' stato eliminato e il suo calendario e' ancora li': chi ricrea un "
+            "annuncio con lo stesso nome ne eredita i prezzi")
+
+    def test_un_annuncio_ricreato_con_lo_STESSO_NOME_non_eredita_il_prezzo(self):
+        """L'effetto che ha pagato il fondatore: 1 EUR scritto nel pannello, 90 in vetrina.
+        `rispecchia_prezzo` prende la notte PRENOTABILE piu' economica dal calendario: se il
+        calendario e' quello del morto, la vetrina dice il prezzo del morto."""
+        s, d = self.g("POST", "/api/host/pubblica",
+                      {"slug": "casa-erede", "titolo": "Erede", "citta": "Roma",
+                       "prezzo_notte_cents": 9000, "capacita": 2}, {"X-Host-Token": self.tok})
+        self.assertIn(s, (200, 201), d)
+        s, d = self._apri_periodo("casa-erede", 9000)
+        self.assertEqual(s, 200, d)
+        s, d = self.g("POST", "/api/host/alloggio_elimina", {"slug": "casa-erede"},
+                      {"X-Host-Token": self.tok})
+        self.assertEqual(s, 200, d)
+        s, d = self.g("POST", "/api/host/pubblica",
+                      {"slug": "casa-erede", "titolo": "Erede 2", "citta": "Roma",
+                       "prezzo_notte_cents": 100, "capacita": 2}, {"X-Host-Token": self.tok})
+        self.assertIn(s, (200, 201), d)
+        scheda = self.sys.catalogo.dettaglio_owner("casa-erede")
+        self.assertIsNotNone(scheda, "premessa: l'annuncio ricreato deve esistere")
+        self.assertEqual(
+            scheda["prezzo_notte_cents"], 100,
+            "l'host ha scritto 1,00 e la vetrina dice un altro numero: il calendario "
+            "dell'annuncio eliminato e' rientrato dalla porta di servizio")
+
     def test_il_CANCELLAMI_toglie_anche_le_FOTO_dell_annuncio(self):
         from fase57_vetrina import Immagine, SchedaAlloggio
         foto = "https://esempio.test/foto-SPIA-OBLIO.jpg"
