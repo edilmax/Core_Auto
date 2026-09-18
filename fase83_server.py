@@ -2344,9 +2344,12 @@ class RouterHTTP:
         # 1) token host self-service valido
         if self._host_id_da_token(headers):
             return True
-        # 2) chiave condivisa dell'operatore (o dev aperto se non configurata)
+        # 2) chiave condivisa dell'operatore: NON configurata = ramo CHIUSO (fail-closed).
+        #    Prima un router senza HOST_KEY apriva l'API host a chiunque ("dev aperto"):
+        #    il confine del deploy (main_casavip.py) senza chiavi non parte, e ora nemmeno
+        #    il router avviato per conto suo si spalanca. Meglio un no che una porta aperta.
         if self._host_key is None:
-            return True
+            return False
         fornita = headers.get("X-Host-Key", "") or headers.get("x-host-key", "")
         return self._auth_con_rate("host", str(fornita), str(self._host_key), headers)
 
@@ -2594,7 +2597,7 @@ class RouterHTTP:
 
     def _auth_admin(self, headers: Dict[str, str]) -> bool:
         if self._admin_key is None:
-            return True            # nessuna chiave configurata = aperto (dev)
+            return False           # nessuna chiave configurata = CHIUSO (fail-closed)
         # OPERATORE admin (fase192) con TOKEN firmato (X-Admin-Op): additivo. Va provato PRIMA, cosi'
         # una richiesta legittima d'operatore (senza X-Admin-Key) NON conta come tentativo-chiave
         # fallito nel buttafuori per IP. Guardato da `tok` per NON deviare la ROOT: la chiave root
@@ -2646,14 +2649,11 @@ class RouterHTTP:
         non autenticato. Serve per i permessi per-ruolo."""
         import hmac as _h
         if self._admin_key is None:
-            # Nessuna chiave configurata = modalita' APERTA (dev): _auth_admin (riga ~2244)
-            # lascia passare CHIUNQUE come root. I due strati devono dire la STESSA cosa: se
-            # qui tornassimo None, _puo_azione negherebbe rimborso/arbitrato/moderazione a un
-            # chiamante che _auth_admin ha appena riconosciuto come amministratore pieno --
-            # porta spalancata e, insieme, controversie irrisolvibili. Con la chiave
-            # configurata (produzione) questo ramo non si attiva mai e il gate di ruolo resta
-            # intatto: 'supporto' continua a non toccare i soldi.
-            return "admin"
+            # Nessuna chiave configurata = NESSUN ruolo (fail-closed). I due strati dicono
+            # la STESSA cosa: _auth_admin nega e nessuno e' admin. Prima questo ramo
+            # rispondeva 'admin' per chiunque: un router acceso senza ADMIN_KEY dava
+            # rimborsi e arbitrato a tutti. Ora e' servi() che senza chiave non parte.
+            return None
         fornita = headers.get("X-Admin-Key", "") or headers.get("x-admin-key", "")
         if fornita and _h.compare_digest(str(fornita), str(self._admin_key)):
             return "admin"                       # ROOT = admin pieno
@@ -2675,7 +2675,11 @@ class RouterHTTP:
             from fase192_admin_accounts import puo
             return puo(self._ruolo_operatore(headers), azione)
         except Exception:
-            return True
+            # FAIL-CLOSED: un guasto nel controllo dei permessi NON e' un accesso libero.
+            # Se fase192 non si carica, rimborsi e moderazione restano negati a tutti.
+            logger.error("_puo_azione: controllo in errore -> NEGO (fail-closed)",
+                         exc_info=True)
+            return False
 
     def _auth_con_rate(self, tipo, fornita, atteso, headers) -> bool:
         """Confronto costante della chiave + BUTTAFUORI per IP sui TENTATIVI FALLITI
@@ -10567,14 +10571,19 @@ class RouterHTTP:
     def _verifica_proprieta(self, headers, slug) -> bool:
         """Self-service (token): l'host può modificare SOLO i propri alloggi. Operatore
         (X-Host-Key senza token): consentito (back-office piattaforma). Slug inesistente
-        o errore infrastrutturale: non blocca qui (l'operazione a valle valida/no-op)."""
+        o errore infrastrutturale: NEGA (fail-closed: un archivio che non risponde non
+        apre l'alloggio di un altro)."""
         hid = self._host_id_da_token(headers)
         if not hid:
             return True
         try:
             owner = self._sys.catalogo.host_di_alloggio(slug)
         except Exception:
-            return True
+            # FAIL-CLOSED sul permesso: l'archivio che non risponde non fa passare la
+            # scrittura. Prima un errore di lookup lasciava modificare qualsiasi annuncio.
+            logger.warning("_verifica_proprieta: proprietario non verificabile -> NEGO "
+                           "(fail-closed)", exc_info=True)
+            return False
         return owner is None or owner == hid
 
     def _alloggio_in_catalogo(self, slug) -> bool:
@@ -11358,6 +11367,18 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
     import os
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
     from urllib.parse import urlparse, parse_qs, unquote
+
+    # -- FAIL-CLOSED all'avvio (2026-09-18, ordine del fondatore): senza ADMIN_KEY il
+    #    server NON si accende. Prima nasceva un router in "modalita' aperta" e l'API dei
+    #    soldi restava esposta in silenzio se la variabile spariva dall'ambiente.
+    #    main_casavip.py gia' rifiuta di partire senza chiavi; ora lo fa anche il server,
+    #    chiunque lo accenda. Meglio il sito giu' che il sito spalancato.
+    if not (admin_key or "").strip():
+        logging.critical(
+            "RIFIUTO DI PARTIRE: ADMIN_KEY assente. Senza, l'API admin sarebbe aperta a "
+            "chiunque (rimborsi, arbitrato, moderazione). Impostala in .env.casavip e "
+            "riavvia.")
+        raise SystemExit(2)
 
     router = crea_router(sistema, host_key=host_key, admin_key=admin_key,
                          base_url=base_url)

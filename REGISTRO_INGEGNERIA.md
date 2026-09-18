@@ -467,6 +467,10 @@ guardie). Pre-volo dalla PowerShell vera: il controllo 1 ha gridato «dichiara 6
 `casa-test` a 1,00 € in vetrina (Blocco 6), il monitor UptimeRobot sulla home invece di `/api/health` (Blocco 8), il
 Guardiano ancora ANOMALO per le righe del 14-15/9 (Blocco 1, si pulisce al giro di domani), 19 rotte del pannello admin
 su 21 senza catena (Blocco 3, debito dichiarato). Restano scadute 6 caselle, ognuna col suo perché in `RIPRENDI_QUI.md`.
+**In produzione il 16/9 alle 14:13Z:** suite intera `Ran 6838 · OK (skipped=4) · USCITA_DIRETTA=0` (95 minuti), commit
+`e80c025`, PR #195 con CI 15 `success` + `zap` skipped e `gate` success, unita via REST → master **`65a1759`** nei tre
+posti; deploy D17 con paracadute ri-agganciato misurando (`44361417…` → `53074c1d…`), immagine viva `d747dcf2…`, sonde
+200/200/403, giudice 190 controlli 0 violazioni, «commit dei file: 65a1759» letto dentro il contenitore.
 
 **Un errore mio, scritto qui perché non si ripeta:** controllando se una variabile d'ambiente fosse presente ho scritto
 `${VAR:+presente}${VAR:-assente}`, e la seconda espansione stampa il **valore** quando la variabile c'è. La chiave di sola

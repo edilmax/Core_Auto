@@ -2,24 +2,51 @@
  "0d33183e3804": {
   "blocco": 3,
   "comando": "python collaudi/esame_accessi.py --casella sonde --scrivi",
-  "commit": "ae69c1f",
+  "commit": "65a1759",
   "condizione": "ogni sonda negativa interroga un indirizzo che risponde diverso da 404",
   "denominatore": 89,
   "esito": true,
-  "impronta": "01970b37c064",
+  "impronta": "bd8e4e6661ff",
+  "impronte_moduli": {
+   "fase105_identity_gate": "a3ab7f1e6819",
+   "fase127_checkin_digitale": "e1d23d1a333b",
+   "fase143_kyc_host": "9024eed56447",
+   "fase179_rate_limit": "d676ae5e7797",
+   "fase180_bunker": "12b50f910968",
+   "fase192_admin_accounts": "d781a60fe796",
+   "fase64_smartpass": "62f32d2a9183",
+   "fase73_firma_agile": "16cd09e0ed5d",
+   "fase80_sentinel": "ebc8a451110f"
+  },
   "motivo": "",
-  "quando": "2026-09-07T12:54:38"
+  "quando": "2026-09-16T17:07:26"
  },
  "0d485cbbe89e": {
   "blocco": 8,
   "comando": "python collaudi/esame_deploy.py --da-file <letture> --scrivi",
-  "commit": "bfad2ce",
+  "commit": "65a1759",
   "condizione": "il deploy passa sempre dal protocollo D17, mai a mano",
-  "denominatore": 37,
+  "denominatore": 47,
   "esito": true,
-  "impronta": "1e861914e310",
+  "impronta": "3eae8dfd80df",
+  "impronte_moduli": {
+   "fase13_protocollo_finale": "2dce22f058cc",
+   "fase16_outbox": "a47de5874653",
+   "fase178_watchdog": "9520cebec63b",
+   "fase23_datastore": "45f9c0f96325",
+   "fase28_gateway": "650f256a6d9a",
+   "fase29_backpressure": "d905d8e921b7",
+   "fase37_notifiche": "386192b635b2",
+   "fase38_backup": "0482a29682b2",
+   "fase39_whatsapp": "e5c341ed59c6",
+   "fase42_observability": "a557645447a7",
+   "fase60_mcp_server": "56ffc4364819",
+   "fase81_bootstrap_casavip": "dacbc902ed40",
+   "fase83_server": "5737bb471831",
+   "fase86_email": "19069663f9d1"
+  },
   "motivo": "",
-  "quando": "2026-09-08T17:59:05"
+  "quando": "2026-09-16T17:09:36"
  },
  "159ad2c8ab8f": {
   "blocco": 1,
@@ -63,11 +90,11 @@
  "16d2c823889f": {
   "blocco": 1,
   "comando": "python collaudi/mutazione_prodotto.py --modulo fase65_split_payment.py fase85_pagamenti_stripe.py fase87_stripe_webhook.py fase101_stripe_connect.py fase131_payout_dashboard.py --tetto 62 --minuti 60 --killer test_fase65_split_payment test_fase85_pagamenti_stripe test_fase87_stripe_webhook test_fase101_stripe_connect test_fase131_payout_dashboard",
-  "commit": "d870a17",
+  "commit": "65a1759",
   "condizione": "zero punti di mutazione scoperti sul PERCORSO DEL DENARO -- i cinque moduli che un euro attraversa davvero: entra, viene confermato, va sul conto dell'host, si divide fra ospiti, esce col bonifico -- sul codice che la produzione ESEGUE",
   "denominatore": 245,
   "esito": true,
-  "impronta": "2835740729f0",
+  "impronta": "f18f622230ff",
   "impronte_moduli": {
    "fase101_stripe_connect": "30d6d6acc8ee",
    "fase102_motore_autonomo": "5f821fcc906f",
@@ -77,14 +104,14 @@
    "fase149_deposito_cauzionale": "272fe8e92880",
    "fase15_idempotency": "bfcd5e8ca68b",
    "fase160_escrow_garanzia": "dbf2a26f8a0a",
-   "fase162_pagamenti_pendenti": "c26dc3e3eb98",
+   "fase162_pagamenti_pendenti": "bfb1d8443d21",
    "fase167_credito_single_use": "4c767fea639e",
    "fase177_financial_controller": "c49d832d573c",
    "fase17_money": "4f56d5c69a04",
    "fase181_audit_console": "f03c9196f159",
    "fase182_riconciliazione": "360574b705b8",
    "fase183_carta_offsession": "cad1b678abff",
-   "fase186_guardiano": "72d34d3c1ed0",
+   "fase186_guardiano": "0dc20d8aae10",
    "fase188_paga_struttura": "b06f26f76cda",
    "fase191_blocco_globale": "0e25d2e0ab6f",
    "fase199_invarianti": "00192bca45b2",
@@ -97,7 +124,7 @@
    "fase99_multicurrency": "61a3b5a0c820"
   },
   "motivo": "",
-  "quando": "2026-09-11T11:15:27"
+  "quando": "2026-09-16T17:22:14"
  },
  "224ae0884a0b": {
   "blocco": 1,
@@ -201,15 +228,15 @@
  "3a547df3a743": {
   "blocco": 8,
   "comando": "python collaudi/esame_backup.py --file <db.gz> --sha <.sha256> --manifest <MANIFEST.txt> --scrivi",
-  "commit": "e39f660",
+  "commit": "65a1759",
   "condizione": "il salvataggio e' stato RIPRISTINATO e letto, non solo prodotto",
   "denominatore": 19,
   "esito": true,
-  "impronta": "b99d9a55b63d",
+  "impronta": "3eae8dfd80df",
   "impronte_moduli": {
    "fase13_protocollo_finale": "2dce22f058cc",
    "fase16_outbox": "a47de5874653",
-   "fase178_watchdog": "fdc1565ac6cd",
+   "fase178_watchdog": "9520cebec63b",
    "fase23_datastore": "45f9c0f96325",
    "fase28_gateway": "650f256a6d9a",
    "fase29_backpressure": "d905d8e921b7",
@@ -219,11 +246,11 @@
    "fase42_observability": "a557645447a7",
    "fase60_mcp_server": "56ffc4364819",
    "fase81_bootstrap_casavip": "dacbc902ed40",
-   "fase83_server": "5debc73aa19b",
+   "fase83_server": "5737bb471831",
    "fase86_email": "19069663f9d1"
   },
   "motivo": "",
-  "quando": "2026-09-12T13:22:07"
+  "quando": "2026-09-16T17:08:32"
  },
  "50691c557e6e": {
   "blocco": 1,
@@ -355,13 +382,24 @@
  "6bb68f1abf5b": {
   "blocco": 3,
   "comando": "python collaudi/esame_accessi.py --casella matrice --scrivi",
-  "commit": "ae69c1f",
+  "commit": "65a1759",
   "condizione": "la matrice dei permessi e' verde su ogni rotta riservata, provata SUL SITO VERO",
   "denominatore": 169,
   "esito": true,
-  "impronta": "01970b37c064",
+  "impronta": "bd8e4e6661ff",
+  "impronte_moduli": {
+   "fase105_identity_gate": "a3ab7f1e6819",
+   "fase127_checkin_digitale": "e1d23d1a333b",
+   "fase143_kyc_host": "9024eed56447",
+   "fase179_rate_limit": "d676ae5e7797",
+   "fase180_bunker": "12b50f910968",
+   "fase192_admin_accounts": "d781a60fe796",
+   "fase64_smartpass": "62f32d2a9183",
+   "fase73_firma_agile": "16cd09e0ed5d",
+   "fase80_sentinel": "ebc8a451110f"
+  },
   "motivo": "",
-  "quando": "2026-09-07T12:54:38"
+  "quando": "2026-09-16T17:07:26"
  },
  "7d0c5b891c14": {
   "blocco": 5,
@@ -439,7 +477,7 @@
  "a36e3373da1d": {
   "blocco": 8,
   "comando": "python collaudi/esame_sentinella.py --scrivi",
-  "commit": "eeea05f",
+  "commit": "65a1759",
   "condizione": "una sentinella ESTERNA (non nostra) si accorge se il sito muore",
   "denominatore": 10,
   "esito": false,
@@ -460,8 +498,8 @@
    "fase83_server": "5737bb471831",
    "fase86_email": "19069663f9d1"
   },
-  "motivo": "[esiste] un monitor ESTERNO (non GitHub) esiste e guarda bookinvip.com/api/health (nessun monitor esterno nelle letture: serve un conto (UptimeRobot o Better Stack, gratuito), lo apre il fondatore); [sveglia] il monitor esterno controlla almeno ogni 5 minuti e non e' in pausa (nessun monitor esterno); [sveglia] nelle ultime 24 ore i controlli del monitor non hanno buchi > 15 minuti e l'ultimo ha meno di 15 minuti (controlli nelle 24 ore: 0, buco massimo -, ultimo -); [sveglia] GitHub (seconda linea): ultimo giro entro 60 minuti e buco massimo nelle 24 ore sotto i 60 minuti — DECIDE, perche' il",
-  "quando": "2026-09-16T13:09:42"
+  "motivo": "[sveglia] nelle ultime 24 ore i controlli del monitor non hanno buchi > 15 minuti e l'ultimo ha meno di 15 minuti (controlli nelle 24 ore: 264, buco massimo 23 min, ultimo 3 min fa); [sveglia] GitHub (seconda linea): ultimo giro entro 60 minuti e buco massimo nelle 24 ore sotto i 60 minuti — DECIDE, perche' il monitor esterno manca o non e' sveglio (ultimo giro 2026-09-16 14:20 UTC (26 minuti fa), giri nelle 24 ore: 7, buco massimo 293 minuti); [grida] il monitor esterno ha un contatto d'allarme e nella sua storia c'e' almeno un «giu'» (sa gridare) (contatti 1, giu' in storia 0)",
+  "quando": "2026-09-16T16:46:44"
  },
  "a5c77ac6c76a": {
   "blocco": 5,
@@ -489,28 +527,28 @@
  "a6c9694a48f1": {
   "blocco": 2,
   "comando": "python collaudi/mutazione_prodotto.py --modulo fase34_prenotazioni.py fase36_booking_api.py fase58_channel_manager.py fase59_concierge.py fase62_predictive_noshow.py fase67_coda_intelligente.py fase71_commitment.py fase82_ical_sync.py fase111_cancellazione.py fase135_ical_bidirezionale.py fase152_notifiche_prenotazione.py fase187_fuso_orario.py fase203_ical_orologio.py --tetto 150 --minuti 600 --killer test_fase34_prenotazioni test_fase36_booking_api test_fase58_channel_manager test_fase59_concierge test_fase62_predictive_noshow test_fase67_coda_intelligente test_fase71_commitment test_fase82_ical_sync test_fase111_cancellazione test_fase135_ical_bidirezionale test_fase152_notifiche_prenotazione test_fuso_alloggio test_fase203_ical_orologio",
-  "commit": "d870a17",
+  "commit": "65a1759",
   "condizione": "zero punti di mutazione scoperti sul codice che la produzione ESEGUE",
-  "denominatore": 487,
+  "denominatore": 451,
   "esito": false,
-  "impronta": "6927427232b8",
+  "impronta": "42dfa326ee8d",
   "impronte_moduli": {
    "fase111_cancellazione": "cdaa0ff5cea8",
    "fase135_ical_bidirezionale": "7400c7b99498",
-   "fase152_notifiche_prenotazione": "b9ae6a149c03",
+   "fase152_notifiche_prenotazione": "d43723ad39d6",
    "fase187_fuso_orario": "831d20429805",
-   "fase203_ical_orologio": "aa7b0e3bf92b",
+   "fase203_ical_orologio": "a6fd5a3dde7a",
    "fase34_prenotazioni": "87f010d9f3cd",
    "fase36_booking_api": "519033218af6",
-   "fase58_channel_manager": "0264745621c2",
+   "fase58_channel_manager": "67b6e2fc5fcb",
    "fase59_concierge": "1c588de5a993",
    "fase62_predictive_noshow": "c24b0e7953a2",
    "fase67_coda_intelligente": "3fa3954e9d4e",
    "fase71_commitment": "5377fc684e79",
    "fase82_ical_sync": "1402326ece2b"
   },
-  "motivo": "26 punti SOPRAVVISSUTI: il guasto passa e i test restano verdi; 14 punti NON ESAMINATI (oltre il tetto 14 · oltre il tempo 0 · i test non hanno finito in tempo 0): un punto lasciato fuori non e' un punto sano, e' un punto che nessuno ha guardato. Se il giro doveva essere corto, dichiaralo con --parziale",
-  "quando": "2026-09-11T17:48:31"
+  "motivo": "27 punti SOPRAVVISSUTI: il guasto passa e i test restano verdi; 52 punti NON ESAMINATI (oltre il tetto 15 · oltre il tempo 37 · i test non hanno finito in tempo 0): un punto lasciato fuori non e' un punto sano, e' un punto che nessuno ha guardato. Se il giro doveva essere corto, dichiaralo con --parziale",
+  "quando": "2026-09-17T03:22:31"
  },
  "bf93b1c1b0ce": {
   "blocco": 7,
@@ -712,7 +750,7 @@
  "eec63adbaf5b": {
   "blocco": 3,
   "comando": "python collaudi/esame_accessi.py --casella scrive --scrivi",
-  "commit": "eeea05f",
+  "commit": "65a1759",
   "condizione": "nessuna rotta pubblica SCRIVE senza identita': l'elenco delle rotte che scrivono viene letto dal codice, e ognuna senza credenziali risponde 401/403/422, mai 200",
   "denominatore": 59,
   "esito": true,
@@ -729,7 +767,7 @@
    "fase80_sentinel": "ebc8a451110f"
   },
   "motivo": "",
-  "quando": "2026-09-16T13:09:44"
+  "quando": "2026-09-16T17:07:25"
  },
  "f10f35b6a7b3": {
   "blocco": 2,

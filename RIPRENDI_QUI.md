@@ -402,10 +402,21 @@ scaduta e va rifatta. Il primo lavoro utile è rilanciare quei 9 attrezzi. → *
 > **Ore UTC. Percentuale di contesto: NON letta dall'IA** (la legge il fondatore con `/context`); consegne scritte alla
 > chiusura del blocco di lavoro, come vuole D21 («a ogni blocco chiuso», non alla percentuale). `git status`: **10 file
 > modificati + 1 nuovo** (`collaudi/rimisura.py`), sopra `master eeea05f`, identico su computer, GitHub e VPS (riletti alle
-> 11:00Z). **Nulla committato.** Suite intera: parte DOPO questi documenti, da ferma; il suo esito sta nel messaggio di
-> commit e nella CI della PR. Caricatore **6843** da fermo (erano 6837: sei guardie nuove). Il via del fondatore:
-> **«AUTORIZZATO» scritto alle 11:47Z per `deploy/watchdog.sh`** (chiesto alle 11:2x), riga applicata e `test_watchdog`
-> intero `Ran 56 · OK`; **«procedi al commit» non ancora chiesto** (si chiede con la suite verde in mano).
+> 11:00Z). Caricatore **6843** da fermo (erano 6837: sei guardie nuove). Il via del fondatore: **«AUTORIZZATO»** alle
+> 11:47Z per `deploy/watchdog.sh` (chiesto alle 11:2x); **«Procedi al commit e aggiorna la VPS. Sei autorizzato»** alle 13:0xZ.
+> **✅ FATTO, misurato, alle 14:14Z:** suite intera prima del commit `Ran 6838 tests in 5697.993s · OK (skipped=4) ·
+> USCITA_DIRETTA=0` (PowerShell vera, staccata via WMI, 95 minuti: un giro lento, entro la forbice «fra 1 e 2 ore»);
+> commit **`e80c025`** (11 file, pre-fatto 10/10, messaggio ASCII) sul ramo `rimisura-e-allarmi-2026-09-16`; PR **#195**;
+> CI letta dall'API: **16 controlli, 15 `success` + `zap` skipped, `gate` success**; unita via REST (`merged=true`) →
+> master **`65a1759`**, uguale su computer, GitHub e VPS. Deploy D17 sul VPS 14:12-14:14Z, tutte le fasi uscita 0: punto di
+> ritorno `eeea05f` riletto, paracadute `:prec` ri-agganciato **misurando** da `44361417…` a `53074c1d…`, backup
+> `finanza-20260916-133731` aperto (gzip integro, «SQLite format 3»), immagine viva `d747dcf2…` ≠ prec, avvio
+> `money_path_pronto True · avvisi []`, sonde `/` 200 · `/api/health` 200 · negativa `/api/bunker/invarianti` **403**,
+> giudice 190 controlli 0 violazioni, dentro il contenitore «commit dei file: 65a1759». Sul server, riletti dopo il pull:
+> la riga del Telegram è `printf '%s\n'` (riga 203), il cron `*/10` intatto, `rimisura.py` presente, zero file tracciati
+> modificati (le 45 righe di `git status` sono vecchi `PRE_DEPLOY_*.commit` non tracciati). ⚠️ **Queste righe sono state
+> scritte DOPO il commit** e viaggiano nel commit successivo, con la sua suite (S10: il documento si aggiorna quando cambia
+> la macchina, il commit lo porta appena si può).
 >
 > **Da dove nasce — la domanda del fondatore («mi sembra che ci sono 18 commit da fare»).** Non erano commit: erano le
 > **18 unioni in `master` dall'11/9** (`git log --oneline --merges --since=2026-09-11 master` → `18`, dalla #174 alla
@@ -452,7 +463,9 @@ scaduta e va rifatta. Il primo lavoro utile è rilanciare quei 9 attrezzi. → *
 >   (`['🔴 PRIMA RIGA'] != ['🔴 PRIMA RIGA', '⚠️ ULTIMA RIGA']`). **La riparazione è `printf '%s\n'`**, una riga più il
 >   commento che la spiega, applicata alle 11:48Z dopo l'**«AUTORIZZATO»** del fondatore (B4: `deploy/` è produzione;
 >   «sistema subito» non era la parola, ed è stata chiesta). Guardia verde, `test_watchdog` intero `Ran 56 · OK`.
->   ⚠️ Vale in produzione **solo dopo il deploy**: il cron del VPS legge `deploy/watchdog.sh` dal repository sul server.
+>   **In produzione dalle 14:13Z** (deploy di `65a1759`): il cron del VPS legge `deploy/watchdog.sh` dal repository sul
+>   server, e la riga riletta lì dopo il `git pull` è quella nuova. Il primo Telegram che lo dimostra dal vivo è il
+>   prossimo promemoria del Guardiano (ogni 6 ore): dovrà portare la sua riga invece di arrivare vuoto.
 >
 > **I 4 rossi nuovi della rimisura (misure vere, scritte nella scheda col loro motivo) e cosa decide il fondatore:**
 > · Blocco 6 `esame_plausibilita`: il sito mostra `casa-test` a **1,00 € a notte** (fuori dalla banda 5..5000 €): è la
@@ -476,6 +489,17 @@ scaduta e va rifatta. Il primo lavoro utile è rilanciare quei 9 attrezzi. → *
 >   del blocco («scrive») è stata rimisurata oggi in `--locale`, che per lei basta: giudica il router locale.
 > · **2 del Blocco 8** (`esame_backup`, `esame_deploy`): vogliono un archivio di salvataggio vero e le letture del deploy
 >   prese sul server.
+> · **La casella «sentinella esterna» (Blocco 8), rimisurata alle 14:46Z dopo che il fondatore ha puntato il monitor
+>   UptimeRobot a `/api/health`:** ora il monitor c'è (264 controlli in 24 ore, ogni 300 s, 1 contatto d'allarme) e restano
+>   **3 passi rossi su 10**: un buco di 23 minuti nelle ultime 24 ore (probabilmente il cambio d'indirizzo: si rimisura
+>   domani, quando le 24 ore saranno tutte sull'indirizzo nuovo); la seconda linea GitHub, rossa solo perché decide finché
+>   il monitor non è «sveglio»; e **«giù in storia 0»**: il monitor non ha mai visto un giù, quindi non ha mai dimostrato
+>   di saper gridare — si chiude con la prova controllata (5 minuti su un indirizzo inesistente, poi si rimette
+>   `/api/health`), che decide il fondatore. ⚠️ **Difetto dello strumento, visto alle 14:44Z:** la prima lettura è esplosa
+>   per un `IncompleteRead` di rete (1 MB dall'API di GitHub) e l'attrezzo ha **scritto un ROSSO** nella scheda col motivo
+>   «le letture sono ESPLOSE», invece di fermarsi come NON ESEGUITO (S7: una lettura che manca non è un rosso). La
+>   seconda lettura l'ha sovrascritto. Da riparare nell'attrezzo (`collaudi/`, D20): una lettura esplosa → FERMO, uscita 2,
+>   niente scritto.
 >
 > **Un mio errore, dichiarato (D6):** controllando la presenza della chiave di UptimeRobot, un `${VAR:-assente}` ne ha
 > stampato il **valore** nel registro della sessione. È la chiave di SOLA LETTURA e non è finita in nessun file del progetto;
@@ -644,7 +668,8 @@ scaduta e va rifatta. Il primo lavoro utile è rilanciare quei 9 attrezzi. → *
 > (guardia vista rossa prima, poi `Ran 7 · OK`): il racconto sta nel blocco «16 SETTEMBRE, mezzogiorno».
 > ⑦ ✅ **CHIUSO 16/9 alle 11:48Z, con l'«AUTORIZZATO» del fondatore: i Telegram VUOTI** — `deploy/watchdog.sh`, la riga
 > che compone il messaggio: `printf '%s'` → `printf '%s\n'` (l'ultima riga di ogni allarme non si perde più). Guardia
-> `test_watchdog.TestIlTelegramPortaTutteLeRigheAncheLUltima` vista ROSSA prima, verde dopo. In produzione dal deploy.
+> `test_watchdog.TestIlTelegramPortaTutteLeRigheAncheLUltima` vista ROSSA prima, verde dopo. **In produzione dalle 14:13Z**
+> (PR #195, master `65a1759`).
 
 **🧭 15 SETTEMBRE, sera — PASSAGGIO DI CONSEGNE (D21): LE PR #187, #188 E #189 RICONTROLLATE A OCCHI FRESCHI, LA #189 UNITA E IN PRODUZIONE (ramo `consegne-d21-2026-09-15`)**
 

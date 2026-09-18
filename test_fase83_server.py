@@ -284,7 +284,10 @@ class TestPayout(unittest.TestCase):
     def setUp(self):
         self.sys = _sistema()
         _popola(self.sys)
-        self.r = crea_router(self.sys)
+        # FAIL-CLOSED (ordine del fondatore 2026-09-18): il router senza HOST_KEY non apre
+        # piu' l'API host. Questi test guardano la LOGICA del payout, non l'accesso:
+        # entrano con la chiave condivisa dell'operatore.
+        self.r = crea_router(self.sys, host_key="hk")
 
     def _book(self):
         s, c = self.r.gestisci("POST", "/api/concierge/quote", body=json.dumps(
@@ -295,13 +298,15 @@ class TestPayout(unittest.TestCase):
 
     def test_payout_dopo_book(self):
         self._book()
-        s, c = self.r.gestisci("GET", "/api/host/payout", {"host_id": "h"})
+        s, c = self.r.gestisci("GET", "/api/host/payout", {"host_id": "h"},
+                               headers={"X-Host-Key": "hk"})
         self.assertEqual(s, 200)
         self.assertIn("EUR", c["payout"])
         self.assertGreater(c["payout"]["EUR"].get("maturato", 0), 0)   # netto host atteso
 
     def test_payout_host_id_mancante(self):
-        s, c = self.r.gestisci("GET", "/api/host/payout", {})
+        s, c = self.r.gestisci("GET", "/api/host/payout", {},
+                               headers={"X-Host-Key": "hk"})
         self.assertEqual(s, 422)
 
 
