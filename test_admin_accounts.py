@@ -181,24 +181,28 @@ class TestCoerenzaAutenticazioneAutorizzazione(unittest.TestCase):
     AZIONI = ("rimborso", "storno_penale", "cancella_attivita",
               "alloggio_stato", "controversia_risolvi", "blocco_globale")
 
-    def test_senza_chiave_admin_il_ruolo_e_admin_pieno(self):
-        """Modalita' aperta (dev): chi passa _auth_admin deve poter fare TUTTO, senza eccezioni."""
+    def test_senza_chiave_admin_nessuno_e_admin(self):
+        """FAIL-CLOSED (ordine del fondatore 2026-09-18): senza chiave configurata NESSUNO
+        e' admin. Fino a ieri questo test affermava il contrario (la "modalita' aperta (dev)"):
+        quel ramo e' stato chiuso in fase83, e servi() senza ADMIN_KEY rifiuta di partire."""
         r = self._r(None)
-        self.assertTrue(r._auth_admin(IP), "senza chiave configurata _auth_admin apre (dev)")
-        self.assertEqual(r._ruolo_operatore(IP), "admin",
-                         "auth dice 'sei root' e il ruolo deve dire la STESSA cosa")
+        self.assertFalse(r._auth_admin(IP), "senza chiave configurata _auth_admin NEGA (fail-closed)")
+        self.assertIsNone(r._ruolo_operatore(IP),
+                          "auth nega e il ruolo deve dire la STESSA cosa: nessun ruolo")
         for azione in self.AZIONI:
-            self.assertTrue(r._puo_azione(IP, azione),
-                            "azione '%s' negata a chi _auth_admin riconosce come root" % azione)
+            self.assertFalse(r._puo_azione(IP, azione),
+                             "azione '%s' concessa SENZA chiave admin: porta aperta" % azione)
 
     def test_senza_chiave_admin_l_arbitrato_non_e_403_di_ruolo(self):
-        """Osservabile d'EFFETTO sulla rotta vera che si era rotta (non solo sui predicati)."""
+        """Osservabile d'EFFETTO sulla rotta vera: senza chiave la porta e' CHIUSA (401),
+        non 403 di ruolo e nemmeno la logica della rotta (una volta arrivava al 404).
+        Il nome resta quello della guardia SEC-05 del registro anti-regressione."""
         r = self._r(None)
         s, out = r.gestisci("POST", "/api/admin/controversia/risolvi", {},
                             json.dumps({"riferimento": "NON_ESISTE", "percentuale_ospite": 40}), IP)
-        self.assertNotEqual(out.get("errore"), "permesso_negato_ruolo",
-                            "arbitrato bloccato da un 403 di RUOLO in modalita' aperta: %r" % (out,))
-        self.assertEqual(s, 404, "la rotta deve arrivare alla logica (riferimento inesistente): %r" % (out,))
+        self.assertEqual(s, 401, "senza chiave admin la rotta deve rispondere 401: %r" % (out,))
+        self.assertEqual(out.get("errore"), "unauthorized",
+                         "l'errore e' l'accesso, non il ruolo ne' la logica: %r" % (out,))
 
     def test_con_chiave_configurata_il_gate_di_ruolo_resta_intatto(self):
         """Anti-vacuita': la correzione NON deve spegnere i permessi dove la chiave c'e'."""

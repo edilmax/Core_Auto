@@ -928,11 +928,18 @@ class TestParitaVersionePython(unittest.TestCase):
                          "di parita' d'ambiente e deve restare dichiarato")
 
     def test_i_job_di_soli_strumenti_restano_sul_pavimento(self):
-        for nome in ("money-smoke", "copertura", "mutazione", "qualita", "w3c"):
+        for nome in ("money-smoke", "copertura", "mutazione", "w3c"):
             with self.subTest(job=nome):
                 self.assertEqual(self.per_job.get(nome), {"3.9"},
                                  "il job %r ha cambiato versione senza passare dalla "
                                  "dichiarazione" % nome)
+        # qualita' e' passata a 3.11 il 2026-09-19 ( dichiarato in ci.yml ): il pip-audit
+        # del cricchetto trovava i due GHSA di anyio, corretti in 4.14.2 che esige
+        # Python >= 3.10; sulla 3.11 (la stessa della produzione) l'albero auditato porta
+        # la versione corretta e le segnalazioni tornano al baseline CHIUSE, non assorbite.
+        self.assertEqual(self.per_job.get("qualita"), {"3.11"},
+                         "il job 'qualita' e' sulla 3.11 per il fix anyio: se cambi "
+                         "versione di nuovo, passa da qui")
 
     def test_il_job_immagine_non_installa_python_sul_runner(self):
         """Nel job dell'immagine il Python che conta e' quello DENTRO il container: se

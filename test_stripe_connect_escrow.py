@@ -85,7 +85,8 @@ class TestConnectEscrow(unittest.TestCase):
         self.rete = _FakeConnectRete()
         self.sys.connect._fetch = self.rete.fetch
         self.sys.connect._fetch_get = self.rete.fetch_get
-        self.r = crea_router(self.sys, host_key="hk", base_url="https://bookinvip.com")
+        self.r = crea_router(self.sys, host_key="hk", admin_key="ak",
+                             base_url="https://bookinvip.com")
         s, c = self.g("POST", "/api/host/registrazione",
                       {"email": "h@cx.it", "password": "password1", "accetta_termini": True,
                        "accetta_clausole": True, "accetta_privacy": True, "doc_sha256": doc_sha256(),
@@ -199,8 +200,9 @@ class TestConnectEscrow(unittest.TestCase):
         self.assertEqual(len(self.rete.transfers()), 0)        # bloccati durante la disputa
         s, out = self.g("POST", "/api/admin/controversia/risolvi",
                         {"riferimento": b["riferimento"], "percentuale_ospite": 40},
-                        {"X-Admin-Key": None} if False else {"X-Admin-Key": "ak"})
-        # router creato senza admin_key -> _auth_admin passa (dev); verifico l'esito
+                        {"X-Admin-Key": "ak"})
+        # FAIL-CLOSED (ordine del fondatore 2026-09-18): il router ora HA admin_key="ak"
+        # (setUp) e la rotta admin la pretende -- senza, 401 e nessun transfer.
         self.assertEqual(s, 200, out)
         trs = self.rete.transfers()
         self.assertEqual(len(trs), 1)
