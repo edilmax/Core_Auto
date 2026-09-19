@@ -778,7 +778,7 @@ jobs:
   #  ha un DENOMINATORE (40 tentativi dichiarati) e, se scade, il passo esce con 1
   #  e stampa il registro del server: mai un "verde per assenza di prove".
   browser:
-    name: browser (3 pannelli + percorsi ospite-host, checkout e pubblicazione - NON blocca, vedi mappa in cima)
+    name: browser (3 pannelli + percorsi ospite-host, checkout, pubblicazione e PIN - NON blocca, vedi mappa in cima)
     runs-on: ubuntu-latest
     # 25 e non 20 dal 2026-08-18: il tetto dev'essere piu' largo dei DUE tentativi di
     # scaricamento del browser (5+5 minuti), se no il secondo tentativo non ha il tempo di
@@ -942,7 +942,46 @@ jobs:
           BASE_VISIVO: http://127.0.0.1:8097
         run: node collaudi/host_pubblica_foto.js
 
-      - name: I registri dei due banchi come allegato (quando va storta)
+      - name: Spegni il secondo banco
+        if: always()
+        run: kill "$(cat server_percorso.pid)" 2>/dev/null || true
+
+      # ----------------------------------------------------------------------
+      #  IL TERZO BANCO: gateway FINTO deterministico (STRIPE_FINTO=1). Il provider
+      #  crea sessioni senza rete col `cs_` derivato dal riferimento: cosi' il
+      #  collaudo del PIN puo' notificare l'incasso col webhook SIGNED come fa
+      #  Stripe vera (stesso handler, stessa firma, stessi archivi) -- e provare
+      #  che il PIN del voucher si apre SOLO a pagamento avvenuto.
+      # ----------------------------------------------------------------------
+      - name: Accendi il terzo banco, gateway finto (porta 8095)
+        run: |
+          STRIPE_SECRET_KEY=sk_test_visivo STRIPE_FINTO=1 VISIVO_TTL=600 \
+            python collaudi/avvia_server_visivo.py 8095 > server_pin.log 2>&1 &
+          echo $! > server_pin.pid
+
+      - name: Aspetta il terzo banco (40 tentativi, poi ROSSO)
+        run: |
+          for i in $(seq 1 40); do
+            if curl -fsS --max-time 3 http://127.0.0.1:8095/api/health > /dev/null; then
+              echo "terzo banco pronto al tentativo $i su 40"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "IL TERZO BANCO NON HA RISPOSTO IN 40 TENTATIVI - registro:"
+          cat server_pin.log
+          exit 1
+
+      - name: Il PIN si apre solo col pagamento (webhook firmato)
+        env:
+          BASE_VISIVO: http://127.0.0.1:8095
+        run: node collaudi/voucher_pin_checkin.js
+
+      - name: Spegni il terzo banco
+        if: always()
+        run: kill "$(cat server_pin.pid)" 2>/dev/null || true
+
+      - name: I registri dei banchi come allegato (quando va storta)
         if: failure()
         uses: actions/upload-artifact@v4
         with:
@@ -950,11 +989,8 @@ jobs:
           path: |
             server_visivo.log
             server_percorso.log
+            server_pin.log
           retention-days: 14
-
-      - name: Spegni il secondo banco
-        if: always()
-        run: kill "$(cat server_percorso.pid)" 2>/dev/null || true
 
   # ATHERIS: fuzzing coverage-guided sui motori-soldi. Un invariante rotto = job ROSSO
   # (bug vero). Gli invarianti sono gia' provati a mano su 222.400 giri -> niente falsi-rossi.
