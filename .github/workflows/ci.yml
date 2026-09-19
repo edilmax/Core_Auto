@@ -778,7 +778,7 @@ jobs:
   #  ha un DENOMINATORE (40 tentativi dichiarati) e, se scade, il passo esce con 1
   #  e stampa il registro del server: mai un "verde per assenza di prove".
   browser:
-    name: browser (3 pannelli + percorso ospite-host - NON blocca, vedi mappa in cima)
+    name: browser (3 pannelli + percorsi ospite-host, checkout e pubblicazione - NON blocca, vedi mappa in cima)
     runs-on: ubuntu-latest
     # 25 e non 20 dal 2026-08-18: il tetto dev'essere piu' largo dei DUE tentativi di
     # scaricamento del browser (5+5 minuti), se no il secondo tentativo non ha il tempo di
@@ -868,6 +868,17 @@ jobs:
           ATTESO: rifiuto
         run: node collaudi/percorso_ospite_host.js
 
+      # IL CHECKOUT DELL'OSPITE, PASSO PER PASSO (Tappa 1, 2026-09-19): stesso banco muto,
+      # ma qui si percorre il modulo intero -- preventivo, conto alla rovescia, i due modi
+      # di pagamento, l'email ROTTA fermata dal client, e il rifiuto PULITO (frase, mai
+      # codici interni). Le 8 lingue si girano a mano in locale (LINGUA=...): in CI resta
+      # l'italiano per non allungare il job.
+      - name: Il checkout dell'ospite, cronologico (gateway muto)
+        env:
+          BASE_VISIVO: http://127.0.0.1:8099
+          ATTESO: rifiuto
+        run: node collaudi/ospite_checkout_paga.js
+
       - name: Spegni il primo banco
         if: always()
         run: kill "$(cat server.pid)" 2>/dev/null || true
@@ -911,6 +922,25 @@ jobs:
           BASE_VISIVO: http://127.0.0.1:8097
           ATTESO: conferma
         run: node collaudi/percorso_ospite_host.js
+
+      # Il gemello del checkout nel verso che si conferma: modo diretto, voucher aperto dal
+      # link della conferma col PIN CHIUSO (nessun PIN senza incasso), e l'host che vede.
+      # Le notti sono le stesse del percorso sopra (unita' 3: una per il percorso, una per
+      # questo) -- il terzo lascio margine a un domani.
+      - name: Il checkout dell'ospite, cronologico (modo diretto, PIN chiuso)
+        env:
+          BASE_VISIVO: http://127.0.0.1:8097
+          ATTESO: conferma
+        run: node collaudi/ospite_checkout_paga.js
+
+      # IL CONFINE NELL'ALTRO VERSO (Tappa 2, 2026-09-19): l'host pubblica dal suo pannello,
+      # carica una FOTO VERA (il primo setInputFiles della cassetta: l'upload non era mai
+      # stato cliccato da nessun collaudo), apre il periodo -- e l'OSPITE, in un secondo
+      # browser, trova annuncio, foto e preventivo. Non consuma unita': resta sotto le 3.
+      - name: L'host pubblica con la foto, l'ospite trova
+        env:
+          BASE_VISIVO: http://127.0.0.1:8097
+        run: node collaudi/host_pubblica_foto.js
 
       - name: I registri dei due banchi come allegato (quando va storta)
         if: failure()
