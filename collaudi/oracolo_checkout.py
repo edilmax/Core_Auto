@@ -27,7 +27,6 @@ Uso:  python collaudi/oracolo_checkout.py   (stampa il conto)  ·  import da tes
 """
 import datetime
 import json
-import os
 import shutil
 import tempfile
 import time
