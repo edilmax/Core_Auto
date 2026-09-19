@@ -493,7 +493,14 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-python@v6
         with:
-          python-version: '3.9'
+          # 3.11 (il Python della produzione, come full-suite-311 e atheris) dal 2026-09-19:
+          # il pip-audit del cricchetto trovava i due GHSA di anyio (5p39-cfhj-2xmp,
+          # 82r6-8w77-94w6), corretti in 4.14.2 che ESIGE Python >= 3.10 -- su 3.9 pip non
+          # poteva installare la versione corretta e il cricchetto restava rosso per una
+          # dipendenza transitiva (di anthropic) che nessun codice nostro poteva chiudere.
+          # Sulla 3.11 l'albero auditato porta anyio 4.14.2: le segnalazioni tornano al
+          # baseline (10) CHIUDENDOLE, non assorbendole; la fotografia non e' stata toccata.
+          python-version: '3.11'
           cache: pip
       # VERSIONI INCHIODATE, non "l'ultima che passa di qui". Le fotografie del
       # cricchetto (collaudi/baseline/*.json) sono state fatte con QUESTE: uno
