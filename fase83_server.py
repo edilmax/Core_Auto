@@ -276,18 +276,20 @@ ETICHETTE_UI: Dict[str, Dict[str, str]] = {
     "badge_commissioni": {"it": "0% commissioni all'ospite", "en": "0% guest fees", "es": "0% comisiones al huésped", "fr": "0% de frais pour le voyageur", "de": "0% Gästegebühren", "pt": "0% de taxas para o hóspede", "ja": "ゲスト手数料0%", "zh": "房客0手续费"},
     "badge_cancellazione": {"it": "Cancellazione gratuita", "en": "Free cancellation", "es": "Cancelación gratuita", "fr": "Annulation gratuite", "de": "Kostenlose Stornierung", "pt": "Cancelamento grátis", "ja": "無料キャンセル", "zh": "免费取消"},
     "badge_pagamenti": {"it": "Pagamenti sicuri", "en": "Secure payments", "es": "Pagos seguros", "fr": "Paiements sécurisés", "de": "Sichere Zahlungen", "pt": "Pagamentos seguros", "ja": "安全な決済", "zh": "安全支付"},
+    # LE FIDUCIE DIMOSTRATE (La Suite, 2026-09-19): non sono slogan, sono la macchina.
+    # Ogni badge corrisponde a un meccanismo VERO del motore, citato fra parentesi quadre.
+    "badge_prezzo_firmato": {"it": "Prezzo firmato, non si cambia [HMAC]", "en": "Signed price — it can't change [HMAC]", "es": "Precio firmado, no cambia [HMAC]", "fr": "Prix signé, il ne change plus [HMAC]", "de": "Signierter Preis, unveränderlich [HMAC]", "pt": "Preço assinado, não muda [HMAC]", "ja": "署名付き価格、変わらない [HMAC]", "zh": "签名价格，不会变 [HMAC]"},
+    "badge_recensioni": {"it": "Recensioni a prova di crittografia", "en": "Cryptographically verified reviews", "es": "Reseñas verificadas criptográficamente", "fr": "Avis vérifiés cryptographiquement", "de": "Kryptografisch verifizierte Bewertungen", "pt": "Avaliações verificadas por criptografia", "ja": "暗号で検証されたレビュー", "zh": "加密验证的真实评价"},
+    "badge_escrow": {"it": "Soldi in garanzia fino al check-in", "en": "Money held safely until check-in", "es": "Dinero en garantía hasta el check-in", "fr": "Argent sous garantie jusqu'à l'arrivée", "de": "Geld bis zum Check-in gesichert", "pt": "Dinheiro garantido até o check-in", "ja": "チェックインまでお金は保全", "zh": "入住前资金安全托管"},
     "badge_antirimpianto": {"it": "Anti-Rimpianto: i soldi tornano come credito", "en": "Regret-free: money back as credit", "es": "Sin arrepentimiento: dinero de vuelta como crédito", "fr": "Sans regret : argent rendu en crédit", "de": "Ohne Reue: Geld zurück als Guthaben", "pt": "Sem arrependimento: dinheiro de volta como crédito", "ja": "後悔なし：返金はクレジットで", "zh": "无悔保障：退款以积分返还"},
     "footer_slogan": {"it": "zero commissioni nascoste", "en": "zero hidden fees", "es": "cero comisiones ocultas", "fr": "zéro frais cachés", "de": "keine versteckten Gebühren", "pt": "zero taxas ocultas", "ja": "隠れた手数料はゼロ", "zh": "零隐藏费用"},
-    # --- barra dei MOTORI (verticali della stessa macchina) ---
-    "m_soggiorni": {"it": "Soggiorni", "en": "Stays", "es": "Estancias", "fr": "Séjours", "de": "Aufenthalte", "pt": "Estadias", "ja": "宿泊", "zh": "住宿"},
-    "m_soggiorni_s": {"it": "a notte", "en": "per night", "es": "por noche", "fr": "par nuit", "de": "pro Nacht", "pt": "por noite", "ja": "1泊単位", "zh": "按夜"},
-    "m_affitti": {"it": "Affitti brevi", "en": "Short lets", "es": "Alquileres cortos", "fr": "Locations courtes", "de": "Kurzzeitmiete", "pt": "Aluguéis curtos", "ja": "短期賃貸", "zh": "短租"},
-    "m_affitti_s": {"it": "1–3 mesi", "en": "1–3 months", "es": "1–3 meses", "fr": "1–3 mois", "de": "1–3 Monate", "pt": "1–3 meses", "ja": "1〜3か月", "zh": "1–3个月"},
-    "m_ville": {"it": "Ville VIP", "en": "VIP Villas", "es": "Villas VIP", "fr": "Villas VIP", "de": "VIP-Villen", "pt": "Villas VIP", "ja": "VIPヴィラ", "zh": "VIP别墅"},
-    "m_ville_s": {"it": "di pregio", "en": "premium", "es": "de lujo", "fr": "de prestige", "de": "exklusiv", "pt": "de luxo", "ja": "高級", "zh": "高端"},
-    "m_business": {"it": "Business", "en": "Business", "es": "Business", "fr": "Business", "de": "Business", "pt": "Business", "ja": "ビジネス", "zh": "商务"},
-    "m_business_s": {"it": "trasferte", "en": "work trips", "es": "viajes de trabajo", "fr": "voyages d'affaires", "de": "Geschäftsreisen", "pt": "viagens de trabalho", "ja": "出張", "zh": "商务出行"},
-    "motore_presto": {"it": "Presto disponibile", "en": "Coming soon", "es": "Próximamente", "fr": "Bientôt disponible", "de": "Bald verfügbar", "pt": "Em breve", "ja": "近日公開", "zh": "即将上线"},
+    # --- IL CONCIERGE (fase139): il desk dell'albergo, sempre aperto, in basso a destra ---
+    "chat_apri_title": {"it": "Parla col Concierge", "en": "Talk to the Concierge", "es": "Habla con el Conserje", "fr": "Parlez au Concierge", "de": "Mit dem Concierge sprechen", "pt": "Fale com o Concierge", "ja": "コンシェルジュに相談", "zh": "咨询礼宾"},
+    "chat_titolo": {"it": "Concierge", "en": "Concierge", "es": "Conserje", "fr": "Concierge", "de": "Concierge", "pt": "Concierge", "ja": "コンシェルジュ", "zh": "礼宾"},
+    "chat_benvenuto": {"it": "Ciao! Sono il Concierge di Bookin VIP: chiedimi prezzi, disponibilita' o servizi di un alloggio.", "en": "Hi! I'm the Bookin VIP Concierge: ask me about prices, availability or amenities.", "es": "¡Hola! Soy el Conserje de Bookin VIP: preguntame precios, disponibilidad o servicios.", "fr": "Bonjour ! Je suis le Concierge de Bookin VIP : prix, disponibilite, services ?", "de": "Hallo! Ich bin der Bookin-VIP-Concierge: Frag mich nach Preisen, Verfugbarkeit oder Ausstattung.", "pt": "Ola! Sou o Concierge do Bookin VIP: pergunte sobre precos, disponibilidade ou servicos.", "ja": "こんにちは！Bookin VIPのコンシェルジュです。料金・空室・設備をお尋ねください。", "zh": "您好！我是Bookin VIP礼宾：价格、空房、设施都可以问我。"},
+    "chat_ph": {"it": "Chiedimi qualcosa…", "en": "Ask me anything…", "es": "Pregúntame algo…", "fr": "Posez votre question…", "de": "Frag mich etwas…", "pt": "Pergunte-me algo…", "ja": "質問をどうぞ…", "zh": "想问什么…"},
+    "chat_manda": {"it": "Invia", "en": "Send", "es": "Enviar", "fr": "Envoyer", "de": "Senden", "pt": "Enviar", "ja": "送信", "zh": "发送"},
+    "chat_chiudi_title": {"it": "Chiudi", "en": "Close", "es": "Cerrar", "fr": "Fermer", "de": "Schließen", "pt": "Fechar", "ja": "閉じる", "zh": "关闭"},
     # --- stato vuoto / lista d'attesa ---
     "empty_titolo": {"it": "Stiamo aprendo presto!", "en": "Opening soon!", "es": "¡Abrimos pronto!", "fr": "Bientôt disponible !", "de": "Bald verfügbar!", "pt": "Em breve!", "ja": "まもなくオープン！", "zh": "即将开通！"},
     "empty_lascia": {"it": "Lascia la tua email: ti avvisiamo appena ci sono alloggi e ricevi un Credito Fondatore di benvenuto per la tua prima prenotazione.", "en": "Leave your email: we'll notify you as soon as stays are available and you'll get a welcome Founder Credit for your first booking.", "es": "Deja tu correo: te avisaremos en cuanto haya alojamientos y recibirás un Crédito Fundador de bienvenida para tu primera reserva.", "fr": "Laissez votre e-mail : nous vous préviendrons dès que des logements seront disponibles et vous recevrez un Crédit Fondateur de bienvenue pour votre première réservation.", "de": "Hinterlasse deine E-Mail: Wir benachrichtigen dich, sobald Unterkünfte verfügbar sind, und du erhältst ein Willkommens-Gründerguthaben für deine erste Buchung.", "pt": "Deixe o seu e-mail: avisamos assim que houver acomodações e você ganha um Crédito Fundador de boas-vindas para a sua primeira reserva.", "ja": "メールアドレスを登録してください。宿泊施設が利用可能になり次第お知らせし、初回予約に使える創設者クレジットをプレゼントします。", "zh": "留下您的邮箱：一旦有房源我们会立即通知您，并赠送创始人礼遇积分用于您的首次预订。"},
@@ -2059,6 +2061,11 @@ class RouterHTTP:
             return self._contratto_host(query)
         if metodo == "GET" and path == "/api/trasparenza":
             return self._trasparenza(query, headers)
+        # IL CONCIERGE (fase139, La Suite 2026-09-19): il desk dell'albergo anche online.
+        # Pubblico MA EDUCATO: buttafuori per IP (stesso fase179 delle altre porte) e
+        # testo cappato: un concierge non si lascia intasare la reception.
+        if metodo == "POST" and path == "/api/chatbot":
+            return self._chatbot(body, headers)
         if metodo == "POST" and path == "/api/domanda":
             return self._domanda_registra(body)
         if metodo == "POST" and path == "/api/partner":
@@ -7460,6 +7467,62 @@ class RouterHTTP:
         except (TypeError, ValueError):
             limite = 200
         return 200, {"totale": par.conta(), "candidati": par.candidati(limite)}
+
+    def _chatbot(self, body, headers):
+        """IL CONCIERGE (fase139): risposta immediata su prezzo/disponibilita'/servizi/
+        posizione/check-in/animali, A REGOLE (zero costi, zero chiamate esterne: senza
+        LLM il fallback e' il desk onesto). Pubblico con le MANIERI:
+          - buttafuori per IP (fase179, 8/min: un concierge umano risponde a un ritmo
+            umano; lo stesso limiter delle chiavi, chiave diversa);
+          - testo cappato a 500 e slug a 80: la reception non accetta monologhi;
+          - risposte SOLO testo del motore a regole: nessun input torna indietro
+            (il widget le mostra con textContent: niente HTML dal server).
+        fase139 parla it/en: per le altre lingue risponde in inglese e la FRASE del
+        widget resta localizzata (dizionario chat_*). Costruzione PER-RICHIESTA:
+        due lingue, zero stato, piu' leggero di un componente cablato."""
+        dati = self._json(body)
+        if not isinstance(dati, dict):
+            return 400, {"errore": "json_non_valido"}
+        testo = str(dati.get("testo") or "")[:500].strip()
+        if not testo:
+            return 422, {"errore": "testo_mancante"}
+        ip = self._client_ip(headers)
+        rl = self._rate
+        if rl is not None and ip:
+            chiave = "chat-ip:" + ip
+            consentito, attesa = rl.consenti(chiave)
+            if not consentito:
+                return 429, {"errore": "troppi_tentativi", "riprova_tra_sec": attesa}
+            # ⛔ fase179 conta i FALLIMENTI, non le richieste: per la chat non esiste
+            # "fallito", e senza questo gettone il buttafuori non scattava MAI (provato:
+            # 10 richieste di fila, tutte 200). Ogni messaggio CONSUMA un gettone:
+            # il desk umano risponde a un ritmo umano, 8/min per IP.
+            rl.fallito(chiave)
+        cat = getattr(self._sys, "catalogo", None)
+        con = getattr(self._sys, "concierge", None)
+        if cat is None or con is None:
+            return 503, {"errore": "concierge_non_disponibile"}
+        slug = str(dati.get("slug") or "")[:80]
+        # LE DATE DELLA RICERCA: l'ospite le ha GIÀ scelte nella barra sopra -- il desk
+        # che le sa risponde col prezzo SUBITO invece di chiederle (formato solo ISO).
+        import re as _re
+        contesto = {}
+        for k in ("check_in", "check_out"):
+            v = str(dati.get(k) or "")[:10]
+            if _re.match(r"^\d{4}-\d{2}-\d{2}$", v):
+                contesto[k] = v
+        contesto["lingua"] = str(dati.get("lang") or "")[:5]
+        lingua = "en" if contesto["lingua"].lower().startswith("en") else "it"
+        try:
+            from fase139_chatbot_guest import crea_chatbot_guest
+            cb = crea_chatbot_guest(catalogo=cat, concierge=con, lingua=lingua)
+            r = cb.rispondi(slug, testo, contesto=contesto)
+        except Exception:
+            logger.error("chatbot: risposta in errore (ISOLATA)", exc_info=True)
+            return 503, {"errore": "errore_interno"}
+        return 200, {"risposta": str(r.get("risposta") or "")[:1000],
+                     "intento": str(r.get("intento") or "")[:40],
+                     "fonte": str(r.get("fonte") or "")[:40]}
 
     def _domanda_registra(self, body):
         """Lista d'attesa anti-vuoto: l'ospite lascia email+citta quando non trova nulla ->

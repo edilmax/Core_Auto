@@ -55,7 +55,7 @@
   select#lang{padding:.4rem .7rem;border-radius:.7rem;border:1px solid var(--bordo);font-size:1rem}
   #btnInstall{display:none;background:var(--brand);color:#fff;border:none;padding:.4rem 1rem;border-radius:2rem;font-weight:600;cursor:pointer}
   /* ===== HERO MOTORI (2026-07-19): verde + sfumature leggere + barra dei motori ===== */
-  .hero{position:relative;border-radius:1.6rem;color:#fff;margin:.3rem 0 1.1rem;padding:1.6rem 2rem 2rem;
+  .hero{position:relative;border-radius:1.6rem;color:#fff;margin:.3rem 0 1.1rem;padding:1.6rem 2rem 3.6rem;
     background:radial-gradient(70% 60% at 82% 2%,rgba(243,216,136,.16) 0,rgba(243,216,136,0) 50%),
       radial-gradient(80% 70% at 6% 6%,rgba(70,138,112,.36) 0,rgba(70,138,112,0) 60%),
       linear-gradient(160deg,#2a7157 -18%,var(--brand) 46%,#0a3629 130%);
@@ -84,8 +84,51 @@
   .mtab.on .ml small{color:var(--brand);opacity:.95}
   .motoreMsg{text-align:center;margin:.6rem auto 0;background:var(--giallo-bg);border:1px solid #f0dfb8;color:#8a5200;font-size:.85rem;padding:.4rem .85rem;border-radius:.6rem;width:max-content;max-width:92%}
   .hbadges{display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap;margin:1rem 0 0;position:relative;z-index:2;font-size:.82rem}
-  .hbadges span{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.14);padding:.34rem .7rem;border-radius:2rem;color:#fff}
+  .hbadges span{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);padding:.34rem .7rem;border-radius:2rem;color:#fff;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
   .hbadges .star{background:rgba(249,200,70,.95);border-color:transparent;color:var(--brand);font-weight:700}
+  /* ===== LA SUITE (2026-09-19): aurora, vetro e champagne — CSS puro, zero librerie =====
+     Psicologia: il movimento lento dice "vivo e moderno" senza distrarre (l'aurora resta
+     DIETRO tutto: z-index 0); il vetro mette a fuoco UNA azione (Hick); lo champagne e'
+     riservato al momento-premio (CTA). prefers-reduced-motion: l'aurora si ferma. */
+  @keyframes bvAurora{0%{transform:translate3d(-5%,-3%,0) scale(1.06)}50%{transform:translate3d(4%,3%,0) scale(1.13)}100%{transform:translate3d(-5%,-3%,0) scale(1.06)}}
+  .hero .aurora{position:absolute;inset:-22%;z-index:0;pointer-events:none;animation:bvAurora 18s ease-in-out infinite;background:
+    radial-gradient(38% 42% at 22% 28%,rgba(243,216,136,.20),transparent 70%),
+    radial-gradient(46% 52% at 80% 20%,rgba(96,186,146,.30),transparent 72%),
+    radial-gradient(42% 46% at 60% 84%,rgba(7,42,32,.55),transparent 70%)}
+  @media(prefers-reduced-motion:reduce){.hero .aurora{animation:none}}
+  /* La ricerca di VETRO: la regola e' su .filtri originale (fonte unica), qui sopra. */
+  /* I PULSANTI LIQUIDI: champagne che si solleva e RIFLETTE (il tocco del concierge).
+     Vale per i tre tasti principali dell'ospite: Cerca, Vicino a me, Prenota. */
+  #btnCerca,#btnVicino,#btnPrenota{position:relative;overflow:hidden;cursor:pointer;
+    transition:transform .18s ease,box-shadow .18s ease,filter .18s ease}
+  #btnCerca:hover,#btnVicino:hover,#btnPrenota:hover{transform:translateY(-2px);filter:brightness(1.05);
+    box-shadow:0 12px 28px -10px rgba(230,193,92,.75)}
+  #btnCerca:active,#btnVicino:active,#btnPrenota:active{transform:translateY(0) scale(.98)}
+  #btnCerca::after,#btnVicino::after,#btnPrenota::after{content:"";position:absolute;top:0;left:-85%;width:55%;height:100%;
+    background:linear-gradient(105deg,transparent,rgba(255,255,255,.5),transparent);transform:skewX(-18deg);
+    transition:left .55s ease;pointer-events:none}
+  #btnCerca:hover::after,#btnVicino:hover::after,#btnPrenota:hover::after{left:135%}
+  /* IL CONCIERGE flottante: il desk in basso a destra. Bolla champagne, pannello vetro. */
+  #cbApri{position:fixed;right:1.3rem;bottom:1.3rem;z-index:1500;width:58px;height:58px;border-radius:50%;border:none;cursor:pointer;
+    background:linear-gradient(145deg,var(--brand) 0%,#0a3629 100%);color:#f3d888;font-size:1.55rem;line-height:1;
+    box-shadow:0 14px 30px -10px rgba(8,42,32,.55),0 0 0 1px rgba(243,216,136,.35) inset;
+    transition:transform .18s ease,box-shadow .18s ease}
+  #cbApri:hover{transform:translateY(-3px) scale(1.04);box-shadow:0 18px 36px -10px rgba(138,109,11,.5),0 0 0 1px rgba(243,216,136,.6) inset}
+  #cbPannello{position:fixed;right:1.3rem;bottom:5.6rem;z-index:1500;width:min(360px,calc(100vw - 2.6rem));
+    background:rgba(250,247,240,.92);backdrop-filter:blur(18px) saturate(1.15);-webkit-backdrop-filter:blur(18px) saturate(1.15);
+    border:1px solid rgba(255,255,255,.7);border-radius:1.2rem;box-shadow:0 26px 60px -18px rgba(8,42,32,.45);
+    display:flex;flex-direction:column;overflow:hidden;font-size:.95rem}
+  #cbPannello .cbTesta{background:linear-gradient(145deg,var(--brand),#0a3629);color:#fff;padding:.7rem .95rem;
+    display:flex;justify-content:space-between;align-items:center;font-weight:700}
+  #cbPannello .cbTesta button{background:none;border:none;color:#f3d888;cursor:pointer;font-size:1rem;padding:.15rem .35rem;border-radius:.4rem}
+  #cbMsgs{padding:.8rem .95rem;display:flex;flex-direction:column;gap:.55rem;min-height:130px;max-height:260px;overflow-y:auto}
+  #cbMsgs .io{align-self:flex-end;background:var(--brand);color:#fff;padding:.45rem .75rem;border-radius:1rem;border-bottom-right-radius:.25rem;max-width:85%}
+  #cbMsgs .bot{align-self:flex-start;background:#fff;border:1px solid var(--bordo);padding:.45rem .75rem;border-radius:1rem;border-bottom-left-radius:.25rem;max-width:85%}
+  #cbForm{display:flex;gap:.45rem;padding:.6rem .7rem .7rem;border-top:1px solid var(--bordo)}
+  #cbInput{flex:1;min-width:0;padding:.5rem .7rem;border:1px solid var(--bordo);border-radius:.8rem;font-size:.92rem;font-family:inherit}
+  #cbManda{background:linear-gradient(145deg,var(--brand),#0a3629);color:#f3d888;border:none;border-radius:.8rem;padding:.5rem .9rem;font-weight:700;cursor:pointer;transition:transform .15s ease,filter .15s ease}
+  #cbManda:hover{transform:translateY(-1px);filter:brightness(1.08)}
+  @media(max-width:600px){.filtri{margin-top:-2.2rem}#cbPannello{bottom:5.2rem}}
   .hbadges .star span{color:var(--brand)}
   .langpick{position:relative}
   .langbtn{display:inline-flex;align-items:center;gap:.35rem;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.24);color:#fff;border-radius:2rem;padding:.26rem .6rem;font-size:.8rem;font-weight:700;cursor:pointer}
@@ -96,7 +139,11 @@
   .langopt:hover{background:var(--sfondo)}
   .langopt svg{width:22px;height:15px;border-radius:2px;flex:none;overflow:hidden}
   .lang-hidden{position:absolute!important;width:1px;height:1px;opacity:0;pointer-events:none;left:-9999px}
-  .filtri{background:#fff;padding:1.25rem 1.5rem;border-radius:1.5rem;box-shadow:0 4px 12px rgba(0,0,0,.04);margin-bottom:2rem}
+  .filtri{background:rgba(255,253,247,.86);backdrop-filter:blur(16px) saturate(1.15);-webkit-backdrop-filter:blur(16px) saturate(1.15);
+    border:1px solid rgba(255,255,255,.65);padding:1.25rem 1.5rem;border-radius:1.4rem;
+    box-shadow:0 22px 48px -20px rgba(8,42,32,.38);margin:-2.7rem 0 2rem;position:relative;z-index:5;
+    transition:box-shadow .25s ease,border-color .25s ease}
+  .filtri:focus-within{border-color:rgba(230,193,92,.75);box-shadow:0 26px 56px -18px rgba(138,109,11,.35)}
   .filtri .riga{display:flex;flex-wrap:wrap;gap:.75rem 1.25rem;align-items:end}
   .filtri label{display:flex;flex-direction:column;font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.03em;color:#4a5b7a;gap:.25rem}
   .filtri input{padding:.5rem .75rem;border-radius:.7rem;border:1px solid var(--bordo);font-size:1rem;min-width:120px}
@@ -156,6 +203,7 @@
 <body>
 <div class="container">
   <section class="hero">
+    <div class="aurora" aria-hidden="true"></div>
     <div class="htop">
       <div class="hbrand">
         <span class="hword">Bookin <span class="v">VIP</span></span>
@@ -181,19 +229,11 @@
     </div>
     <div class="hbadges">
       <span>✓ <span data-t="badge_commissioni">0% commissioni all'ospite</span></span>
-      <span>✓ <span data-t="badge_pagamenti">Pagamenti sicuri</span></span>
+      <span>🔐 <span data-t="badge_prezzo_firmato">Prezzo firmato, non si cambia [HMAC]</span></span>
+      <span>🛡 <span data-t="badge_escrow">Soldi in garanzia fino al check-in</span></span>
+      <span>★ <span data-t="badge_recensioni">Recensioni a prova di crittografia</span></span>
     </div>
   </section>
-
-  <div class="motoribar">
-    <div class="motori" id="motori">
-      <button type="button" class="mtab on" data-m="soggiorni"><span class="em">🏠</span><span class="ml"><b data-t="m_soggiorni">Soggiorni</b><small data-t="m_soggiorni_s">a notte</small></span></button>
-      <button type="button" class="mtab" data-m="affitti"><span class="em">📅</span><span class="ml"><b data-t="m_affitti">Affitti brevi</b><small data-t="m_affitti_s">1–3 mesi</small></span></button>
-      <button type="button" class="mtab" data-m="ville"><span class="em">👑</span><span class="ml"><b data-t="m_ville">Ville VIP</b><small data-t="m_ville_s">di pregio</small></span></button>
-      <button type="button" class="mtab" data-m="business"><span class="em">💼</span><span class="ml"><b data-t="m_business">Business</b><small data-t="m_business_s">trasferte</small></span></button>
-    </div>
-    <div class="motoreMsg" id="motoreMsg" style="display:none"></div>
-  </div>
 
   <form class="filtri" id="form">
     <div class="riga">
@@ -277,6 +317,23 @@
     <button class="prenota-btn" id="btnPrenota">Prenota</button>
     <div id="mMsg" role="status" aria-live="polite"></div>
   </div>
+</div>
+
+<!-- IL CONCIERGE (fase139): il desk dell'albergo, sempre aperto. Bolla champagne fisso,
+     pannello di vetro; le frasi del dizionario chat_* seguono la lingua della pagina. -->
+<button id="cbApri" data-ttitle="chat_apri_title" title="Parla col Concierge"
+        aria-label="Parla col Concierge" aria-expanded="false" aria-controls="cbPannello">💬</button>
+<div id="cbPannello" role="dialog" aria-label="Concierge" hidden>
+  <div class="cbTesta">
+    <b data-t="chat_titolo">Concierge</b>
+    <button id="cbChiudi" data-ttitle="chat_chiudi_title" title="Chiudi" aria-label="Chiudi">✕</button>
+  </div>
+  <div id="cbMsgs" role="log" aria-live="polite"></div>
+  <form id="cbForm">
+    <input id="cbInput" type="text" data-tph="chat_ph" placeholder="Chiedimi qualcosa…"
+           maxlength="500" autocomplete="off" aria-label="Messaggio al Concierge">
+    <button id="cbManda" type="submit" data-t="chat_manda">Invia</button>
+  </form>
 </div>
 
 <script src="/app.js?v=1"></script>
@@ -828,17 +885,47 @@ document.getElementById('lang').value = LANG;
   host.appendChild(btn); host.appendChild(menu); paint();
   sel.addEventListener('change', paint);
 })();
-// ── BARRA DEI MOTORI: Soggiorni attivo; gli altri "presto" (arriveranno come motori separati) ──
+// ── IL CONCIERGE (fase139): il desk dell'albergo, sempre aperto, in basso a destra ──
+// Nessuna libreria: un bottone, un pannello di vetro, e le risposte a regole del motore.
+// Le frasi del BOT entrano con textContent (mai innerHTML): cio' che scrive l'ospite
+// non puo' tornare indietro come HTML — la stessa regola di BV.esc, applicata alla chat.
 (function(){
-  var box=document.getElementById('motori'); if(!box) return;
-  box.querySelectorAll('.mtab').forEach(function(tab){
-    tab.addEventListener('click', function(){
-      if(tab.dataset.m==='soggiorni') return;
-      var m=document.getElementById('motoreMsg');
-      if(m){ m.textContent='🔜 '+(typeof t==='function'?t('motore_presto'):'Presto disponibile');
-             m.style.display='block'; clearTimeout(m._h); m._h=setTimeout(function(){ m.style.display='none'; },2800); }
-    });
-  });
+  const apri=document.getElementById('cbApri'), pan=document.getElementById('cbPannello'),
+        msgs=document.getElementById('cbMsgs'), form=document.getElementById('cbForm'),
+        input=document.getElementById('cbInput');
+  if(!apri||!pan||!msgs||!form||!input) return;
+  let salutato=false, occupato=false, slugCorrente='';
+  // contesto: se l'ospite ha appena aperto una scheda, il concierge lo SA (desk vero)
+  document.addEventListener('click', e=>{
+    const b=e.target.closest && e.target.closest('#risultati button[data-slug]');
+    if(b) slugCorrente=b.dataset.slug||'';
+  }, true);
+  function riga(testo, mio){
+    const d=document.createElement('div'); d.className=mio?'io':'bot';
+    d.textContent=testo; msgs.appendChild(d); msgs.scrollTop=msgs.scrollHeight;
+  }
+  apri.onclick=()=>{
+    const visibile=pan.hidden;
+    pan.hidden=!visibile; apri.setAttribute('aria-expanded', String(visibile));
+    if(visibile && !salutato){ salutato=true; riga(t('chat_benvenuto'), false); input.focus(); }
+  };
+  document.getElementById('cbChiudi').onclick=()=>{ pan.hidden=true; };
+  form.onsubmit=async e=>{
+    e.preventDefault();
+    const testo=(input.value||'').trim().slice(0,500); if(!testo||occupato) return;
+    riga(testo, true); input.value=''; occupato=true;
+    const manda=document.getElementById('cbManda'); manda.disabled=true;
+    try{
+      // le DATE le ha gia' scelte nella barra sopra: il desk le sa e risponde col
+      // prezzo SUBITO (check-in/check-out correnti del form di ricerca)
+      const ci=document.getElementById('checkin'), co=document.getElementById('checkout');
+      const r=await api('/api/chatbot',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({testo:testo, lang:LANG, slug:slugCorrente,
+                             check_in:ci?ci.value:'', check_out:co?co.value:''})});
+      riga((r&&r.risposta)?r.risposta:(typeof t==='function'?t('errore'):'…'), false);
+    }catch(err){ riga(typeof t==='function'?t('errore'):String(err.message||err), false); }
+    manda.disabled=false; occupato=false; input.focus();
+  };
 })();
 (async()=>{ await caricaI18N(LANG); cerca(); })();
 </script>
