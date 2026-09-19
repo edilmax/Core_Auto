@@ -56,7 +56,8 @@ class TestIlCalendarioNonHaPauraDel29(unittest.TestCase):
                  {"email": "host@bisestile.it", "password": "password1",
                   "accetta_termini": True, "accetta_clausole": True, "accetta_privacy": True,
                   "doc_sha256": doc_sha256(), "versione": CONTRATTO_HOST_VERSIONE})
-        assert s == 201, c
+        if s != 201:
+            raise AssertionError("registrazione host: %s %r" % (s, c))
         cls.tok = c["token"]
         # TRE annunci, stesso prezzo: "casa" per quote+notte-29, "seconda" per l'import,
         # "terza" a UNA unita' per la prova del blocco (una prenotazione esaurisce tutto)
@@ -66,7 +67,8 @@ class TestIlCalendarioNonHaPauraDel29(unittest.TestCase):
                      {"slug": slug, "titolo": titolo, "citta": "Roma", "paese": "IT",
                       "cin": CIN, "prezzo_notte_cents": PREZZO, "capacita": 4},
                      {"X-Host-Token": cls.tok})
-            assert s == 201, c
+            if s != 201:
+                raise AssertionError("pubblica %s: %s %r" % (slug, s, c))
         # tre finestre aperte su "casa": cambio d'ora 2026, anno intero 2027, primo semestre 2028
         for da, a in (("2026-10-01", "2026-12-31"), ("2027-01-01", "2027-12-31"),
                       ("2028-01-01", "2028-06-30")):
@@ -74,13 +76,15 @@ class TestIlCalendarioNonHaPauraDel29(unittest.TestCase):
                      {"alloggio_id": "casa", "da": da, "a": a,
                       "unita_totali": 2, "prezzo_netto_cents": PREZZO},
                      {"X-Host-Token": cls.tok})
-            assert s == 200, c
+            if s != 200:
+                raise AssertionError("disponibilita %s-%s: %s %r" % (da, a, s, c))
         for alloggio in ("seconda", "terza"):
             s, c = g("POST", "/api/host/disponibilita_range",
                      {"alloggio_id": alloggio, "da": "2028-01-01", "a": "2028-06-30",
                       "unita_totali": 1, "prezzo_netto_cents": PREZZO},
                      {"X-Host-Token": cls.tok})
-            assert s == 200, c
+            if s != 200:
+                raise AssertionError("disponibilita %s: %s %r" % (alloggio, s, c))
         # la "terza" ha unita' UNA anche nel 2026: l'export mostra i giorni PIENI, e con
         # una sola unita' una prenotazione riempie (misurato: con 2 unita' il giorno resta
         # non-pieno e il feed lo omette, giustamente)
@@ -88,7 +92,8 @@ class TestIlCalendarioNonHaPauraDel29(unittest.TestCase):
                  {"alloggio_id": "terza", "da": "2026-10-01", "a": "2026-12-31",
                   "unita_totali": 1, "prezzo_netto_cents": PREZZO},
                  {"X-Host-Token": cls.tok})
-        assert s == 200, c
+        if s != 200:
+            raise AssertionError("disponibilita terza 2026: %s %r" % (s, c))
 
     @classmethod
     def tearDownClass(cls):

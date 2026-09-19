@@ -73,10 +73,16 @@ function firmaStripe(payload, secret, ts) {
   const page = await ctx.newPage();
   sorveglia(page, 'OSPITE', sacco);
   let catturato = null;
-  page.on('response', async (r) => {
-    if (r.url().includes('/api/concierge/book') && !catturato) {
-      try { catturato = await r.json(); } catch (e) { /* la risposta non-JSON non e' nostra */ }
-    }
+  // ⛔ IL BODY DEL BOOK SI PRENDE DALL'INTERCETTORE, NON DALLA RISPOSTA. Il listener e
+  //    anche waitForResponse perdono la gara con la navigazione verso la pagina di
+  //    pagamento (il contesto della risposta muore: json() torna null -- visto sul runner
+  //    e riprodotto in locale). Il passthrough qui sotto lascia la chiamata arrivare DAVVERO
+  //    al server e tiene il corpo gia' letto: nessuna gara, nessun costo per il prodotto.
+  let corpoBook = null;
+  await page.route('**/api/concierge/book', async (route) => {
+    const risposta = await route.fetch();
+    try { corpoBook = await risposta.json(); } catch (e) { corpoBook = null; }
+    await route.fulfill({ response: risposta });
   });
   await page.route(`${FINTO}**`, (route) => route.fulfill({
     status: 200, contentType: 'text/html; charset=utf-8',
@@ -113,8 +119,10 @@ function firmaStripe(payload, secret, ts) {
   esigi(sulPagamento, 'dopo la prenotazione il browser non e\' arrivato sulla pagina di pagamento: ' +
     'il modo online non e\' partito (vedi #mMsg e il registro del banco)');
 
+  catturato = corpoBook;
   if (!esigi(catturato && catturato.riferimento && catturato.voucher_token,
-    `la risposta del book non ha consegnato riferimento/voucher: ${JSON.stringify(catturato || {}).slice(0, 200)}`)) {
+    `la risposta del book non ha consegnato riferimento/voucher: ` +
+    `${JSON.stringify(catturato || null).slice(0, 200)}`)) {
     await browser.close(); chiudi(guasti, sacco);
   }
   const { riferimento, voucher_token: voucherToken } = catturato;
