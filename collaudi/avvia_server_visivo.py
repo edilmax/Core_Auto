@@ -26,6 +26,29 @@ from fase83_server import crea_router, servi                               # noq
 from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256       # noqa: E402
 
 
+def _provider_finto():
+    """STRIPE_FINTO=1: il provider del banco risponde SENZA rete. La sessione e'
+    DETERMINISTICA dal riferimento (che viaggia in client_reference_id): cosi' il
+    collaudo del PIN (voucher_pin_checkin.js) puo' FORGIARE il webhook di pagamento
+    col giusto `cs_` -- l'incasso simulato resta un incasso VERO per il prodotto
+    (stesso handler, stessa firma HMAC, stessi archivi). Solo nei collaudi: mai in
+    produzione, dove _fetch_reale parla con api.stripe.com. Misurato: senza questo
+    gancio, nessuna prenotazione di banco puo' mai diventare 'pagato'."""
+    import hashlib
+    import re
+    from urllib.parse import unquote
+    def fetch_finto(url, body, headers):
+        if not isinstance(body, (bytes, bytearray)) or b"client_reference_id=" not in body:
+            return {}                      # tutto il resto del provider: non servito qui
+        m = re.search(rb"client_reference_id=([^&]+)", body)
+        rif = unquote(m.group(1).decode("ascii", "replace")) if m else "sconosciuto"
+        h = hashlib.sha256(rif.encode("utf-8")).hexdigest()
+        return {"id": "cs_test_" + h[:16], "object": "checkout.session",
+                "payment_intent": "pi_test_" + h[16:32],
+                "url": "https://pagamento.finto/" + rif}
+    return fetch_finto
+
+
 def _prepara(porta):
     # ⛔ DOVE STANNO I DATABASE E' UNA COSA CHE IL BANCO DEVE POTER DIRE A CHI LO GIUDICA.
     # Fino al 2026-08-20 questa cartella era temporanea e senza nome, e `collaudi/giro_banco.py`
@@ -99,6 +122,12 @@ def _prepara(porta):
       {"alloggio_id": "attico-roma-visivo", "da": oggi.isoformat(),
        "a": (oggi + datetime.timedelta(days=120)).isoformat(),
        "unita_totali": 3, "prezzo_netto_cents": 18000}, {"X-Host-Token": tok})
+    if os.environ.get("STRIPE_FINTO", "") == "1":
+        # il provider del banco crea sessioni deterministiche senza rete: legge
+        # _provider_finto() in testa al file (voucher_pin_checkin.js e' il suo cliente)
+        sistema.stripe._fetch = _provider_finto()
+        print("STRIPE_FINTO: provider del banco senza rete, sessioni deterministiche",
+              flush=True)
     return sistema
 
 
