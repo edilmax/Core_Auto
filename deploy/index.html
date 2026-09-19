@@ -62,10 +62,9 @@
     box-shadow:0 22px 52px -30px rgba(8,42,32,.7)}
   .hero::after{content:"";position:absolute;inset:0;pointer-events:none;border-radius:1.6rem;background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,0) 24%)}
   .htop{display:flex;justify-content:space-between;align-items:center;gap:.6rem;position:relative;z-index:3;flex-wrap:wrap}
-  .hbrand{display:flex;align-items:center;gap:.5rem}
-  .hbrand .cr{width:30px;height:12px;display:block}
-  .hword{font-family:Georgia,'Times New Roman',serif;font-weight:700;font-size:1.4rem;letter-spacing:.3px;line-height:1;color:#fff}
-  .hword .v{color:#f3d888;font-weight:800;letter-spacing:.04em;margin-left:.1em}
+  .hbrand{display:flex;align-items:center}
+  .hword{font-family:Georgia,'Times New Roman',serif;font-weight:700;font-size:1.5rem;letter-spacing:.3px;line-height:1;color:#fff}
+  .hword .v{color:#f3d888;font-weight:800;letter-spacing:.04em;margin-left:.15em}
   .hctrl{display:flex;gap:.45rem;align-items:center}
   .hctrl #btnInstall{display:none;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.24);color:#fff;padding:.34rem .8rem;border-radius:2rem;font-weight:600;font-size:.8rem;cursor:pointer}
   .claim{text-align:center;margin:.9rem auto .2rem;max-width:46ch;position:relative;z-index:2}
@@ -159,8 +158,7 @@
   <section class="hero">
     <div class="htop">
       <div class="hbrand">
-        <svg class="cr" viewBox="0 0 46 18" aria-hidden="true"><defs><linearGradient id="crg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e6c15c"/><stop offset="1" stop-color="#b8860b"/></linearGradient></defs><path d="M3 15 L10 3 L17 11 L23 2 L29 11 L36 3 L43 15 Z" fill="url(#crg)"/><rect x="3" y="15.2" width="40" height="2.6" rx="1.3" fill="url(#crg)"/></svg>
-        <span class="hword">Bookin<span class="v">VIP</span></span>
+        <span class="hword">Bookin <span class="v">VIP</span></span>
       </div>
       <div class="hctrl">
         <button id="btnInstall">⬇ App</button>
@@ -178,7 +176,7 @@
       </div>
     </div>
     <div class="claim">
-      <h1><span data-t="hero_titolo">Il tuo viaggio,</span> <span class="l2" data-t="hero_titolo2">senza sorprese.</span></h1>
+      <h1><span data-t="hero_titolo">Per noi,</span> <span class="l2" data-t="hero_titolo2">il VIP sei tu.</span></h1>
       <p data-t="hero_sub">Alloggi certificati · paghi il prezzo pulito · cancellazione gratuita</p>
     </div>
     <div class="hbadges">
@@ -188,7 +186,6 @@
   </section>
 
   <div class="motoribar">
-    <div class="mcaption" data-t="hero_claim">Una sola macchina, tanti modi di trovare casa</div>
     <div class="motori" id="motori">
       <button type="button" class="mtab on" data-m="soggiorni"><span class="em">🏠</span><span class="ml"><b data-t="m_soggiorni">Soggiorni</b><small data-t="m_soggiorni_s">a notte</small></span></button>
       <button type="button" class="mtab" data-m="affitti"><span class="em">📅</span><span class="ml"><b data-t="m_affitti">Affitti brevi</b><small data-t="m_affitti_s">1–3 mesi</small></span></button>
