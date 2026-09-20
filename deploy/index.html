@@ -83,9 +83,16 @@
   .mtab .ml small{font-weight:500;font-size:.66rem;color:var(--testo-tenue);opacity:.9}
   .mtab.on .ml small{color:var(--brand);opacity:.95}
   .motoreMsg{text-align:center;margin:.6rem auto 0;background:var(--giallo-bg);border:1px solid #f0dfb8;color:#8a5200;font-size:.85rem;padding:.4rem .85rem;border-radius:.6rem;width:max-content;max-width:92%}
-  .hbadges{display:flex;gap:.55rem;justify-content:center;flex-wrap:wrap;margin:1.5rem 0 0;position:relative;z-index:2;font-size:.82rem}
-  .hbadges span{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);padding:.34rem .7rem;border-radius:2rem;color:#fff;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
-  .hbadges .star{background:rgba(249,200,70,.95);border-color:transparent;color:var(--brand);font-weight:700}
+  .hbadges{display:flex;justify-content:center;flex-wrap:wrap;margin:1.5rem 0 0;position:relative;z-index:2;font-size:.86rem}
+  .hbadges span{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.24);padding:.34rem .85rem;border-radius:2rem;color:#fff;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+  /* FILTRI AVANZATI: esistono, ma non gareggiano (Hick: UNA azione dominante) */
+  .avanzati{margin-top:.85rem}
+  .avanzati summary{cursor:pointer;font-size:.88rem;font-weight:600;color:var(--brand-chiaro);list-style:none;display:inline-flex;align-items:center;gap:.35rem}
+  .avanzati summary::-webkit-details-marker{display:none}
+  .avanzati summary::before{content:'›';transition:transform .15s ease;display:inline-block}
+  .avanzati[open] summary::before{transform:rotate(90deg)}
+  .avanzati summary:hover{color:var(--brand)}
+  .avanzati[open] summary{margin-bottom:.4rem}
   /* ===== LA SUITE (2026-09-19): aurora, vetro e champagne — CSS puro, zero librerie =====
      Psicologia: il movimento lento dice "vivo e moderno" senza distrarre (l'aurora resta
      DIETRO tutto: z-index 0); il vetro mette a fuoco UNA azione (Hick); lo champagne e'
@@ -247,10 +254,7 @@
       <p data-t="hero_sub">Alloggi certificati · paghi il prezzo pulito · cancellazione gratuita</p>
     </div>
     <div class="hbadges">
-      <span>✓ <span data-t="badge_commissioni">0% commissioni all'ospite</span></span>
-      <span>🔐 <span data-t="badge_prezzo_firmato">Prezzo firmato, non si cambia [HMAC]</span></span>
-      <span>🛡 <span data-t="badge_escrow">Soldi in garanzia fino al check-in</span></span>
-      <span>★ <span data-t="badge_recensioni">Recensioni a prova di crittografia</span></span>
+      <span data-t="fiducia_linea">Prezzo firmato · Soldi in garanzia · 0% per te</span>
     </div>
   </section>
 
@@ -260,14 +264,19 @@
       <label data-t="checkin">Check-in<input type="date" id="checkin"></label>
       <label data-t="checkout">Check-out<input type="date" id="checkout"></label>
       <label data-t="ospiti">Ospiti<input type="number" id="ospiti" value="2" min="1" max="20"></label>
+      <button type="submit" id="btnCerca">Cerca</button>
+    </div>
+    <details class="avanzati">
+      <summary data-t="filtri_av">Filtri avanzati</summary>
+      <div class="riga" style="margin-top:.7rem">
       <label data-t="max_prezzo">Max €<input type="number" id="prezzomax" data-tph="ph_prezzomax" placeholder="es. 150" min="0"></label>
       <label id="lblRaggio" data-t="raggio">Raggio<select id="raggio" aria-label="Raggio ricerca"><option value="0.1">100 m</option><option value="0.25">250 m</option><option value="0.5">500 m</option><option value="1" selected>1 km</option><option value="2">2 km</option><option value="5">5 km</option><option value="10">10 km</option><option value="25">25 km</option><option value="50">50 km</option></select></label>
-      <button type="submit" id="btnCerca">Cerca</button>
       <button type="button" id="btnVicino" data-ttitle="vicino_title" title="Trova alloggi vicino a dove ti trovi ora">📍 <span data-t="vicino_a_me">Vicino a me</span></button>
-    </div>
-    <div class="chips" id="chips"></div>
-    <label style="display:flex;align-items:center;gap:.4rem;margin-top:.7rem;font-size:.85rem;color:var(--brand-chiaro);font-weight:600;cursor:pointer;text-transform:none;flex-direction:row"><input type="checkbox" id="soloGratuita" style="min-width:0;width:auto"> <span data-t="filtro_gratuita">Solo cancellazione gratuita</span></label>
-    <label style="display:flex;align-items:center;gap:.4rem;margin-top:.4rem;font-size:.85rem;color:var(--brand);font-weight:600;cursor:pointer;text-transform:none;flex-direction:row"><input type="checkbox" id="flexDate" style="min-width:0;width:auto"> <span id="lblFlex" data-t="flex">Date flessibili (± 3 giorni)</span></label>
+      </div>
+      <div class="chips" id="chips"></div>
+      <label style="display:flex;align-items:center;gap:.4rem;margin-top:.7rem;font-size:.85rem;color:var(--brand-chiaro);font-weight:600;cursor:pointer;text-transform:none;flex-direction:row"><input type="checkbox" id="soloGratuita" style="min-width:0;width:auto"> <span data-t="filtro_gratuita">Solo cancellazione gratuita</span></label>
+      <label style="display:flex;align-items:center;gap:.4rem;margin-top:.4rem;font-size:.85rem;color:var(--brand);font-weight:600;cursor:pointer;text-transform:none;flex-direction:row"><input type="checkbox" id="flexDate" style="min-width:0;width:auto"> <span id="lblFlex" data-t="flex">Date flessibili (± 3 giorni)</span></label>
+    </details>
   </form>
 
 
