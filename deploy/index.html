@@ -935,14 +935,14 @@ document.getElementById('lang').value = LANG;
   apri.onclick=()=>{
     const visibile=pan.hidden;
     pan.hidden=!visibile; apri.setAttribute('aria-expanded', String(visibile));
-    try{ sessionStorage.setItem('cbVista','1'); }catch(e){}
+    try{ sessionStorage.setItem('cbVista','1'); }catch(e){ console.warn('bookinvip-ospite', e); }
     if(visibile && !salutato){ salutato=true; riga(t('chat_benvenuto'), false); input.focus(); }
   };
   document.getElementById('cbChiudi').onclick=()=>{ pan.hidden=true; };
   // APERTURA AUTOMATICA dopo 30 s, UNA volta per sessione: il desk si presenta da
   // solo, ma se l'ospite l'ha gia' aperto o chiuso non inseguisce nessuno.
   setTimeout(function(){
-    let vista=false; try{ vista=sessionStorage.getItem('cbVista')==='1'; }catch(e){}
+    let vista=false; try{ vista=sessionStorage.getItem('cbVista')==='1'; }catch(e){ console.warn('bookinvip-ospite', e); }
     if(!vista && pan.hidden){ apri.click(); }
   }, 30000);
   // gestore d'invio DIRETTO sull'id: la guardia test_i_moduli_hanno_un_gestore_di_invio
