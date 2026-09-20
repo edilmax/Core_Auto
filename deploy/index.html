@@ -55,20 +55,20 @@
   select#lang{padding:.4rem .7rem;border-radius:.7rem;border:1px solid var(--bordo);font-size:1rem}
   #btnInstall{display:none;background:var(--brand);color:#fff;border:none;padding:.4rem 1rem;border-radius:2rem;font-weight:600;cursor:pointer}
   /* ===== HERO MOTORI (2026-07-19): verde + sfumature leggere + barra dei motori ===== */
-  .hero{position:relative;border-radius:1.6rem;color:#fff;margin:.3rem 0 1.1rem;padding:1.6rem 2rem 3.6rem;
+  .hero{position:relative;border-radius:1.6rem;color:#fff;margin:.3rem 0 1.1rem;padding:2.7rem 2.4rem 5rem;
     background:radial-gradient(70% 60% at 82% 2%,rgba(243,216,136,.16) 0,rgba(243,216,136,0) 50%),
       radial-gradient(80% 70% at 6% 6%,rgba(70,138,112,.36) 0,rgba(70,138,112,0) 60%),
       linear-gradient(160deg,#2a7157 -18%,var(--brand) 46%,#0a3629 130%);
     box-shadow:0 22px 52px -30px rgba(8,42,32,.7)}
   .hero::after{content:"";position:absolute;inset:0;pointer-events:none;border-radius:1.6rem;background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,0) 24%)}
-  .htop{display:flex;justify-content:space-between;align-items:center;gap:.6rem;position:relative;z-index:3;flex-wrap:wrap}
+  .htop{display:flex;justify-content:space-between;align-items:center;gap:.6rem;position:relative;z-index:3;flex-wrap:wrap;margin-bottom:1.1rem}
   .hbrand{display:flex;align-items:center}
   .hword{font-family:Georgia,'Times New Roman',serif;font-weight:700;font-size:1.5rem;letter-spacing:.3px;line-height:1;color:#fff}
   .hword .v{color:#f3d888;font-weight:800;letter-spacing:.04em;margin-left:.15em}
   .hctrl{display:flex;gap:.45rem;align-items:center}
   .hctrl #btnInstall{display:none;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.24);color:#fff;padding:.34rem .8rem;border-radius:2rem;font-weight:600;font-size:.8rem;cursor:pointer}
-  .claim{text-align:center;margin:.9rem auto .2rem;max-width:46ch;position:relative;z-index:2}
-  .claim h1{font-family:Georgia,serif;font-weight:700;font-size:clamp(1.5rem,4.4vw,1.95rem);line-height:1.15;margin:0;color:#fff;letter-spacing:.2px;text-wrap:balance}
+  .claim{text-align:center;margin:1.5rem auto .4rem;max-width:64ch;position:relative;z-index:2}
+  .claim h1{font-family:Georgia,serif;font-weight:700;font-size:clamp(1.7rem,4.8vw,2.3rem);line-height:1.15;margin:0;color:#fff;letter-spacing:.2px;text-wrap:balance}
   .claim h1 .l2{font-style:italic;font-weight:400;background:linear-gradient(180deg,#f3d888,#e6c15c);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
   .claim p{opacity:.9;font-size:1.02rem;margin:.85rem 0 0}
   /* barra motori SOTTO il verde: tab SOTTOLINEATE (non pillole) */
@@ -83,7 +83,7 @@
   .mtab .ml small{font-weight:500;font-size:.66rem;color:var(--testo-tenue);opacity:.9}
   .mtab.on .ml small{color:var(--brand);opacity:.95}
   .motoreMsg{text-align:center;margin:.6rem auto 0;background:var(--giallo-bg);border:1px solid #f0dfb8;color:#8a5200;font-size:.85rem;padding:.4rem .85rem;border-radius:.6rem;width:max-content;max-width:92%}
-  .hbadges{display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap;margin:1rem 0 0;position:relative;z-index:2;font-size:.82rem}
+  .hbadges{display:flex;gap:.55rem;justify-content:center;flex-wrap:wrap;margin:1.5rem 0 0;position:relative;z-index:2;font-size:.82rem}
   .hbadges span{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);padding:.34rem .7rem;border-radius:2rem;color:#fff;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
   .hbadges .star{background:rgba(249,200,70,.95);border-color:transparent;color:var(--brand);font-weight:700}
   /* ===== LA SUITE (2026-09-19): aurora, vetro e champagne — CSS puro, zero librerie =====
@@ -114,16 +114,30 @@
     box-shadow:0 14px 30px -10px rgba(8,42,32,.55),0 0 0 1px rgba(243,216,136,.35) inset;
     transition:transform .18s ease,box-shadow .18s ease}
   #cbApri:hover{transform:translateY(-3px) scale(1.04);box-shadow:0 18px 36px -10px rgba(138,109,11,.5),0 0 0 1px rgba(243,216,136,.6) inset}
+  /* ⛔ display:flex qui VINCEVA l'attributo hidden (che e' solo un display:none debole):
+     il pannello non si chiudeva MAI -- visto dal fondatore sul banco, 2026-09-20.
+     La regola [hidden] qui sotto lo rimette al suo posto: chiuso vuol dire chiuso. */
   #cbPannello{position:fixed;right:1.3rem;bottom:5.6rem;z-index:1500;width:min(360px,calc(100vw - 2.6rem));
     background:rgba(250,247,240,.92);backdrop-filter:blur(18px) saturate(1.15);-webkit-backdrop-filter:blur(18px) saturate(1.15);
     border:1px solid rgba(255,255,255,.7);border-radius:1.2rem;box-shadow:0 26px 60px -18px rgba(8,42,32,.45);
     display:flex;flex-direction:column;overflow:hidden;font-size:.95rem}
+  #cbPannello[hidden]{display:none}
   #cbPannello .cbTesta{background:linear-gradient(145deg,var(--brand),#0a3629);color:#fff;padding:.7rem .95rem;
     display:flex;justify-content:space-between;align-items:center;font-weight:700}
   #cbPannello .cbTesta button{background:none;border:none;color:#f3d888;cursor:pointer;font-size:1rem;padding:.15rem .35rem;border-radius:.4rem}
   #cbMsgs{padding:.8rem .95rem;display:flex;flex-direction:column;gap:.55rem;min-height:130px;max-height:260px;overflow-y:auto}
   #cbMsgs .io{align-self:flex-end;background:var(--brand);color:#fff;padding:.45rem .75rem;border-radius:1rem;border-bottom-right-radius:.25rem;max-width:85%}
   #cbMsgs .bot{align-self:flex-start;background:#fff;border:1px solid var(--bordo);padding:.45rem .75rem;border-radius:1rem;border-bottom-left-radius:.25rem;max-width:85%}
+  /* IL DITTAMO (Web Speech API del browser): zero server, zero chiavi. Champagne al
+     passaggio del mouse, pulsa quando ascolta. Se il browser non lo sa fare il tasto
+     NON ESISTE (niente bottoni finti: S2). */
+  .voce{position:relative;display:flex;width:100%}
+  .voce input{width:100%;padding-right:2.4rem}
+  #btnVoce{position:absolute;right:.4rem;top:50%;transform:translateY(-50%);width:30px;height:30px;border-radius:50%;border:none;background:transparent;color:var(--brand);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:background .18s ease,box-shadow .18s ease,transform .18s ease,color .18s ease}
+  #btnVoce svg{width:17px;height:17px}
+  #btnVoce:hover{background:linear-gradient(145deg,#f3d888,#e6c15c);color:#0a3629;box-shadow:0 6px 16px -6px rgba(230,193,92,.85);transform:translateY(-50%) scale(1.1)}
+  #btnVoce.ascolta{background:linear-gradient(145deg,#f3d888,#e6c15c);color:#0a3629;animation:pulseVoce 1.2s ease-in-out infinite}
+  @keyframes pulseVoce{0%,100%{box-shadow:0 0 0 0 rgba(230,193,92,.6)}50%{box-shadow:0 0 0 8px rgba(230,193,92,0)}}
   #cbForm{display:flex;gap:.45rem;padding:.6rem .7rem .7rem;border-top:1px solid var(--bordo)}
   #cbInput{flex:1;min-width:0;padding:.5rem .7rem;border:1px solid var(--bordo);border-radius:.8rem;font-size:.92rem;font-family:inherit}
   #cbManda{background:linear-gradient(145deg,var(--brand),#0a3629);color:#f3d888;border:none;border-radius:.8rem;padding:.5rem .9rem;font-weight:700;cursor:pointer;transition:transform .15s ease,filter .15s ease}
@@ -131,7 +145,8 @@
   @media(max-width:600px){.filtri{margin-top:-2.2rem}#cbPannello{bottom:5.2rem}}
   .hbadges .star span{color:var(--brand)}
   .langpick{position:relative}
-  .langbtn{display:inline-flex;align-items:center;gap:.35rem;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.24);color:#fff;border-radius:2rem;padding:.26rem .6rem;font-size:.8rem;font-weight:700;cursor:pointer}
+  .langbtn{display:inline-flex;align-items:center;gap:.35rem;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.24);color:#fff;border-radius:2rem;padding:.26rem .6rem;font-size:.8rem;font-weight:700;cursor:pointer;transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease}
+  .langbtn:hover{transform:translateY(-1px);border-color:rgba(243,216,136,.65);box-shadow:0 8px 20px -8px rgba(230,193,92,.55)}
   .langbtn svg{width:18px;height:13px;border-radius:2px;display:block;overflow:hidden}
   .langmenu{position:absolute;right:0;top:calc(100% + .35rem);background:#fff;color:var(--testo);border-radius:.8rem;box-shadow:0 14px 34px rgba(0,0,0,.22);padding:.3rem;min-width:158px;z-index:60;display:none}
   .langmenu.open{display:block}
@@ -237,7 +252,7 @@
 
   <form class="filtri" id="form">
     <div class="riga">
-      <label data-t="citta">Città<input type="text" id="citta" value="Roma"></label>
+      <label data-t="citta">Città<span class="voce"><input type="text" id="citta" value="Roma"><button type="button" id="btnVoce" aria-label="Dittamo vocale della città" title="Ditta la città a voce"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg></button></span></label>
       <label data-t="checkin">Check-in<input type="date" id="checkin"></label>
       <label data-t="checkout">Check-out<input type="date" id="checkout"></label>
       <label data-t="ospiti">Ospiti<input type="number" id="ospiti" value="2" min="1" max="20"></label>
@@ -251,11 +266,6 @@
     <label style="display:flex;align-items:center;gap:.4rem;margin-top:.4rem;font-size:.85rem;color:var(--brand);font-weight:600;cursor:pointer;text-transform:none;flex-direction:row"><input type="checkbox" id="flexDate" style="min-width:0;width:auto"> <span id="lblFlex" data-t="flex">Date flessibili (± 3 giorni)</span></label>
   </form>
 
-  <div id="bannerBeta" style="background:linear-gradient(135deg,#fff8ec,#fffdf8);border:1px solid #f0dfb8;border-radius:1rem;padding:1rem 1.2rem;margin:0 0 1.4rem;text-align:center">
-    <div style="font-weight:700;color:#8a5200;font-size:1.02rem">🚧 <span id="beta1" data-t="b1">Siamo in fase di test e costruzione — apriamo a breve.</span></div>
-    <div style="color:var(--testo-tenue);font-size:.92rem;margin-top:.25rem"><span id="beta2" data-t="b2">Stiamo preparando un servizio più avanzato e più conveniente per te. Nel frattempo è già aperto agli host:</span>
-      <a href="/diventa-host.html" style="color:var(--brand-chiaro);font-weight:700;white-space:nowrap"><span id="beta3" data-t="b3">pubblica il tuo alloggio ora →</span></a></div>
-  </div>
 
   <div id="vista" style="display:none;gap:.5rem;margin:.2rem 0 .8rem">
     <button type="button" id="btnLista" class="vistaBtn attiva">≣ <span id="lblLista">Lista</span></button>
@@ -528,8 +538,6 @@ function mt(k){ return (MAP_T[LANG]||MAP_T.en)[k] || MAP_T.en[k] || k; }
 function localizzaMappa(){
   const a=document.getElementById('lblLista'), b=document.getElementById('lblMappa');
   if(a) a.textContent=mt('lista'); if(b) b.textContent=mt('mappa');
-  // gli id nel DOM sono beta1/2/3, le chiavi del dizionario b1/2/3
-  ['b1','b2','b3'].forEach(k=>{const e=document.getElementById('beta'+k.slice(1)); if(e) e.textContent=mt(k);});
   {const lf=document.getElementById('lblFlex'); if(lf) lf.textContent=mt('flex');}
 }
 function caricaLeaflet(){
@@ -885,6 +893,26 @@ document.getElementById('lang').value = LANG;
   host.appendChild(btn); host.appendChild(menu); paint();
   sel.addEventListener('change', paint);
 })();
+// ── DITTAMO VOCALE della citta' (Web Speech API): zero server, zero chiavi. Nei
+// browser che non lo sanno fare il tasto NON ESISTE (niente bottoni finti: S2).
+(function(){
+  var bv=document.getElementById('btnVoce'), ci=document.getElementById('citta');
+  if(!bv||!ci) return;
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){ bv.style.display='none'; return; }
+  var REC={it:'it-IT',en:'en-US',es:'es-ES',fr:'fr-FR',de:'de-DE',pt:'pt-BR',ja:'ja-JP',zh:'zh-CN'};
+  var r=null, ascoltando=false;
+  bv.onclick=function(){
+    if(ascoltando){ r.stop(); return; }
+    r=new SR(); r.lang=REC[(typeof LANG!=='undefined'&&REC[LANG])?LANG:'it']||'it-IT';
+    r.interimResults=false; r.maxAlternatives=1;
+    r.onresult=function(e){ var d=e.results[0][0].transcript.trim();
+      if(d){ ci.value=d; ci.dispatchEvent(new Event('input')); cerca(); } };
+    r.onend=function(){ ascoltando=false; bv.classList.remove('ascolta'); };
+    r.onerror=r.onend;
+    try{ r.start(); ascoltando=true; bv.classList.add('ascolta'); }catch(e){ ascoltando=false; }
+  };
+})();
 // ── IL CONCIERGE (fase139): il desk dell'albergo, sempre aperto, in basso a destra ──
 // Nessuna libreria: un bottone, un pannello di vetro, e le risposte a regole del motore.
 // Le frasi del BOT entrano con textContent (mai innerHTML): cio' che scrive l'ospite
@@ -907,9 +935,16 @@ document.getElementById('lang').value = LANG;
   apri.onclick=()=>{
     const visibile=pan.hidden;
     pan.hidden=!visibile; apri.setAttribute('aria-expanded', String(visibile));
+    try{ sessionStorage.setItem('cbVista','1'); }catch(e){ console.warn('bookinvip-ospite', e); }
     if(visibile && !salutato){ salutato=true; riga(t('chat_benvenuto'), false); input.focus(); }
   };
   document.getElementById('cbChiudi').onclick=()=>{ pan.hidden=true; };
+  // APERTURA AUTOMATICA dopo 30 s, UNA volta per sessione: il desk si presenta da
+  // solo, ma se l'ospite l'ha gia' aperto o chiuso non inseguisce nessuno.
+  setTimeout(function(){
+    let vista=false; try{ vista=sessionStorage.getItem('cbVista')==='1'; }catch(e){ console.warn('bookinvip-ospite', e); }
+    if(!vista && pan.hidden){ apri.click(); }
+  }, 30000);
   // gestore d'invio DIRETTO sull'id: la guardia test_i_moduli_hanno_un_gestore_di_invio
   // pretende getElementById('cbForm').onsubmit nel sorgente (forme indirette = tasto morto)
   document.getElementById('cbForm').onsubmit=async e=>{
