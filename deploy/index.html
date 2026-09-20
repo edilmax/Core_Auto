@@ -55,13 +55,13 @@
   select#lang{padding:.4rem .7rem;border-radius:.7rem;border:1px solid var(--bordo);font-size:1rem}
   #btnInstall{display:none;background:var(--brand);color:#fff;border:none;padding:.4rem 1rem;border-radius:2rem;font-weight:600;cursor:pointer}
   /* ===== HERO MOTORI (2026-07-19): verde + sfumature leggere + barra dei motori ===== */
-  .hero{position:relative;border-radius:1.6rem;color:#fff;margin:.3rem 0 1.1rem;padding:2.7rem 2.4rem 5rem;
+  .hero{position:relative;border-radius:1.6rem;color:#fff;margin:.3rem 0 1.1rem;padding:2.7rem 2.4rem 3rem;
     background:radial-gradient(70% 60% at 82% 2%,rgba(243,216,136,.16) 0,rgba(243,216,136,0) 50%),
       radial-gradient(80% 70% at 6% 6%,rgba(70,138,112,.36) 0,rgba(70,138,112,0) 60%),
       linear-gradient(160deg,#2a7157 -18%,var(--brand) 46%,#0a3629 130%);
     box-shadow:0 22px 52px -30px rgba(8,42,32,.7)}
   .hero::after{content:"";position:absolute;inset:0;pointer-events:none;border-radius:1.6rem;background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,0) 24%)}
-  .htop{display:flex;justify-content:space-between;align-items:center;gap:.6rem;position:relative;z-index:3;flex-wrap:wrap;margin-bottom:1.1rem}
+  .htop{display:flex;justify-content:space-between;align-items:center;gap:.6rem;position:relative;z-index:10;flex-wrap:wrap;margin-bottom:1.1rem}
   .hbrand{display:flex;align-items:center}
   .hword{font-family:Georgia,'Times New Roman',serif;font-weight:700;font-size:1.5rem;letter-spacing:.3px;line-height:1;color:#fff}
   .hword .v{color:#f3d888;font-weight:800;letter-spacing:.04em;margin-left:.15em}
@@ -141,8 +141,12 @@
   #cbForm{display:flex;gap:.45rem;padding:.6rem .7rem .7rem;border-top:1px solid var(--bordo)}
   #cbInput{flex:1;min-width:0;padding:.5rem .7rem;border:1px solid var(--bordo);border-radius:.8rem;font-size:.92rem;font-family:inherit}
   #cbManda{background:linear-gradient(145deg,var(--brand),#0a3629);color:#f3d888;border:none;border-radius:.8rem;padding:.5rem .9rem;font-weight:700;cursor:pointer;transition:transform .15s ease,filter .15s ease}
+  #cbMsgs .cbAnnuncio{align-self:flex-start;width:100%;text-align:left;background:#fff;border:1px solid rgba(243,216,136,.75);border-left:3px solid #e6c15c;padding:.5rem .75rem;border-radius:.8rem;cursor:pointer;font-size:.9rem;transition:transform .15s ease,box-shadow .15s ease}
+  #cbMsgs .cbAnnuncio:hover{transform:translateY(-1px);box-shadow:0 8px 18px -8px rgba(230,193,92,.7)}
+  #cbMsgs .cbAnnuncio b{display:block;color:var(--brand)}
+  #cbMsgs .cbAnnuncio span{color:var(--testo-tenue);font-size:.85rem}
   #cbManda:hover{transform:translateY(-1px);filter:brightness(1.08)}
-  @media(max-width:600px){.filtri{margin-top:-2.2rem}#cbPannello{bottom:5.2rem}}
+  @media(max-width:600px){#cbPannello{bottom:5.2rem}}
   .hbadges .star span{color:var(--brand)}
   .langpick{position:relative}
   .langbtn{display:inline-flex;align-items:center;gap:.35rem;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.24);color:#fff;border-radius:2rem;padding:.26rem .6rem;font-size:.8rem;font-weight:700;cursor:pointer;transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease}
@@ -156,7 +160,7 @@
   .lang-hidden{position:absolute!important;width:1px;height:1px;opacity:0;pointer-events:none;left:-9999px}
   .filtri{background:rgba(255,253,247,.86);backdrop-filter:blur(16px) saturate(1.15);-webkit-backdrop-filter:blur(16px) saturate(1.15);
     border:1px solid rgba(255,255,255,.65);padding:1.25rem 1.5rem;border-radius:1.4rem;
-    box-shadow:0 22px 48px -20px rgba(8,42,32,.38);margin:-2.7rem 0 2rem;position:relative;z-index:5;
+    box-shadow:0 22px 48px -20px rgba(8,42,32,.38);margin:.9rem 0 2rem;position:relative;z-index:5;
     transition:box-shadow .25s ease,border-color .25s ease}
   .filtri:focus-within{border-color:rgba(230,193,92,.75);box-shadow:0 26px 56px -18px rgba(138,109,11,.35)}
   .filtri .riga{display:flex;flex-wrap:wrap;gap:.75rem 1.25rem;align-items:end}
@@ -956,10 +960,25 @@ document.getElementById('lang').value = LANG;
       // le DATE le ha gia' scelte nella barra sopra: il desk le sa e risponde col
       // prezzo SUBITO (check-in/check-out correnti del form di ricerca)
       const ci=document.getElementById('checkin'), co=document.getElementById('checkout');
+      const pm=parseFloat((document.getElementById('prezzomax')||{}).value);
+      const op=(document.getElementById('ospiti')||{}).value;
       const r=await api('/api/chatbot',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({testo:testo, lang:LANG, slug:slugCorrente,
-                             check_in:ci?ci.value:'', check_out:co?co.value:''})});
+                             check_in:ci?ci.value:'', check_out:co?co.value:'',
+                             citta:(document.getElementById('citta')||{}).value||'',
+                             party:parseInt(op,10)||null,
+                             prezzo_max_cents:(pm>0)?Math.round(pm*100):null})});
       riga((r&&r.risposta)?r.risposta:(typeof t==='function'?t('errore'):'…'), false);
+      // I RISULTATI DEL DESK: schede CLICCABILI che aprono l'alloggio (createElement:
+      // niente HTML costruito con dati del server — la regola della chat)
+      if(r&&r.lista&&r.lista.length){ for(const it of r.lista){
+        const b=document.createElement('button'); b.type='button'; b.className='bot cbAnnuncio';
+        const t1=document.createElement('b'); t1.textContent=it.titolo||it.slug;
+        const t2=document.createElement('span'); t2.textContent=' — '+(it.prezzo||'');
+        b.appendChild(t1); b.appendChild(t2);
+        b.onclick=()=>{ apri(it.slug); };
+        msgs.appendChild(b); msgs.scrollTop=msgs.scrollHeight;
+      } }
     }catch(err){ riga(typeof t==='function'?t('errore'):String(err.message||err), false); }
     manda.disabled=false; occupato=false; input.focus();
   };

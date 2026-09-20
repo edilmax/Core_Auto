@@ -7511,6 +7511,23 @@ class RouterHTTP:
             v = str(dati.get(k) or "")[:10]
             if _re.match(r"^\d{4}-\d{2}-\d{2}$", v):
                 contesto[k] = v
+        # E LA RICERCA: citta', ospiti e tetto di prezzo della barra -- il desk cerca
+        # con QUELLI (La Suite: trova alloggi veri con i prezzi veri).
+        citta = str(dati.get("citta") or "")[:60].strip()
+        if citta:
+            contesto["citta"] = citta
+        try:
+            party = int(dati.get("party"))
+            if 1 <= party <= 20:
+                contesto["party"] = party
+        except (TypeError, ValueError):
+            pass
+        try:
+            pm = int(dati.get("prezzo_max_cents"))
+            if 0 < pm <= 100000000:
+                contesto["prezzo_max_cents"] = pm
+        except (TypeError, ValueError):
+            pass
         contesto["lingua"] = str(dati.get("lang") or "")[:5]
         lingua = "en" if contesto["lingua"].lower().startswith("en") else "it"
         try:
@@ -7520,9 +7537,17 @@ class RouterHTTP:
         except Exception:
             logger.error("chatbot: risposta in errore (ISOLATA)", exc_info=True)
             return 503, {"errore": "errore_interno"}
-        return 200, {"risposta": str(r.get("risposta") or "")[:1000],
-                     "intento": str(r.get("intento") or "")[:40],
-                     "fonte": str(r.get("fonte") or "")[:40]}
+        d = {"risposta": str(r.get("risposta") or "")[:1000],
+             "intento": str(r.get("intento") or "")[:40],
+             "fonte": str(r.get("fonte") or "")[:40]}
+        # LA LISTA DEL DESK (La Suite): quando il Concierge ha cercato, porta gli
+        # alloggi trovati (slug/titolo/prezzo) — il widget li fa cliccabili.
+        if isinstance(r.get("lista"), list) and r.get("lista"):
+            d["lista"] = [{"slug": str(e.get("slug") or "")[:80],
+                           "titolo": str(e.get("titolo") or "")[:60],
+                           "prezzo": str(e.get("prezzo") or "")[:30]}
+                          for e in r["lista"][:3] if isinstance(e, dict)]
+        return 200, d
 
     def _domanda_registra(self, body):
         """Lista d'attesa anti-vuoto: l'ospite lascia email+citta quando non trova nulla ->
