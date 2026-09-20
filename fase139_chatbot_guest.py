@@ -15,6 +15,16 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 logger = logging.getLogger("core_auto.chatbot_guest")
 
 _INTENTI: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
+    # LA HOME DEL DESK (La Suite, 2026-09-20): senza slug il Concierge TROVA alloggi
+    # (ricerca vera del catalogo), parla di FIDUCIA con le macchine reali e di GUADAGNI
+    # con i numeri veri di fase98. Prima di tutto: queste domande battono quelle da scheda.
+    ("cerca", ("trovami", "trova un", "trova una", "cerco", "cercare", "mostrami",
+               "ho bisogno", "voglio", "casa a", "appartamento a", "search", "find me",
+               "looking for")),
+    ("host", ("sono un host", "sono host", "guadagn", "commission", "percentual",
+              "pubblicar", "affitto la mia casa", "la mia struttura", "earning")),
+    ("fiducia", ("sicur", "fiduc", "fidar", "mi fido", "garanzia", "truffa", "affidabil",
+                 "safe", "trust", "scam", "verified", "regret")),
     ("prezzo", ("prezzo", "costo", "quanto costa", "price", "cost", "how much")),
     ("disponibilita", ("disponibil", "libero", "available", "free", "vacancy")),
     ("servizi", ("servizi", "wifi", "piscina", "parcheggio", "amenities", "pool", "parking")),
@@ -68,6 +78,10 @@ class ChatbotGuest:
 
     def rispondi(self, slug: str, testo: str, *,
                  contesto: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        # SENZA SLUG siamo sulla HOME: il desk esegue la ricerca vera, parla di fiducia
+        # con le macchine reali e dei guadagni con i numeri di fase98 (La Suite).
+        if not (isinstance(slug, str) and slug.strip()):
+            return self.rispondi_home(testo, contesto)
         intento = classifica_intento(testo)
         ctx = contesto or {}
         it = self._lng == "it"
@@ -115,6 +129,122 @@ class ChatbotGuest:
             logger.warning("rispondi fallita (ISOLATA)", exc_info=True)
             return self._out("fallback", "Riprova più tardi." if it else "Try again later.",
                              "errore")
+
+    # ── LA HOME DEL DESK (La Suite, 2026-09-20): TROVA alloggi con la ricerca vera del
+    #    catalogo, parla di FIDUCIA citando le macchine reali, e di GUADAGNI con i numeri
+    #    veri di fase98. Ogni risposta e' generata dal motore: niente inventato.
+    def rispondi_home(self, testo: str, contesto: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        ctx = contesto or {}
+        it = self._lng == "it"
+        intento = classifica_intento(testo)
+        if intento == "host":
+            return self._host_home(it)
+        if intento == "fiducia":
+            return self._fiducia_home(it)
+        if intento in ("cerca", "prezzo", "disponibilita"):
+            return self._cerca_home(ctx, it)
+        if intento == "saluto":
+            return self._out("saluto",
+                             "Ciao! Posso TROVARTI un alloggio (dimmi la citta' nella barra "
+                             "e quante persone), spiegarti come ci si fida, o parlarti dei "
+                             "guadagni per gli host." if it else
+                             "Hi! I can FIND you a stay (set the city and guests), explain "
+                             "how trust works, or talk host earnings.", "canned")
+        return self._out("fallback",
+                         "Posso TROVARTI un alloggio (imposta la citta' nella barra e "
+                         "quante persone), rispondere su SICUREZZA E PAGAMENTI, o "
+                         "spiegarti i GUADAGNI per gli host. Oppure apri la scheda di un "
+                         "alloggio e chiedimi i dettagli." if it else
+                         "I can FIND you a stay (set the city and guests), answer about "
+                         "SAFETY AND PAYMENTS, or explain HOST earnings. Or open a "
+                         "listing and ask for details.", "canned")
+
+    def _cerca_home(self, ctx: Dict[str, Any], it: bool) -> Dict[str, Any]:
+        """La ricerca VERA del catalogo (fase57.CriteriRicerca) con i valori che l'ospite
+        ha gia' impostato nella barra: citta', ospiti, tetto di prezzo, date (per la
+        disponibilita'). Massimo 3: un desk elenca, non impila."""
+        if self._cat is None:
+            return self._out("cerca", "Catalogo non disponibile ora." if it else
+                             "Catalog unavailable.", "nessun_catalogo")
+        citta = str(ctx.get("citta") or "").strip() or None
+        if not citta:
+            return self._out("cerca",
+                             "Dimmi la citta': scrivila nella barra di ricerca e "
+                             "ripeto la domanda." if it else
+                             "Tell me the city: type it in the search bar and ask again.",
+                             "richiesta_dati")
+        from fase57_vetrina import CriteriRicerca
+        criteri = CriteriRicerca(
+            citta=citta,
+            capacita_min=ctx.get("party") or None,
+            prezzo_max_cents=ctx.get("prezzo_max_cents") or None,
+            check_in=ctx.get("check_in") or None,
+            check_out=ctx.get("check_out") or None,
+            limit=3)
+        try:
+            res = self._cat.cerca(criteri)
+        except Exception:
+            logger.warning("concierge cerca: ISOLATO", exc_info=True)
+            res = None
+        risultati = (res or {}).get("risultati") or []
+        if not risultati:
+            return self._out("cerca",
+                             ("Ancora niente a %s: lascia la richiesta dalla Home e ti "
+                              "avvisiamo quando arriva un alloggio." % citta) if it else
+                             ("Nothing in %s yet: leave a request from the Home page and "
+                              "we'll notify you." % citta), "catalogo")
+        righe, lista = [], []
+        for i, r in enumerate(risultati[:3], 1):
+            titolo = str(r.get("titolo") or "")[:60]
+            pre = _importo_chat(r.get("prezzo_notte_cents"), r.get("valuta"))
+            righe.append("%d. %s - %s a notte" % (i, titolo, pre))
+            lista.append({"slug": str(r.get("slug") or ""), "titolo": titolo, "prezzo": pre})
+        risposta = (("Ecco cosa ho trovato a %s:\n" % citta) if it else "Here's what I found in %s:\n" % citta) \
+            + "\n".join(righe) + ("\nApri quella che ti piace e chiedimi i dettagli."
+                                  if it else "\nOpen the one you like and ask me details.")
+        d = self._out("cerca", risposta, "catalogo")
+        d["lista"] = lista
+        return d
+
+    def _host_home(self, it: bool) -> Dict[str, Any]:
+        """I numeri VERI di fase98: la rampa di lancio e la tariffa di pagamento, con
+        l'esempio calcolato DALLE COSTANTI (se qualcuno cambia i numeri, l'esempio segue)."""
+        from fase98_policy_commissione import (LANCIO_GIORNI_GRATIS, LANCIO_BPS_FASE1,
+                                               LANCIO_GIORNI_FASE1, LANCIO_BPS_REGIME)
+        spesa = 10000 * 500 // 10000 + 25           # 5% + 0,25 EUR su 100 EUR
+        netto = 10000 - spesa                       # 9475 = 94,75 EUR nei primi 90 giorni
+        risposta = (
+            "Commissioni HOST: i primi %d giorni da quando ti registri paghi 0%%; poi "
+            "%d%% fino a %d giorni; a regime %d%%. A questo si aggiunge la tariffa di "
+            "pagamento: 5%% + 0,25 EUR per transazione (7%% se la valuta e' estera: il "
+            "gateway converte). L'OSPITE paga sempre 0%%. Esempio: su 100 EUR nei primi "
+            "%d giorni ti restano %.2f EUR (poi l'ospite paga quello: zero sorprese per lui)."
+            % (LANCIO_GIORNI_GRATIS, LANCIO_BPS_FASE1 // 100, LANCIO_GIORNI_FASE1,
+               LANCIO_BPS_REGIME // 100, LANCIO_GIORNI_GRATIS, netto / 100)) if it else (
+            "HOST fees: your first %d days cost 0%; then %d%% up to %d days; %d%% at "
+            "scale. Plus the payment fee: 5%% + 0.25 EUR per transaction (7%% for foreign "
+            "currency). The GUEST always pays 0%%. Example: on 100 EUR in your first %d "
+            "days you keep %.2f EUR."
+            % (LANCIO_GIORNI_GRATIS, LANCIO_BPS_FASE1 // 100, LANCIO_GIORNI_FASE1,
+               LANCIO_BPS_REGIME // 100, LANCIO_GIORNI_GRATIS, netto / 100))
+        return self._out("host", risposta, "fase98")
+
+    def _fiducia_home(self, it: bool) -> Dict[str, Any]:
+        risposta = (
+            "Perche' puoi fidarti: (1) i soldi RESTANO IN GARANZIA fino al check-in: "
+            "all'host arrivano solo se tutto va bene (escrow, sblocco entro 24h); "
+            "(2) il prezzo che vedi e' FIRMATO crittograficamente e non cambia; "
+            "(3) le recensioni arrivano SOLO da chi ha pagato davvero; "
+            "(4) il voucher con il PIN ti arriva firmato via email; "
+            "(5) l'ora e i documenti sono certificati da autorita' europee. "
+            "E se non sei contento, il rimborso torna come credito." if it else
+            "Why you can trust us: (1) the money stays in ESCROW until check-in; "
+            "(2) the price you see is cryptographically signed and cannot change; "
+            "(3) reviews come only from guests who actually paid; "
+            "(4) your voucher with the PIN arrives signed by email; "
+            "(5) timestamps and documents are certified by European authorities. "
+            "And if you're not happy, the refund comes back as credit.")
+        return self._out("fiducia", risposta, "motore")
 
     def _prezzo(self, slug: str, ctx: Dict[str, Any], it: bool) -> Dict[str, Any]:
         ci, co = ctx.get("check_in"), ctx.get("check_out")

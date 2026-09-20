@@ -179,5 +179,106 @@ class TestLaRottaPubblicaDelConcierge(unittest.TestCase):
                          "il concierge e' rimasto aperto a raffica: %r" % (c,))
 
 
+
+class TestIlDeskDellaHome(unittest.TestCase):
+    """LE TRE FAMIGLIE del desk della Home (La Suite): CERCA alloggi con la ricerca
+    vera del catalogo, risponde sui GUADAGNI con i numeri veri di fase98, e sulla
+    FIDUCIA citando le macchine reali. Senza slug: e' la Home."""
+
+    @classmethod
+    def setUpClass(cls):
+        import datetime
+        import json
+        import tempfile
+        from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
+        from fase83_server import crea_router
+        from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
+        cls.d = tempfile.mkdtemp(prefix="desk_home_")
+        cfg = ConfigCasaVIP(
+            abilitato=True, segreto_hmac=b"D" * 32, con_registrazione_host=True,
+            db_catalogo=cls.d + "/c.db", db_inventario=cls.d + "/i.db",
+            db_registro_host=cls.d + "/r.db", db_accettazioni=cls.d + "/a.db",
+            db_pendenti=cls.d + "/p.db", db_payout=cls.d + "/po.db",
+            db_finanza=cls.d + "/f.db", db_garanzia=cls.d + "/g.db",
+            db_tassa_comunale=cls.d + "/t.db", valuta="EUR")
+        sistema = crea_sistema(cfg)
+        cls.r = crea_router(sistema, host_key="hk", admin_key="ak")
+        j = json.dumps
+
+        def g(m, p, b=None, h=None):
+            return cls.r.gestisci(m, p, {}, j(b) if b is not None else None, h or {})
+
+        cls.g = staticmethod(g)
+        s, c = g("POST", "/api/host/registrazione",
+                 {"email": "host@desk.it", "password": "password1",
+                  "accetta_termini": True, "accetta_clausole": True, "accetta_privacy": True,
+                  "doc_sha256": doc_sha256(), "versione": CONTRATTO_HOST_VERSIONE})
+        if s != 201:
+            raise AssertionError("registrazione: %s %r" % (s, c))
+        tok = c["token"]
+        s, c = g("POST", "/api/host/pubblica",
+                 {"slug": "loft-desk", "titolo": "Loft del Desk", "citta": "Roma",
+                  "paese": "IT", "cin": "IT058091C2X5V0ABCD",
+                  "prezzo_notte_cents": 9500, "capacita": 4},
+                 {"X-Host-Token": tok})
+        if s != 201:
+            raise AssertionError("pubblica: %s %r" % (s, c))
+        oggi = datetime.date.today()
+        s, c = g("POST", "/api/host/disponibilita_range",
+                 {"alloggio_id": "loft-desk", "da": oggi.isoformat(),
+                  "a": (oggi + datetime.timedelta(days=120)).isoformat(),
+                  "unita_totali": 2, "prezzo_netto_cents": 9500},
+                 {"X-Host-Token": tok})
+        if s != 200:
+            raise AssertionError("disponibilita: %s %r" % (s, c))
+
+    @classmethod
+    def tearDownClass(cls):
+        import shutil
+        shutil.rmtree(cls.d, ignore_errors=True)
+
+    def test_il_desk_cerca_e_trova_con_prezzo(self):
+        import datetime
+        oggi = datetime.date.today()
+        s, c = self.g("POST", "/api/chatbot",
+                      {"testo": "trovami un alloggio", "citta": "Roma", "party": 2,
+                       "check_in": (oggi + datetime.timedelta(days=7)).isoformat(),
+                       "check_out": (oggi + datetime.timedelta(days=9)).isoformat(),
+                       "lang": "it"})
+        self.assertEqual(200, s, c)
+        self.assertEqual("cerca", c.get("intento"))
+        self.assertIn("Loft del Desk", str(c.get("risposta")),
+                      "il desk non cita l'alloggio vero: %r" % (c,))
+        lista = c.get("lista") or []
+        self.assertTrue(any(e.get("slug") == "loft-desk" for e in lista),
+                        "la lista cliccabile non contiene l'alloggio vero: %r" % (lista,))
+        self.assertTrue(any("95" in str(e.get("prezzo")) for e in lista),
+                        "manca il prezzo a notte: %r" % (lista,))
+
+    def test_il_desk_risponde_all_host_con_i_numeri_veri(self):
+        s, c = self.g("POST", "/api/chatbot",
+                      {"testo": "sono un host, quante commissioni pago?", "lang": "it"})
+        self.assertEqual(200, s, c)
+        risposta = str(c.get("risposta"))
+        self.assertIn("0%", risposta, "manca lo 0%% dei primi giorni: %r" % (risposta,))
+        self.assertIn("94,75", risposta.replace(".", ",") if False else risposta.replace(".", ","),
+                      "manca l'esempio vero su 100 EUR: %r" % (risposta,))
+
+    def test_il_desk_risponde_sulla_fiducia_col_motore(self):
+        s, c = self.g("POST", "/api/chatbot", {"testo": "posso fidarmi? e' sicuro?", "lang": "it"})
+        self.assertEqual(200, s, c)
+        risposta = str(c.get("risposta"))
+        self.assertIn("GARANZIA", risposta, "manca l'escrow: %r" % (risposta,))
+        self.assertIn("FIRMATO", risposta, "manca il prezzo firmato: %r" % (risposta,))
+        self.assertIn("recensioni", risposta.lower(), "manca la promessa recensioni: %r" % (risposta,))
+
+    def test_senza_citta_il_desk_chiede_e_non_inventa(self):
+        s, c = self.g("POST", "/api/chatbot", {"testo": "trovami un alloggio", "lang": "it"})
+        self.assertEqual(200, s, c)
+        risposta = str(c.get("risposta"))
+        self.assertIn("citta", risposta.lower(),
+                      "il desk cerca senza citta' invece di chiederla: %r" % (risposta,))
+
+
 if __name__ == "__main__":
     unittest.main()
