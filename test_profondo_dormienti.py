@@ -988,7 +988,9 @@ class TestGapDiCablaggio(_BaseDormienti):
     # DB_DEPOSITO, esposto come `sistema.deposito`) — vedi test_deposito_cablato.py. Resta senza
     # ROTTA, quindi continua a comparire nel test sulle rotte inesistenti qui sotto: mezzo
     # cablato, come coda e split.
-    SPENTI = ("cauzione", "wishlist", "fedelta", "chatbot", "web_push",
+    # chatbot USCITO dagli spenti il 2026-09-19: e' cablato (rotta /api/chatbot in
+    # fase83, La Suite) -- vedi test_fase139.TestLaRottaPubblicaDelConcierge
+    SPENTI = ("cauzione", "wishlist", "fedelta", "web_push",
               "push", "traduttore", "gate_identita", "asia")
 
     def test_i_moduli_spenti_non_sono_ancora_nel_sistema(self):
@@ -1008,7 +1010,6 @@ class TestGapDiCablaggio(_BaseDormienti):
                 ("POST", "/api/wishlist", {"slug": SLUG}),
                 ("GET", "/api/wishlist", None),
                 ("POST", "/api/fedelta/accredita", {"punti": 1}),
-                ("POST", "/api/chatbot", {"slug": SLUG, "testo": "ciao"}),
                 ("POST", "/api/push/registra", {"sub": {}}),
                 ("POST", "/api/deposito/autorizza", {"importo_cents": 100}),
                 ("POST", "/api/coda/iscrivi", {"alloggio_id": SLUG}),
