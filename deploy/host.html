@@ -1620,5 +1620,10 @@ if(window.BV&&BV.occhielli) BV.occhielli();   // 👁 mostra/nascondi su ogni in
 // RE-installava mentre index lo disinstallava -> ping-pong e rischio pagine vecchie in cache
 if('serviceWorker' in navigator){ navigator.serviceWorker.getRegistrations().then(rs=>rs.forEach(r=>r.unregister())).catch(()=>{}); if(window.caches) caches.keys().then(ks=>ks.forEach(k=>caches.delete(k))).catch(()=>{}); }
 </script>
+<!-- ⚙️ SEDE DELL'ASSISTENTE HOST (Agente IA, fase 25/164): il mount point e' pronto.
+     Si aggangera' qui con la stessa forma del Concierge ospite (fase139): bolla + pannello
+     di vetro + rotta dedicata che risponde DAL MOTORE (payout, calendario, turnover, tasse).
+     Fino ad allora RESTA SCOLLEGATO: niente finti in produzione. -->
+<div id="assistenteHost" hidden aria-hidden="true"></div>
 </body>
 </html>
