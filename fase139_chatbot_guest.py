@@ -118,6 +118,15 @@ class ChatbotGuest:
 
     def _prezzo(self, slug: str, ctx: Dict[str, Any], it: bool) -> Dict[str, Any]:
         ci, co = ctx.get("check_in"), ctx.get("check_out")
+        if not (isinstance(slug, str) and slug.strip()):
+            # SENZA ALLOGGIO il desk non INDOVINA: indica la strada (provato dalla Home,
+            # 2026-09-19: rispondeva "non disponibile" a chi chiedeva un prezzo prima di
+            # aprire una scheda -- un no falso al cliente che stava chiedendo).
+            return self._out("prezzo",
+                             "Apri la scheda di un alloggio e riprova: ti dico il prezzo "
+                             "firmato per le tue date." if it else
+                             "Open a listing first and ask again: I'll give you the signed "
+                             "price for your dates.", "richiesta_dati")
         if not (ci and co):
             return self._out("prezzo", "Indica le date (check-in e check-out) per il prezzo."
                              if it else "Tell me your dates for a price.", "richiesta_dati")

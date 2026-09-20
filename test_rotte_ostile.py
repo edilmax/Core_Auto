@@ -369,6 +369,12 @@ class TestGiroOstileTutteLeRotte(unittest.TestCase):
                     body={"nome": "Partner Ostile", "email": "p@ostile.it",
                           "tipo": "agenzia", "citta": "Roma", "consenso": True},
                     valore={"ok": True})
+        # IL CONCIERGE (fase139, La Suite): pubblico, risponde a regole. Lo slug ostile
+        # inesistente non esplode: il desk risponde (fallback/canned) senza 500.
+        self.chiama("POST", "/api/chatbot", 200,
+                    [("risposta", str), ("intento", str), ("fonte", str)],
+                    body={"testo": "quanto costa?", "slug": "alloggio-ostile-inesistente",
+                          "lang": "it", "check_in": "2027-03-10", "check_out": "2027-03-12"})
         contr = self.chiama("POST", "/api/contratto", 200, [("righe", list)],
                             body={"voucher_token": vt, "lang": "it"})
         self.assertTrue(any("Casa casa-ostile" in x or "casa-ostile" in x or "Roma" in x
@@ -803,7 +809,7 @@ class TestGiroOstileTutteLeRotte(unittest.TestCase):
         inesistenti = provate - dichiarate
         self.assertEqual(inesistenti, set(),
                          "provate rotte che il router non dichiara: %s" % sorted(inesistenti))
-        self.assertEqual(len(dichiarate), 136,
+        self.assertEqual(len(dichiarate), 137,
                          "il router ha %d rotte: la mappa del collaudo va aggiornata"
                          % len(dichiarate))
         # nessuna 5xx inattesa: solo le due dormienti dichiarate

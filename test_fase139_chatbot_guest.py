@@ -79,5 +79,105 @@ class TestChatbot(unittest.TestCase):
         self.assertEqual(r["prezzo_guest_cents"], 11200)
 
 
+class TestLaRottaPubblicaDelConcierge(unittest.TestCase):
+    """/api/chatbot (La Suite, 2026-09-19): il desk dell'albergo esposto ALLA PAGINA.
+    Costruzione per-richiesta (it/en) sul SISTEMA VERO: catalogo e concierge di fase81,
+    niente finti -- perche' la guardia deve vedere il cablaggio che usa l'ospite."""
+
+    @classmethod
+    def setUpClass(cls):
+        import datetime
+        import json
+        import tempfile
+        from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
+        from fase83_server import crea_router
+        from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
+        cls.d = tempfile.mkdtemp(prefix="chatbot_rotta_")
+        cfg = ConfigCasaVIP(
+            abilitato=True, segreto_hmac=b"C" * 32, con_registrazione_host=True,
+            db_catalogo=cls.d + "/c.db", db_inventario=cls.d + "/i.db",
+            db_registro_host=cls.d + "/r.db", db_accettazioni=cls.d + "/a.db",
+            db_pendenti=cls.d + "/p.db", db_payout=cls.d + "/po.db",
+            db_finanza=cls.d + "/f.db", db_garanzia=cls.d + "/g.db",
+            db_tassa_comunale=cls.d + "/t.db", valuta="EUR")
+        sistema = crea_sistema(cfg)
+        cls.r = crea_router(sistema, host_key="hk", admin_key="ak")
+        j = json.dumps
+
+        def g(m, p, b=None, h=None):
+            return cls.r.gestisci(m, p, {}, j(b) if b is not None else None, h or {})
+
+        cls.g = staticmethod(g)
+        s, c = g("POST", "/api/host/registrazione",
+                 {"email": "host@chatrotta.it", "password": "password1",
+                  "accetta_termini": True, "accetta_clausole": True, "accetta_privacy": True,
+                  "doc_sha256": doc_sha256(), "versione": CONTRATTO_HOST_VERSIONE})
+        if s != 201:
+            raise AssertionError("registrazione: %s %r" % (s, c))
+        tok = c["token"]
+        s, c = g("POST", "/api/host/pubblica",
+                 {"slug": "casa-chat", "titolo": "Casa Chat", "citta": "Roma", "paese": "IT",
+                  "cin": "IT058091C2X5V0ABCD", "prezzo_notte_cents": 12000, "capacita": 3},
+                 {"X-Host-Token": tok})
+        if s != 201:
+            raise AssertionError("pubblica: %s %r" % (s, c))
+        oggi = datetime.date.today()
+        s, c = g("POST", "/api/host/disponibilita_range",
+                 {"alloggio_id": "casa-chat", "da": oggi.isoformat(),
+                  "a": (oggi + datetime.timedelta(days=90)).isoformat(),
+                  "unita_totali": 2, "prezzo_netto_cents": 12000},
+                 {"X-Host-Token": tok})
+        if s != 200:
+            raise AssertionError("disponibilita: %s %r" % (s, c))
+
+    @classmethod
+    def tearDownClass(cls):
+        import shutil
+        shutil.rmtree(cls.d, ignore_errors=True)
+
+    def test_il_saluto_arriva_dalla_rotta(self):
+        s, c = self.g("POST", "/api/chatbot", {"testo": "ciao!", "lang": "it"})
+        self.assertEqual(200, s, c)
+        self.assertTrue(c.get("risposta"), "concierge muto sul saluto: %r" % (c,))
+        self.assertEqual("saluto", c.get("intento"))
+
+    def test_senza_testo_la_reception_dice_422(self):
+        s, c = self.g("POST", "/api/chatbot", {"testo": "   "})
+        self.assertEqual(422, s)
+        self.assertEqual("testo_mancante", c.get("errore"))
+
+    def test_il_monologo_viene_cappato_non_rifiutato(self):
+        s, c = self.g("POST", "/api/chatbot", {"testo": "a" * 5000 + " quanto costa?"})
+        self.assertEqual(200, s, "un ospite prolisso si legge, non si manda via: %r" % (c,))
+        self.assertTrue(c.get("risposta"))
+
+    def test_lo_slug_contesto_porta_la_risposta_giusta(self):
+        import datetime
+        oggi = datetime.date.today()
+        ci = (oggi + datetime.timedelta(days=7)).isoformat()
+        co = (oggi + datetime.timedelta(days=9)).isoformat()
+        s, c = self.g("POST", "/api/chatbot",
+                      {"testo": "quanto costa?", "slug": "casa-chat", "lang": "it",
+                       "check_in": ci, "check_out": co})
+        self.assertEqual(200, s, c)
+        self.assertEqual("prezzo", c.get("intento"))
+        # 2 notti x 120,00 = totale 240,00: il numero VERO dell'annuncio, e la frase
+        # di fiducia ("preventivo firmato") che la Home promette nel badge
+        self.assertIn("240", str(c.get("risposta")),
+                      "il concierge non dice il totale vero (2 notti x 120): %r" % (c,))
+        self.assertIn("firmato", str(c.get("risposta")),
+                      "manca la promessa di fiducia del badge: %r" % (c,))
+
+    def test_la_reception_non_si_lascia_intasare(self):
+        # il buttafuori per IP (fase179): dopo la soglia, 429 -- lo stesso trattamento
+        # delle chiavi, perche' anche il desk e' una porta
+        s, c = 0, {}
+        for _ in range(10):
+            s, c = self.g("POST", "/api/chatbot", {"testo": "ciao"},
+                          h={"X-Forwarded-For": "203.0.113.77"})
+        self.assertEqual(429, s,
+                         "il concierge e' rimasto aperto a raffica: %r" % (c,))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -124,6 +124,7 @@ PUBBLICHE_PER_PROGETTO = {
     # `test_le_liste_dichiarate_nominano_solo_rotte_che_esistono` l'ha vista rossa qui il
     # 2026-09-06 prima che fosse tolta. Una dichiarazione su una rotta inventata e' S2.
     "/api/gate/logout": "uscire non richiede di essere dentro",
+    "/api/chatbot": "Il Concierge (fase139): solo lettura a regole, testo cappato a 500, buttafuori per IP a gettoni (8/min)",
     "/api/domanda": "lista d'attesa: l'email e' il dato, non c'e' un conto da proteggere",
     "/api/partner": "candidatura partner: modulo pubblico con consenso GDPR, dedup per email",
     "/api/concierge/quote": "un preventivo non scrive: firma un token (e' l'inizio dell'identita')",
