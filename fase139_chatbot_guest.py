@@ -221,7 +221,7 @@ class ChatbotGuest:
             "%d giorni ti restano %.2f EUR (poi l'ospite paga quello: zero sorprese per lui)."
             % (LANCIO_GIORNI_GRATIS, LANCIO_BPS_FASE1 // 100, LANCIO_GIORNI_FASE1,
                LANCIO_BPS_REGIME // 100, LANCIO_GIORNI_GRATIS, netto / 100)) if it else (
-            "HOST fees: your first %d days cost 0%; then %d%% up to %d days; %d%% at "
+            "HOST fees: your first %d days cost 0%%; then %d%% up to %d days; %d%% at "
             "scale. Plus the payment fee: 5%% + 0.25 EUR per transaction (7%% for foreign "
             "currency). The GUEST always pays 0%%. Example: on 100 EUR in your first %d "
             "days you keep %.2f EUR."
