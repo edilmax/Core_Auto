@@ -7467,15 +7467,10 @@ class RouterHTTP:
     def _chatbot(self, body, headers):
         """IL CONCIERGE (fase139): risposta immediata su prezzo/disponibilita'/servizi/
         posizione/check-in/animali, A REGOLE (zero costi, zero chiamate esterne: senza
-        LLM il fallback e' il desk onesto). Pubblico con le MANIERI:
-          - buttafuori per IP (fase179, 8/min: un concierge umano risponde a un ritmo
-            umano; lo stesso limiter delle chiavi, chiave diversa);
-          - testo cappato a 500 e slug a 80: la reception non accetta monologhi;
-          - risposte SOLO testo del motore a regole: nessun input torna indietro
-            (il widget le mostra con textContent: niente HTML dal server).
-        fase139 parla it/en: per le altre lingue risponde in inglese e la FRASE del
-        widget resta localizzata (dizionario chat_*). Costruzione PER-RICHIESTA:
-        due lingue, zero stato, piu' leggero di un componente cablato."""
+        LLM il fallback e' il desk onesto). Pubblico MA EDUCATO: buttafuori per IP
+        (fase179), testo cappato a 500 e slug a 80. E con LA MAIL IN CHAT (La Suite):
+        se l'ospite scrive un indirizzo email, e' la richiesta d'attesa (fase158) col
+        Credito Fondatore firmato — lo stesso percorso ufficiale, zero inventato."""
         dati = self._json(body)
         if not isinstance(dati, dict):
             return 400, {"errore": "json_non_valido"}
@@ -7499,33 +7494,47 @@ class RouterHTTP:
         if cat is None or con is None:
             return 503, {"errore": "concierge_non_disponibile"}
         slug = str(dati.get("slug") or "")[:80]
-        # LE DATE DELLA RICERCA: l'ospite le ha GIÀ scelte nella barra sopra -- il desk
-        # che le sa risponde col prezzo SUBITO invece di chiederle (formato solo ISO).
+        # LE DATE E LA RICERCA: l'ospite le ha GIÀ scelte nella barra sopra -- il desk
+        # che le sa risponde col prezzo SUBITO e cerca con QUELLI (formato solo ISO).
         import re as _re
         contesto = {}
         for k in ("check_in", "check_out"):
             v = str(dati.get(k) or "")[:10]
             if _re.match(r"^\d{4}-\d{2}-\d{2}$", v):
                 contesto[k] = v
-        # E LA RICERCA: citta', ospiti e tetto di prezzo della barra -- il desk cerca
-        # con QUELLI (La Suite: trova alloggi veri con i prezzi veri).
         citta = str(dati.get("citta") or "")[:60].strip()
         if citta:
             contesto["citta"] = citta
-        try:
-            party = int(dati.get("party"))
-            if 1 <= party <= 20:
-                contesto["party"] = party
-        except (TypeError, ValueError):
-            pass
-        try:
-            pm = int(dati.get("prezzo_max_cents"))
-            if 0 < pm <= 100000000:
-                contesto["prezzo_max_cents"] = pm
-        except (TypeError, ValueError):
-            pass
         contesto["lingua"] = str(dati.get("lang") or "")[:5]
         lingua = "en" if contesto["lingua"].lower().startswith("en") else "it"
+        # ⛔ LA MAIL IN CHAT (La Suite): se l'ospite scrive un INDIRIZZO EMAIL, non e' una
+        #    domanda — e' la richiesta d'attesa che il desk gli ha appena chiesto. Si
+        #    registra con lo STESSO percorso ufficiale della waitlist (stessa validazione,
+        #    stesso Credito Fondatore firmato, stesso allarme domanda): zero inventato.
+        testo_mail = str(dati.get("testo") or "").strip()
+        if _re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", testo_mail):
+            import json as _j
+            corpo_attesa = {"email": testo_mail,
+                            "citta": (contesto.get("citta") or "") or None,
+                            "check_in": contesto.get("check_in") or "",
+                            "check_out": contesto.get("check_out") or "",
+                            "party": contesto.get("party") or 1}
+            s2, d2 = self._domanda_registra(_j.dumps(corpo_attesa))
+            if s2 == 201:
+                import fase158_domanda as _d158
+                eur = _d158.CREDITO_FONDATORE_CENTS / 100
+                dove = corpo_attesa.get("citta") or "La tua citta"
+                return 200, {"risposta": (
+                    "Fatto! %s e' nella lista d'attesa: ti avviso appena arriva un "
+                    "alloggio. E ho messo da parte per te un Credito di benvenuto da "
+                    "%.2f EUR, firmato: sara' tuo quando prenoterai." % (dove, eur)),
+                    "intento": "attesa", "fonte": "domanda",
+                    "attesa_registrata": True}
+            if s2 == 422:
+                return 200, {"risposta": "Quell'email non mi sembra valida: "
+                             "ricontrolla e rimandami il tuo indirizzo.",
+                             "intento": "attesa", "fonte": "domanda"}
+            return 503, {"errore": "errore_interno"}
         try:
             from fase139_chatbot_guest import crea_chatbot_guest
             cb = crea_chatbot_guest(catalogo=cat, concierge=con, lingua=lingua)
