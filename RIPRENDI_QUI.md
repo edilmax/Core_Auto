@@ -3435,7 +3435,20 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 76113fd
+CONSEGNE AGGIORNATE A: 5df2321
+
+## PASSAGGIO DI CONSEGNE 2 (2026-09-21 sera, D21) - LAVORO IN CORSO NON COMMITTATO:
+deploy 5df2321 COMPLETATO e verificato (sonde verdi, Concierge vivo in produzione, tre
+posti allineati). Su disco, NON committato: fase139_chatbot_guest.py capisce il LINGUAGGIO
+LIBERO ('ROMA 2 PERSONE FINE MESE' -> _citta_nel_testo con citta_pubblicate() di fase57 ->
+ricerca vera; test 18/18 verdi). DA FARE prossima sessione, in ordine: (1) committare questo
+(scopo gia' dichiarato), (2) microfono anche nel PANNELLO chat stile WhatsApp, (3) frase di
+tutela 'fase di test per un servizio migliore e risparmio' + email->sconto 5 EUR in 8 lingue
+al posto del vecchio blocco waitlist, (4) T3 riconciliazione notturna automatica (fase182 +
+cron, unico tassello mancante), (5) T4 rimisure col vero, (6) T5 settimana della perfezione,
+(7) T6 primi host. Mandato permanente valido. REGOLE_AVVIO_CHAT.txt sul Desktop: cartello
+d'ingresso per ogni chat nuova (5 libri da leggere in ordine prima di toccare).
+
 
 ## PASSAGGIO DI CONSEGNE (2026-09-21, contesto al 70% - D21) - DEPLOY 76113fd A META':
 computer e GitHub sono a 76113fd (desk in chat, PR #205 unita, CI 14/14 verde). IL VPS

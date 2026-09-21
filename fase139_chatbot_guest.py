@@ -137,12 +137,17 @@ class ChatbotGuest:
         ctx = contesto or {}
         it = self._lng == "it"
         intento = classifica_intento(testo)
+        # LINGUAGGIO LIBERO (La Suite, 2026-09-21): "ROMA 2 PERSONE FINE MESE" non contiene
+        # le parole-chiave ("cerco/trova") — ma se nella frase c'e' una CITTA' che il
+        # catalogo conosce, l'ospite sta chiaramente chiedendo di cercare (provato dal
+        # fondatore in produzione). Vale anche con la citta' dalla barra di ricerca.
+        citta_nota = self._citta_nel_testo(testo)
         if intento == "host":
             return self._host_home(it)
         if intento == "fiducia":
             return self._fiducia_home(it)
-        if intento in ("cerca", "prezzo", "disponibilita"):
-            return self._cerca_home(ctx, it)
+        if intento in ("cerca", "prezzo", "disponibilita") or citta_nota or ctx.get("citta"):
+            return self._cerca_home(ctx, it, citta_nota, testo)
         if intento == "saluto":
             return self._out("saluto",
                              "Ciao! Posso TROVARTI un alloggio (dimmi la citta' nella barra "
@@ -159,14 +164,32 @@ class ChatbotGuest:
                          "SAFETY AND PAYMENTS, or explain HOST earnings. Or open a "
                          "listing and ask for details.", "canned")
 
-    def _cerca_home(self, ctx: Dict[str, Any], it: bool) -> Dict[str, Any]:
+    def _citta_nel_testo(self, testo: str) -> Optional[str]:
+        """Se nella frase dell'ospite compare una citta' PUBBLICATA dal catalogo, la
+        torna (case-insensitive). Fonte dati: le citta' vere, non un dizionario a mano."""
+        if not (isinstance(testo, str) and testo.strip() and self._cat is not None):
+            return None
+        try:
+            citta_note = self._cat.citta_pubblicate()
+        except Exception:
+            return None
+        tl = " " + " ".join(testo.lower().split()) + " "
+        for c in citta_note:
+            cl = str(c).lower().strip()
+            if cl and (" " + cl + " " in tl or cl + "." in tl or cl + "," in tl):
+                return str(c)
+        return None
+
+    def _cerca_home(self, ctx: Dict[str, Any], it: bool, citta_nota: Optional[str] = None,
+                    testo: str = "") -> Dict[str, Any]:
         """La ricerca VERA del catalogo (fase57.CriteriRicerca) con i valori che l'ospite
         ha gia' impostato nella barra: citta', ospiti, tetto di prezzo, date (per la
-        disponibilita'). Massimo 3: un desk elenca, non impila."""
+        disponibilita'). Massimo 3: un desk elenca, non impila. La citta' puo' arrivare
+        anche dal LINGUAGGIO LIBERO dell'ospite (citta_nota battere il baratto)."""
         if self._cat is None:
             return self._out("cerca", "Catalogo non disponibile ora." if it else
                              "Catalog unavailable.", "nessun_catalogo")
-        citta = str(ctx.get("citta") or "").strip() or None
+        citta = (citta_nota or str(ctx.get("citta") or "").strip() or None)
         if not citta:
             return self._out("cerca",
                              "Dimmi la citta': scrivila nella barra di ricerca e "
