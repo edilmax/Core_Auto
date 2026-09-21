@@ -3435,7 +3435,21 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 0f0c81b
+CONSEGNE AGGIORNATE A: 76113fd
+
+## PASSAGGIO DI CONSEGNE (2026-09-21, contesto al 70% - D21) - DEPLOY 76113fd A META':
+computer e GitHub sono a 76113fd (desk in chat, PR #205 unita, CI 14/14 verde). IL VPS
+E' ANCORA A 134688e con il DEPLOY A META' preparato e sicuro: paracadute :prec gia'
+agganciato e VERIFICATO sull'immagine viva (sha256 27258223...), file PRE_DEPLOY_20260921_*.commit
+scritto, container NON toccati (sito stabile sulla versione vecchia). PROSSIMA SESSIONE:
+completare il deploy da DEPLOY.md par.3-4 partendo da 'cd /var/www/bookinvip && git pull --ff-only'
+(ri-verificare comunque il :prec), build, stop/rm app+backup, up -d; poi par.4: container healthy,
+money_path_pronto True avvisi [], sonde 200 + /api/bunker/invarianti 403 + /api/host/payout 401,
+tre posti allineati a 76113fd. POI: rimisure col vero (sentinella/backup/deploy), riconciliazione
+notturna automatica (fase182 senza cron: unico pezzo mancante vero), settimana della perfezione,
+primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo gate verde e
+deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
+
 
 SUITE ATTUALE: Ran 6870 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
