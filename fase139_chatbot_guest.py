@@ -189,10 +189,12 @@ class ChatbotGuest:
         risultati = (res or {}).get("risultati") or []
         if not risultati:
             return self._out("cerca",
-                             ("Ancora niente a %s: lascia la richiesta dalla Home e ti "
-                              "avvisiamo quando arriva un alloggio." % citta) if it else
-                             ("Nothing in %s yet: leave a request from the Home page and "
-                              "we'll notify you." % citta), "catalogo")
+                             ("Ancora niente a %s: SCRIVIMI QUI la tua email (basta "
+                              "l'indirizzo) e ti avviso appena arriva un alloggio — con "
+                              "un Credito di benvenuto per te." % citta) if it else
+                             ("Nothing in %s yet: TYPE YOUR EMAIL HERE and I'll notify "
+                              "you the moment a listing arrives — with a welcome credit."
+                              % citta), "catalogo")
         righe, lista = [], []
         for i, r in enumerate(risultati[:3], 1):
             titolo = str(r.get("titolo") or "")[:60]
