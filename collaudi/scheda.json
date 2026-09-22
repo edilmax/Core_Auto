@@ -294,11 +294,11 @@
  "506a24febc87": {
   "blocco": 6,
   "comando": "python collaudi/esame_plausibilita.py --scrivi",
-  "commit": "eeea05f",
+  "commit": "45d0eee",
   "condizione": "ogni numero mostrato ha senso nel mondo vero (modo di rompersi 10)",
   "denominatore": 14,
   "esito": false,
-  "impronta": "9d6084750989",
+  "impronta": "c4496d2aad88",
   "impronte_moduli": {
    "fase107_traduzione_annunci": "e0fc5c8e8eb1",
    "fase113_messaggistica": "c3a8712be969",
@@ -307,7 +307,7 @@
    "fase123_web_push": "674827600458",
    "fase129_traduzione_recensioni": "2d80591ac6cd",
    "fase137_fedelta_guest": "5394500c8163",
-   "fase139_chatbot_guest": "716261ab2b0d",
+   "fase139_chatbot_guest": "2f44757235d2",
    "fase166_geocoder": "162da4a35b88",
    "fase175_poi_osm": "c1ad5e11dd94",
    "fase26_ricerca": "3dc66d4cb1ac",
@@ -317,7 +317,7 @@
    "fase74_sensory_engine": "6f64cb3f6e59"
   },
   "motivo": "[mostrati] casa-test: prezzo a notte in banda (5..5000 EUR) (100 EUR = 1.00 EUR)",
-  "quando": "2026-09-16T13:07:51"
+  "quando": "2026-09-22T13:28:26"
  },
  "555972b586e3": {
   "blocco": 2,
@@ -477,11 +477,11 @@
  "a36e3373da1d": {
   "blocco": 8,
   "comando": "python collaudi/esame_sentinella.py --scrivi",
-  "commit": "65a1759",
+  "commit": "45d0eee",
   "condizione": "una sentinella ESTERNA (non nostra) si accorge se il sito muore",
   "denominatore": 10,
   "esito": false,
-  "impronta": "3eae8dfd80df",
+  "impronta": "0f1e65704639",
   "impronte_moduli": {
    "fase13_protocollo_finale": "2dce22f058cc",
    "fase16_outbox": "a47de5874653",
@@ -495,11 +495,11 @@
    "fase42_observability": "a557645447a7",
    "fase60_mcp_server": "56ffc4364819",
    "fase81_bootstrap_casavip": "dacbc902ed40",
-   "fase83_server": "5737bb471831",
+   "fase83_server": "ddbfe8f5ffca",
    "fase86_email": "19069663f9d1"
   },
-  "motivo": "[sveglia] nelle ultime 24 ore i controlli del monitor non hanno buchi > 15 minuti e l'ultimo ha meno di 15 minuti (controlli nelle 24 ore: 264, buco massimo 23 min, ultimo 3 min fa); [sveglia] GitHub (seconda linea): ultimo giro entro 60 minuti e buco massimo nelle 24 ore sotto i 60 minuti — DECIDE, perche' il monitor esterno manca o non e' sveglio (ultimo giro 2026-09-16 14:20 UTC (26 minuti fa), giri nelle 24 ore: 7, buco massimo 293 minuti); [grida] il monitor esterno ha un contatto d'allarme e nella sua storia c'e' almeno un «giu'» (sa gridare) (contatti 1, giu' in storia 0)",
-  "quando": "2026-09-16T16:46:44"
+  "motivo": "[esiste] un monitor ESTERNO (non GitHub) esiste e guarda bookinvip.com/api/health (nessun monitor esterno nelle letture: serve un conto (UptimeRobot o Better Stack, gratuito), lo apre il fondatore); [sveglia] il monitor esterno controlla almeno ogni 5 minuti e non e' in pausa (nessun monitor esterno); [sveglia] nelle ultime 24 ore i controlli del monitor non hanno buchi > 15 minuti e l'ultimo ha meno di 15 minuti (controlli nelle 24 ore: 0, buco massimo -, ultimo -); [sveglia] GitHub (seconda linea): ultimo giro entro 60 minuti e buco massimo nelle 24 ore sotto i 60 minuti — DECIDE, perche' il",
+  "quando": "2026-09-22T13:28:31"
  },
  "a5c77ac6c76a": {
   "blocco": 5,
@@ -696,11 +696,11 @@
  "e0c5eaf17028": {
   "blocco": 6,
   "comando": "python collaudi/esame_testi_congelati.py --scrivi",
-  "commit": "eeea05f",
+  "commit": "45d0eee",
   "condizione": "nessun testo resta congelato in italiano dove la pagina dichiara 8 lingue: l'occhio del fondatore conta ZERO parole ferme sulle pagine che non sono gusci riempiti dal server",
   "denominatore": 72,
   "esito": true,
-  "impronta": "9d6084750989",
+  "impronta": "c4496d2aad88",
   "impronte_moduli": {
    "fase107_traduzione_annunci": "e0fc5c8e8eb1",
    "fase113_messaggistica": "c3a8712be969",
@@ -709,7 +709,7 @@
    "fase123_web_push": "674827600458",
    "fase129_traduzione_recensioni": "2d80591ac6cd",
    "fase137_fedelta_guest": "5394500c8163",
-   "fase139_chatbot_guest": "716261ab2b0d",
+   "fase139_chatbot_guest": "2f44757235d2",
    "fase166_geocoder": "162da4a35b88",
    "fase175_poi_osm": "c1ad5e11dd94",
    "fase26_ricerca": "3dc66d4cb1ac",
@@ -719,7 +719,7 @@
    "fase74_sensory_engine": "6f64cb3f6e59"
   },
   "motivo": "",
-  "quando": "2026-09-16T13:07:50"
+  "quando": "2026-09-22T13:28:25"
  },
  "ec84faaea398": {
   "blocco": 2,

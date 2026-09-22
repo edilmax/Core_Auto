@@ -153,6 +153,10 @@
   #cbMsgs .cbAnnuncio b{display:block;color:var(--brand)}
   #cbMsgs .cbAnnuncio span{color:var(--testo-tenue);font-size:.85rem}
   #cbManda:hover{transform:translateY(-1px);filter:brightness(1.08)}
+  #cbVoce{flex:0 0 2.4rem;width:2.4rem;border:none;border-radius:.8rem;background:transparent;color:var(--brand);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:background .18s ease,color .18s ease}
+  #cbVoce svg{width:17px;height:17px}
+  #cbVoce:hover{background:linear-gradient(145deg,#f3d888,#e6c15c);color:#0a3629}
+  #cbVoce.ascolta{background:linear-gradient(145deg,#f3d888,#e6c15c);color:#0a3629;animation:pulseVoce 1.2s ease-in-out infinite}
   @media(max-width:600px){#cbPannello{bottom:5.2rem}}
   .hbadges .star span{color:var(--brand)}
   .langpick{position:relative}
@@ -355,6 +359,8 @@
   <form id="cbForm">
     <input id="cbInput" type="text" data-tph="chat_ph" placeholder="Chiedimi qualcosa…"
            maxlength="500" autocomplete="off" aria-label="Messaggio al Concierge">
+    <button id="cbVoce" type="button" data-ttitle="chat_voce_title" title="Ditta il messaggio a voce"
+            aria-label="Dettatura vocale del messaggio"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg></button>
     <button id="cbManda" type="submit" data-t="chat_manda">Invia</button>
   </form>
 </div>
@@ -921,6 +927,27 @@ document.getElementById('lang').value = LANG;
     r.interimResults=false; r.maxAlternatives=1;
     r.onresult=function(e){ var d=e.results[0][0].transcript.trim();
       if(d){ ci.value=d; ci.dispatchEvent(new Event('input')); cerca(); } };
+    r.onend=function(){ ascoltando=false; bv.classList.remove('ascolta'); };
+    r.onerror=r.onend;
+    try{ r.start(); ascoltando=true; bv.classList.add('ascolta'); }catch(e){ ascoltando=false; }
+  };
+})();
+// ── DITTAMO VOCALE ANCHE NELLA CHAT del Concierge (stessa Web Speech API del campo
+// citta', stile WhatsApp): detta e RIEMPE il messaggio, invia resta all'ospite. Nei
+// browser che non lo sanno fare il tasto NON ESISTE (niente bottoni finti: S2).
+(function(){
+  var bv=document.getElementById('cbVoce'), inp=document.getElementById('cbInput');
+  if(!bv||!inp) return;
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){ bv.style.display='none'; return; }
+  var REC={it:'it-IT',en:'en-US',es:'es-ES',fr:'fr-FR',de:'de-DE',pt:'pt-BR',ja:'ja-JP',zh:'zh-CN'};
+  var r=null, ascoltando=false;
+  bv.onclick=function(){
+    if(ascoltando){ r.stop(); return; }
+    r=new SR(); r.lang=REC[(typeof LANG!=='undefined'&&REC[LANG])?LANG:'it']||'it-IT';
+    r.interimResults=false; r.maxAlternatives=1;
+    r.onresult=function(e){ var d=e.results[0][0].transcript.trim();
+      if(d){ inp.value=(inp.value?inp.value.trim()+' ':'')+d; inp.focus(); } };
     r.onend=function(){ ascoltando=false; bv.classList.remove('ascolta'); };
     r.onerror=r.onend;
     try{ r.start(); ascoltando=true; bv.classList.add('ascolta'); }catch(e){ ascoltando=false; }

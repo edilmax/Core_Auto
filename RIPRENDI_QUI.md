@@ -3435,7 +3435,26 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 5df2321
+CONSEGNE AGGIORNATE A: 45d0eee
+
+## PASSAGGIO DI CONSEGNE 3 (2026-09-22, D21 a chiusura blocco) - DEPLOY 45d0eee FATTO + MICROFONO IN CHAT E DESK ASSISTENTE TOTALE:
+deploy della 45d0eee COMPLETATO e verificato (paracadute :prec agganciato e verificato,
+build, scambio rm-first, container healthy, money_path_pronto True avvisi [], sonde
+200/200/403/401, nessuna PAGAMENTO_* sul server, tre posti allineati a 45d0eee). IN QUESTO COMMIT: (A) microfono nel PANNELLO chat stile WhatsApp
+(deploy/index.html: tasto cbVoce fra input e Invia, sparisce senza Web Speech API,
+dettatura riempie l'input senza inviare; titolo tradotto in 8 lingue con chiave
+chat_voce_title in fase83 ETICHETTE_UI); (B) fase139 ASSISTENTE TOTALE (ordine del
+fondatore: «la chat deve essere assistente a tutte le domande del progetto»): nuovi
+intenti chisiamo, come_funziona, contatto, tassa + cancellazione anche in home, messi
+PRIMA del saluto perche' «chi siete» contiene «hi» e il saluto lo rubava (visto rosso
+dalla guardia); 9 test nuovi, visti ROSSI sul codice vecchio (git stash dei 3 file di
+produzione) e poi verdi: classe fase139 27/27. CARICATORE 6879 (misurato col caricatore
+PRIMA del giro: unittest.TestLoader discover countTestCases). RESTO DELLA CODA del
+fondatore: (3) frase di tutela in 8 lingue + email->sconto 5 EUR, (4) T3 riconciliazione
+notturna (fase182 + cron), (5) T4 rimisure col vero, (6) T5 settimana della perfezione,
+(7) T6 primi host. Mandato permanente valido. Launcher d'ambiente per la suite:
+python %TEMP%/bookinvip_launcher.py <collaudi/...> (simula PowerShell: toglie MSYSTEM
+e openssl dal PATH, richiesto dal controllo 4 del pre-volo).
 
 ## PASSAGGIO DI CONSEGNE 2 (2026-09-21 sera, D21) - LAVORO IN CORSO NON COMMITTATO:
 deploy 5df2321 COMPLETATO e verificato (sonde verdi, Concierge vivo in produzione, tre
@@ -3464,7 +3483,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 6870 test
+SUITE ATTUALE: Ran 6879 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

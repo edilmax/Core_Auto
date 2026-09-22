@@ -280,5 +280,88 @@ class TestIlDeskDellaHome(unittest.TestCase):
                       "il desk cerca senza citta' invece di chiederla: %r" % (risposta,))
 
 
+    def test_il_desk_dice_chi_siamo(self):
+        s, c = self.g("POST", "/api/chatbot",
+                      {"testo": "chi siete? cosa e' Bookin VIP?", "lang": "it"})
+        self.assertEqual(200, s, c)
+        self.assertEqual("chisiamo", c.get("intento"), "intento sbagliato: %r" % (c,))
+        self.assertIn("0%", str(c.get("risposta")),
+                      "manca lo 0%% dell'ospite: %r" % (c,))
+
+    def test_il_desk_spiega_come_funziona(self):
+        s, c = self.g("POST", "/api/chatbot",
+                      {"testo": "come funziona? come pago?", "lang": "it"})
+        self.assertEqual(200, s, c)
+        r = str(c.get("risposta"))
+        self.assertIn("FIRMATO", r, "manca il prezzo firmato: %r" % (r,))
+        self.assertIn("voucher", r.lower(), "manca il voucher col PIN: %r" % (r,))
+        self.assertIn("GARANZIA", r, "manca l'escrow: %r" % (r,))
+
+    def test_il_desk_contatto_non_inventa_email(self):
+        s, c = self.g("POST", "/api/chatbot",
+                      {"testo": "come vi contatto? mi serve assistenza", "lang": "it"})
+        self.assertEqual(200, s, c)
+        r = str(c.get("risposta"))
+        self.assertEqual("contatto", c.get("intento"), "intento sbagliato: %r" % (c,))
+        self.assertNotIn("@", r, "il desk ha inventato un indirizzo: %r" % (r,))
+
+    def test_il_desk_spiega_la_tassa(self):
+        s, c = self.g("POST", "/api/chatbot",
+                      {"testo": "c'e' la tassa di soggiorno?", "lang": "it"})
+        self.assertEqual(200, s, c)
+        r = str(c.get("risposta"))
+        self.assertEqual("tassa", c.get("intento"), "intento sbagliato: %r" % (c,))
+        self.assertIn("totale", r.lower(), "la tassa non parla del totale vero: %r" % (r,))
+
+    def test_il_desk_risponde_su_cancellazione_dalla_home(self):
+        s, c = self.g("POST", "/api/chatbot",
+                      {"testo": "se cancello, il rimborso?", "lang": "it"})
+        self.assertEqual(200, s, c)
+        r = str(c.get("risposta"))
+        self.assertEqual("cancellazione", c.get("intento"), "intento sbagliato: %r" % (c,))
+        self.assertIn("checkout", r.lower(),
+                      "la cancellazione non rimanda al checkout vero: %r" % (r,))
+
+
+class TestIlMicrofonoNelPannelloChat(unittest.TestCase):
+    """Il dittamo vocale anche nel PANNELLO della chat (2026-09-22, ordine del
+    fondatore: stile WhatsApp). Guardia di SORGENTE su deploy/index.html: il tasto
+    sta nel form della chat (fra l'input e Invia), SPARISCE dove il browser non
+    sa dettare (niente bottoni finti), cio' che dettato finisce nell'input della
+    chat, e il suo titolo e' tradotto in 8 lingue come tutto il resto della chat."""
+
+    @classmethod
+    def setUpClass(cls):
+        import os
+        cls.src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                    "deploy", "index.html"), encoding="utf-8").read()
+
+    def test_il_tasto_sta_nel_form_fra_input_e_invia(self):
+        i_input = self.src.index('id="cbInput"')
+        i_voce = self.src.index('id="cbVoce"')
+        i_manda = self.src.index('id="cbManda"')
+        self.assertLess(i_input, i_voce,
+                        "il microfono non sta dopo l'input della chat")
+        self.assertLess(i_voce, i_manda,
+                        "il microfono non sta prima del tasto Invia")
+
+    def test_senza_web_speech_il_tasto_non_esiste(self):
+        self.assertIn("document.getElementById('cbVoce')", self.src,
+                      "il tasto non e' cablato col gestore letterale")
+        self.assertIn("bv.style.display='none'", self.src,
+                      "senza Web Speech API il tasto resta visibile: bottone finto")
+
+    def test_la_dettatura_riempie_linput_della_chat(self):
+        self.assertIn("inp.value=(inp.value?inp.value.trim()+' ':'')+d", self.src,
+                      "la dettatura non scrive nell'input della chat")
+
+    def test_il_titolo_del_tasto_e_tradotto_in_otto_lingue(self):
+        from fase83_server import ETICHETTE_UI
+        voci = ETICHETTE_UI.get("chat_voce_title", {})
+        mancanti = [l for l in ("it", "en", "es", "fr", "de", "pt", "ja", "zh")
+                    if not str(voci.get(l, "")).strip()]
+        self.assertEqual([], mancanti, "lingue senza titolo del microfono: %r" % (mancanti,))
+
+
 if __name__ == "__main__":
     unittest.main()

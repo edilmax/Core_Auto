@@ -403,6 +403,37 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🎙️ IL MICROFONO ENTRA NELLA CHAT, E IL DESK DIVENTA ASSISTENTE TOTALE — 22 settembre, «vai avanti fino alla fine» del fondatore (ramo `microfono-chat-2026-09-22`)
+
+**Da dove nasce.** Il fondatore, dopo il deploy della 45d0eee: *«microfono nella chat e chat deve essere assistente a
+tutte le domande del progetto: trovare alloggi e tutto»*. Due lavori in uno, coda 2 della sua lista.
+
+**Il microfono.** `deploy/index.html` aveva la dettatura vocale SOLO sul campo citta' (Web Speech API, zero server,
+zero chiavi). L'abbiamo portata nel PANNELLO del Concierge con lo stesso pattern collaudato: tasto `cbVoce` fra
+l'input e Invia (stessa icona e stessa animazione `pulseVoce` del tasto citta'), che DETTA e RIEMPE il messaggio —
+l'invio resta all'ospite, come WhatsApp. Dove il browser non sa dettare il tasto NON ESISTE (niente bottoni finti).
+Il titolo e' tradotto in 8 lingue con la chiave `chat_voce_title` in `fase83_server.ETICHETTE_UI`, come tutto il
+resto della chat.
+
+**L'assistente totale (fase139).** Cinque risposte nuove dalla HOME: CHI SIAMO (commissioni piu' basse del mercato,
+ospite 0%), COME FUNZIONA (preventivo firmato → carta → voucher col PIN → garanzia → self check-in, in cinque passi),
+CONTATTO (il desk e' il contatto: NESSUNA email o telefono inventato — D8), TASSA (sempre nel totale prima di pagare),
+CANCELLAZIONE (politica al checkout, rimborso come credito). Tutte fatti VERI del motore, niente promesse che il
+codice non mantiene.
+
+**Il difetto che la guardia ha colto.** I nuovi intenti erano in coda alla lista dopo il saluto: ma «chi siete»
+contiene «hi» e il saluto, che matcha per sottostringa, rubava la domanda (visto ROSSO da `test_il_desk_dice_chi_siamo`
+sul codice appena scritto). Spostati PRIMA del saluto, col perche' scritto nel commento.
+
+**Prove.** 9 guardie nuove in `test_fase139_chatbot_guest.py` (5 sul sistema vero via `/api/chatbot`, 4 di sorgente
+sul pannello e sulle 8 lingue): viste ROSSE sul codice vecchio (stash dei 3 file di produzione, 5 fail + 1 error) e
+poi VERDI. Classe fase139 27/27. Caricatore 6879, misurato col caricatore prima del giro (S14).
+
+**Lezione.** Il pre-volo si rifiutava di giudicare l'ambiente: questa sessione gira dentro un sandbox che inietta
+`MSYSTEM` in ogni processo (nemmeno `env -i` lo toglie). Launcher d'ambiente in TEMP che riproduce l'ambiente della
+suite (niente MSYSTEM, niente openssl nel PATH, git presente) e vale per pre-volo E suite: la stessa domanda,
+lo stesso posto (S11/D23).
+
 ### 🔁 LE CASELLE SI RIMISURANO DOPO OGNI UNIONE, E I DUE ALLARMI CHE MENTIVANO — 16 settembre, mezzogiorno
 
 **Da dove nasce.** Il fondatore, riaprendo la chat: *«mi sembra che ci sono 18 commit da fare»*. Non erano commit da
