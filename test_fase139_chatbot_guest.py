@@ -362,6 +362,26 @@ class TestIlMicrofonoNelPannelloChat(unittest.TestCase):
                     if not str(voci.get(l, "")).strip()]
         self.assertEqual([], mancanti, "lingue senza titolo del microfono: %r" % (mancanti,))
 
+    def test_la_dettatura_morta_si_fa_vedere_in_chat(self):
+        # 2026-09-22, fondatore in produzione: «clicco sul microfono ma non funziona».
+        # Il permesso negato (misurato: onerror not-allowed) veniva ingoiato in
+        # silenzio da r.onerror=r.onend: zero feedback per l'ospite.
+        self.assertIn("voceAvvisa(", self.src,
+                      "manca l'avviso visibile quando la dettatura muore")
+        self.assertIn("chat_voce_no_perm", self.src,
+                      "manca il messaggio per il microfono bloccato")
+        self.assertNotIn("r.onerror=r.onend", self.src,
+                         "la dettatura torna a ingoiare gli errori in silenzio")
+
+    def test_gli_avvisi_della_dettatura_sono_in_otto_lingue(self):
+        from fase83_server import ETICHETTE_UI
+        for chiave in ("chat_voce_no", "chat_voce_no_perm"):
+            voci = ETICHETTE_UI.get(chiave, {})
+            mancanti = [l for l in ("it", "en", "es", "fr", "de", "pt", "ja", "zh")
+                        if not str(voci.get(l, "")).strip()]
+            self.assertEqual([], mancanti,
+                             "%s senza lingue: %r" % (chiave, mancanti))
+
 
 if __name__ == "__main__":
     unittest.main()
