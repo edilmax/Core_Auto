@@ -32,6 +32,21 @@ _INTENTI: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
     ("checkin", ("check-in", "checkin", "orario", "arrivo", "arrival", "key", "chiavi")),
     ("animali", ("animali", "cane", "gatto", "pet", "dog", "cat")),
     ("cancellazione", ("cancell", "rimborso", "refund", "cancel")),
+    # L'ASSISTENTE TOTALE (2026-09-22, ordine del fondatore: «la chat deve essere
+    # assistente a tutte le domande del progetto: trovare alloggi e tutto»). Chi
+    # siamo, come funziona prenotare e pagare, il contatto, la tassa. Vanno PRIMA
+    # del saluto: "chi siete" contiene "hi" e il saluto, che matcha per sottostringa,
+    # glielo ruberebbe (visto rosso dalla guardia test_il_desk_dice_chi_siamo).
+    ("chisiamo", ("chi siete", "chi sei", "cos'e bookinvip", "cos'e bookin vip",
+                  "cosa e' bookinvip", "cosa sei", "about", "what is bookinvip",
+                  "who are you")),
+    ("come_funziona", ("come funziona", "come prenot", "come si prenota", "prenotare",
+                       "come pago", "pagament", "carta", "voucher",
+                       "how does it work", "how to book", "how do i pay",
+                       "how do i book", "payment")),
+    ("contatto", ("contatt", "telefono", "assistenz", "parlare con una persona",
+                  "un umano", "contact", "support", "customer service")),
+    ("tassa", ("tassa", "city tax", "tourist tax", "tasse")),
     ("saluto", ("ciao", "salve", "buongiorno", "hello", "hi")),
 )
 
@@ -146,6 +161,18 @@ class ChatbotGuest:
             return self._host_home(it)
         if intento == "fiducia":
             return self._fiducia_home(it)
+        # L'ASSISTENTE TOTALE: chi siamo, come funziona, contatto, tassa e
+        # cancellazione rispondono anche dalla HOME (prima era solo da scheda).
+        if intento == "chisiamo":
+            return self._chisiamo_home(it)
+        if intento == "come_funziona":
+            return self._come_funziona_home(it)
+        if intento == "contatto":
+            return self._contatto_home(it)
+        if intento == "tassa":
+            return self._tassa_home(it)
+        if intento == "cancellazione":
+            return self._cancellazione_home(it)
         if intento in ("cerca", "prezzo", "disponibilita") or citta_nota or ctx.get("citta"):
             return self._cerca_home(ctx, it, citta_nota, testo)
         if intento == "saluto":
@@ -157,12 +184,13 @@ class ChatbotGuest:
                              "how trust works, or talk host earnings.", "canned")
         return self._out("fallback",
                          "Posso TROVARTI un alloggio (imposta la citta' nella barra e "
-                         "quante persone), rispondere su SICUREZZA E PAGAMENTI, o "
-                         "spiegarti i GUADAGNI per gli host. Oppure apri la scheda di un "
-                         "alloggio e chiedimi i dettagli." if it else
+                         "quante persone), rispondere su SICUREZZA E PAGAMENTI, spiegarti "
+                         "i GUADAGNI per gli host, COME FUNZIONA la prenotazione o CHI "
+                         "SIAMO. Oppure apri la scheda di un alloggio e chiedimi i "
+                         "dettagli." if it else
                          "I can FIND you a stay (set the city and guests), answer about "
-                         "SAFETY AND PAYMENTS, or explain HOST earnings. Or open a "
-                         "listing and ask for details.", "canned")
+                         "SAFETY AND PAYMENTS, explain HOST earnings, HOW BOOKING WORKS "
+                         "or WHO WE ARE. Or open a listing and ask for details.", "canned")
 
     def _citta_nel_testo(self, testo: str) -> Optional[str]:
         """Se nella frase dell'ospite compare una citta' PUBBLICATA dal catalogo, la
@@ -270,6 +298,67 @@ class ChatbotGuest:
             "(5) timestamps and documents are certified by European authorities. "
             "And if you're not happy, the refund comes back as credit.")
         return self._out("fiducia", risposta, "motore")
+
+    def _chisiamo_home(self, it: bool) -> Dict[str, Any]:
+        risposta = (
+            "Bookin VIP e' un portale di alloggi nato per una cosa sola: le commissioni "
+            "piu' basse del mercato. L'OSPITE non paga commissioni (0%), il prezzo che "
+            "vede e' garantito e il denaro resta protetto fino al check-in. Noi ci "
+            "guadagniamo con commissioni piccole sugli host, non con sorprese su di te."
+            if it else
+            "Bookin VIP is a stay marketplace built around one thing: the lowest fees "
+            "in the market. GUESTS pay 0% commission, the price you see is guaranteed, "
+            "and your money stays protected until check-in. We earn small host fees, "
+            "not surprises on you.")
+        return self._out("chisiamo", risposta, "motore")
+
+    def _come_funziona_home(self, it: bool) -> Dict[str, Any]:
+        risposta = (
+            "Come funziona, in cinque passi: (1) scegli l'alloggio e le date, e il "
+            "preventivo e' FIRMATO: quel prezzo non cambia piu'; (2) paghi con la "
+            "carta; (3) ti arriva via email il voucher col PIN di check-in; (4) i "
+            "soldi restano in GARANZIA e all'host arrivano solo se tutto va bene; "
+            "(5) entri col self check-in digitale. Vuoi che ti trovi un alloggio? "
+            "Dimmi la citta'." if it else
+            "How it works, in five steps: (1) pick the stay and dates, and the quote "
+            "is SIGNED: that price cannot change; (2) you pay by card; (3) your "
+            "voucher with the check-in PIN arrives by email; (4) the money stays in "
+            "ESCROW and reaches the host only if all goes well; (5) you check in "
+            "digitally. Want me to find you a stay? Tell me the city.")
+        return self._out("come_funziona", risposta, "motore")
+
+    def _contatto_home(self, it: bool) -> Dict[str, Any]:
+        # NESSUN indirizzo/telefono inventato (D8): il desk È il contatto, e la
+        # strada vera per una persona e' la domanda scritta qui.
+        risposta = (
+            "Il desk sono io: scrivimi QUI la tua domanda e rispondo subito (prezzi, "
+            "alloggi, come funziona, guadagni da host). Se serve una persona in "
+            "carne e ossa, scrivimi comunque qui cosa ti serve: la tua richiesta "
+            "arriva a chi la puo' risolvere." if it else
+            "The desk is me: ask your question HERE and I'll answer right away "
+            "(prices, stays, how it works, host earnings). If you need a human, "
+            "still write it here: your request reaches whoever can solve it.")
+        return self._out("contatto", risposta, "motore")
+
+    def _tassa_home(self, it: bool) -> Dict[str, Any]:
+        risposta = (
+            "La tassa di soggiorno, se il comune la prevede, la calcola il motore e "
+            "la vedi SEMPRE nel totale prima di pagare: il totale include soggiorno "
+            "+ tassa. Nessun extra a sorpresa dopo." if it else
+            "The tourist tax, when the city requires it, is calculated by the engine "
+            "and always shown in the total before you pay: the total includes stay "
+            "+ tax. No surprise extras afterwards.")
+        return self._out("tassa", risposta, "motore")
+
+    def _cancellazione_home(self, it: bool) -> Dict[str, Any]:
+        risposta = (
+            "La politica di cancellazione e il rimborso sono mostrati al checkout, "
+            "PRIMA di pagare, cosi' sai sempre a cosa vai incontro. E se qualcosa "
+            "va storto, il rimborso ti torna come credito." if it else
+            "The cancellation policy and refund are shown at checkout, BEFORE you "
+            "pay, so you always know where you stand. And if something goes wrong, "
+            "your refund comes back as credit.")
+        return self._out("cancellazione", risposta, "policy")
 
     def _prezzo(self, slug: str, ctx: Dict[str, Any], it: bool) -> Dict[str, Any]:
         ci, co = ctx.get("check_in"), ctx.get("check_out")
