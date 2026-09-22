@@ -928,7 +928,7 @@ document.getElementById('lang').value = LANG;
     r.onresult=function(e){ var d=e.results[0][0].transcript.trim();
       if(d){ ci.value=d; ci.dispatchEvent(new Event('input')); cerca(); } };
     r.onend=function(){ ascoltando=false; bv.classList.remove('ascolta'); };
-    r.onerror=r.onend;
+    r.onerror=function(e){ console.warn('bookinvip-ospite','dettatura citta',(e&&e.error)||''); };
     try{ r.start(); ascoltando=true; bv.classList.add('ascolta'); }catch(e){ ascoltando=false; }
   };
 })();
@@ -942,6 +942,15 @@ document.getElementById('lang').value = LANG;
   if(!SR){ bv.style.display='none'; return; }
   var REC={it:'it-IT',en:'en-US',es:'es-ES',fr:'fr-FR',de:'de-DE',pt:'pt-BR',ja:'ja-JP',zh:'zh-CN'};
   var r=null, ascoltando=false;
+  // il permesso negato e i guasti della dettatura non si ingoiano in silenzio
+  // (misurato in produzione 2026-09-22: not-allowed senza nessun feedback) --
+  // l'ospite vede nella chat COSA fare, e il codice finisce nel log (ferrea 9)
+  function voceAvvisa(chiave){
+    var m=document.getElementById('cbMsgs'); if(!m) return;
+    var av=document.createElement('div'); av.className='bot';
+    av.textContent=(typeof t==='function'&&t(chiave))||'Microfono non disponibile.';
+    m.appendChild(av); m.scrollTop=m.scrollHeight;
+  }
   bv.onclick=function(){
     if(ascoltando){ r.stop(); return; }
     r=new SR(); r.lang=REC[(typeof LANG!=='undefined'&&REC[LANG])?LANG:'it']||'it-IT';
@@ -949,7 +958,11 @@ document.getElementById('lang').value = LANG;
     r.onresult=function(e){ var d=e.results[0][0].transcript.trim();
       if(d){ inp.value=(inp.value?inp.value.trim()+' ':'')+d; inp.focus(); } };
     r.onend=function(){ ascoltando=false; bv.classList.remove('ascolta'); };
-    r.onerror=r.onend;
+    r.onerror=function(e){
+      var cod=(e&&e.error)||'';
+      console.warn('bookinvip-ospite','dettatura chat',cod);
+      voceAvvisa(cod==='not-allowed'?'chat_voce_no_perm':'chat_voce_no');
+    };
     try{ r.start(); ascoltando=true; bv.classList.add('ascolta'); }catch(e){ ascoltando=false; }
   };
 })();

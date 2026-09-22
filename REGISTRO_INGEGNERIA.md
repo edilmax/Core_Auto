@@ -395,6 +395,24 @@ Codice pronto e (per lo più) testato, ma non attivo. **Priorità del fondatore 
 ## 🧪 SUPER-TEST VISIVO PANNELLO HOST (2026-07-14, sul VERO account del fondatore, via HTTPS)
 **Fatto e verificato in produzione:** login reale · **10 alloggi creati** (Roma/Milano/Venezia/Barcellona/Parigi/Londra/Tokyo/Dubai/Bali/NY — valute EUR/GBP/JPY/AED/USD, sconti settimana/mese, indirizzi→geocode preciso, foto, 60gg di date) · foto caricata e CANCELLATA · annuncio "SBAGLIATO" creato ed **ELIMINATO col nuovo 🗑** · **2 richieste su-richiesta** da clienti demo (visibili in "Richieste da approvare" + avviso Telegram al fondatore) · link invito OK · **STRESS 100 host + 100 annunci in 8.2s (~1467 op/min), health OK sotto carico** · pulizia completa (0 residui, i 10 del fondatore intatti). **Nota collaudo:** raffiche di admin-delete → nginx risponde 503 (protezione anti-burst, NON un bug: retry risolve). Novità di questo giro: 🗑 elimina annuncio con DOPPIA conferma (bloccato se prenotazioni future, 409) + card in ORDINE D'USO (guida→alloggio→pubblica→i miei→periodo→calendario→richieste→prenotazioni→telegram→stripe→incassi).
 
+### 🔇 IL MICROFONO CHE TACEVA: L'ERRORE INGOIATO — 22 settembre sera, segnalazione del fondatore in produzione («clicco ma non funziona»)
+
+**Da dove nasce.** Un'ora dopo il deploy della PR #208 il fondatore clicca il microfono della chat e non succede
+nulla. Riprodotto nel browser vero: la dettatura parte e MUORE subito con `onerror not-allowed` — il permesso del
+microfono, bloccato o mai concesso — e il nostro codice faceva `r.onerror=r.onend`: l'errore finiva dritto nel
+silenzio. Nessun messaggio, nessun log: per l'ospite (e per il fondatore) un bottone che non fa niente. Era cosi'
+anche sul tasto della citta' fin dall'origine: il difetto non era nuovo, ma oggi lo ha visto il fondatore.
+
+**La riparazione.** Quando la dettatura muore, la chat scrive un rigo VISIBILE all'ospite: se l'errore e'
+`not-allowed` gli dice di consentire il microfono dal lucchetto nella barra degli indirizzi (`chat_voce_no_perm`),
+altrimenti lo invita a scrivere a mano (`chat_voce_no`) — entrambe in 8 lingue, con `textContent` come tutte le
+frasi del bot. Il codice d'errore finisce in `console.warn('bookinvip-ospite', ...)` per la chat E per la citta'
+(ferrea 9: l'osservabile debole porta codice, non solo «non va»). Il permesso vero non si puo' sbloccare da noi:
+e' del browser, e ora l'ospite sa dov'e' la manopola.
+
+**Prove.** 2 guardie nuove (l'avviso esiste nel sorgente e le chiavi sono in 8 lingue; `r.onerror=r.onend` e'
+VIETATO tornare), viste rosse sul codice vecchio (stash: 2 fail) e poi verdi. Caricatore 6881.
+
 ## 2-bis) 📖 QUELLO CHE ABBIAMO SCOPERTO STRADA FACENDO — diario, non lista
 
 > ⛔ **Questo titolo diceva «DA FARE / PROSSIMI PASSI» fino al 2026-08-22.** Era la seconda

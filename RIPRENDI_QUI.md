@@ -3435,7 +3435,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 45d0eee
+CONSEGNE AGGIORNATE A: 17e6afb
 
 ## PASSAGGIO DI CONSEGNE 3 (2026-09-22, D21 a chiusura blocco) - DEPLOY 45d0eee FATTO + MICROFONO IN CHAT E DESK ASSISTENTE TOTALE:
 deploy della 45d0eee COMPLETATO e verificato (paracadute :prec agganciato e verificato,
@@ -3453,6 +3453,13 @@ PRIMA del giro: unittest.TestLoader discover countTestCases). RESTO DELLA CODA d
 fondatore: (3) frase di tutela in 8 lingue + email->sconto 5 EUR, (4) T3 riconciliazione
 notturna (fase182 + cron), (5) T4 rimisure col vero, (6) T5 settimana della perfezione,
 (7) T6 primi host. Mandato permanente valido. Launcher d'ambiente per la suite:
+SEGUITO (2026-09-22 sera, PR #209, riparazione dal vivo): il fondatore cliccava il
+microfono e non succedeva nulla. Misurato nel browser: la dettatura muore con onerror
+not-allowed (permesso microfono bloccato/non concesso) e il codice la ingoiava in
+silenzio (r.onerror=r.onend). ORA la chat AVVISA l'ospite (chiavi chat_voce_no e
+chat_voce_no_perm in 8 lingue, istruzioni col lucchetto per sbloccare) e il codice
+d'errore finisce nel log (ferrea 9), sia per la chat che per la citta'. 2 guardie
+nuove viste rosse e verdi, caricatore 6881.
 python %TEMP%/bookinvip_launcher.py <collaudi/...> (simula PowerShell: toglie MSYSTEM
 e openssl dal PATH, richiesto dal controllo 4 del pre-volo).
 
@@ -3483,7 +3490,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 6879 test
+SUITE ATTUALE: Ran 6881 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
