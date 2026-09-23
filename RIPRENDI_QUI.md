@@ -3435,7 +3435,21 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 8027088
+CONSEGNE AGGIORNATE A: 41ff430
+
+## PASSAGGIO DI CONSEGNE 7 (2026-09-23 notte) - BLOCCO AI DISCOVERY IN CORSO:
+AUDIT misurato DAL VIVO: MCP /api/mcp VIVO (initialize + 6 tool + cerca_alloggi reale),
+llms.txt 200, .well-known/ai-plugin.json 200, openapi.json 200 (OpenAPI 3.0.3 servita
+dall'app), manifest 200: il documento del consulente era gia' ~80% costruito. UNICA
+lacuna vera: JSON-LD = 0 pagine. IN CORSO NON COMMITTATO: JSON-LD TravelAgency in home
+(SearchAction ?citta=, 8 lingue, sameAs social vera, description con 0% ospite) +
+guardia test_il_sito_dichiara_i_fatti_al_le_macchine_json_ld (JSON valido, @type,
+SearchAction, 8 lingue) nata ROSSA e verde; caricatore 6888. NOTA B2: aggiornamento
+documento fatto prima con script Python (VIOLAZIONE dichiarata), ripristinato e
+rifatto con editor. RESTA: suite intera -> PR -> gate -> merge -> deploy -> sonda
+ld+json servita. PROSSIMA SESSIONE (fresca): JSON-LD sulle 230+ landing citta
+(fase97 generatore), AI Discovery Monitor (visibilita' AI quotidiana), lock
+1-carta=1-sconto su Stripe. Coda T3/T4/T5/T6 invariata.
 
 ## PASSAGGIO DI CONSEGNE 6 (2026-09-23 sera) - SERRATURA ANTI-ACCUMULO CREDITO (denaro, via esplicito del fondatore):
 il fondatore ha visto il buco ("io ho dieci email, vuole dire 10 sconti... accumulare crediti
@@ -3532,7 +3546,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 6887 test
+SUITE ATTUALE: Ran 6888 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

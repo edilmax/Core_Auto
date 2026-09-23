@@ -1690,6 +1690,29 @@ class TestIlBloccoVuotoDellaHomePrometteIlCreditoVERO(unittest.TestCase):
         self.assertIn("recensioni_verifica", src,
                       "la scheda alloggio non mostra la riga di trasparenza")
 
+    def test_il_sito_dichiara_i_fatti_al_le_macchine_json_ld(self):
+        """2026-09-23, blocco AI Discovery: la home porta JSON-LD (schema.org) coi
+        FATTI veri del motore. L'audit ha misurato: MCP vivo (6 tool provati dal
+        vivo), llms.txt, ai-plugin.json, openapi.json — ma 0 pagine con JSON-LD:
+        e' il formato che Google AI Search e Perplexity leggono. La guardia valida
+        il JSON e pretende i campi che dicono la verita' del progetto."""
+        import json as _json
+        import os
+        import re
+        src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                "deploy", "index.html"), encoding="utf-8").read()
+        m = re.search(r'<script type="application/ld\+json">\s*(\{.*?\})\s*</script>',
+                      src, re.S)
+        self.assertIsNotNone(m, "la home non porta JSON-LD: invisibile alle AI search")
+        d = _json.loads(m.group(1))                 # JSON rotto = rosso subito
+        self.assertEqual(d.get("@type"), "TravelAgency")
+        self.assertIn("https://schema.org", str(d.get("@context")))
+        self.assertIn("SearchAction", str(d))
+        self.assertIn("bookinvip.com", str(d.get("url")))
+        lingue = d.get("availableLanguage") or []
+        self.assertEqual(len(lingue), 8, "le lingue dichiarate alle macchine devono "
+                                          "essere le 8 vere del sito")
+
 
 if __name__ == "__main__":
     unittest.main()
