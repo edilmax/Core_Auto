@@ -88,6 +88,13 @@ class GestoreDomanda:
                     check_in TEXT DEFAULT '', check_out TEXT DEFAULT '',
                     party INTEGER DEFAULT 1, ts INTEGER NOT NULL,
                     PRIMARY KEY (email, citta))""")
+                # SERRATURA ANTI-ACCUMULO (2026-09-23, ordine del fondatore: "accumulare
+                # crediti sulla stessa citta' da nessuna parte, solo una volta"): il token
+                # emesso per (email, citta) si ARCHIVIA e si RESTITUISCE identico alle
+                # chiamate successive -> N iscrizioni = 1 credito, non N.
+                con.execute("""CREATE TABLE IF NOT EXISTS crediti_emessi (
+                    email TEXT NOT NULL, citta TEXT NOT NULL, token TEXT NOT NULL,
+                    ts INTEGER NOT NULL, PRIMARY KEY (email, citta))""")
         finally:
             con.close()
 
@@ -154,14 +161,27 @@ class GestoreDomanda:
     def emette_credito_fondatore(self, email: Any, citta: Any, *,
                                  credito_cents: int = CREDITO_FONDATORE_CENTS,
                                  giorni: int = GIORNI_VALIDITA) -> Optional[str]:
-        """Token FIRMATO del Credito Fondatore (non falsificabile). None se non c'e' firma."""
+        """Token FIRMATO del Credito Fondatore (non falsificabile). None se non c'e' firma.
+        SERRATURA ANTI-ACCUMULO (2026-09-23): per (email, citta) il token viene emesso UNA
+        volta sola e archiviato; le chiamate successive restituiscono lo STESSO token —
+        N iscrizioni = 1 credito (ordine del fondatore)."""
         if self._firma is None or not _email_ok(email):
             return None
         c = credito_cents if isinstance(credito_cents, int) and 0 < credito_cents <= 5000 else \
             CREDITO_FONDATORE_CENTS
-        return self._firma.codifica({
-            "tipo": "credito_fondatore", "email": email.strip().lower(),
-            "citta": (str(citta).strip().lower() if isinstance(citta, str) else ""),
+        em = email.strip().lower()
+        ci = _pulisci(citta, 120).strip().lower() if isinstance(citta, str) else ""
+        con = self._apri()
+        try:
+            r = con.execute("SELECT token FROM crediti_emessi WHERE email=? AND citta=?",
+                            (em, ci)).fetchone()
+            if r and r[0]:
+                return r[0]
+        finally:
+            con.close()
+        token = self._firma.codifica({
+            "tipo": "credito_fondatore", "email": em,
+            "citta": ci,
             # VALUTA del credito: i "cents" senza valuta valevano 500 di QUALSIASI unita'
             # minore (¥500 ≈ €3 su un annuncio JPY; e un credito nato in valuta debole si
             # spendeva come €5 su un annuncio EUR). Il credito sconta SOLO annunci nella
@@ -169,6 +189,14 @@ class GestoreDomanda:
             "valuta": "EUR",
             "credito_cents": c, "exp": self._now() + max(1, int(giorni)) * 86400,
             "nonce": secrets.token_hex(8)})   # firma univoca -> single-use affidabile (fase167)
+        con = self._apri()
+        try:
+            with con:
+                con.execute("INSERT OR IGNORE INTO crediti_emessi (email, citta, token, ts) "
+                            "VALUES (?,?,?,?)", (em, ci, token, self._now()))
+        finally:
+            con.close()
+        return token
 
 
 def crea_gestore_domanda(percorso: str, *, firma: Any = None, orologio: Any = None

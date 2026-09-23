@@ -48,12 +48,20 @@ class TestColdStartFlywheel(unittest.TestCase):
         # un ospite si mette in lista d'attesa per Milano
         s, _ = self.g("POST", "/api/domanda", {"email": "ospite@x.it", "citta": "Milano"})
         self.assertIn(s, (200, 201))
+        # EMAIL 1 (2026-09-23, fondatore: "deve mandare email"): conferma d'iscrizione
+        # SUBITO, SENZA il link al credito (quello viaggia solo all'apertura: anti-farming)
+        self.assertEqual(len(self.mail.inviate), 1)
+        d1, o1, h1 = self.mail.inviate[0]
+        self.assertEqual(d1, "ospite@x.it")
+        self.assertIn("lista", o1.lower())
+        self.assertNotIn("credito=", h1.lower(), "il link del credito NON va nell'email "
+                                                        "di conferma: farming con email multiple")
         # l'host pubblica il PRIMO annuncio a Milano
         s, o = self._pubblica("casa-mi-1", "Milano")
         self.assertEqual(s, 201, o)
-        # l'ospite in lista ha ricevuto l'email col link + credito
-        self.assertEqual(len(self.mail.inviate), 1, "l'ospite in lista d'attesa doveva essere avvisato")
-        dest, ogg, html = self.mail.inviate[0]
+        # EMAIL 2: l'ospite in lista riceve l'avviso di apertura col link + credito
+        self.assertEqual(len(self.mail.inviate), 2, "conferma + apertura: una email per tipo")
+        dest, ogg, html = self.mail.inviate[1]
         self.assertEqual(dest, "ospite@x.it")
         self.assertIn("/alloggio/casa-mi-1", html)         # link all'annuncio
         self.assertIn("credito=", html.lower() + html)     # link col Credito Fondatore

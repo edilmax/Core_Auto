@@ -3435,7 +3435,22 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: a0d2136
+CONSEGNE AGGIORNATE A: 8027088
+
+## PASSAGGIO DI CONSEGNE 6 (2026-09-23 sera) - SERRATURA ANTI-ACCUMULO CREDITO (denaro, via esplicito del fondatore):
+il fondatore ha visto il buco ("io ho dieci email, vuole dire 10 sconti... accumulare crediti
+sulla stessa citta' da nessuna parte, solo una volta" + "solo quando non ci sono alloggi").
+IN CORSO NON COMMITTATO: (1) fase158: tabella crediti_emessi (PK email+citta) — emette_credito_
+fondatore archivia il token e alle chiamate successive restituisce lo STESSO token (N iscrizioni
+= 1 credito; maiuscole/spazi normalizzati); (2) fase83 _domanda_registra: credito emesso SOLO se
+la citta' non ha alloggi (CriteriRicerca limit=1) + EMAIL DI CONFERMA all'iscrizione SENZA link
+al credito (quello viaggia solo nell'email di apertura 0->1: anti-farming); (3) guardie nuove in
+test_fase158_serratura.py (stesso token, email/citta' diverse = token diversi, emissione ripetuta
+= una) + test_fase158_domanda e test_cold_start_flywheel AGGIORNATI al contratto nuovo (rotta su
+citta' CON alloggi -> credito_token vuoto; due email: conferma senza credito + apertura con
+credito). Batteria crediti 172/172 verde; CARICATORE 6887. RESTA: suite intera -> PR -> gate ->
+merge -> deploy rebuild -> sonde -> PROVA DAL VIVO col fondatore (doppia iscrizione stesso token;
+citta' con alloggi = nessun credito). Proposta carta-fingerprint rimandata a blocco dedicato.
 
 ## PASSAGGIO DI CONSEGNE 5 (2026-09-23, D21) - BLOCCO 3 DELLA CODA IN CORSO (fase di test + sconto 5 EUR):
 PR #211 unita (consegne 4), VPS allineato a a0d2136. IN CORSO NON COMMITTATO: fase83 ETICHETTE_UI
@@ -3517,7 +3532,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 6884 test
+SUITE ATTUALE: Ran 6887 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
