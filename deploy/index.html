@@ -21,6 +21,22 @@
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://bookinvip.com/">
 <meta property="og:locale" content="it_IT">
+<!-- JSON-LD (schema.org): i dati che Google AI Search, Perplexity e gli agenti
+     leggono per CAPIRE il sito. Solo fatti VERI del motore: prezzo trasparente,
+     0% all'ospite, ricerca sul posto. Nessuna promessa che il codice non mantiene
+     (la guardia in test_fase83_server confronta i campi col sorgente). -->
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"TravelAgency","name":"BookinVIP",
+"url":"https://bookinvip.com/","logo":"https://bookinvip.com/icon.svg",
+"description":"Piattaforma di prenotazione alloggi in diretta con l'host: prezzo trasparente, denaro protetto, 0% di commissioni per l'ospite.",
+"areaServed":"Worldwide","availableLanguage":["it","en","es","fr","de","pt","ja","zh"],
+"potentialAction":{"@type":"SearchAction",
+"target":{"@type":"EntryPoint","urlTemplate":"https://bookinvip.com/?citta={search_term_string}"},
+"query-input":"required name=search_term_string"},
+"sameAs":["https://www.facebook.com/1248474171672376","https://instagram.com/bookinvip",
+"https://x.com/bookinvip","https://youtube.com/@bookinvip","https://tiktok.com/@bookinvip",
+"https://t.me/bookinvip_ufficiale"]}
+</script>
 <style>
 :root{
   /* DESIGN TOKENS (FASE 2 carrozzeria): la palette sta QUI, un posto solo.
