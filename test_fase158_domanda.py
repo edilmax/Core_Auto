@@ -68,7 +68,13 @@ class TestRiscattoNelConcierge(unittest.TestCase):
     def _credito(self):
         s, c = self.g("POST", "/api/domanda", {"email": "a@x.it", "citta": "Roma"})
         self.assertEqual(s, 201)
-        return c["credito_token"]
+        # REGOLA NUOVA (fondatore, 2026-09-23): la rotta NON emette crediti per una
+        # citta' che ha GIA' alloggi (qui: casa e' pubblicata nel setUp). Il token per
+        # provare lo sconto lo emette il gestore, con la stessa firma del sistema.
+        self.assertEqual(c["credito_token"], "",
+                         "credito emesso su citta' CON alloggi: regola 'solo quando non "
+                         "ci sono alloggi' violata")
+        return self.sis.domanda.emette_credito_fondatore("a@x.it", "roma")
 
     def test_credito_sconta_ospite_da_nostra_commissione(self):
         ct = self._credito()

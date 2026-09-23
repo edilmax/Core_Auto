@@ -86,7 +86,12 @@ class TestCreditoValuta(unittest.TestCase):
 
     def _credito_eur(self):
         _, dom = self.g("POST", "/api/domanda", {"email": "cli@cv.it", "citta": "roma"})
-        return dom["credito_token"]
+        # REGOLA NUOVA (fondatore, 2026-09-23): la rotta non emette crediti su citta'
+        # CON alloggi (questi test ne hanno uno pubblicato in setUp); il token per
+        # provare la VALUTA lo emette il gestore, stessa firma del sistema.
+        self.assertEqual(dom.get("credito_token"), "",
+                         "credito emesso su citta' con alloggi: regola violata")
+        return self.sis.domanda.emette_credito_fondatore("cli@cv.it", "roma")
 
     def test_credito_eur_su_annuncio_eur(self):
         q = self._quota("casa-eur", cred=self._credito_eur())

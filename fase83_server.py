@@ -7587,7 +7587,33 @@ class RouterHTTP:
                             party=dati.get("party", 1)):
             return 422, {"errore": "email_non_valida"}
         from fase158_domanda import CREDITO_FONDATORE_CENTS
-        credito = dom.emette_credito_fondatore(email, citta_eff)
+        # SERRATURA (2026-09-23, ordine del fondatore): il credito si emette SOLO quando
+        # la citta' NON ha alloggi (e' il premio della lista d'attesa, non un buono a vita
+        # per qualunque citta'). Se la citta' ha gia' annunci, l'ospite prenota direttamente:
+        # zero credito.
+        credito = None
+        try:
+            from fase57_vetrina import CriteriRicerca
+            esito = self._sys.catalogo.cerca(CriteriRicerca(citta=citta_eff, limit=1)) or {}
+            if not (esito.get("risultati") or []):
+                credito = dom.emette_credito_fondatore(email, citta_eff)
+        except Exception:
+            logger.warning("controllo alloggi per credito fallito (ISOLATO)", exc_info=True)
+            credito = dom.emette_credito_fondatore(email, citta_eff)
+        # EMAIL DI CONFERMA all'iscrizione (2026-09-23, ordine del fondatore: "deve mandare
+        # email"): senza il link al credito — quello arriva solo con l'email di apertura
+        # della citta' (flywheel 0->1), cosi' i crediti non viaggiano in giro.
+        try:
+            ep = getattr(self._sys, "email_provider", None)
+            if ep is not None and isinstance(email, str) and "@" in email:
+                nome = citta_eff if citta_eff != "(qualsiasi)" else "BookinVIP"
+                ogg = "Sei in lista per %s — il tuo sconto di 5 EUR quando apriamo" % nome
+                html = ("<p>Grazie! Ti avvisiamo appena pubblichiamo il primo alloggio a "
+                        "<b>%s</b>: il tuo <b>sconto di 5 EUR</b> sulla prima prenotazione "
+                        "sara' gia' attivo nel link che riceverai.</p>" % nome)
+                ep.invia(email.strip().lower(), ogg, html)
+        except Exception:
+            logger.warning("email conferma domanda fallita (ISOLATO)", exc_info=True)
         # ALLARME DOMANDA: se la città supera la soglia, avvisa gli host (UNA volta, best-effort)
         try:
             if citta_eff != "(qualsiasi)":

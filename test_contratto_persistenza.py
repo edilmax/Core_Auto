@@ -988,11 +988,16 @@ class TestContrattoDomandaFase158(BaseContratto, unittest.TestCase):
         "domanda": ("email TEXT NOT NULL PK1", "citta TEXT NOT NULL PK2",
                     "check_in TEXT", "check_out TEXT", "party INTEGER",
                     "ts INTEGER NOT NULL"),
+        # SERRATURA ANTI-ACCUMULO (2026-09-23): il token emesso per (email, citta) si
+        # archivia e si restituisce identico -> N iscrizioni = 1 credito.
+        "crediti_emessi": ("email TEXT NOT NULL PK1", "citta TEXT NOT NULL PK2",
+                           "token TEXT NOT NULL", "ts INTEGER NOT NULL"),
     }
     INDICI = {}
-    UNICI = {"domanda": ("pk(email, citta)",)}
-    CHECK = {"domanda": ()}
-    FK = {"domanda": ()}
+    UNICI = {"domanda": ("pk(email, citta)",),
+             "crediti_emessi": ("pk(email, citta)",)}
+    CHECK = {"domanda": (), "crediti_emessi": ()}
+    FK = {"domanda": (), "crediti_emessi": ()}
     TRIGGER = {}
     DENARO = ()
 
