@@ -3435,7 +3435,19 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: b0460ee
+CONSEGNE AGGIORNATE A: a0d2136
+
+## PASSAGGIO DI CONSEGNE 5 (2026-09-23, D21) - BLOCCO 3 DELLA CODA IN CORSO (fase di test + sconto 5 EUR):
+PR #211 unita (consegne 4), VPS allineato a a0d2136. IN CORSO NON COMMITTATO: fase83 ETICHETTE_UI
+empty_titolo/empty_lascia RISCRITTI in 8 lingue (titolo "Fase di test: servizio migliore, piu'
+risparmio" = la frase di tutela del fondatore; testo con sconto di 5 EUR sulla prima prenotazione al
+posto del Credito Fondatore - e' la STESSA cosa: fase158 CREDITO_FONDATORE_CENTS=500). 2 guardie
+nuove in test_fase83_server.py (la cifra promessa = la cifra del motore; 8 lingue complete), viste
+ROSSE sul testo vecchio (stash) e verdi; classe 110/110; CARICATORE 6884. AGGIUNTO: chiave recensioni_verifica (8 lingue) mostrata sotto le recensioni nella scheda alloggio ("Solo ospiti che hanno pagato e soggiornato possono recensire — verificato dal sistema", richiesta del fondatore) + guardia che pretende l'enforcer def _recensione_ammessa col 402 prenotazione_non_pagata nel sorgente (vista rossa). deploy/index.html: emptyStateHtml container ORIZZONTALE a tutta larghezza (grid-column:1/-1: la griglia lo schiacciava in una cella da 280px), scudo con spunta, pill host con stella; banner_test richiesto POI RITIRATO dal fondatore (chiave rimessa via). RESTA: suite intera ->
+PR -> gate -> merge -> deploy (rebuild app: fase83 e' nel container app) -> sonde. Coda dopo questo
+blocco: (4) T3 riconciliazione notturna (fase182 + cron), (5) T4 rimisure col vero, (6) T5
+perfezione, (7) T6 primi host. Microfono: PC = hardware sordo (misurato); telefono in attesa della
+prova post-sblocco. Mandato permanente valido.
 
 ## PASSAGGIO DI CONSEGNE 4 (2026-09-23, D21 a chiusura blocco) - REDIRECT www ONLINE E VERIFICATO:
 deploy b0460ee COMPLETATO (solo nginx: pull + nginx -t in container usa-e-getta + rm -f casavip_nginx +
@@ -3505,7 +3517,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 6881 test
+SUITE ATTUALE: Ran 6884 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

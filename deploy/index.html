@@ -617,19 +617,30 @@ async function caricaMappaPin(){
 }
 function emptyStateHtml(citta){
   const c = citta ? esc(String(citta)) : '';   // escape pieno, non mezza-misura
-  const cityLine = c ? `<div style="color:var(--brand);font-weight:600;margin:.2rem 0">📍 ${c}</div>` : '';
-  return `<div class="vuoto" style="text-align:center;padding:1.5rem">
-    <div style="font-size:2rem">🌱</div>
-    <h3 style="color:var(--brand);margin:.5rem 0">${t('empty_titolo')}</h3>
-    ${cityLine}
-    <div id="wl_proof" style="margin:.3rem 0;font-weight:700;color:#c0392b"></div>
-    <p style="color:var(--testo-tenue);max-width:44ch;margin:.3rem auto 1rem">${t('empty_lascia')}</p>
-    <div style="display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap;max-width:420px;margin:0 auto">
-      <input id="wl_email" type="email" placeholder="${t('ph_email')}" style="flex:1;min-width:200px;padding:.7rem;border-radius:.7rem;border:1px solid var(--bordo)">
-      <button id="wl_btn" style="background:var(--brand);color:#fff;border:0;border-radius:.7rem;padding:.7rem 1.2rem;font-weight:700;cursor:pointer">${t('avvisami')}</button>
+  const cityLine = c ? `<div style="color:var(--brand);font-weight:700;margin:.2rem 0 .4rem">📍 ${c}</div>` : '';
+  // CONTAINER ORIZZONTALE (2026-09-23, richiesta del fondatore: "un bel container
+  // orizzontale"): card ampia in stile champagne, testo a sinistra e iscrizione a
+  // destra; con flex-wrap si impila da solo sul telefono (niente media query).
+  return `<div class="vuoto" style="grid-column:1/-1;background:linear-gradient(145deg,#ffffff,#fdfaf1);border:1px solid rgba(230,193,92,.55);border-radius:1.4rem;box-shadow:0 18px 40px -22px rgba(10,54,41,.35);padding:2rem 2.2rem;max-width:980px;margin:0 auto;width:100%;box-sizing:border-box;display:flex;gap:1.8rem;flex-wrap:wrap;align-items:center;text-align:left">
+    <div style="flex:1.3 1 340px;min-width:0">
+      <div style="display:flex;align-items:center;gap:.8rem">
+        <div style="width:52px;height:52px;flex:0 0 52px;border-radius:50%;background:linear-gradient(145deg,#f3d888,#e6c15c);display:flex;align-items:center;justify-content:center" aria-hidden="true"><svg viewBox="0 0 24 24" width="27" height="27"><path fill="#0a3629" d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg></div>
+        <h3 style="color:var(--brand);margin:0;font-size:1.35rem;line-height:1.25">${t('empty_titolo')}</h3>
+      </div>
+      ${cityLine}
+      <div id="wl_proof" style="margin:.2rem 0;font-weight:700;color:#c0392b"></div>
+      <p style="color:var(--testo-tenue);margin:.5rem 0 0;line-height:1.6;font-size:1.02rem">${t('empty_lascia')}</p>
     </div>
-    <div id="wl_msg" style="margin-top:.7rem;font-size:.9rem"></div>
-    <p style="margin-top:1.4rem;font-size:.9rem;color:var(--testo-tenue)">${t('sei_host')} <a href="/diventa-host.html" style="color:var(--brand-chiaro);font-weight:700">${t('pubblica_primo')} →</a></p>
+    <div style="flex:1 1 300px;min-width:280px">
+      <input id="wl_email" type="email" placeholder="${t('ph_email')}" aria-label="${t('ph_email')}" style="width:100%;box-sizing:border-box;padding:.85rem 1rem;border-radius:.85rem;border:1px solid var(--bordo);font-size:1rem;margin-bottom:.6rem">
+      <button id="wl_btn" style="width:100%;box-sizing:border-box;background:linear-gradient(145deg,var(--brand),#0a3629);color:#f3d888;border:0;border-radius:.85rem;padding:.85rem 1.2rem;font-weight:700;font-size:1rem;cursor:pointer">${t('avvisami')}</button>
+      <div id="wl_msg" style="margin-top:.5rem;font-size:.95rem"></div>
+    </div>
+    <div style="flex:1 1 100%;display:flex;align-items:center;justify-content:center;gap:.55rem;flex-wrap:wrap;background:#fbf7ea;border:1px solid rgba(230,193,92,.5);border-radius:999px;padding:.6rem 1.3rem;font-size:.98rem;color:var(--testo-tenue)">
+      <span style="color:#b8912e;font-size:1.05rem" aria-hidden="true">✦</span>
+      <span>${t('sei_host')}</span>
+      <a href="/diventa-host.html" style="color:var(--brand);font-weight:800;text-decoration:none;border-bottom:2px solid rgba(230,193,92,.9)">${t('pubblica_primo')} →</a>
+    </div>
   </div>`;
 }
 function bindWaitlist(citta){
@@ -685,7 +696,8 @@ async function apri(slug){
           rr.recensioni.slice(0,4).map(x=>{
             const txt=(x.testo&&x.testo.text)?x.testo.text:'';
             return `<div style="border-top:1px solid var(--sfondo-tenue);padding:.4rem 0">★ ${esc(x.voto)} <span style="color:var(--brand-chiaro);font-size:.72rem">✓ ${t('verificata')}</span><br><span style="color:#4a5b7a">${esc(txt)}</span></div>`;
-          }).join('')+'</div>';
+          }).join('')+'</div>'+
+          '<div style="margin-top:.6rem;padding:.5rem .7rem;background:var(--verde-bg);border:1px solid rgba(21,87,36,.25);border-radius:.6rem;font-size:.82rem;color:var(--brand)">🛡️ '+t('recensioni_verifica')+'</div>';
       }
     }catch(e){console.warn('bookinvip-ospite',e)}
     const FONTE = new URLSearchParams(location.search).get('fonte')||'marketplace';
