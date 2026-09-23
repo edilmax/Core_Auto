@@ -413,6 +413,24 @@ e' del browser, e ora l'ospite sa dov'e' la manopola.
 **Prove.** 2 guardie nuove (l'avviso esiste nel sorgente e le chiavi sono in 8 lingue; `r.onerror=r.onend` e'
 VIETATO tornare), viste rosse sul codice vecchio (stash: 2 fail) e poi verdi. Caricatore 6881.
 
+### 🌐 UN SOLO INDIRIZZO: www → bookinvip.com (redirect 301) — 23 settembre, scoperto col caso microfono
+
+**Da dove nasce.** La caccia al microfono muto del fondatore ha smascherato una trappola strutturale: nel browser
+`www.bookinvip.com` e `bookinvip.com` sono DUE ORIGINI DIVERSE, ognuna con i suoi permessi. Il fondatore aveva dato
+"Consenti" al microfono su una (www, pagina impostazioni fotografata) e usava l'altra (senza www, si vede
+nell'indirizzo del suo screenshot): la dettatura taceva col messaggio "microfono bloccato" — il messaggio NUOVO che
+ha permesso la diagnosi a distanza. Lo stesso rischio vale per notifiche, storage e consensi per-origini.
+
+**La riparazione (nginx).** `deploy/nginx.casavip.ssl.conf`: nuovo server block HTTPS che risponde SOLO a
+`www.bookinvip.com` e fa `301 https://bookinvip.com$request_uri` (con lo stesso certificato, che copre gia'
+entrambi i nomi: SAN verificato con openssl il 2026-09-23); il www e' TOLTO dal `server_name` del blocco
+principale (un nome, un posto); l'HTTP :80 ora reindirizza sempre al canonico `https://bookinvip.com` (prima
+usava `$host`, cioe' mandava www su www). Validato con `nginx -t` in un container usa-e-getta con gli stessi
+mount PRIMA di toccare il container vivo (il bind-mount e' per inode: serve ricreare casavip_nginx, DEPLOY.md).
+
+**Prove.** Config validata (`syntax is ok`); al deploy: `curl -I https://www.bookinvip.com/` atteso **301** verso
+`https://bookinvip.com/`, e le sonde canoniche 200/403/401 invariate.
+
 ## 2-bis) 📖 QUELLO CHE ABBIAMO SCOPERTO STRADA FACENDO — diario, non lista
 
 > ⛔ **Questo titolo diceva «DA FARE / PROSSIMI PASSI» fino al 2026-08-22.** Era la seconda
