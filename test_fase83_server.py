@@ -1684,9 +1684,9 @@ class TestIlBloccoVuotoDellaHomePrometteIlCreditoVERO(unittest.TestCase):
         mancanti = [l for l in ("it", "en", "es", "fr", "de", "pt", "ja", "zh")
                     if not str(voci.get(l, "")).strip()]
         self.assertEqual([], mancanti, "recensioni_verifica senza lingue: %r" % (mancanti,))
-        src = open(__file__.replace("test_fase83_server.py",
-                                    "deploy" + chr(92) + "index.html"),
-                   encoding="utf-8").read()
+        import os
+        src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                "deploy", "index.html"), encoding="utf-8").read()
         self.assertIn("recensioni_verifica", src,
                       "la scheda alloggio non mostra la riga di trasparenza")
 
