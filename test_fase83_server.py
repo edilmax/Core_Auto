@@ -1641,5 +1641,55 @@ class TestLEtichettaDellaCancellazioneNONPuoSmentireIlMotore(unittest.TestCase):
                          "SOTTO QUELLA SOGLIA NON VIENE MANTENUTA:\n" + "\n".join(muti))
 
 
+class TestIlBloccoVuotoDellaHomePrometteIlCreditoVERO(unittest.TestCase):
+    """2026-09-23, ordine del fondatore: frase di tutela "fase di test per un servizio
+    migliore e risparmio" + sconto 5 EUR al posto del vecchio blocco waitlist. La cifra
+    nel testo DEVE valere quanto il credito che il motore emette davvero (fase158,
+    CREDITO_FONDATORE_CENTS): un testo che promette un numero diverso e' una bugia sui
+    soldi (regola zero 4)."""
+
+    def test_lo_sconto_promesso_e_il_credito_del_motore_sono_la_STESSA_cifra(self):
+        from fase158_domanda import CREDITO_FONDATORE_CENTS
+        self.assertEqual(500, CREDITO_FONDATORE_CENTS,
+                         "il credito e' cambiato? allora cambia ANCHE il testo della home")
+        from fase83_server import ETICHETTE_UI
+        for lingua in ("it", "en"):
+            testo = ETICHETTE_UI["empty_lascia"][lingua]
+            self.assertIn("5", testo,
+                          "%s: il blocco vuoto non promette piu' lo sconto a 5 EUR: %r"
+                          % (lingua, testo))
+
+    def test_la_frase_di_tutela_e_le_cta_sono_in_otto_lingue(self):
+        from fase83_server import ETICHETTE_UI
+        for chiave in ("empty_titolo", "empty_lascia", "sei_host"):
+            voci = ETICHETTE_UI[chiave]
+            mancanti = [l for l in ("it", "en", "es", "fr", "de", "pt", "ja", "zh")
+                        if not str(voci.get(l, "")).strip()]
+            self.assertEqual([], mancanti, "%s senza lingue: %r" % (chiave, mancanti))
+
+    def test_la_trasparenza_delle_recensioni_e_vera_e_mostrata(self):
+        """2026-09-23, fondatore: 'chi prenota puo' fare recensioni, solo loro!!!' --
+        la frase 'verificato dal sistema' e' VERA solo se l'enforcer esiste (la
+        recensione senza pagamento e' rifiutata) e la pagina la mostra davvero."""
+        import inspect
+        import fase83_server
+        from fase83_server import ETICHETTE_UI
+        src_f83 = inspect.getsource(fase83_server)
+        self.assertIn("def _recensione_ammessa", src_f83,
+                      "l'enforcer anti-recensioni-finte non esiste piu': la frase "
+                      "'verificato dal sistema' sarebbe una bugia (regola zero 4)")
+        self.assertIn("prenotazione_non_pagata", src_f83,
+                      "la regola 'solo chi ha pagato' non e' piu' applicata")
+        voci = ETICHETTE_UI.get("recensioni_verifica", {})
+        mancanti = [l for l in ("it", "en", "es", "fr", "de", "pt", "ja", "zh")
+                    if not str(voci.get(l, "")).strip()]
+        self.assertEqual([], mancanti, "recensioni_verifica senza lingue: %r" % (mancanti,))
+        import os
+        src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                "deploy", "index.html"), encoding="utf-8").read()
+        self.assertIn("recensioni_verifica", src,
+                      "la scheda alloggio non mostra la riga di trasparenza")
+
+
 if __name__ == "__main__":
     unittest.main()

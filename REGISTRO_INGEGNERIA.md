@@ -439,6 +439,16 @@ mount PRIMA di toccare il container vivo (il bind-mount e' per inode: serve ricr
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🛡️ IL BLOCCO VUOTO DIVENTA UN CONTAINER DI FIDUCIA (tutela + sconto 5 EUR + recensioni trasparenti) — 23 settembre, «fallo fino al lavoro finito, super testato» del fondatore (ramo `tutela-sconto-2026-09-23`)
+
+**Da dove nasce.** Punto 3 della coda del fondatore: frase di tutela «fase di test per un servizio migliore e risparmio» + email→sconto 5 EUR in 8 lingue al posto del vecchio blocco waitlist. In corso d'opera il fondatore ha guidato la FORMA: container orizzontale («bello, degno di fiducia»), via la piantina (→ scudo con spunta in medaglia champagne), scritte più grandi, la riga host diventa CTA («Sei un host? Cosa aspetti a farne parte?»), banner in cima richiesto POI ritirato (tutto nel blocco sotto). SMASCHERATO dall'anteprima locale (server di sola lettura in %TEMP% che serve deploy/ con catalogo vuoto): la griglia dei risultati (`.risultati`, colonne da 280px) SCHIACIAVA il container in una cella -> `grid-column:1/-1` e il blocco respira a tutta larghezza.
+
+**I testi.** empty_titolo «Fase di test: servizio migliore, piu' risparmio»; empty_lascia col sconto di 5 EUR: il numero NON e' decorativo, la guardia lo lega a fase158 CREDITO_FONDATORE_CENTS=500 (se il credito cambia e il testo no, la suite diventa rossa: una promessa sui soldi non invecchia in silenzio). NUOVA chiave recensioni_verifica in 8 lingue mostrata sotto le recensioni della scheda («Solo ospiti che hanno pagato e soggiornato possono recensire — verificato dal sistema»): la guardia pretende NEL SORGENTE l'enforcer `def _recensione_ammessa` col 402 `prenotazione_non_pagata` — se un giorno l'enforcer sparisce, la frase diventa una bugia e il test lo grida (regola zero 4 applicata ai testi).
+
+**Prove.** Guardie nuove viste ROSSE (stash del solo fase83; enforcer cercato col nome sbagliato: rosso colto da se' stesso e corretto col nome vero letto dal sorgente — S2) e poi VERDI. Caricatore 6884; suite intera Ran 6879 OK (skipped=4), uscita 0.
+
+**Lezione.** L'anteprima locale prima della pubblicazione ha fatto risparmiare un deploy sbagliato: il «container orizzontale» era orizzontale solo fuori dalla griglia. Guardare la pagina INTERA, non il frammento.
+
 ### 🎙️ IL MICROFONO ENTRA NELLA CHAT, E IL DESK DIVENTA ASSISTENTE TOTALE — 22 settembre, «vai avanti fino alla fine» del fondatore (ramo `microfono-chat-2026-09-22`)
 
 **Da dove nasce.** Il fondatore, dopo il deploy della 45d0eee: *«microfono nella chat e chat deve essere assistente a
