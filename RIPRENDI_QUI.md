@@ -3435,22 +3435,22 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: de82d61
+CONSEGNE AGGIORNATE A: b0460ee
 
-## PASSAGGIO DI CONSEGNE 4 (2026-09-23, D21 a chiusura blocco) - REDIRECT www + VERDETTO MICROFONO:
-IN QUESTO COMMIT: redirect nginx www.bookinvip.com -> bookinvip.com (301, certificato SAN copre entrambi,
-validato nginx -t in container usa-e-getta; perche': le due forme sono DUE ORIGINI per i permessi del
-browser - trappola smascherata dal caso microfono del fondatore, registro 23 set). microfono chat +
-assistente totale + avvisi 8 lingue gia' online a de82d61 (PR #208/#209). VERDETTO MICROFONO PC DEL
-FONDATORE (misurato con IAudioMeterInformation, script in %TEMP%): il microfono interno registra
-SILENZIO ASSOLUTO a hardware (voce TTS a picco 0.98 sull'uscita, cattura picco ~0, anche dopo reboot;
-permessi Chrome giusti su entrambe le origini, verificati in chrome://settings): servono cuffie con filo
-o l'interruttore fisico del mic; il sito non e' in colpa. TELEFONO: la chat NUOVA ha detto "microfono
-bloccato" (la diagnosi a distanza funziona); dopo lo sblocco del permesso resta da verificare il
-comportamento attuale. Launcher suite: python %TEMP%/bookinvip_launcher.py -m unittest ... (MSYSTEM/
-openssl). Coda del fondatore: (3) frase di tutela + email->sconto 5 EUR 8 lingue, (4) T3 riconciliazione
-notturna (fase182 + cron), (5) T4 rimisure col vero (2 caselle rosse), (6) T5 perfezione, (7) T6 primi
-host. Mandato permanente valido.
+## PASSAGGIO DI CONSEGNE 4 (2026-09-23, D21 a chiusura blocco) - REDIRECT www ONLINE E VERIFICATO:
+deploy b0460ee COMPLETATO (solo nginx: pull + nginx -t in container usa-e-getta + rm -f casavip_nginx +
+up -d; sonde: www 301 -> https://bookinvip.com/, canonico 200, health 200, bunker 403, payout 401, tre
+posti allineati). microfono chat + assistente totale + avvisi 8 lingue online (PR #208/#209); redirect
+www->canonico (PR #210: le due forme sono DUE ORIGINI per i permessi del browser, trappola smascherata
+dal caso microfono). VERDETTO MICROFONO PC DEL FONDATORE (misurato con IAudioMeterInformation, script
+in %TEMP%): il microfono interno registra SILENZIO ASSOLUTO a hardware (voce TTS a picco 0.98
+sull'uscita, cattura picco ~0, anche dopo reboot; permessi Chrome giusti su entrambe le origini,
+verificati in chrome://settings): servono cuffie con filo o l'interruttore fisico del mic; il sito non
+e' in colpa. TELEFONO: la chat NUOVA ha detto "microfono bloccato" (la diagnosi a distanza funziona);
+dopo lo sblocco del permesso resta da verificare il comportamento attuale. Launcher suite: python
+%TEMP%/bookinvip_launcher.py -m unittest ... (MSYSTEM/openssl). Coda del fondatore: (3) frase di tutela
++ email->sconto 5 EUR 8 lingue, (4) T3 riconciliazione notturna (fase182 + cron), (5) T4 rimisure col
+vero (2 caselle rosse), (6) T5 perfezione, (7) T6 primi host. Mandato permanente valido.
 
 ## PASSAGGIO DI CONSEGNE 3 (2026-09-22, D21 a chiusura blocco) - DEPLOY 45d0eee FATTO + MICROFONO IN CHAT E DESK ASSISTENTE TOTALE:
 deploy della 45d0eee COMPLETATO e verificato (paracadute :prec agganciato e verificato,
