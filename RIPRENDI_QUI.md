@@ -3450,6 +3450,17 @@ rifatto con editor. RESTA: suite intera -> PR -> gate -> merge -> deploy -> sond
 ld+json servita. PROSSIMA SESSIONE (fresca): JSON-LD sulle 230+ landing citta
 (fase97 generatore), AI Discovery Monitor (visibilita' AI quotidiana), lock
 1-carta=1-sconto su Stripe. Coda T3/T4/T5/T6 invariata.
+SEGUITO (24/9 notte): JSON-LD unito e DEPLOYATO (PR #214, master 4c96811, tre posti allineati,
+validato dal vivo TravelAgency/8 lingue/SearchAction; landing citta' avevano GIA' 3 blocchi
+JSON-LD da fase97: livello AI Discovery COMPLETO). CASELLE CHIUSE (22 -> 25 su 43, tutte
+misurate e scritte con --scrivi): testi congelati (verde 72), produzione (verde 9/9), backup
+ripristinato (verde 19/19: copia del backup VERO del VPS esaminata, checksum+integrita'+catena
+hash). collaudi/scheda.json MODIFICATO e NON committato: portarlo nel prossimo commit.
+PER CHIUDERNE ALTRE: plausibilita' = il FONDATORE sospende "casa-test" (1 EUR) dal pannello
+BUNKER poi esame_plausibilita.py --scrivi; D17 = usare il pulsante /root/deploy_pulsante.sh
+(letture: raccogli_letture.py in %TEMP%, pre_deploy da /root E /var/www/bookinvip, schema
+esatto in esame_deploy.letture_finte); marketing = riconnettere fase89+fase95 a fase154;
+catene admin = 19 catene E2E da scrivere. Brief completo: Desktop\PROSSIMA_SESSIONE_BRIEF.txt.
 
 ## PASSAGGIO DI CONSEGNE 6 (2026-09-23 sera) - SERRATURA ANTI-ACCUMULO CREDITO (denaro, via esplicito del fondatore):
 il fondatore ha visto il buco ("io ho dieci email, vuole dire 10 sconti... accumulare crediti

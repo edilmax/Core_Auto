@@ -148,7 +148,9 @@ class TestRadarOutreach(unittest.TestCase):
                        invia=self.invia)
         self.assertEqual(rep["inviati"], 0)
         self.assertEqual(self.inviate, [])
-        self.assertIn("giurisdizione_non_permessa", rep["motivi"])
+        # il motivo porta il prefisso stabile + la legge di fase154 (piu' informativo)
+        self.assertTrue(any(k.startswith("giurisdizione_non_permessa")
+                            for k in rep["motivi"]), rep["motivi"])
 
     def test_opt_out_sovrano(self):
         m = MotoreRadarOutreach(giurisdizioni_permesse=("US",))
