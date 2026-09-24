@@ -3435,7 +3435,95 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 45fa0ca
+CONSEGNE AGGIORNATE A: 84595fd
+
+## PASSAGGIO DI CONSEGNE 9 (2026-09-25 notte, D21) - LOCK 1-CARTA=1-SCONTO IN PUBBLICAZIONE (denaro, via esplicito del fondatore):
+- VIA: «implementa il Lock Stripe (1-carta=1-sconto)... guardie meccaniche a specchio e
+  test di regressione, rimanendo in modalità e2e di prova» + «vai avanti tu contex 16»
+  NONOSTANTE la plausibilità aperta (dichiarato con --nonostante: casa-test dipendeva da
+  un click del fondatore, la sentinella da un conto monitor esterno che solo lui apre).
+- ENIGMA CASA-TEST RISOLTO (colpa trovata nei log nginx+app, non ipotizzata): i click del
+  fondatore ARRIVAVANO al server, che rispondeva 403 "bunker_richiesto" TRE volte (23:28,
+  23:29, 23:37 del 24/9) = sessione Bunker non armata o scaduta; il messaggio 🔒 in cima
+  alla pagina non veniva visto. Al 4° tentativo col Bunker sbloccato subito prima:
+  «ADMIN_ACTION | OGGETTO: casa-test | AZIONE: Stato->sospeso | ESITO: eseguito» (00:15 del
+  25/9). VERIFICATO dal vivo: DB stato='sospeso', catalogo pubblico 0 annunci.
+- CASCELLA PLAUSIBILITA': resta APERTA (27/43) per motivo ONESTO: il catalogo ora è VUOTO
+  (casa-test era l'unico annuncio) e l'esame dichiara «zero annunci = casella NON
+  misurata». Chiuderà col PRIMO ANNUNCIO VERO di un host (T6). Nessun --scrivi.
+- IL LOCK (denaro, difensivo): fase167: tabella carta_impronte (PK impronta) +
+  lega_carta(impronta, credito_id, rif) ATOMICA, semantica speculare a consuma
+  (nuovo/stesso/diverso; "stesso" = stesso riferimento E stesso credito). fase85:
+  impronta_carta(pi) = GET sola lettura del PaymentIntent con expand latest_charge ->
+  payment_method_details.card.fingerprint (METODO 3.4: lo stato si chiede all'API;
+  l'impronta Stripe è stabile per carta, il numero non si vede né si conserva). fase83:
+  _lock_carta_credito dal webhook checkout.session.completed PRIMA di onorare il
+  pagamento: con credito -> impronta -> 'nuovo'/'stesso' prosegue; 'diverso' = RIMBORSO
+  PIENO automatico (rimborsa con Idempotency-Key "lock-carta:<rif>"), prenotazione NON
+  confermata, pendente -> 'rimborsato', stanza rilasciata, riga di giornale
+  (evento_id lock_carta:<rif>), CRITICAL nel registro (watchdog -> Telegram).
+  CHI PERDE SE VA STORTA (D16): nessuno resta indebito; la piattaforma paga la
+  commissione Stripe del rimborso (costo dichiarato della chiusura del buco).
+  FAIL-OPEN DICHIARATO se l'impronta non è ottenibile (chiave assente, Stripe giù):
+  WARNING nel registro; il primo muro resta la serratura email+città (PR #213).
+- GUARDIE: test_lock_carta_credito.py, 10 guardie e2e di prova sulle ROTTE VERE
+  (publish/quote/book/webhook firmato; Stripe finto SOLO al bordo provider; link
+  concierge finto come nel fixture storico di test_fase162): il primo credito di una
+  carta si conferma; stessa carta + credito diverso = rimborso pieno + rifiuto +
+  CRITICAL; replay dello stesso evento = duplicato senza doppio rimborso (chiave
+  idempotente stabile); senza credito il lock non guarda (zero letture all'impronta);
+  impronta non ottenibile = fail-open DICHIARATO col WARNING; lega_carta speculare a
+  consuma nelle due direzioni (6 casi). VISTE ROSSE con 2 difetti iniettati con
+  l'editor (gancio disattivato + lega_carta sempre 'nuovo'): FAILED failures=5;
+  ripristino byte-identico (sha256 OK su fase83/167/85); verdi 10/10 EXIT=0.
+- Caricatore 6897 -> 6907 (misurato). README 427 file di test.
+- RESTA: suite intera -> pre-fatto -> commit -> PR -> gate -> unione -> DEPLOY rebuild
+  app (fase83/85/167 sono produzione: paracadute :prec, DEPLOY.md) -> sonde.
+
+## PASSAGGIO DI CONSEGNE 8 (2026-09-24 notte, D21 - CHIUSURA SESSIONE: AI DISCOVERY MONITOR UNITO, PLAUSIBILITA' ANCORA ROSSA):
+- AI DISCOVERY MONITOR: PR #216 unita (gate success, 16 job verdi), master 84595fd,
+  tre posti allineati (container NON toccati: nessun file di produzione). Strumento
+  collaudi/ai_discovery_monitor.py (stdlib puro: motore AI da ambiente
+  DISCOVERY_AI_URL/KEY/MODEL, set fisso 5 domande, detection citazione bookinvip +
+  competitor fissi, rapporto JSON, uscita 1 se la misura non puo' partire) +
+  test_ai_discovery_monitor.py (9 guardie: rosse con difetti iniettati FALLURES=4,
+  verdi dopo ripristino byte-identico sha256 087cd2cb) + README 426 file di test
+  (audit millimetrico verde) + appendice R4 nel registro + voce diario. Suite intera
+  Ran 6892 OK skipped=4 uscita 0 (6892 + 5 guardie openssl da parte = 6897
+  caricatore, D23 punto 3). PRIMO GIRO REALE quando il fondatore configura le tre
+  variabili DISCOVERY_AI_*; giro quotidiano automatico col cron del T3.
+- PLAUSIBILITA' ANCORA ROSSA (27/43): casa-test ANCORA stato='pubblicato' in
+  produzione (catalogo e dettaglio pubblici lo servono, misurato DUE volte nel
+  24/9 notte; il filtro stato='pubblicato' e' nel deploy da giugno, d5cdbd0). Il
+  fondatore ha riferito DUE volte il click fatto e la casella verde 28/43:
+  SMENTITO DALLE MISURE (catalogo: 1 annuncio casa-test; esame: ROSSO; scheda: 27).
+  Il pulsante giusto: pannello ADMIN "Tutti gli annunci" -> riga casa-test ->
+  "Sospendi" (dialog di conferma; serve sessione Bunker armata, 15 min). Poi:
+  python %TEMP%/bookinvip_launcher.py esame_plausibilita.py --scrivi.
+- LOCK 1-CARTA=1-SCONTO: il fondatore ha dato l'istruzione scritta ("procedi...
+  implementa il Lock Stripe... guardie meccaniche a specchio e test di regressione,
+  rimanendo in modalita' e2e di prova") MA il blocco NON parte: la premessa
+  (plausibilita' verde) era smentita dalle misure e il denaro vuole sessione fresca
+  (regola del brief del fondatore). IL VIA E' VALIDO per la prossima sessione
+  fresca. Punto d'attacco da studiare: cattura del fingerprint carta nel webhook di
+  conferma pagamento (payment_method_details.card.fingerprint), tabella
+  impronta->credito usato, rifiuto automatico col rimborso pieno se la carta ha gia'
+  consumato un credito diverso (nessuno resta col denaro indebito; costo Stripe sul
+  rimborso dichiarato); guardie a specchio nelle due direzioni + regressione
+  serratura email+citta' (PR #213) che deve restare verde.
+- SENTINELLA ROSSA (rimisura dopo merge #215, regola fondatore 16/9): manca il
+  monitor esterno gratuito (UptimeRobot/Better Stack: LO APRE IL FONDATORE) e la
+  sentinella GitHub e' in ritardo (188 min, limite noto di GitHub). esame_sentinella
+  --scrivi NON lanciato: rosso onesto, casella resta aperta col motivo.
+- RESIDUI deploy/index.html.prima_capolavoro e .vecchia_sicura SPOSTATI (non
+  cancellati) in Desktop\RESIDUI_DEPLOY_2026-09-24\ (il pre-fatto controllo 9
+  bloccava il commit). ⛔ NON ridichiararli nello --scopo: toccano deploy/ =
+  produzione e accendono il cancello delle caselle scadute.
+- QUESTO BLOCCO DI CONSEGNE E' STATO PORTATO NEL COMMIT DEL BLOCCO 9 (che vedi sopra).
+- PROSSIMA SESSIONE (fresca, dopo /clear): (1) il fondatore sospende casa-test
+  (Admin -> Tutti gli annunci -> Sospendi) -> esame_plausibilita --scrivi -> commit;
+  (2) LOCK Stripe col via gia' dato sopra; (3) T3 cron riconciliazione; (4)
+  T4/T5/T6. Brief: Desktop\PROSSIMA_SESSIONE_BRIEF.txt.
 
 ## PASSAGGIO DI CONSEGNE 7 (2026-09-23 notte) - BLOCCO AI DISCOVERY IN CORSO:
 AUDIT misurato DAL VIVO: MCP /api/mcp VIVO (initialize + 6 tool + cerca_alloggi reale),
@@ -3573,7 +3661,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 6897 test
+SUITE ATTUALE: Ran 6907 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

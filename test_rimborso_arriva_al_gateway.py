@@ -67,9 +67,16 @@ CHIAVE_FINTA = "sk"
 
 RADICE = os.path.dirname(os.path.abspath(__file__))
 SERVER = os.path.join(RADICE, "fase83_server.py")
-# ⛔ I DUE punti — e SOLO due — da cui i soldi possono partire nel prodotto vivo. Sono i
+# ⛔ I TRE punti — e SOLO tre — da cui i soldi possono partire nel prodotto vivo. Sono i
 # metodi che li contengono, non le righe: i numeri di riga invecchiano al primo inserimento.
-PARTENZE_CENSITE = {"_admin_rimborso", "_admin_rimborsa_dovuto"}
+# La TERZA strada parte DA SOLA ed e' una scelta dichiarata (LOCK 1-CARTA=1-SCONTO, ordine
+# del fondatore con via esplicito): al webhook di conferma, una carta che ha gia' pagato con
+# un altro credito viene restituita PER INTERO prima di onorare il pagamento. Misurata prima
+# di censirla in test_lock_carta_credito.py: innesco = webhook di conferma di una
+# prenotazione col credito; importo = totale/prezzo_guest del record pendente; idempotente =
+# chiave stabile "lock-carta:<rif>". Nessuno resta indebito: ospite tutto indietro, host
+# mai pagato, la piattaforma paga la commissione Stripe del rimborso.
+PARTENZE_CENSITE = {"_admin_rimborso", "_admin_rimborsa_dovuto", "_lock_carta_credito"}
 
 
 def metodi_che_chiamano_il_gateway():
