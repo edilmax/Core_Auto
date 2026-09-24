@@ -3435,7 +3435,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 41ff430
+CONSEGNE AGGIORNATE A: 45fa0ca
 
 ## PASSAGGIO DI CONSEGNE 7 (2026-09-23 notte) - BLOCCO AI DISCOVERY IN CORSO:
 AUDIT misurato DAL VIVO: MCP /api/mcp VIVO (initialize + 6 tool + cerca_alloggi reale),
@@ -3455,12 +3455,28 @@ validato dal vivo TravelAgency/8 lingue/SearchAction; landing citta' avevano GIA
 JSON-LD da fase97: livello AI Discovery COMPLETO). CASELLE CHIUSE (22 -> 25 su 43, tutte
 misurate e scritte con --scrivi): testi congelati (verde 72), produzione (verde 9/9), backup
 ripristinato (verde 19/19: copia del backup VERO del VPS esaminata, checksum+integrita'+catena
-hash). collaudi/scheda.json MODIFICATO e NON committato: portarlo nel prossimo commit.
+hash). collaudi/scheda.json: committato (albero pulito, verificato con git status a 45fa0ca).
 PER CHIUDERNE ALTRE: plausibilita' = il FONDATORE sospende "casa-test" (1 EUR) dal pannello
 BUNKER poi esame_plausibilita.py --scrivi; D17 = usare il pulsante /root/deploy_pulsante.sh
 (letture: raccogli_letture.py in %TEMP%, pre_deploy da /root E /var/www/bookinvip, schema
 esatto in esame_deploy.letture_finte); marketing = riconnettere fase89+fase95 a fase154;
 catene admin = 19 catene E2E da scrivere. Brief completo: Desktop\PROSSIMA_SESSIONE_BRIEF.txt.
+SEGUITO 2 (24/9): PR #215 (giurisdizioni fase154) unita -> master 45fa0ca; caselle 27 su 43
+misurate dal vivo con collaudi/scheda.py su 45fa0ca. BLOCCO PLAUSIBILITA': pre-volo verde,
+esame girato dal vivo -> ROSSO misurato ("casa-test" prezzo 1.00 EUR fuori banda: l'annuncio
+e' ancora stato='pubblicato' nel DB di produzione — verificato che il filtro stato='pubblicato'
+della vetrina e' nel deploy da giugno, quindi il click di sospensione NON ha avuto effetto).
+Il fondatore riprova dal pannello Admin "Tutti gli annunci" -> riga casa-test -> "Sospendi"
+(conferma; serve sessione Bunker armata). La casella resta aperta finche' l'esame non e' verde.
+BLOCCO 2 (via "high fatto vai", livello High): AI DISCOVERY MONITOR scritto
+(collaudi/ai_discovery_monitor.py, stdlib puro): motore AI da ambiente (DISCOVERY_AI_URL/KEY/
+MODEL), set fisso di 5 domande, detection citazione bookinvip + competitor fissi, rapporto JSON,
+uscita 1 = NON ESEGUITO se config/manca sito. 9 guardie (test_ai_discovery_monitor.py) viste
+ROSSE con difetti iniettati (FAILED failures=4) e verdi dopo ripristino byte-identico
+(sha256 087cd2cb...). Fonti D25 in appendice R4 del registro. Caricatore 6888 -> 6897.
+Primo giro reale quando il fondatore configura la chiave; cron quotidiano con T3.
+RESTA in questo commit: suite intera -> pre-fatto -> commit (scheda.json se si chiude la
+casella, registro, RIPRENDI_QUI, strumento + guardie) -> PR -> gate -> unione -> tre posti.
 
 ## PASSAGGIO DI CONSEGNE 6 (2026-09-23 sera) - SERRATURA ANTI-ACCUMULO CREDITO (denaro, via esplicito del fondatore):
 il fondatore ha visto il buco ("io ho dieci email, vuole dire 10 sconti... accumulare crediti
@@ -3557,7 +3573,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 6888 test
+SUITE ATTUALE: Ran 6897 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
