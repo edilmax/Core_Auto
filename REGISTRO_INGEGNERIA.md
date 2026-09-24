@@ -439,6 +439,18 @@ mount PRIMA di toccare il container vivo (il bind-mount e' per inode: serve ricr
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🔎 AI DISCOVERY MONITOR: misura se e come le AI mostrano BookinVIP — 24 settembre, coda punto 2 del fondatore (via «high fatto vai», livello High)
+
+**Da dove nasce.** Il piano AI-first ha la parte OFFERTA online e verificata (PDC 7: MCP con 6 tool, llms.txt, ai-plugin.json, openapi.json, JSON-LD home TravelAgency + landing con 3 blocchi fase97). Mancava la parte MISURA: se e come gli assistenti AI mostrano BookinVIP non lo sapeva nessuno — ed è esattamente ciò che il fondatore ha chiesto («strumento che misura ogni giorno se e come le AI mostrano BookinVIP»).
+
+**Cosa fa.** `collaudi/ai_discovery_monitor.py` (v1, stdlib puro, zero dipendenze): UN motore AI configurato da ambiente (`DISCOVERY_AI_URL` / `DISCOVERY_AI_KEY` / `DISCOVERY_AI_MODEL`, qualunque endpoint compatibile `/chat/completions`); set FISSO di 5 domande da viaggio con intenti mescolati (marca, categoria, confronto, prodotto); detection della prima citazione di bookinvip (frase + posizione-parole) e competitor da insieme fisso (`booking.com, airbnb, expedia, vrbo, agoda, trivago`); rapporto JSON per giro (default `%TEMP%/bookinvip_ai_discovery/`, `--report` per cambiarlo); metrica del giro = PRESENZA (citazioni / risposte ottenute, denominatore dichiarato nel rapporto). Uscita 0 = giro completato (con o senza citazioni: il risultato è un dato); uscita 1 = misura impossibile — config mancante dichiara **NON ESEGUITO col nome delle variabili mancanti** (S7), sito giù, motore muto. La chiave non viene mai stampata né scritta nel rapporto; gli errori di rete vengono ripuliti dalla chiave (ferrea 14).
+
+**Fonti (D25, due ricerche del 2026-09-24, dettaglio in appendice R4).** I commerciali del settore tracciano menzioni/competitor a livello di prompt su set fissi (SE Ranking, Frizerly 2026, Ziptie 2026, Growbydata); il metodo standard è lo *AI Share of Voice* con prompt set costante e giri ripetuti nel tempo (Improvado 2026, Scrunch, Shadow, Riff Analytics, OptimizeGeo). NON adottato: le piattaforme SaaS (costo ricorrente; il punto è possedere la misura, con strumento nostro e nessuna dipendenza nuova — ferrea 1).
+
+**Prove.** 9 guardie in `test_ai_discovery_monitor.py`, giro SENZA rete (motore finto, salute del sito finta): viste ROSSE con due difetti iniettati con l'editor (detection sempre falsa: la risposta che nomina bookinvip dichiarata non-trovata; config mancante che passa invece di gridare NON ESEGUITO — `FAILED (failures=4)` letto diretto), ripristino **byte-identico** (sha256 `087cd2cb…` uguale prima e dopo), verdi con `EXIT=0` letto diretto. Caricatore misurato 6888 → **6897**.
+
+**Stato: acceso su richiesta.** `python collaudi/ai_discovery_monitor.py` — serve un endpoint AI nelle tre variabili `DISCOVERY_AI_*`; senza, dichiara NON ESEGUITO e non misura niente. Primo giro reale appena il fondatore configura la chiave (sul VPS: `.env.casavip`); il giro QUOTIDIANO automatico arriva col cron (T3). Limiti dichiarati nel rapporto stesso (D18 punto 3): misura solo il motore configurato, ciò che il motore risponde (non ciò che un cliente vede), un giro per invocazione, posizione = indice parole e non ranking pubblico, niente sentiment/aree riservate.
+
 ### 🛡️ IL BLOCCO VUOTO DIVENTA UN CONTAINER DI FIDUCIA (tutela + sconto 5 EUR + recensioni trasparenti) — 23 settembre, «fallo fino al lavoro finito, super testato» del fondatore (ramo `tutela-sconto-2026-09-23`)
 
 **Da dove nasce.** Punto 3 della coda del fondatore: frase di tutela «fase di test per un servizio migliore e risparmio» + email→sconto 5 EUR in 8 lingue al posto del vecchio blocco waitlist. In corso d'opera il fondatore ha guidato la FORMA: container orizzontale («bello, degno di fiducia»), via la piantina (→ scudo con spunta in medaglia champagne), scritte più grandi, la riga host diventa CTA («Sei un host? Cosa aspetti a farne parte?»), banner in cima richiesto POI ritirato (tutto nel blocco sotto). SMASCHERATO dall'anteprima locale (server di sola lettura in %TEMP% che serve deploy/ con catalogo vuoto): la griglia dei risultati (`.risultati`, colonne da 280px) SCHIACIAVA il container in una cella -> `grid-column:1/-1` e il blocco respira a tutta larghezza.
@@ -14130,6 +14142,48 @@ la sua fonte.
 - Rate limit sulle rotte a token come priorità: i token firmati rendono l'enumerazione non praticabile.
 - Sonde sintetiche che PRENOTANO in produzione: il giudice non scrive sul sito (regola sua); la sonda dal lato
   dell'ospite (C3) resta in sola lettura.
+
+
+### R4 — 2026-09-24 · AI Discovery: come si misura se e come le AI mostrano un brand
+
+**La domanda.** Ordine del fondatore (coda punto 2): «strumento che misura ogni giorno se e come le AI mostrano
+BookinVIP». Nessun precedente in casa (censimento: zero strumenti con nomi ai_/discovery/mcp/visibilita' in
+collaudi/). Due ricerche prima di scrivere una riga (D25).
+
+**Le fonti lette** (2026-09-24):
+- SE Ranking, *Perplexity Search Visibility and Brand Mentions Tracker*, https://seranking.com
+- Frizerly, *6 best AI brand monitoring tools* (ChatGPT, Gemini, Perplexity), 2026, https://blog.frizerly.com
+- Ziptie, *Best Tools for Tracking Brand Visibility in AI Search (2026)*, https://ziptie.dev
+- Growbydata, *tracking brand mentions in Perplexity via prompt-level monitoring*, https://growbydata.com
+- Improvado, *How to Measure AI Search Visibility in 2026*, https://www.improvado.io
+- Scrunch (workflow SOV: dashboard → topic/prompt-level → drill-down), https://www.scrunchai.com
+- Shadow, *How to Measure AI Share of Voice: Methods, Tools*, 2026-06-06, https://www.shadow.inc
+- Riff Analytics, framework di calcolo SOV su ChatGPT/Perplexity/Gemini/AI Overviews, https://www.riffanalytics.ai
+- OptimizeGeo, formula SOV = (Brand Citations / Total Category Citations) x 100, https://optimizegeo.com
+
+**Cosa dicono.**
+1. La pratica del settore e' la misura a livello di PROMPT: un set fisso di domande della categoria
+   (tipicamente 50-200, marca + prodotto + confronto), rilanciato con costanza nel tempo perche' le
+   risposte AI NON sono deterministiche; la tendenza viene dai giri ripetuti, non dal giro singolo.
+2. La metrica standard e' lo **AI Share of Voice**: citazioni del brand / citazioni totali della
+   categoria; si misurano anche la posizione della citazione nella risposta e il contesto/tono.
+3. Gli strumenti commerciali (SE Ranking, Frizerly, Ziptie & co.) vendono esattamente questo:
+   menzioni, competitor, quota di voce, sentiment, su piu' motori.
+
+**Cosa abbiamo deciso.** Strumento NOSTRO (`collaudi/ai_discovery_monitor.py` v1): set fisso di 5 domande
+(intenti mescolati), un motore per giro configurato da ambiente (DISCOVERY_AI_*, endpoint compatibile
+/chat/completions), detection della prima citazione + competitor da insieme fisso, rapporto JSON per giro,
+metrica PRESENZA = citazioni / risposte ottenute col denominatore dichiarato. Uscita 0 = giro completato,
+uscita 1 = misura impossibile (config mancante = NON ESEGUITO, S7; sito giu'; motore muto). La chiave non
+esce mai dall'ambiente (ferrea 14, errori di rete ripuliti).
+
+**Cosa NON abbiamo adottato, e perche'.**
+- Le piattaforme SaaS commerciali: costo ricorrente e il punto e' POSSEDERE la misura; strumento stdlib
+  puro senza dipendenze nuove (ferrea 1), estendibile a piu' motori configurandoli.
+- Sentiment e posizione-pubblica: le fonti li offrono, ma qui il primo giro e' la presenza; il tono e il
+  ranking sono un'estensione futura, dichiarata nei limiti (D18 punto 3) e non promessa.
+- Giri multipli per invocazione: il costo token moltiplicato senza bisogno — la cadenza la fa il cron
+  quotidiano (T3), che e' il metodo delle fonti stesse (stesso set, giri ripetuti nel tempo).
 
 
 ### Ricerca: Errori delle IA sul codice altrui + storia del repo — 23 regole sopravvissute
