@@ -27,6 +27,9 @@ from typing import Any, Callable, List, Optional, Sequence
 
 from fase89_jurisdiction_outreach import (ALLOW_LIST_DEFAULT, MotoreRadarOutreach,
                                           _email_valida)
+# GIURISDIZIONI LE DECIDE fase154 (2026-09-24): il motore durevole fa il SECONDO muro
+# (dopo il gate di fase89) interrogando le leggi al volo, per email.
+from fase154_giurisdizioni_marketing import puo_contattare_a_freddo
 
 logger = logging.getLogger("core_auto.outreach_email")
 
@@ -112,6 +115,11 @@ class MotoreOutreachDurevole(MotoreRadarOutreach):
         super().__init__(giurisdizioni_permesse=giurisdizioni_permesse,
                          link_opt_out=link_opt_out)
         self._store = store
+        # SECONDO MURO (giurisdizioni le decide fase154): all'avvio la allow-list
+        # attiva si filtra con le leggi vere — un paese mai ammesso non passa nemmeno
+        # in _permesse. Il gate di fase89 resta il muro primo per singolo contatto.
+        self._permesse = {p for p in self._permesse
+                          if puo_contattare_a_freddo(p, "email")[0] is True}
         for e in store.tutti():                        # preload durevole -> RAM
             super().opt_out(e)
 

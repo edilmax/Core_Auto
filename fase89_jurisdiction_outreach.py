@@ -34,7 +34,18 @@ logger = logging.getLogger("core_auto.jurisdiction_outreach")
 
 # Giurisdizioni dove il cold-email B2B è generalmente ammesso (con opt-out): l'operatore
 # le abilita SOTTO la propria responsabilità legale. Default minimale; UE/UK esclusi.
-ALLOW_LIST_DEFAULT = ("US",)
+# GIURISDIZIONI LE DECIDE fase154 (2026-09-24, chiude la casella del piano): la lista
+# cablata deriva da giurisdizioni_consentite("email") di fase154 — le leggi del marketing
+# stanno in UN modulo solo, e il gate del radar (consentito) interroga fase154 al volo
+# invece di fidarsi di una costante che può invecchiare.
+try:
+    from fase154_giurisdizioni_marketing import (
+        giurisdizioni_consentite as _giurisdizioni_consentite_f154,
+        puo_contattare_a_freddo as _puo_contattare_a_freddo_f154,
+    )
+    ALLOW_LIST_DEFAULT = tuple(sorted(_giurisdizioni_consentite_f154("email")))
+except Exception:                                       # fail-closed: lista minima
+    ALLOW_LIST_DEFAULT = ("US",)
 
 # Paese ISO -> lingua dell'email (estendibile).
 LINGUA_PER_PAESE = {
@@ -336,13 +347,21 @@ class MotoreRadarOutreach:
             self._optout.add(email.strip().lower())
 
     def consentito(self, c: Contatto) -> Tuple[bool, str]:
-        """IL GATE, fail-closed."""
+        """IL GATE, fail-closed. La giurisdizione la decide fase154 AL VOLO
+        (puo_contattare_a_freddo): se le leggi cambiano, il gate segue senza deploy."""
         if not isinstance(c, Contatto) or not _email_valida(c.email):
             return False, "contatto_non_valido"
         if c.email.strip().lower() in self._optout:
             return False, "opt_out"                  # vince su tutto
-        if str(c.paese).upper() not in self._permesse:
-            return False, "giurisdizione_non_permessa"
+        paese = str(c.paese).upper()
+        try:
+            lecito, motivo_legge = _puo_contattare_a_freddo_f154(paese, "email")
+            if lecito is not True:
+                return False, "giurisdizione_non_permessa(%s)" % (motivo_legge or paese)
+        except Exception:
+            return False, "giurisdizione_indisponibile"   # fail-closed
+        if paese not in self._permesse:
+            return False, "fuori_giurisdizioni_attive"
         if not c.contatto_pubblico_business:
             return False, "non_contatto_pubblico"
         return True, ""

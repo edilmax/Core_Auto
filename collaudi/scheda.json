@@ -24,11 +24,11 @@
  "0d485cbbe89e": {
   "blocco": 8,
   "comando": "python collaudi/esame_deploy.py --da-file <letture> --scrivi",
-  "commit": "65a1759",
+  "commit": "4c96811",
   "condizione": "il deploy passa sempre dal protocollo D17, mai a mano",
   "denominatore": 47,
-  "esito": true,
-  "impronta": "3eae8dfd80df",
+  "esito": false,
+  "impronta": "bfc1c39351b2",
   "impronte_moduli": {
    "fase13_protocollo_finale": "2dce22f058cc",
    "fase16_outbox": "a47de5874653",
@@ -42,11 +42,11 @@
    "fase42_observability": "a557645447a7",
    "fase60_mcp_server": "56ffc4364819",
    "fase81_bootstrap_casavip": "dacbc902ed40",
-   "fase83_server": "5737bb471831",
+   "fase83_server": "57f593909935",
    "fase86_email": "19069663f9d1"
   },
-  "motivo": "",
-  "quando": "2026-09-16T17:09:36"
+  "motivo": "[tracce] deploy_scambio_2.log: un PRE_DEPLOY_*.commit scritto PRIMA, entro 180 minuti (nessuno); [tracce] deploy_scambio_20260905.log: un PRE_DEPLOY_*.commit scritto PRIMA, entro 180 minuti (nessuno); [tracce] deploy_scambio_20260906.log: un PRE_DEPLOY_*.commit scritto PRIMA, entro 180 minuti (nessuno); [tracce] deploy_scambio_20260906_2.log: un PRE_DEPLOY_*.commit scritto PRIMA, entro 180 minuti (nessuno); [tracce] deploy_scambio_20260907.log: un PRE_DEPLOY_*.commit scritto PRIMA, entro 180 minuti (nessuno); [tracce] deploy_scambio_20260908.log: un PRE_DEPLOY_*.commit scritto PRIMA, entro 180",
+  "quando": "2026-09-24T00:35:12"
  },
  "159ad2c8ab8f": {
   "blocco": 1,
@@ -228,11 +228,11 @@
  "3a547df3a743": {
   "blocco": 8,
   "comando": "python collaudi/esame_backup.py --file <db.gz> --sha <.sha256> --manifest <MANIFEST.txt> --scrivi",
-  "commit": "65a1759",
+  "commit": "4c96811",
   "condizione": "il salvataggio e' stato RIPRISTINATO e letto, non solo prodotto",
   "denominatore": 19,
   "esito": true,
-  "impronta": "3eae8dfd80df",
+  "impronta": "bfc1c39351b2",
   "impronte_moduli": {
    "fase13_protocollo_finale": "2dce22f058cc",
    "fase16_outbox": "a47de5874653",
@@ -246,11 +246,11 @@
    "fase42_observability": "a557645447a7",
    "fase60_mcp_server": "56ffc4364819",
    "fase81_bootstrap_casavip": "dacbc902ed40",
-   "fase83_server": "5737bb471831",
+   "fase83_server": "57f593909935",
    "fase86_email": "19069663f9d1"
   },
   "motivo": "",
-  "quando": "2026-09-16T17:08:32"
+  "quando": "2026-09-24T00:55:15"
  },
  "50691c557e6e": {
   "blocco": 1,
@@ -427,10 +427,10 @@
  "813b9082642c": {
   "blocco": 1,
   "comando": "python collaudi/esame_produzione.py --scrivi",
-  "commit": "eeea05f",
+  "commit": "4c96811",
   "condizione": "gli invarianti sono verificati in PRODUZIONE, non solo nei test",
   "denominatore": 14,
-  "esito": false,
+  "esito": true,
   "impronta": "f18f622230ff",
   "impronte_moduli": {
    "fase101_stripe_connect": "30d6d6acc8ee",
@@ -460,8 +460,8 @@
    "fase87_stripe_webhook": "d597430f8f64",
    "fase99_multicurrency": "61a3b5a0c820"
   },
-  "motivo": "l'ULTIMO giro INTERO del Guardiano e' finito pulito (GUARDIANO: nessuno stato anomalo), ha meno di 25 h e ha verificato gli invarianti (la sua riga INVARIANTI ARCHIVI lo precede) (GUARDIANO: 4 stato/i anomalo/i -> {'guasti_isolati': {'conta · eta 9.5 h · riga INVARIANTI ARCHIVI subito prima: si')",
-  "quando": "2026-09-16T13:09:36"
+  "motivo": "",
+  "quando": "2026-09-24T00:43:24"
  },
  "8267c64a367a": {
   "blocco": 4,
@@ -635,13 +635,42 @@
  "d4e612aafcd1": {
   "blocco": 9,
   "comando": "python collaudi/esame_marketing.py --casella giurisdizioni --scrivi",
-  "commit": "39448a0",
+  "commit": "4c96811",
   "condizione": "si pubblica SOLO dove e' lecito (le giurisdizioni le decide fase154)",
   "denominatore": 8,
-  "esito": false,
-  "impronta": "dac198979bc0",
-  "motivo": "[chiamanti] almeno un modulo di produzione importa fase154 (albero sintattico) (chiamanti=[]); [decisori] fase89_jurisdiction_outreach decide un paese: passa da fase154 (non importa fase154); [decisori] fase95_outreach_email decide un paese: passa da fase154 (non importa fase154)",
-  "quando": "2026-09-07T18:26:42"
+  "esito": true,
+  "impronta": "6c46f8c089e2",
+  "impronte_moduli": {
+   "fase158_domanda": "c8b1f3c520bb",
+   "fase161_domanda_allarme": "fa75bc0fe516",
+   "fase169_indexnow": "9c0408babc35",
+   "fase171_cervello_seo": "1d1d92ac71b7",
+   "fase173_motore_seo": "df1918adf2aa",
+   "fase193_canale_mastodon": "37328fdef72e",
+   "fase194_canale_bluesky": "69d5c3ed57cd",
+   "fase195_canale_reddit": "aa05b6c28f6c",
+   "fase196_video_ai": "122fa86f8138",
+   "fase197_canale_nostr": "9cd99413a11f",
+   "fase198_blog": "84d1c66249a3",
+   "fase200_campagna_persuasiva": "463f53a7da3e",
+   "fase201_partner": "798c18e0bc51",
+   "fase24_channels": "12c9022b17ca",
+   "fase48_advertising": "e694368273cc",
+   "fase68_niche_profiler": "48ae64216384",
+   "fase76_viral_loop": "22de84f56302",
+   "fase77_portability": "6a44640e8850",
+   "fase89_jurisdiction_outreach": "117be484f3ae",
+   "fase90_marketing": "7e03531da8ab",
+   "fase91_canali_social": "e10d754a3fd0",
+   "fase92_canale_x": "3303b0dd1d37",
+   "fase93_canale_tiktok": "76c90176a632",
+   "fase94_scheduler_campagna": "baaa54b7d737",
+   "fase95_outreach_email": "2bb7d841ddb4",
+   "fase96_fonte_osm": "8d0bc0cbb8d9",
+   "fase97_inbound_seo": "8f73f48d3a48"
+  },
+  "motivo": "",
+  "quando": "2026-09-24T18:27:14"
  },
  "d70ecb7a31cc": {
   "blocco": 1,
@@ -685,22 +714,51 @@
  "df0678e71e35": {
   "blocco": 9,
   "comando": "python collaudi/esame_marketing.py --casella interruttore --scrivi",
-  "commit": "39448a0",
+  "commit": "4c96811",
   "condizione": "nessun canale pubblica senza che una persona possa fermarlo",
   "denominatore": 26,
   "esito": true,
-  "impronta": "dac198979bc0",
+  "impronta": "6c46f8c089e2",
+  "impronte_moduli": {
+   "fase158_domanda": "c8b1f3c520bb",
+   "fase161_domanda_allarme": "fa75bc0fe516",
+   "fase169_indexnow": "9c0408babc35",
+   "fase171_cervello_seo": "1d1d92ac71b7",
+   "fase173_motore_seo": "df1918adf2aa",
+   "fase193_canale_mastodon": "37328fdef72e",
+   "fase194_canale_bluesky": "69d5c3ed57cd",
+   "fase195_canale_reddit": "aa05b6c28f6c",
+   "fase196_video_ai": "122fa86f8138",
+   "fase197_canale_nostr": "9cd99413a11f",
+   "fase198_blog": "84d1c66249a3",
+   "fase200_campagna_persuasiva": "463f53a7da3e",
+   "fase201_partner": "798c18e0bc51",
+   "fase24_channels": "12c9022b17ca",
+   "fase48_advertising": "e694368273cc",
+   "fase68_niche_profiler": "48ae64216384",
+   "fase76_viral_loop": "22de84f56302",
+   "fase77_portability": "6a44640e8850",
+   "fase89_jurisdiction_outreach": "117be484f3ae",
+   "fase90_marketing": "7e03531da8ab",
+   "fase91_canali_social": "e10d754a3fd0",
+   "fase92_canale_x": "3303b0dd1d37",
+   "fase93_canale_tiktok": "76c90176a632",
+   "fase94_scheduler_campagna": "baaa54b7d737",
+   "fase95_outreach_email": "2bb7d841ddb4",
+   "fase96_fonte_osm": "8d0bc0cbb8d9",
+   "fase97_inbound_seo": "8f73f48d3a48"
+  },
   "motivo": "",
-  "quando": "2026-09-07T18:26:42"
+  "quando": "2026-09-24T18:27:14"
  },
  "e0c5eaf17028": {
   "blocco": 6,
   "comando": "python collaudi/esame_testi_congelati.py --scrivi",
-  "commit": "45d0eee",
+  "commit": "4c96811",
   "condizione": "nessun testo resta congelato in italiano dove la pagina dichiara 8 lingue: l'occhio del fondatore conta ZERO parole ferme sulle pagine che non sono gusci riempiti dal server",
   "denominatore": 72,
   "esito": true,
-  "impronta": "c4496d2aad88",
+  "impronta": "55c470307e9a",
   "impronte_moduli": {
    "fase107_traduzione_annunci": "e0fc5c8e8eb1",
    "fase113_messaggistica": "c3a8712be969",
@@ -709,7 +767,7 @@
    "fase123_web_push": "674827600458",
    "fase129_traduzione_recensioni": "2d80591ac6cd",
    "fase137_fedelta_guest": "5394500c8163",
-   "fase139_chatbot_guest": "2f44757235d2",
+   "fase139_chatbot_guest": "72a347f6fbfe",
    "fase166_geocoder": "162da4a35b88",
    "fase175_poi_osm": "c1ad5e11dd94",
    "fase26_ricerca": "3dc66d4cb1ac",
@@ -719,7 +777,7 @@
    "fase74_sensory_engine": "6f64cb3f6e59"
   },
   "motivo": "",
-  "quando": "2026-09-22T13:28:25"
+  "quando": "2026-09-24T00:41:58"
  },
  "ec84faaea398": {
   "blocco": 2,
