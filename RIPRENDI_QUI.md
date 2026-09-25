@@ -3435,7 +3435,37 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 84595fd
+CONSEGNE AGGIORNATE A: cfc8f56
+
+## PASSAGGIO DI CONSEGNE 10 (2026-09-25 notte, D21) - T3: RICONCILIAZIONE NOTTURNA (cron sul VPS), via «autorizzato» del fondatore:
+- IL GIRO: deploy/cron_riconciliazione.py (nell'immagine a /app/deploy/): chiama
+  fase182.riconcilia (READ-ONLY) sul periodo di 2 giorni, manda UNA email SEMPRE
+  (anche a tutto ok: la mail che non arriva e' lei l'allarme), URGENTE nell'oggetto se
+  fantasmi o giro parziale; alla fine lascia il BATTITO fase178.segna_battito_
+  riconciliazione(dir_dati di DB_FINANZA) e una riga JSON in /data/riconciliazione_
+  notte.log. Uscite: 0 = tutto ok; 1 = fantasmi/parziale/email non partita (URGENTE
+  gia' mandata); 2 = impossibile (config mancante/eccezione, S7).
+- IL GUARDIANO DEL BATTITO: fase178_watchdog.py + NOME_BATTITO_RIC,
+  segna_battito_riconciliazione, eta_battito_riconciliazione_sec e l'allarme
+  "riconciliazione_muto" in valuta (critico se manca o > 25h, stessa soglia del
+  guardiano; chiave assente = non misurato = non si giudica, come per il guardiano).
+  Il watchdog.sh ESISTENTE non e' toccato: la lettura passa da --dati gia' cablato.
+- CRON SUL VPS (installato nel crontab di root, verificato con crontab -l):
+  17 2 * * * docker exec casavip_app python3 /app/deploy/cron_riconciliazione.py >> /data/riconciliazione_cron.log 2>&1
+- GUARDIE: test_riconciliazione_notturna.py, 10 guardie (battito in valuta nelle due
+  direzioni + giro notturno con Stripe finto al bordo fetch e email finta: mail anche
+  a tutto ok, URGENTE coi fantasmi, NON ESEGUITO senza config, battito anche con email
+  ko). VISTE ROSSE con 2 difetti iniettati (allarme disattivato in valuta + mail
+  saltata a tutto ok): FAILED failures=4; ripristino byte-identico (sha256);
+  verdi 10/10 EXIT=0. Il primo tentativo aveva un SyntaxError e un F401 beccati in
+  casa prima del commit.
+- Caricatore 6907 -> 6917 (misurato). README 428 file di test.
+- NOTE: il giro PARZIALE (tetto pagine Stripe) non ha una guardia dedicata: condivide
+  il ramo URGENTE dei fantasmi, dichiarato (D18 p.3). La PRIMA mail vera arriva
+  stanotte alle 02:17 UTC su ALERT_EMAIL; la verifica "il cron ha girato davvero" e'
+  il battito fresco domani mattina (o la mail in arrivo).
+- RESTA: suite intera -> pre-fatto -> commit -> PR -> gate -> unione -> deploy rebuild
+  (deploy/ entra nell'immagine) -> verifica battito/domani.
 
 ## PASSAGGIO DI CONSEGNE 9 (2026-09-25 notte, D21) - LOCK 1-CARTA=1-SCONTO IN PUBBLICAZIONE (denaro, via esplicito del fondatore):
 - VIA: «implementa il Lock Stripe (1-carta=1-sconto)... guardie meccaniche a specchio e
@@ -3477,8 +3507,18 @@ CONSEGNE AGGIORNATE A: 84595fd
   l'editor (gancio disattivato + lega_carta sempre 'nuovo'): FAILED failures=5;
   ripristino byte-identico (sha256 OK su fase83/167/85); verdi 10/10 EXIT=0.
 - Caricatore 6897 -> 6907 (misurato). README 427 file di test.
-- RESTA: suite intera -> pre-fatto -> commit -> PR -> gate -> unione -> DEPLOY rebuild
-  app (fase83/85/167 sono produzione: paracadute :prec, DEPLOY.md) -> sonde.
+- FATTO (25/9 notte): suite intera Ran 6902 OK skipped=4 uscita 0 (giri 2 e 3: il giro 1
+  aveva beccato la strada di rimborso NON CENSITA - guardie del censimento funzionanti -
+  e la variabile ruff F841; corretti con censimento e assertLogs, non indebolendo niente).
+  Commit f708272 + bcc1a25, PR #217, gate success (16 job), merge cfc8f56 verificato 2x.
+  DEPLOY col pulsante a 3 tappe (paracadute/scambio/verifica, USCITA=0): :prec agganciato
+  all'immagine di prima (24512046), app+backup healthy, money_path_pronto True avvisi [],
+  tre posti a cfc8f56. SONDE: health 200, canonico 200, www 301, bunker 403, payout 401.
+  Giudice esterno verifica_produzione.py: 190 controlli, 0 violazioni. Campini sentinella
+  T+5/T+15/T+30 scritti da soli nel log %TEMP%\sonde_T30.log.
+- PROSSIMA SESSIONE: (1) chiudere la casella plausibilita' col primo annuncio vero (T6) o
+  col via del fondatore su un annuncio demo a prezzo plausibile; (2) T3 cron riconciliazione;
+  (3) monitor esterno UptimeRobot (lo apre il fondatore) per la sentinella; (4) T4/T5/T6.
 
 ## PASSAGGIO DI CONSEGNE 8 (2026-09-24 notte, D21 - CHIUSURA SESSIONE: AI DISCOVERY MONITOR UNITO, PLAUSIBILITA' ANCORA ROSSA):
 - AI DISCOVERY MONITOR: PR #216 unita (gate success, 16 job verdi), master 84595fd,
@@ -3661,7 +3701,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 6907 test
+SUITE ATTUALE: Ran 6917 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
