@@ -170,6 +170,39 @@ class ProviderStripe:
             return {"ok": False, "id": "",
                     "motivo": "%s: %s" % (exc.__class__.__name__, exc)}
 
+    def impronta_carta(self, payment_intent: Any) -> str:
+        """LOCK 1-CARTA=1-SCONTO: l'impronta STABILE della carta usata in un pagamento.
+        Stripe la calcola dal numero di carta: e' la stessa a distanza di mesi e da
+        qualunque account -- cio' che il lock usa per riconoscere LA CARTA senza mai
+        vedere (ne' conservare) il numero.
+
+        LETTURA SOLA: GET del PaymentIntent con `expand` del charge, perche' l'oggetto
+        vero si chiede all'API e il contenuto del webhook non e' verita' sullo stato
+        (METODO 3.4). Ritorna l'impronta, o "" se non ottenibile (input assente,
+        risposta inattesa, errore di rete): il chiamante dichiara il fail-open e lo
+        scrive nel registro; qui niente ERROR perche' in un'interruzione di Stripe
+        diventerebbe posta quotidiana che nessuno legge piu' (ferrea 10)."""
+        if not (isinstance(payment_intent, str) and payment_intent.startswith("pi_")):
+            return ""
+        try:
+            from urllib.parse import urlencode
+            url = (PAGAMENTI_URL + "/" + payment_intent + "?"
+                   + urlencode([("expand[]", "latest_charge")]))
+            resp = self._fetch(url, None, {"Authorization": "Bearer " + self._key})
+            charge = resp.get("latest_charge") if isinstance(resp, dict) else None
+            if not isinstance(charge, dict):
+                return ""
+            pm = charge.get("payment_method_details")
+            pm = pm if isinstance(pm, dict) else {}
+            carta = pm.get("card")
+            carta = carta if isinstance(carta, dict) else {}
+            fp = carta.get("fingerprint")
+            return fp if isinstance(fp, str) else ""
+        except Exception as exc:
+            logger.warning("Stripe: impronta carta non letta pi=%s -> %s: %s",
+                           payment_intent, exc.__class__.__name__, exc)
+            return ""
+
     # Rimborsi che valgono come denaro GIA' USCITO (o in uscita). Un rimborso 'failed' o
     # 'canceled' NON ha restituito niente: contarlo come fatto toglierebbe la riga dalla lista
     # di chi aspetta lasciando l'ospite senza i suoi soldi E senza nessuno che lo sappia --

@@ -7373,6 +7373,98 @@ class RouterHTTP:
         except Exception:
             logger.warning("rilascio su credito_gia_usato fallito (ignorato)", exc_info=True)
 
+    def _lock_carta_credito(self, rif, pi_id):
+        """LOCK 1-CARTA=1-SCONTO (ordine del fondatore, via esplicito scritto): la carta
+        che ha gia' pagato una prenotazione col Credito Fondatore non ne ottiene un ALTRO,
+        anche iscrivendosi con email diverse. Chiamato dal webhook DI CONFERMA pagamento,
+        prima di onorarlo: l'impronta della carta esiste solo nel pagamento confermato.
+
+        Come funziona (fase167.lega_carta, semantica speculare a _consuma_credito):
+          - "nuovo"/"stesso" -> il pagamento prosegue (prima volta per la carta, o replay
+            idempotente dello stesso book);
+          - "diverso" -> la carta stava riusando il buco con un secondo credito: RIMBORSO
+            PIENO automatico, prenotazione NON confermata, stanza rilasciata, riga nel
+            giornale e CRITICAL nel registro (il watchdog lo porta su Telegram entro il
+            suo giro: chi tenta il buco lo sa che l'abbiamo visto).
+
+        CHI PERDE SE VA STORTA (D16): nessuno resta indebito. L'ospite riceve TUTTO
+        indietro (niente servizio consegnato), l'host non ha mai ricevuto, la piattaforma
+        paga la commissione Stripe del rimborso (non restituibile): e' il costo, scritto
+        qui, della chiusura del buco.
+
+        ⚠️ FAIL-OPEN DICHIARATO se l'impronta non e' ottenibile (chiave assente in test,
+        Stripe API giu', provider senza il metodo): NON si rifiuta un pagamento vero per
+        un errore di lettura di una DIFESA di secondo livello -- e in un'interruzione
+        Stripe rifiutare tutti significherebbe bloccare ogni arrivo (ferrea 10). Il fatto
+        resta nel registro (WARNING) e il primo muro resta la serratura email+citta'
+        (fase158/PR #213). Una registrazione senza credito esce subito: il lock non la guarda."""
+        pp_ = getattr(self._sys, "pagamenti_pendenti", None)
+        if pp_ is None or not (isinstance(rif, str) and rif):
+            return "fuori_perimetro"
+        rec = pp_.info(rif)
+        if not isinstance(rec, dict):
+            return "fuori_perimetro"
+        try:
+            corpo = json.loads(rec.get("corpo_json") or "{}")
+        except Exception:
+            corpo = {}
+        if not isinstance(corpo, dict):
+            corpo = {}
+        credito_id = corpo.get("credito_id")
+        sconto = corpo.get("sconto_credito_cents", 0)
+        if not (isinstance(credito_id, str) and credito_id.strip()) \
+                or not (isinstance(sconto, int) and not isinstance(sconto, bool) and sconto > 0):
+            return "fuori_perimetro"
+        registro = getattr(self._sys, "credito_usati", None)
+        lega = getattr(registro, "lega_carta", None) if registro is not None else None
+        provider = getattr(self._sys, "stripe", None)
+        prendi = getattr(provider, "impronta_carta", None) if provider is not None else None
+        if lega is None or prendi is None:
+            logger.warning("LOCK CARTA | codice: impronta_non_ottenibile | sottocodice: "
+                           "strumento_assente | messaggio: lock non eseguibile per '%s'",
+                           _rif_per_registro(rif))
+            return "impronta_assente"
+        try:
+            impronta = prendi(pi_id)
+        except Exception:
+            logger.warning("LOCK CARTA | codice: impronta_non_ottenibile | sottocodice: "
+                           "errore_lettura | messaggio: fail-open dichiarato per '%s'",
+                           _rif_per_registro(rif), exc_info=True)
+            impronta = ""
+        if not (isinstance(impronta, str) and impronta.strip()):
+            return "impronta_assente"
+        esito = lega(impronta, credito_id, str(rif))
+        if esito != "diverso":
+            return esito
+        # DIVERSO: stessa carta, credito diverso -> il buco si chiude qui.
+        logger.critical("LOCK CARTA | carta gia' usata per un altro credito: RIMBORSO "
+                        "PIENO e prenotazione RIFIUTATA per '%s'", _rif_per_registro(rif))
+        importo = int(corpo.get("totale_cents", 0) or corpo.get("prezzo_guest_cents", 0) or 0)
+        es_rim = {"ok": False, "motivo": "importo_assente"}
+        if importo > 0 and pi_id:
+            es_rim = provider.rimborsa(pi_id, importo, "lock-carta:" + str(rif))
+        try:
+            self._giornale(tipo="rimborso", riferimento=rif,
+                           soggetto="ospite:" + str(rif),
+                           importo_cents=importo,
+                           valuta=corpo.get("valuta") or "EUR",
+                           evento_id="lock_carta:" + str(rif),
+                           causale="lock 1-carta=1-sconto: carta gia' usata per un altro "
+                                   "credito; rimborso pieno (%s)" % es_rim.get("motivo", ""))
+        except Exception:
+            logger.error("LOCK CARTA: riga di giornale NON scritta per '%s' (il rimborso "
+                         "dovuto non deve sparire)", _rif_per_registro(rif), exc_info=True)
+        pp_.marca_da_rimborsare(rif)
+        _idem = str(rec.get("idem_key") or "")
+        try:
+            self._sys.inventario.rilascia(rec.get("alloggio_id"), rec.get("check_in"),
+                                          rec.get("check_out"),
+                                          idem_key=(_idem or ("hold_" + str(rif))))
+        except Exception:
+            logger.error("LOCK CARTA: rilascio stanza fallito per '%s' (le date restano "
+                         "bloccate fino allo sweeper)", _rif_per_registro(rif), exc_info=True)
+        return "diverso"
+
     def _credito_anti_rimpianto(self, trattenuto_cents, valuta="EUR"):
         """Trasforma il 50% della penale in un Credito Viaggio firmato (tetto 5000 unita'
         minori DELLA VALUTA della prenotazione). Riusa il riscatto floor-guarded del
@@ -8362,6 +8454,12 @@ class RouterHTTP:
             except Exception:
                 logger.warning("salvataggio cs_ fallito (ISOLATO)", exc_info=True)
                 esito_perso = "salvataggio_sessione_fallito"
+            # LOCK 1-CARTA=1-SCONTO: se la carta ha gia' pagato con un altro credito il
+            # pagamento viene restituito PER INTERO e la prenotazione NON si conferma
+            # (200 comunque: l'esito e' gestito, Stripe non deve ritentare).
+            if self._lock_carta_credito(rif, pi_id) == "diverso":
+                return 200, {"ricevuto": True, "tipo": tipo,
+                             "lock_carta": "credito_negato"}
             logger.info("Stripe: pagamento CONFERMATO per riferimento '%s'",
                         _rif_per_registro(rif))
             # ⛔ IL RITORNO SI GUARDA: `False` vuol dire che la conferma e' esplosa DA NOI

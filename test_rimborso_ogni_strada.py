@@ -57,6 +57,16 @@ STRADE_CENSITE = {
         "rimborso_non_confermabile:",
     "rimborso dovuto: pagamento tardivo su stanza presa": "rimborso_tardivo:",
     "rimborso dovuto: anticipo su stanza già presa": "rimborso_anticipo_tardivo:",
+    # LOCK 1-CARTA=1-SCONTO (ordine del fondatore, via esplicito): l'unica strada che
+    # parte DA SOLA, e la differenza e' il punto. Le altre sette restituiscono denaro
+    # deciso da una persona; questa lo restituisce da sola al webhook di conferma, quando
+    # la carta ha gia' pagato con un altro credito. Misurata prima di censirla (le guardie
+    # di test_lock_carta_credito la percorrono fino al gateway finto): innesco = webhook di
+    # conferma di una prenotazione col credito; importo = totale_cents/prezzo_guest_cents
+    # del record pendente; idempotente = chiave stabile "lock-carta:<rif>" (Stripe non
+    # restituisce due volte). La riga di giornale porta evento_id "lock_carta:<rif>".
+    "lock 1-carta=1-sconto: carta gia' usata per un altro credito; rimborso pieno (%s)":
+        "lock_carta:",
 }
 
 # Le strade che condividono la chiave di default, DICHIARATE una per una. Sono tre, e la

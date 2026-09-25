@@ -73,6 +73,55 @@ class RegistroCreditiUsati:
                     credito_id TEXT PRIMARY KEY,
                     riferimento TEXT NOT NULL DEFAULT '',
                     ts INTEGER NOT NULL DEFAULT 0)""")
+                # LOCK 1-CARTA=1-SCONTO (ordine del fondatore, via esplicito): l'impronta
+                # della carta che ha pagato una prenotazione col credito si vincola al
+                # credito usato; la STESSA carta non puo' ottenerne un altro, nemmeno
+                # con email diverse. PK sull'impronta = vincolo nel database (PARTE 16.2).
+                con.execute("""CREATE TABLE IF NOT EXISTS carta_impronte (
+                    impronta TEXT PRIMARY KEY,
+                    credito_id TEXT NOT NULL,
+                    riferimento TEXT NOT NULL DEFAULT '',
+                    ts INTEGER NOT NULL DEFAULT 0)""")
+        finally:
+            con.close()
+
+    def lega_carta(self, impronta: Any, credito_id: Any, riferimento: Any) -> str:
+        """LOCK 1-CARTA=1-SCONTO: vincola l'impronta della carta al credito pagato con lei.
+        ATOMICO (BEGIN IMMEDIATE), semantica speculare a `consuma`. Ritorna:
+          - "nuovo"  : prima volta per questa carta (credito legittimo, si conferma)
+          - "stesso" : la carta ha gia' pagato il STESSO credito (replay del webhook -> ok)
+          - "diverso": la carta ha gia' pagato con un credito DIVERSO (abuso -> rimborso)
+        Impronta vuota -> "nuovo" senza scrivere niente: senza impronta il lock non
+        guarda (niente falsi rifiuti per un dato assente; il chiamante lo dichiara).
+        credito_id vuoto -> "nuovo": una prenotazione senza credito non puo' violare
+        il lock e non deve lasciare traccia."""
+        if not (isinstance(impronta, str) and impronta.strip()):
+            return "nuovo"
+        if not (isinstance(credito_id, str) and credito_id.strip()):
+            return "nuovo"
+        rif = str(riferimento or "")
+        con = self._apri()
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            r = con.execute("SELECT credito_id, riferimento FROM carta_impronte WHERE impronta=?",
+                            (impronta,)).fetchone()
+            if r is None:
+                con.execute("INSERT INTO carta_impronte (impronta, credito_id, riferimento, ts) "
+                            "VALUES (?,?,?,?)", (impronta, credito_id, rif, self._now()))
+                con.execute("COMMIT")
+                return "nuovo"
+            con.execute("COMMIT")
+            # "stesso" = replay dello STESSO book (stesso riferimento E stesso credito),
+            # speculare a `consuma`: un riferimento vuoto non identifica niente, e due
+            # prenotazioni diverse sullo stesso credito non sono un replay ma un abuso.
+            return "stesso" if (rif and r["riferimento"] == rif
+                                and r["credito_id"] == credito_id) else "diverso"
+        except Exception:
+            try:
+                con.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
+            raise
         finally:
             con.close()
 

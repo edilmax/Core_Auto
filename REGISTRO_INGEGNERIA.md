@@ -439,6 +439,18 @@ mount PRIMA di toccare il container vivo (il bind-mount e' per inode: serve ricr
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🔒 LOCK 1-CARTA=1-SCONTO: la carta che ha usato il credito non ne usa un altro — 25 settembre, via esplicito del fondatore (denaro)
+
+**Da dove nasce.** Il fondatore vede il buco: il Credito Fondatore (5 EUR) è negato alla stessa email (serratura PR #213), ma **dieci email diverse su la stessa carta** lo farmerebbero comunque. Ordine scritto: «implementa il Lock Stripe (1-carta = 1-sconto)... guardie meccaniche a specchio e test di regressione, rimanendo in modalità e2e di prova», poi «vai avanti tu» NONOSTANTE la casella plausibilità aperta (dichiarato nello scopo col perché).
+
+**Il problema strutturale.** Il credito si consuma alla finalizzazione (PRE-pagamento), ma **la carta esiste solo quando Stripe conferma il pagamento**: il punto di enforce è il webhook di conferma, dove l'impronta si legge con una GET sola-lettura del PaymentIntent (METODO 3.4: lo stato si chiede all'API, il payload del webhook non è verità sullo stato). L'impronta Stripe è stabile per carta a distanza di mesi: riconosce LA CARTA senza mai vedere né conservare il numero.
+
+**Come funziona.** fase167: tabella `carta_impronte` (PK sull'impronta: il vincolo sta nel database) + `lega_carta()` ATOMICA con semantica speculare a `consuma` («nuovo» / «stesso» = replay dello stesso book / «diverso»). fase85: `impronta_carta(pi)`. fase83: `_lock_carta_credito` dal webhook PRIMA di onorare il pagamento — «diverso» = **rimborso pieno automatico** (chiave di idempotenza stabile), prenotazione non confermata, stanza rilasciata, riga nel giornale, CRITICAL nel registro (il watchdog lo porta su Telegram). CHI PERDE (D16): nessuno resta indebito; la piattaforma paga la commissione Stripe del rimborso — costo dichiarato della chiusura del buco. FAIL-OPEN dichiarato se l'impronta non è ottenibile (chiave assente, Stripe giù): WARNING nel registro, non si rifiuta un pagamento vero per un errore di lettura di una difesa di secondo livello; il primo muro resta la serratura email+città.
+
+**Prove.** 10 guardie e2e di prova su ROTTE VERE in `test_lock_carta_credito.py` (Stripe finto solo al bordo provider): viste ROSSE con 2 difetti iniettati con l'editor (FAILED failures=5), ripristino byte-identico (sha256), verdi 10/10. Caricatore 6907.
+
+**Lezione.** Il caso "sospendi non funziona" (risolto nei log: TRE 403 "bunker_richiesto" perché il Bunker non era armato, il messaggio 🔒 non visto; al 4° tentativo ESITO: eseguito) insegna che un gesto admin rifiutato lascia la sua traccia NEI LOG DEL SERVER, non nell'occhio di chi ha cliccato: quando un'azione "non funziona", la prima domanda è «che cosa ha visto il server», non «riproviamo».
+
 ### 🔎 AI DISCOVERY MONITOR: misura se e come le AI mostrano BookinVIP — 24 settembre, coda punto 2 del fondatore (via «high fatto vai», livello High)
 
 **Da dove nasce.** Il piano AI-first ha la parte OFFERTA online e verificata (PDC 7: MCP con 6 tool, llms.txt, ai-plugin.json, openapi.json, JSON-LD home TravelAgency + landing con 3 blocchi fase97). Mancava la parte MISURA: se e come gli assistenti AI mostrano BookinVIP non lo sapeva nessuno — ed è esattamente ciò che il fondatore ha chiesto («strumento che misura ogni giorno se e come le AI mostrano BookinVIP»).
