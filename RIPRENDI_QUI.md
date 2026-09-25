@@ -3435,7 +3435,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: cfc8f56
+CONSEGNE AGGIORNATE A: f9196b3
 
 ## PASSAGGIO DI CONSEGNE 10 (2026-09-25 notte, D21) - T3: RICONCILIAZIONE NOTTURNA (cron sul VPS), via «autorizzato» del fondatore:
 - IL GIRO: deploy/cron_riconciliazione.py (nell'immagine a /app/deploy/): chiama
