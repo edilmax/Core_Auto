@@ -120,7 +120,7 @@ class TestLockSulWebhook(unittest.TestCase):
         s, _ = self._webhook("evt_a", rif_a, "pi_A")
         self.assertEqual(s, 200)
         self.assertEqual(self.sis.pagamenti_pendenti.info(rif_a)["stato"], "pagato")
-        with self.assertLogs("core_auto.server", level="CRITICAL") as log:
+        with self.assertLogs("core_auto.server", level="CRITICAL"):
             s, c = self._webhook("evt_b", rif_b, "pi_B")
         self.assertEqual(s, 200)
         self.assertEqual(c.get("lock_carta"), "credito_negato")
