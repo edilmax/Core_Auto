@@ -3435,7 +3435,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: cd74846
+CONSEGNE AGGIORNATE A: 0f52f1d
 
 ## PASSAGGIO DI CONSEGNE 12 (2026-09-25 sera, D21 a chiusura blocco) - ESAME RIMBORSI VERDE 8/8 + MUTAZIONE DENARO 0 SOPRAVVISSUTI + AMBIENTE RIMISURATO:
 - IL LAVORO (potenza MAX del fondatore; zero righe di produzione nel commit, i due
@@ -3479,9 +3479,18 @@ CONSEGNE AGGIORNATE A: cd74846
   numerone della casella scaduta (fase178 incluso?) resta una domanda del fondatore:
   la casella giustamente conta i 5 moduli del percorso dell'euro, fase178 e' il
   guardiano, non una strada dell'euro.
-- RESTA (mandato permanente): pre-fatto -> commit su ramo -> PR -> gate -> unione ->
-  deploy col pulsante (D17) -> sonde + battito riconciliazione -> tre posti allineati.
-  Poi: (a) casella webhook-caselle 7-11 (strumenti da accendere), (b) T5 settimana della
+- CATENA FATTA (mandato permanente): commit `d60b1a7` (6 file, 194+/18-, ZERO fase*.py)
+  -> PR #221 -> CI letta dall'API: 15 job success + zap skipped, **gate success** ->
+  unione `merged=True` verificata 2x -> **master `0f52f1d`** -> tre posti allineati
+  (computer/GitHub/VPS `0f52f1d`; container NON toccati: nessun file di produzione nel
+  commit, come da precedente della PR #216). GIUDICE ESTERNO: verifica_produzione 190
+  controlli, 0 violazioni. SONDE: health 200 · www 301 · bunker 403. BATITO: scritto dal
+  giro manuale delle 12:42 UTC (eta 5h14m, dentro le 25h); il CRON ha la sua prima vera
+  partenza stanotte 02:17 UTC (crontab -l verificato; nessun giro prima, giusto per
+  orario); il watchdog ha URLATO fino alle 12:40 e si e' RIENTRATO DA SOLO col battito
+  fresco (l'ultima riconciliazione_muto 12:40:02, poi solo OK) — la catena funziona
+  nelle due direzioni. Il blocco di questo passaggio viaggia col commit che lo porta.
+- RESTA: (a) casella webhook-caselle 7-11 (strumenti da accendere), (b) T5 settimana della
   perfezione, (c) T6 primi host, (d) plausibilita' chiude col primo annuncio vero,
   (e) sentinella esterna (UptimeRobot) la apre il fondatore.
 
