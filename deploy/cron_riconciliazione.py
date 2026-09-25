@@ -20,6 +20,12 @@ import os
 import sys
 import time
 
+# LANCIATO DA CRON lo script gira DA SOLO: sys.path[0] e' la cartella dello script
+# (/app/deploy), NON la radice — i moduli fase non sono importabili senza questa riga.
+# Trovato dal PRIMO giro sul container vero (ModuleNotFoundError), non dai test
+# in-process, che girano dalla radice: e' la lezione D23, l'ambiente e' parte della misura.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 GIORNI = 2
 LOG = "/data/riconciliazione_notte.log"
 

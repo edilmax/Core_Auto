@@ -3452,13 +3452,17 @@ CONSEGNE AGGIORNATE A: cfc8f56
   Il watchdog.sh ESISTENTE non e' toccato: la lettura passa da --dati gia' cablato.
 - CRON SUL VPS (installato nel crontab di root, verificato con crontab -l):
   17 2 * * * docker exec casavip_app python3 /app/deploy/cron_riconciliazione.py >> /data/riconciliazione_cron.log 2>&1
-- GUARDIE: test_riconciliazione_notturna.py, 10 guardie (battito in valuta nelle due
+- GUARDIE: test_riconciliazione_notturna.py, 11 guardie (battito in valuta nelle due
   direzioni + giro notturno con Stripe finto al bordo fetch e email finta: mail anche
   a tutto ok, URGENTE coi fantasmi, NON ESEGUITO senza config, battito anche con email
-  ko). VISTE ROSSE con 2 difetti iniettati (allarme disattivato in valuta + mail
-  saltata a tutto ok): FAILED failures=4; ripristino byte-identico (sha256);
-  verdi 10/10 EXIT=0. Il primo tentativo aveva un SyntaxError e un F401 beccati in
-  casa prima del commit.
+  ko, e lo script DA SOLO da cartella qualunque). VISTE ROSSE tre volte: (a) 2 difetti
+  iniettati (allarme disattivato in valuta + mail saltata a tutto ok) -> failures=4;
+  (b) IL DIFETTO VIVO trovato dal PRIMO giro manuale sul container vero: lanciato da
+  cron lo script e' SOLO (sys.path = /app/deploy) e i moduli fase non si importavano
+  (ModuleNotFoundError) — i test in-process non lo vedevano perché girano dalla radice
+  (D23: l'ambiente e' parte della misura); guardia subprocess nata ROSSA, riparata con
+  sys.path.insert della radice, verde; (c) ruff S603 chiuso con nosec+noqa come da casa.
+  Ripristini byte-identici verificati (sha256).
 - Caricatore 6907 -> 6917 (misurato). README 428 file di test.
 - NOTE: il giro PARZIALE (tetto pagine Stripe) non ha una guardia dedicata: condivide
   il ramo URGENTE dei fantasmi, dichiarato (D18 p.3). La PRIMA mail vera arriva
@@ -3701,7 +3705,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 6917 test
+SUITE ATTUALE: Ran 6918 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
