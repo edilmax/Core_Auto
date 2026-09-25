@@ -68,11 +68,19 @@ class _StripeCheRicorda:
         self.per_pi = {}
         self.per_chiave = {}
         self.creazioni = []
+        # L'impronta della carta per ogni PaymentIntent (solo il lock la chiede: GET del
+        # PaymentIntent con `expand[]` dell'ultimo charge). Chi non la imposta non cambia
+        # niente: fingerprint vuoto -> fail-open dichiarato, nessun credito toccato.
+        self.impronte = {}
 
     def __call__(self, url, body, headers):
         if "/refunds" in url and not body:
             pi = (parse_qs(urlparse(url).query).get("payment_intent") or [""])[0]
             return {"object": "list", "data": list(self.per_pi.get(pi, []))}
+        if "/payment_intents/" in url and not body:
+            pi = url.split("?", 1)[0].rstrip("/").rsplit("/", 1)[-1]
+            return {"id": pi, "latest_charge": {"payment_method_details":
+                    {"card": {"fingerprint": self.impronte.get(pi, "")}}}}
         if "/refunds" in url:
             campi = parse_qs(body.decode("utf-8"))
             pi = (campi.get("payment_intent") or [""])[0]
@@ -151,9 +159,10 @@ class _BancoDelleStrade(unittest.TestCase):
         ci = self.oggi + datetime.timedelta(days=da)
         return ci.isoformat(), (ci + datetime.timedelta(days=notti)).isoformat()
 
-    def prenota(self, ci, co, email, extra=None):
+    def prenota(self, ci, co, email, extra=None, credito_token=None):
         s, q = self.g("POST", "/api/concierge/quote",
-                      {"alloggio_id": "casa", "check_in": ci, "check_out": co, "party": 2})
+                      {"alloggio_id": "casa", "check_in": ci, "check_out": co, "party": 2,
+                       **({"credito_token": credito_token} if credito_token else {})})
         self.assertEqual(s, 200, "PREMESSA NON VALIDA: niente preventivo: %r" % (q,))
         corpo = {"quote_token": q["quote_token"], "email": email}
         corpo.update(extra or {})
@@ -480,6 +489,80 @@ class TestISoldiTornanoDaOgniStrada(_BancoDelleStrade):
             self.assertEqual(self.stripe.creazioni, [], "I SOLDI SONO PARTITI LO STESSO")
         finally:
             self.sis.garanzia.stato = vero_stato
+
+    # ── attrezzo del lock ─────────────────────────────────────────────────────
+    def _credito(self, nome):
+        """Il Credito Fondatore firmato, come nel fixture di `test_lock_carta_credito`:
+        il lock guarda solo chi lo porta, e solo se porta UN sconto."""
+        return self.sis.firma.codifica({
+            "tipo": "credito_fondatore", "email": "", "citta": "",
+            "credito_cents": 500, "valuta": "EUR",
+            "exp": int(time.time()) + 365 * 86400, "nonce": nome.encode().hex()})
+
+    def test_STRADA_lock_carta_da_capo_a_fondo(self):
+        """«lock 1-carta=1-sconto: carta gia' usata per un altro credito; rimborso pieno»:
+        l'UNICA strada che restituisce DA SOLA, senza lista ne' pulsante (ordine del
+        fondatore con via esplicito, scelta dichiarata in `_lock_carta_credito`). La catena
+        qui e' diversa dalle altre: al webhook di conferma, la carta che ha gia' pagato con
+        un altro credito vede TUTTO il pagamento tornare indietro nella stessa chiamata, la
+        prenotazione non si conferma, la stanza si libera; chi aveva pagato prima resta
+        pagato, e la lista dei dovuti non grida divergenza su nessuno dei due."""
+        ci_a, co_a = self.date(45)
+        ci_b, co_b = self.date(50)
+        b_a, _tot_a = self.prenota(ci_a, co_a, "prima@os.it",
+                                   credito_token=self._credito("strada-uno"))
+        b_b, atteso = self.prenota(ci_b, co_b, "abuso@os.it",
+                                   credito_token=self._credito("strada-due"))
+        rif_a, rif_b = b_a["riferimento"], b_b["riferimento"]
+        # STESSA carta su entrambi i pagamenti: e' l'abuso che il lock deve vedere.
+        self.stripe.impronte = {"pi_lkA": "FP-strada-lock", "pi_lkB": "FP-strada-lock"}
+        self.paga(rif_a, "pi_lkA")
+        rec_a = self.sis.pagamenti_pendenti.info(rif_a)
+        self.assertEqual(rec_a["stato"], "pagato",
+                         "PREMESSA NON VALIDA: il primo credito della carta deve confermare "
+                         "(senza, il lock non e' la strada percorsa, e' un banco rotto): %r"
+                         % (rec_a,))
+        self.assertEqual(self.stripe.creazioni, [],
+                         "PREMESSA NON VALIDA: il gateway ha gia' ricevuto qualcosa: %r"
+                         % (self.stripe.creazioni,))
+        with self.assertLogs("core_auto.server", level="CRITICAL"):
+            self.paga(rif_b, "pi_lkB")
+        rec_b = self.sis.pagamenti_pendenti.info(rif_b)
+        self.assertEqual(rec_b["stato"], "rimborsato",
+                         "[lock carta] IL BUCO NON SI CHIUDE: la carta riusata col secondo "
+                         "credito non e' stata restituita (stato %r)."
+                         % (rec_b and rec_b.get("stato"),))
+        self.assertEqual(
+            len(self.stripe.creazioni), 1,
+            "[lock carta] I SOLDI NON SONO PARTITI (o sono partiti piu' volte): %r"
+            % (self.stripe.creazioni,))
+        c = self.stripe.creazioni[0]
+        self.assertEqual(c["importo_cents"], atteso,
+                         "[lock carta] IL GATEWAY HA RICEVUTO %s INVECE DEL RIMBORSO PIENO "
+                         "(%s): all'ospite abusivo tornerebbe una cifra diversa dal totale "
+                         "pagato." % (c["importo_cents"], atteso))
+        self.assertEqual(c["payment_intent"], "pi_lkB",
+                         "[lock carta] IL GATEWAY HA RICEVUTO IL PAGAMENTO SBAGLIATO (%r): i "
+                         "soldi partirebbero da un'altra transazione." % (c["payment_intent"],))
+        self.assertEqual(c["chiave"], "lock-carta:" + rif_b,
+                         "[lock carta] chiave di idempotenza mancante o instabile: un ritentativo "
+                         "dello stesso webhook restituirebbe due volte. Ricevuta: %r" % (c["chiave"],))
+        righe = [m for m in self.sis.finanza.movimenti(rif_b)
+                 if (m.get("tipo") or "") == "rimborso"]
+        self.assertEqual(
+            len(righe), 1,
+            "[lock carta] la strada non scrive il rimborso nel giornale: l'audit non lo vedra' "
+            "mai successo. Movimenti: %r" % (righe,))
+        self.assertEqual(int(righe[0].get("importo_cents") or -1), atteso,
+                         "[lock carta] il giornale scrive %s mentre al gateway sono andati %s"
+                         % (righe[0].get("importo_cents"), atteso))
+        self.assertEqual(rec_a["stato"], "pagato",
+                         "[lock carta] CHI AVEVA PAGATO PRIMA NON DEVE ESSERNE TOCCATO.")
+        corpo = self.lista()
+        self.assertEqual(corpo.get("allarmi") or [], [],
+                         "[lock carta] la lista grida DIVERGENZA: o sul rimborso deciso dal lock "
+                         "(falso allarme, ferrea 10) o su una perdita vera; qui non c'e' niente "
+                         "da gridare. Allarmi: %r" % (corpo.get("allarmi"),))
 
 
 if __name__ == "__main__":

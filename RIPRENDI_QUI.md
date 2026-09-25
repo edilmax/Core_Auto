@@ -3437,6 +3437,54 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 ```
 CONSEGNE AGGIORNATE A: cd74846
 
+## PASSAGGIO DI CONSEGNE 12 (2026-09-25 sera, D21 a chiusura blocco) - ESAME RIMBORSI VERDE 8/8 + MUTAZIONE DENARO 0 SOPRAVVISSUTI + AMBIENTE RIMISURATO:
+- IL LAVORO (potenza MAX del fondatore; zero righe di produzione nel commit, i due
+  mutanti-fanciulli toccati sono stati iniezioni temporanee ripristinate byte-identiche):
+  (1) test_rimborso_torna_da_ogni_strada.TestISoldiTornanoDaOgniStrada.test_STRADA_lock_
+  carta_da_capo_a_fondo: l'ottava strada percorsa intera — prenota col credito, webhook,
+  stessa carta + credito diverso -> rimborso PIENO al gateway (chiave lock-carta:<rif>,
+  importo = totale misurato dal preventivo), riga di giornale, prenotazione rifiutata,
+  chi aveva pagato resta pagato, lista senza allarmi. La rete finta del banco risponde ora
+  anche alla GET del PaymentIntent col fingerprint. VISTA ROSSA col gancio del Lock
+  disattivato (iniezione a runtime dentro il processo, nessun file toccato, sha256 ok) e
+  verde sul sano; file intero 10/10.
+  (2) collaudi/esame_rimborsi.py: GATEWAY da 2 a 3 punti (_lock_carta_credito — i tre
+  punti che chiamano .rimborsa(, come i PARTENZE_CENSITE di test_rimborso_arriva_al_
+  gateway). VERDE 8/8 strade, E2E verde, denominatore 39, --scrivi -> casella rimborsi
+  esito=True (prima ROSSA: NON MISURATA). Autoprova OK. NOTA: la DIVERGENZA CONTI del
+  banco del mattino era l'allarme DEL collaudo test_ALLARME_... (atteso, ferrea 10);
+  il Lock non puo' produrre falsi allarmi: scatta PRIMA della conferma, il record resta
+  'rimborsato' e non entra in pagati_recenti (fase83:8460->8469, fase162:545).
+  (3) GIRO DI MUTAZIONE sui 5 moduli del denaro (comando della casella scaduta, --tetto 62
+  --minuti 60 --killer i 5 dedicati): giro 1 -> 247 provati, 1 SOPRAVVISSUTO su
+  fase85:185 (and->or sulla guardia d'ingresso di impronta_carta: input non stringa =
+  crash invece del fail-open). GUARDIA NUOVA test_fase85_pagamenti_stripe.
+  test_riga185_l_impronta_carta_sull_input_non_stringa_ritorna_vuoto_e_non_esplode
+  (D19 p.3: lo stato impossibile si costruisce a mano; None/123/bytes/liste/dict ->
+  vuoto). Vista ROSSA col mutante iniettato CON L'EDITOR (errors=5), ripristino
+  byte-identico (sha256 2aa4de85...), verde. GIRO 2 -> 246 uccisi, 0 sopravvissuti,
+  1 equivalente (dichiarato dallo schedario), ri-conferme 15/15, casella scritta
+  esito=True. BLOCCO 1: 7 -> 8 SU 15.
+  (4) AMBIENTE RIMISURATO: openssl ORA c'e' nel PATH di PowerShell (Git mingw64, 3.5.6,
+  Get-Command -> True); dal 2026-09-03 la riga diceva assente e le 5 guardie backup
+  saltavano in blocco. RIGA RISCRITTA: da ora lo scarto RACCOLTI-ESEGUITI e' 0, non piu' 5.
+- SUITE INTERA: Ran 6920 tests in 3407.5s · OK (skipped=3) · USCITA_DIRETTA=0, da
+  PowerShell VERA (MSYSTEM svuotato). ⛔ Il giro 1 della suite era ROSSO (4 fallimenti in
+  test_pipeline_ci: pre-volo NON ESEGUITO) SOLO perche' MSYSTEM=MINGW64 era ereditato
+  nell'ambiente: S11 puro, l'ambiente e' parte della misura. Nessun difetto nel codice.
+  Caricatore 6918 -> 6920 (misurato da fermo, PRIMA della suite). README: 428 file di
+  test invariati. REGISTRO: voce diario del 25/9 scritta.
+- REGOLE COSTATE CARE: l'ambiente ereditato dalla shell spawna rossi FINTI e peggio —
+  la suite va lanciata col MSYSTEM svuotato (i 4 rossi del giro 1 lo insegnano); la
+  numerone della casella scaduta (fase178 incluso?) resta una domanda del fondatore:
+  la casella giustamente conta i 5 moduli del percorso dell'euro, fase178 e' il
+  guardiano, non una strada dell'euro.
+- RESTA (mandato permanente): pre-fatto -> commit su ramo -> PR -> gate -> unione ->
+  deploy col pulsante (D17) -> sonde + battito riconciliazione -> tre posti allineati.
+  Poi: (a) casella webhook-caselle 7-11 (strumenti da accendere), (b) T5 settimana della
+  perfezione, (c) T6 primi host, (d) plausibilita' chiude col primo annuncio vero,
+  (e) sentinella esterna (UptimeRobot) la apre il fondatore.
+
 ## PASSAGGIO DI CONSEGNE 11 (2026-09-25, D21 a chiusura sessione) - T3 ATTIVO + T4 D17 CHIUSA + BLOCCO 1 SCADUTO E RIMISURATO A META':
 - T3 FATTI E VERIFICATI SUL VIVO (PR #218 + #219, master cd74846, tre posti allineati):
   cron di root ore 02:17 UTC (crontab preservato, backup in /root/crontab_backup_20260925.txt);
@@ -3749,7 +3797,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 6918 test
+SUITE ATTUALE: Ran 6920 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
@@ -3980,10 +4028,14 @@ FILE DI TEST: 412             <- Get-ChildItem -Filter 'test_*.py' -File (radice
 MODULI fase*.py: 151          <- Get-ChildItem -Filter 'fase*.py' -File
 
 AMBIENTE: Windows · Python 3.9.10 · hypothesis + pyyaml + coverage installati
-          · ⛔ openssl NON nel PATH da PowerShell (`Get-Command openssl` -> ASSENTE):
-            le guardie sul ripristino dei backup si mettono da parte IN BLOCCO e non
-            entrano nel totale ESEGUITO. E' il caso descritto da D23 punto 3, ed e' la
-            ragione dello scarto fra RACCOLTI e ESEGUITI (5 di scarto: le guardie openssl).
+          · openssl PRESENTE nel PATH di PowerShell (`Get-Command openssl` -> True,
+            C:\Program Files\Git\mingw64\bin\openssl.exe, 3.5.6): le guardie sul
+            ripristino dei backup ESCONO dal blocco ed entrano nel totale ESEGUITO.
+            ⛔ RIMISURATO il 2026-09-25 da PowerShell vera (MSYSTEM svuotato): dal
+            2026-09-03 la riga diceva «openssl NON nel PATH» e le 5 guardie dei backup
+            si mettevano da parte IN BLOCCO (D23 punto 3): oggi l'ambiente e' cambiato
+            e la dichiarazione con lui. Lo scarto fra RACCOLTI e ESEGUITI da qui in
+            avanti NON e' piu' 5: e' 0 (le 5 guardie openssl girano).
 MISURATO:  2026-09-03 su 463384a (albero B; `git rev-parse` dice che coincide con
            origin/master) piu' le 17 guardie dei rimborsi della corsia B non ancora
            committate, col caricatore, da PowerShell VERA (MSYSTEM svuotato e PATH
