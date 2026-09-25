@@ -175,6 +175,45 @@ def eta_battito_guardiano_sec(dir_dati: str, *, ora: Optional[int] = None) -> Op
     return max(0, ora - m)
 
 
+# ── il battito della RICONCILIAZIONE NOTTURNA (T3, fase182 via cron) ─────────
+# Stessa meccanica del battito del Guardiano, per l'altro giro che confronta i soldi
+# con Stripe: deploy/cron_riconciliazione.py lo lascia alla fine, e se invecchia oltre
+# la soglia (stesso ritmo notturno, stessa grazia: MAX_ETA_BATTITO_SEC) valuta grida
+# "riconciliazione_muto" — la MAIL del giro e' il primo allarme, questo e' il secondo.
+NOME_BATTITO_RIC = "riconciliazione_ultimo_giro"
+
+
+def segna_battito_riconciliazione(dir_dati: str, *, ora: Optional[int] = None) -> bool:
+    """Lascia il battito del giro notturno di riconciliazione. Stesse regole del battito
+    del Guardiano: senza una cartella vera NON si scrive niente (un battito finto
+    rassicura, cioe' mente), un guasto qui non fa cadere il giro."""
+    if not dir_dati or not os.path.isdir(dir_dati):
+        return False
+    ora = ora if isinstance(ora, int) else int(time.time())
+    try:
+        percorso = os.path.join(dir_dati, NOME_BATTITO_RIC)
+        with open(percorso, "w") as f:
+            f.write("%d\n" % ora)
+        os.utime(percorso, (ora, ora))     # l'eta' si legge dall'mtime, non dal contenuto
+        return True
+    except OSError:
+        return False
+
+
+def eta_battito_riconciliazione_sec(dir_dati: str, *, ora: Optional[int] = None) -> Optional[int]:
+    """Eta' (secondi) dell'ultimo battito della riconciliazione. None se non c'e': o il
+    cron non ha mai girato, o il segnale e' sparito — in entrambi i casi NON SAPPIAMO se
+    i conti vengono ancora confrontati con Stripe."""
+    ora = ora if isinstance(ora, int) else int(time.time())
+    if not dir_dati:
+        return None
+    try:
+        m = int(os.path.getmtime(os.path.join(dir_dati, NOME_BATTITO_RIC)))
+    except OSError:
+        return None
+    return max(0, ora - m)
+
+
 def segna_esito_guardiano(dir_dati: str, *, pulito: bool, dettaglio: str = "") -> bool:
     """Lascia l'ESITO del giro (pulito o no, e cosa e' stato trovato). Stesse regole del
     battito: senza una cartella vera non si scrive niente, e un guasto qui non solleva mai.
@@ -439,6 +478,22 @@ def valuta(misure: Dict[str, Any], *, max_eta_backup_sec: int = 8 * 3600,
                                    "nessuno sta piu' confrontando i nostri conti con Stripe"
                                    % (eb // 3600, max_eta_battito_sec // 3600)})
 
+    # Il battito della riconciliazione notturna (fase182 via cron): stessa disciplina —
+    # chiave ASSENTE = non misurato = non si giudica (il watchdog REMOTO non vede il volume).
+    if "eta_battito_riconciliazione_sec" in misure:
+        er = misure.get("eta_battito_riconciliazione_sec")
+        if er is None:
+            allarmi.append({"cod": "riconciliazione_muto", "grav": "critico",
+                            "msg": "la riconciliazione notturna NON ha lasciato NESSUN battito: "
+                                   "il cron non gira o non ha mai girato. I fantasmi di Stripe "
+                                   "(pagamenti non nel giornale) resterebbero non visti"})
+        elif er > max_eta_battito_sec:
+            allarmi.append({"cod": "riconciliazione_muto", "grav": "critico",
+                            "msg": "la riconciliazione notturna non lascia battito da %dh "
+                                   "(soglia %dh): la mail che non arriva e' un allarme e i "
+                                   "fantasmi di Stripe restano non visti"
+                                   % (er // 3600, max_eta_battito_sec // 3600)})
+
     # L'esito dell'ultimo giro: un Guardiano VIVO che ha trovato soldi fermi e' piu' grave di
     # uno muto, e prima lo diceva solo per email. Chiave assente = non misurato = non si giudica.
     esito = misure.get("esito_guardiano")
@@ -507,6 +562,7 @@ def diagnosi(*, dir_dati: str, dir_backup: str, uptime_ok: Optional[bool] = None
         "catena": verifica_catena_file(os.path.join(dir_dati, DB_GIORNALE + ".db")),
         "eta_backup_sec": eta_backup_sec(dir_backup),
         "eta_battito_guardiano_sec": eta_battito_guardiano_sec(dir_dati),
+        "eta_battito_riconciliazione_sec": eta_battito_riconciliazione_sec(dir_dati),
         "esito_guardiano": leggi_esito_guardiano(dir_dati),
         "errori_freschi": errori_freschi(dir_dati),
         "disco_pct": spazio_disco_pct(dir_dati),

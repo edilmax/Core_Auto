@@ -439,6 +439,18 @@ mount PRIMA di toccare il container vivo (il bind-mount e' per inode: serve ricr
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🌙 RICONCILIAZIONE NOTTURNA IN CRON (T3): fase182 fa il giro, la mail manca = allarme — 25 settembre, «autorizzato» del fondatore
+
+**Da dove nasce.** T3 della coda del fondatore: «fase182 esiste, manca solo il cron sul VPS — unico tassello architetturale mancante vero». La casella della porta dei soldi (METODO 3.7: «gira OGNI notte e manda una mail anche quando è tutto a posto, con URGENTE...») era l'unica del Blocco 1 senza il suo attrezzo.
+
+**Cosa fa.** `deploy/cron_riconciliazione.py` (entra nell'immagine): chiama `fase182.riconcilia` (READ-ONLY totale) sugli ultimi 2 giorni, manda **una email sempre** — a tutto ok pure, perché la mail che manca è lei l'allarme — con **URGENTE** nell'oggetto se ci sono fantasmi (solo_stripe/solo_giornale/importo_diverso) o il giro è parziale; alla fine lascia il **battito** `fase178.segna_battito_riconciliazione` nella cartella dei dati e una riga JSON in `/data/riconciliazione_notte.log`. Uscite: 0 ok · 1 fantasmi/parziale/mail ko · 2 impossibile (S7). Il cron di root sul VPS (ore 02:17 UTC) lancia `docker exec casavip_app python3 /app/deploy/cron_riconciliazione.py`.
+
+**Il battito ha il suo sorvegliante.** fase178 (il watchdog) ha preso il terzo battito della famiglia: `segna_battito_riconciliazione` / `eta_battito_riconciliazione_sec` / allarme **`riconciliazione_muto`** in `valuta` (critico se manca o invecchia oltre la stessa soglia del Guardiano: 25h; chiave assente = non misurato = non si giudica, come per il guardiano — il watchdog remoto non vede il volume e non deve gridare a ogni giro). Il cron morto non è più un silenzio: è un rosso su Telegram entro il giro successivo del watchdog.
+
+**Prove.** 10 guardie in `test_riconciliazione_notturna.py`: battito in valuta nelle due direzioni (fresco tace, vecchio/assente grida critico, chiave assente non si giudica, senza cartella vera non si scrive niente) + giro notturno con Stripe finto al bordo e email finta (mail ANCHE a tutto ok; URGENTE coi fantasmi; NON ESEGUITO senza config con zero effetti; battito scritto anche con email ko). Viste ROSSE con 2 difetti iniettati con l'editor (allarme disattivato in valuta; mail saltata a tutto ok): FAILED failures=4; ripristino byte-identico (sha256); verdi 10/10. Caricatore 6907→6917.
+
+**Prove sul vivo** (container reale dopo il deploy): giro manuale con la chiave di produzione → mail a ALERT_EMAIL + battito fresco + riga nel log; crontab -l mostra la riga.
+
 ### 🔒 LOCK 1-CARTA=1-SCONTO: la carta che ha usato il credito non ne usa un altro — 25 settembre, via esplicito del fondatore (denaro)
 
 **Da dove nasce.** Il fondatore vede il buco: il Credito Fondatore (5 EUR) è negato alla stessa email (serratura PR #213), ma **dieci email diverse su la stessa carta** lo farmerebbero comunque. Ordine scritto: «implementa il Lock Stripe (1-carta = 1-sconto)... guardie meccaniche a specchio e test di regressione, rimanendo in modalità e2e di prova», poi «vai avanti tu» NONOSTANTE la casella plausibilità aperta (dichiarato nello scopo col perché).
