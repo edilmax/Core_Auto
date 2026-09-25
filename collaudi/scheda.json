@@ -90,11 +90,11 @@
  "16d2c823889f": {
   "blocco": 1,
   "comando": "python collaudi/mutazione_prodotto.py --modulo fase65_split_payment.py fase85_pagamenti_stripe.py fase87_stripe_webhook.py fase101_stripe_connect.py fase131_payout_dashboard.py --tetto 62 --minuti 60 --killer test_fase65_split_payment test_fase85_pagamenti_stripe test_fase87_stripe_webhook test_fase101_stripe_connect test_fase131_payout_dashboard",
-  "commit": "65a1759",
+  "commit": "7629d14",
   "condizione": "zero punti di mutazione scoperti sul PERCORSO DEL DENARO -- i cinque moduli che un euro attraversa davvero: entra, viene confermato, va sul conto dell'host, si divide fra ospiti, esce col bonifico -- sul codice che la produzione ESEGUE",
-  "denominatore": 245,
+  "denominatore": 246,
   "esito": true,
-  "impronta": "f18f622230ff",
+  "impronta": "8578945616d0",
   "impronte_moduli": {
    "fase101_stripe_connect": "30d6d6acc8ee",
    "fase102_motore_autonomo": "5f821fcc906f",
@@ -105,7 +105,7 @@
    "fase15_idempotency": "bfcd5e8ca68b",
    "fase160_escrow_garanzia": "dbf2a26f8a0a",
    "fase162_pagamenti_pendenti": "bfb1d8443d21",
-   "fase167_credito_single_use": "4c767fea639e",
+   "fase167_credito_single_use": "84db76bef110",
    "fase177_financial_controller": "c49d832d573c",
    "fase17_money": "4f56d5c69a04",
    "fase181_audit_console": "f03c9196f159",
@@ -119,12 +119,12 @@
    "fase204_eventi_stripe": "2f45faff9e1d",
    "fase35_pagamenti": "abd2cab5c989",
    "fase65_split_payment": "2f6d24e7b1fe",
-   "fase85_pagamenti_stripe": "ffc644cfd6fb",
+   "fase85_pagamenti_stripe": "a50affaae836",
    "fase87_stripe_webhook": "d597430f8f64",
    "fase99_multicurrency": "61a3b5a0c820"
   },
   "motivo": "",
-  "quando": "2026-09-16T17:22:14"
+  "quando": "2026-09-25T17:48:04"
  },
  "224ae0884a0b": {
   "blocco": 1,
@@ -675,10 +675,10 @@
  "d70ecb7a31cc": {
   "blocco": 1,
   "comando": "python collaudi/esame_rimborsi.py --scrivi",
-  "commit": "cd74846",
+  "commit": "7629d14",
   "condizione": "i soldi tornano DAVVERO all'ospite da OGNI strada che porta a un rimborso, non solo da quella che qualcuno si e' ricordato di provare (il 2026-08-16 le strade erano due e ne funzionava una). ⛔ L'AUTOMATICO NON e' la riga d'arrivo di questo blocco: e' una decisione del fondatore, e si accende dopo -- prima si guadagna la fiducia, poi si toglie il dito",
   "denominatore": 39,
-  "esito": false,
+  "esito": true,
   "impronta": "8578945616d0",
   "impronte_moduli": {
    "fase101_stripe_connect": "30d6d6acc8ee",
@@ -708,8 +708,8 @@
    "fase87_stripe_webhook": "d597430f8f64",
    "fase99_multicurrency": "61a3b5a0c820"
   },
-  "motivo": "«lock 1-carta=1-sconto: carta gia' usata per un altro credito; rimborso pieno (%s)»: NON MISURATA: nessun collaudo verde percorre questa strada",
-  "quando": "2026-09-25T15:45:17"
+  "motivo": "",
+  "quando": "2026-09-25T17:19:41"
  },
  "df0678e71e35": {
   "blocco": 9,

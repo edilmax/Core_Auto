@@ -350,6 +350,29 @@ class TestIBuchiDelGiudice(unittest.TestCase):
         self.assertIn("name%5D=BookinVIP+anticipo+prenotazione", spy2.body)
         self.assertNotIn("customer_email", spy2.body)
 
+    def test_riga185_l_impronta_carta_sull_input_non_stringa_ritorna_vuoto_e_non_esplode(self):
+        """Guardia nata dal SOPRAVVISSUTO del giro del 2026-09-25 (riga 185, `and` -> `or`
+        sulla guardia d'ingresso di `impronta_carta`): senza il controllo CONGIUNTO fra
+        «e' una stringa» e «comincia per pi_», un input non stringa esplode con
+        AttributeError PRIMA del try -- e il fail-open dichiarato dal metodo («non
+        ottenibile -> vuoto», che il Lock di fase83 sopporta senza fermare il pagamento)
+        diventa un crash. Lo stato «impossibile» si costruisce a mano adesso (D19 punto
+        3): si chiama il metodo con quello che nessun chiamante passa oggi, e si pretende
+        il vuoto. Vista ROSSA col mutante iniettato, VERDE sul codice sano (ferrea 2)."""
+        p = _p(FetchFinto())
+        for input_cattivo in (None, 123, b"pi_binario", ["pi_1"], {"pi": 1}):
+            with self.subTest(input=input_cattivo):
+                self.assertEqual(p.impronta_carta(input_cattivo), "")
+        # e su input VALIDO la lettura parte davvero: GET del PaymentIntent, impronta letta
+        f = FetchFinto({PAGAMENTI_URL: {"latest_charge": {"payment_method_details":
+                                                          {"card": {"fingerprint": "FP-9"}}}}})
+        self.assertEqual(_p(f).impronta_carta("pi_ok"), "FP-9")
+        self.assertIn(PAGAMENTI_URL + "/pi_ok", f.chiamate[0][0])
+        # risposte monche: niente charge, niente carta, niente impronta -> vuoto, non errore
+        self.assertEqual(_p(FetchFinto({PAGAMENTI_URL: {}})).impronta_carta("pi_ok"), "")
+        self.assertEqual(_p(FetchFinto({PAGAMENTI_URL: {"latest_charge": {}}}))
+                         .impronta_carta("pi_ok"), "")
+
 
 if __name__ == "__main__":
     unittest.main()
