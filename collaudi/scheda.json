@@ -24,15 +24,15 @@
  "0d485cbbe89e": {
   "blocco": 8,
   "comando": "python collaudi/esame_deploy.py --da-file <letture> --scrivi",
-  "commit": "4c96811",
+  "commit": "cd74846",
   "condizione": "il deploy passa sempre dal protocollo D17, mai a mano",
   "denominatore": 47,
-  "esito": false,
-  "impronta": "bfc1c39351b2",
+  "esito": true,
+  "impronta": "a96406ce47b0",
   "impronte_moduli": {
    "fase13_protocollo_finale": "2dce22f058cc",
    "fase16_outbox": "a47de5874653",
-   "fase178_watchdog": "9520cebec63b",
+   "fase178_watchdog": "91a971322681",
    "fase23_datastore": "45f9c0f96325",
    "fase28_gateway": "650f256a6d9a",
    "fase29_backpressure": "d905d8e921b7",
@@ -42,20 +42,20 @@
    "fase42_observability": "a557645447a7",
    "fase60_mcp_server": "56ffc4364819",
    "fase81_bootstrap_casavip": "dacbc902ed40",
-   "fase83_server": "57f593909935",
+   "fase83_server": "7f1d77840758",
    "fase86_email": "19069663f9d1"
   },
-  "motivo": "[tracce] deploy_scambio_2.log: un PRE_DEPLOY_*.commit scritto PRIMA, entro 180 minuti (nessuno); [tracce] deploy_scambio_20260905.log: un PRE_DEPLOY_*.commit scritto PRIMA, entro 180 minuti (nessuno); [tracce] deploy_scambio_20260906.log: un PRE_DEPLOY_*.commit scritto PRIMA, entro 180 minuti (nessuno); [tracce] deploy_scambio_20260906_2.log: un PRE_DEPLOY_*.commit scritto PRIMA, entro 180 minuti (nessuno); [tracce] deploy_scambio_20260907.log: un PRE_DEPLOY_*.commit scritto PRIMA, entro 180 minuti (nessuno); [tracce] deploy_scambio_20260908.log: un PRE_DEPLOY_*.commit scritto PRIMA, entro 180",
-  "quando": "2026-09-24T00:35:12"
+  "motivo": "",
+  "quando": "2026-09-25T15:42:12"
  },
  "159ad2c8ab8f": {
   "blocco": 1,
   "comando": "python collaudi/esame_produzione.py --casella ogni-ora --scrivi",
-  "commit": "eeea05f",
+  "commit": "cd74846",
   "condizione": "gli invarianti sui dati veri girano in produzione almeno OGNI ORA, non una volta al giorno, e l'ultimo giro si legge dal registro del server con la sua ora",
   "denominatore": 13,
   "esito": true,
-  "impronta": "f18f622230ff",
+  "impronta": "8578945616d0",
   "impronte_moduli": {
    "fase101_stripe_connect": "30d6d6acc8ee",
    "fase102_motore_autonomo": "5f821fcc906f",
@@ -66,7 +66,7 @@
    "fase15_idempotency": "bfcd5e8ca68b",
    "fase160_escrow_garanzia": "dbf2a26f8a0a",
    "fase162_pagamenti_pendenti": "bfb1d8443d21",
-   "fase167_credito_single_use": "4c767fea639e",
+   "fase167_credito_single_use": "84db76bef110",
    "fase177_financial_controller": "c49d832d573c",
    "fase17_money": "4f56d5c69a04",
    "fase181_audit_console": "f03c9196f159",
@@ -80,12 +80,12 @@
    "fase204_eventi_stripe": "2f45faff9e1d",
    "fase35_pagamenti": "abd2cab5c989",
    "fase65_split_payment": "2f6d24e7b1fe",
-   "fase85_pagamenti_stripe": "ffc644cfd6fb",
+   "fase85_pagamenti_stripe": "a50affaae836",
    "fase87_stripe_webhook": "d597430f8f64",
    "fase99_multicurrency": "61a3b5a0c820"
   },
   "motivo": "",
-  "quando": "2026-09-16T13:09:38"
+  "quando": "2026-09-25T15:45:45"
  },
  "16d2c823889f": {
   "blocco": 1,
@@ -129,11 +129,11 @@
  "224ae0884a0b": {
   "blocco": 1,
   "comando": "python collaudi/esame_orologi.py --scrivi",
-  "commit": "eeea05f",
+  "commit": "cd74846",
   "condizione": "hold, payout e penale scadono davvero in un giro contro Stripe di PROVA con l'orologio NOSTRO spostato, e i tre esiti si rileggono da Stripe (rimborso dell'hold, bonifico all'host, penale addebitata)",
   "denominatore": 34,
   "esito": true,
-  "impronta": "f18f622230ff",
+  "impronta": "8578945616d0",
   "impronte_moduli": {
    "fase101_stripe_connect": "30d6d6acc8ee",
    "fase102_motore_autonomo": "5f821fcc906f",
@@ -144,7 +144,7 @@
    "fase15_idempotency": "bfcd5e8ca68b",
    "fase160_escrow_garanzia": "dbf2a26f8a0a",
    "fase162_pagamenti_pendenti": "bfb1d8443d21",
-   "fase167_credito_single_use": "4c767fea639e",
+   "fase167_credito_single_use": "84db76bef110",
    "fase177_financial_controller": "c49d832d573c",
    "fase17_money": "4f56d5c69a04",
    "fase181_audit_console": "f03c9196f159",
@@ -158,21 +158,21 @@
    "fase204_eventi_stripe": "2f45faff9e1d",
    "fase35_pagamenti": "abd2cab5c989",
    "fase65_split_payment": "2f6d24e7b1fe",
-   "fase85_pagamenti_stripe": "ffc644cfd6fb",
+   "fase85_pagamenti_stripe": "a50affaae836",
    "fase87_stripe_webhook": "d597430f8f64",
    "fase99_multicurrency": "61a3b5a0c820"
   },
   "motivo": "",
-  "quando": "2026-09-16T13:10:08"
+  "quando": "2026-09-25T15:45:41"
  },
  "227c35ec4353": {
   "blocco": 1,
   "comando": "python collaudi/esame_percorso_ruoli.py --casella coerenza --scrivi",
-  "commit": "eeea05f",
+  "commit": "cd74846",
   "condizione": "lo stesso fatto sui soldi -- una prenotazione, un rimborso, un bonifico -- letto dal pannello dell'host, da quello dell'admin e dal bunker da' lo STESSO numero al centesimo, riga per riga e non solo nei totali (due errori che si compensano danno un totale giusto), e le letture si enumerano dal codice, non a memoria",
   "denominatore": 4,
   "esito": true,
-  "impronta": "f18f622230ff",
+  "impronta": "8578945616d0",
   "impronte_moduli": {
    "fase101_stripe_connect": "30d6d6acc8ee",
    "fase102_motore_autonomo": "5f821fcc906f",
@@ -183,7 +183,7 @@
    "fase15_idempotency": "bfcd5e8ca68b",
    "fase160_escrow_garanzia": "dbf2a26f8a0a",
    "fase162_pagamenti_pendenti": "bfb1d8443d21",
-   "fase167_credito_single_use": "4c767fea639e",
+   "fase167_credito_single_use": "84db76bef110",
    "fase177_financial_controller": "c49d832d573c",
    "fase17_money": "4f56d5c69a04",
    "fase181_audit_console": "f03c9196f159",
@@ -197,12 +197,12 @@
    "fase204_eventi_stripe": "2f45faff9e1d",
    "fase35_pagamenti": "abd2cab5c989",
    "fase65_split_payment": "2f6d24e7b1fe",
-   "fase85_pagamenti_stripe": "ffc644cfd6fb",
+   "fase85_pagamenti_stripe": "a50affaae836",
    "fase87_stripe_webhook": "d597430f8f64",
    "fase99_multicurrency": "61a3b5a0c820"
   },
   "motivo": "",
-  "quando": "2026-09-16T13:07:44"
+  "quando": "2026-09-25T15:45:46"
  },
  "24faa37bd025": {
   "blocco": 7,
@@ -255,11 +255,11 @@
  "50691c557e6e": {
   "blocco": 1,
   "comando": "python collaudi/esame_soldi.py --scrivi",
-  "commit": "eeea05f",
+  "commit": "cd74846",
   "condizione": "le dimostrazioni z3 sugli invarianti GIRANO in CI, e i test che le portano NON risultano saltati",
   "denominatore": 54,
   "esito": true,
-  "impronta": "f18f622230ff",
+  "impronta": "8578945616d0",
   "impronte_moduli": {
    "fase101_stripe_connect": "30d6d6acc8ee",
    "fase102_motore_autonomo": "5f821fcc906f",
@@ -270,7 +270,7 @@
    "fase15_idempotency": "bfcd5e8ca68b",
    "fase160_escrow_garanzia": "dbf2a26f8a0a",
    "fase162_pagamenti_pendenti": "bfb1d8443d21",
-   "fase167_credito_single_use": "4c767fea639e",
+   "fase167_credito_single_use": "84db76bef110",
    "fase177_financial_controller": "c49d832d573c",
    "fase17_money": "4f56d5c69a04",
    "fase181_audit_console": "f03c9196f159",
@@ -284,21 +284,21 @@
    "fase204_eventi_stripe": "2f45faff9e1d",
    "fase35_pagamenti": "abd2cab5c989",
    "fase65_split_payment": "2f6d24e7b1fe",
-   "fase85_pagamenti_stripe": "ffc644cfd6fb",
+   "fase85_pagamenti_stripe": "a50affaae836",
    "fase87_stripe_webhook": "d597430f8f64",
    "fase99_multicurrency": "61a3b5a0c820"
   },
   "motivo": "",
-  "quando": "2026-09-16T13:06:17"
+  "quando": "2026-09-25T15:43:57"
  },
  "506a24febc87": {
   "blocco": 6,
   "comando": "python collaudi/esame_plausibilita.py --scrivi",
-  "commit": "45d0eee",
+  "commit": "cd74846",
   "condizione": "ogni numero mostrato ha senso nel mondo vero (modo di rompersi 10)",
-  "denominatore": 14,
+  "denominatore": 2,
   "esito": false,
-  "impronta": "c4496d2aad88",
+  "impronta": "55c470307e9a",
   "impronte_moduli": {
    "fase107_traduzione_annunci": "e0fc5c8e8eb1",
    "fase113_messaggistica": "c3a8712be969",
@@ -307,7 +307,7 @@
    "fase123_web_push": "674827600458",
    "fase129_traduzione_recensioni": "2d80591ac6cd",
    "fase137_fedelta_guest": "5394500c8163",
-   "fase139_chatbot_guest": "2f44757235d2",
+   "fase139_chatbot_guest": "72a347f6fbfe",
    "fase166_geocoder": "162da4a35b88",
    "fase175_poi_osm": "c1ad5e11dd94",
    "fase26_ricerca": "3dc66d4cb1ac",
@@ -316,8 +316,8 @@
    "fase63_recensioni": "5e00244ea3f5",
    "fase74_sensory_engine": "6f64cb3f6e59"
   },
-  "motivo": "[mostrati] casa-test: prezzo a notte in banda (5..5000 EUR) (100 EUR = 1.00 EUR)",
-  "quando": "2026-09-22T13:28:26"
+  "motivo": "[mostrati] il catalogo elenca almeno un annuncio (zero annunci = casella NON misurata) (annunci=0 totale dichiarato=0)",
+  "quando": "2026-09-25T15:45:47"
  },
  "555972b586e3": {
   "blocco": 2,
@@ -427,11 +427,11 @@
  "813b9082642c": {
   "blocco": 1,
   "comando": "python collaudi/esame_produzione.py --scrivi",
-  "commit": "4c96811",
+  "commit": "cd74846",
   "condizione": "gli invarianti sono verificati in PRODUZIONE, non solo nei test",
   "denominatore": 14,
   "esito": true,
-  "impronta": "f18f622230ff",
+  "impronta": "8578945616d0",
   "impronte_moduli": {
    "fase101_stripe_connect": "30d6d6acc8ee",
    "fase102_motore_autonomo": "5f821fcc906f",
@@ -442,7 +442,7 @@
    "fase15_idempotency": "bfcd5e8ca68b",
    "fase160_escrow_garanzia": "dbf2a26f8a0a",
    "fase162_pagamenti_pendenti": "bfb1d8443d21",
-   "fase167_credito_single_use": "4c767fea639e",
+   "fase167_credito_single_use": "84db76bef110",
    "fase177_financial_controller": "c49d832d573c",
    "fase17_money": "4f56d5c69a04",
    "fase181_audit_console": "f03c9196f159",
@@ -456,12 +456,12 @@
    "fase204_eventi_stripe": "2f45faff9e1d",
    "fase35_pagamenti": "abd2cab5c989",
    "fase65_split_payment": "2f6d24e7b1fe",
-   "fase85_pagamenti_stripe": "ffc644cfd6fb",
+   "fase85_pagamenti_stripe": "a50affaae836",
    "fase87_stripe_webhook": "d597430f8f64",
    "fase99_multicurrency": "61a3b5a0c820"
   },
   "motivo": "",
-  "quando": "2026-09-24T00:43:24"
+  "quando": "2026-09-25T15:45:43"
  },
  "8267c64a367a": {
   "blocco": 4,
@@ -477,15 +477,15 @@
  "a36e3373da1d": {
   "blocco": 8,
   "comando": "python collaudi/esame_sentinella.py --scrivi",
-  "commit": "45d0eee",
+  "commit": "cd74846",
   "condizione": "una sentinella ESTERNA (non nostra) si accorge se il sito muore",
   "denominatore": 10,
   "esito": false,
-  "impronta": "0f1e65704639",
+  "impronta": "a96406ce47b0",
   "impronte_moduli": {
    "fase13_protocollo_finale": "2dce22f058cc",
    "fase16_outbox": "a47de5874653",
-   "fase178_watchdog": "9520cebec63b",
+   "fase178_watchdog": "91a971322681",
    "fase23_datastore": "45f9c0f96325",
    "fase28_gateway": "650f256a6d9a",
    "fase29_backpressure": "d905d8e921b7",
@@ -495,11 +495,11 @@
    "fase42_observability": "a557645447a7",
    "fase60_mcp_server": "56ffc4364819",
    "fase81_bootstrap_casavip": "dacbc902ed40",
-   "fase83_server": "ddbfe8f5ffca",
+   "fase83_server": "7f1d77840758",
    "fase86_email": "19069663f9d1"
   },
   "motivo": "[esiste] un monitor ESTERNO (non GitHub) esiste e guarda bookinvip.com/api/health (nessun monitor esterno nelle letture: serve un conto (UptimeRobot o Better Stack, gratuito), lo apre il fondatore); [sveglia] il monitor esterno controlla almeno ogni 5 minuti e non e' in pausa (nessun monitor esterno); [sveglia] nelle ultime 24 ore i controlli del monitor non hanno buchi > 15 minuti e l'ultimo ha meno di 15 minuti (controlli nelle 24 ore: 0, buco massimo -, ultimo -); [sveglia] GitHub (seconda linea): ultimo giro entro 60 minuti e buco massimo nelle 24 ore sotto i 60 minuti — DECIDE, perche' il",
-  "quando": "2026-09-22T13:28:31"
+  "quando": "2026-09-25T15:45:53"
  },
  "a5c77ac6c76a": {
   "blocco": 5,
@@ -574,11 +574,11 @@
  "c3cf3da4543f": {
   "blocco": 1,
   "comando": "python collaudi/esame_soldi.py --scrivi",
-  "commit": "eeea05f",
+  "commit": "cd74846",
   "condizione": "esistono le relazioni metamorfiche sull'aritmetica del denaro",
   "denominatore": 15,
   "esito": true,
-  "impronta": "f18f622230ff",
+  "impronta": "8578945616d0",
   "impronte_moduli": {
    "fase101_stripe_connect": "30d6d6acc8ee",
    "fase102_motore_autonomo": "5f821fcc906f",
@@ -589,7 +589,7 @@
    "fase15_idempotency": "bfcd5e8ca68b",
    "fase160_escrow_garanzia": "dbf2a26f8a0a",
    "fase162_pagamenti_pendenti": "bfb1d8443d21",
-   "fase167_credito_single_use": "4c767fea639e",
+   "fase167_credito_single_use": "84db76bef110",
    "fase177_financial_controller": "c49d832d573c",
    "fase17_money": "4f56d5c69a04",
    "fase181_audit_console": "f03c9196f159",
@@ -603,12 +603,12 @@
    "fase204_eventi_stripe": "2f45faff9e1d",
    "fase35_pagamenti": "abd2cab5c989",
    "fase65_split_payment": "2f6d24e7b1fe",
-   "fase85_pagamenti_stripe": "ffc644cfd6fb",
+   "fase85_pagamenti_stripe": "a50affaae836",
    "fase87_stripe_webhook": "d597430f8f64",
    "fase99_multicurrency": "61a3b5a0c820"
   },
   "motivo": "",
-  "quando": "2026-09-16T13:06:17"
+  "quando": "2026-09-25T15:43:57"
  },
  "d22022c687dd": {
   "blocco": 3,
@@ -675,11 +675,11 @@
  "d70ecb7a31cc": {
   "blocco": 1,
   "comando": "python collaudi/esame_rimborsi.py --scrivi",
-  "commit": "eeea05f",
+  "commit": "cd74846",
   "condizione": "i soldi tornano DAVVERO all'ospite da OGNI strada che porta a un rimborso, non solo da quella che qualcuno si e' ricordato di provare (il 2026-08-16 le strade erano due e ne funzionava una). ⛔ L'AUTOMATICO NON e' la riga d'arrivo di questo blocco: e' una decisione del fondatore, e si accende dopo -- prima si guadagna la fiducia, poi si toglie il dito",
-  "denominatore": 38,
-  "esito": true,
-  "impronta": "f18f622230ff",
+  "denominatore": 39,
+  "esito": false,
+  "impronta": "8578945616d0",
   "impronte_moduli": {
    "fase101_stripe_connect": "30d6d6acc8ee",
    "fase102_motore_autonomo": "5f821fcc906f",
@@ -690,7 +690,7 @@
    "fase15_idempotency": "bfcd5e8ca68b",
    "fase160_escrow_garanzia": "dbf2a26f8a0a",
    "fase162_pagamenti_pendenti": "bfb1d8443d21",
-   "fase167_credito_single_use": "4c767fea639e",
+   "fase167_credito_single_use": "84db76bef110",
    "fase177_financial_controller": "c49d832d573c",
    "fase17_money": "4f56d5c69a04",
    "fase181_audit_console": "f03c9196f159",
@@ -704,12 +704,12 @@
    "fase204_eventi_stripe": "2f45faff9e1d",
    "fase35_pagamenti": "abd2cab5c989",
    "fase65_split_payment": "2f6d24e7b1fe",
-   "fase85_pagamenti_stripe": "ffc644cfd6fb",
+   "fase85_pagamenti_stripe": "a50affaae836",
    "fase87_stripe_webhook": "d597430f8f64",
    "fase99_multicurrency": "61a3b5a0c820"
   },
-  "motivo": "",
-  "quando": "2026-09-16T13:07:26"
+  "motivo": "«lock 1-carta=1-sconto: carta gia' usata per un altro credito; rimborso pieno (%s)»: NON MISURATA: nessun collaudo verde percorre questa strada",
+  "quando": "2026-09-25T15:45:17"
  },
  "df0678e71e35": {
   "blocco": 9,
