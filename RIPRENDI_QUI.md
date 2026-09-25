@@ -3435,7 +3435,51 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: f9196b3
+CONSEGNE AGGIORNATE A: cd74846
+
+## PASSAGGIO DI CONSEGNE 11 (2026-09-25, D21 a chiusura sessione) - T3 ATTIVO + T4 D17 CHIUSA + BLOCCO 1 SCADUTO E RIMISURATO A META':
+- T3 FATTI E VERIFICATI SUL VIVO (PR #218 + #219, master cd74846, tre posti allineati):
+  cron di root ore 02:17 UTC (crontab preservato, backup in /root/crontab_backup_20260925.txt);
+  giro manuale nel container vero: ok=True fantasmi=0 email=True USCITA=0 (la mail
+  "TUTTO QUADRA" e' partita su ALERT_EMAIL); battito fresco (eta 26s) e valuta zero
+  allarmi; il Telegram rosso visto dal fondatore ("riconciliazione non ha lasciato
+  battito") ERA la catena nuova che funzionava: cron partito -> script morto sul difetto
+  d'import (PR #219 lo ripara) -> nessun battito -> watchdog urla. Ora si rientra da solo.
+- T4/D17 CHIUSA: raccoglitore corretto sullo schema di esame_deploy.letture_finte
+  (pre_deploy da ENTRAMBE /root e /var/www/bookinvip; immagini{viva,prec,latest};
+  git{status_porcelain_produzione,commit_solo_sul_vps,head,head_in_origin_master};
+  compose{v2,v1_segnaposto,v1_apt_candidate}; paracadute DERIVATO dallo stato misurato e
+  dichiarato: quando = mtime del PRE_DEPLOY piu' recente, viva=prec_dopo = prec attuale).
+  Evidenze vere: 10 log scambi storici con USCITA=0, 95 PRE_DEPLOY (3 di oggi in
+  /var/www/bookinvip). esame_deploy --da-file: VERDE 47/47 -> --scrivi.
+- BLOCCO 1 SCADUTO PER COSTRUZIONE (8 caselle, da 27 a 19): il Lock ha toccato fase83/
+  fase85/fase167 (produzione del denaro) e l'impronta del blocco e' cambiata. RIMISURA
+  (regola fondatore 16/9, python collaudi/rimisura.py): VERDI gia' riscritte = esame_
+  soldi, esame_orologi (34/34), esame_produzione (9/9 e 8/8), esame_percorso_ruoli
+  (12/12). RIMASTE APERTE nel blocco: rimborsi (rosso, sotto), webhook-caselle (7-11,
+  strumenti da accendere), mutazione (saltata: giro da 60 min da programmare), backup
+  (a mano, gia' chiusa il 24/9 con le sue prove), plausibilita' (catalogo vuoto),
+  metamorfiche/OTA (mai misurate). VIETATO ridichiarare il blocco come chiuso: le
+  caselle verdi restano quelle riscritte dagli esami.
+- ROSSO VERO DA CHIUDERE (prossima sessione, fresca): esame_rimborsi ROSSO con DUE
+  motivi: (1) la strada del Lock nel banco di prova rimborsa nel gateway finto ma il
+  classificatore delle divergenze non la conosce come "deciso da noi" (divergenza
+  DIVERGENZA CONTI rif 50609a29... nel BANCO, non in produzione: ZERO righe LOCK CARTA
+  in /data/app.log, il Lock non ha MAI scattato sul vero); (2) "STRADA lock 1-carta=
+  1-sconto NON MISURATA: nessun collaudo verde percorre questa strada" — il collaudo
+  riconosciuto e' test_rimborso_torna_da_ogni_strada.TestISoldiTornanoDaOgniStrada
+  (pattern test_STRADA_*_da_capo_a_fondo): va aggiunto il ramo del Lock (o esteso
+  esame_rimborsi a leggere le guardie di test_lock_carta_credito). Senticella rossa =
+  monitor esterno da aprire (fondatore). Plausibilita' rossa = catalogo vuoto (primo
+  annuncio vero). PROSSIMA SESSIONE: (1) chiudere esame_rimborsi (2 punti sopra),
+  (2) mutazione sui 5 moduli del denaro (fase178 ora incluso?), (3) T5/T6.
+- REGOLE COSTATE CARE DI QUESTA SESSIONE: il difetto vivo (import da cron) l'ha visto
+  il giro vero, non i test in-process (D23); il commit su master e' stato rifiuto dal
+  cancello e spostato su ramo (il cancello funziona); la suite becca le strade dei
+  soldi non censite; il conteggio caselle scende quando tocchi produzione e va
+  RI-MISURATO, mai ridichiarato.
+
+## PASSAGGIO DI CONSEGNE 10 (2026-09-25 notte, D21) - T3: RICONCILIAZIONE NOTTURNA (cron sul VPS), via «autorizzato» del fondatore:
 
 ## PASSAGGIO DI CONSEGNE 10 (2026-09-25 notte, D21) - T3: RICONCILIAZIONE NOTTURNA (cron sul VPS), via «autorizzato» del fondatore:
 - IL GIRO: deploy/cron_riconciliazione.py (nell'immagine a /app/deploy/): chiama
