@@ -117,5 +117,37 @@ class TestIlGiroNotturno(unittest.TestCase):
         self.assertGreater(ts, 0)
 
 
+class TestLoScriptGiraDaSolo(unittest.TestCase):
+    """Il cron lancia lo script STANDOLO (python3 /app/deploy/cron_riconciliazione.py):
+    sys.path allora contiene la SOLA cartella dello script, non la radice -- e i moduli
+    fase non sono importabili. Difetto VIVO trovato dal primo giro sul container vero
+    (ModuleNotFoundError), non dai test in-process (che girano dalla radice)."""
+
+    def test_da_una_cartella_qualunque_i_moduli_fase_si_importano(self):
+        import subprocess  # nosec B404 - esegue lo script NOSTRO, nessun input esterno
+        import sys as _sys
+        radice = os.path.dirname(os.path.abspath(__file__))
+        script = os.path.join(radice, "deploy", "cron_riconciliazione.py")
+        d = tempfile.mkdtemp()
+        try:
+            ambiente = dict(os.environ)
+            ambiente.pop("PYTHONPATH", None)           # lo script non deve ereditare scorciatoie
+            ambiente["STRIPE_SECRET_KEY"] = "sk_" + "finto"   # finta, e bandit lo sa vedere
+            ambiente["ALERT_EMAIL"] = "f@x.it"
+            ambiente["DB_FINANZA"] = os.path.join(d, "finanza.db")
+            esito = subprocess.run(  # nosec B603 - script NOSTRO, nessun input esterno  # noqa: S603
+                [_sys.executable, script],
+                cwd=tempfile.mkdtemp(),                    # DOVESSERO essere altrove
+                env=ambiente,
+                capture_output=True, text=True, timeout=120)
+            tutto = esito.stdout + esito.stderr
+            self.assertNotIn("ModuleNotFoundError", tutto,
+                             "lo script da solo non trova i moduli fase: il cron di notte "
+                             "morirebbe a ogni giro: %r" % (tutto[:300],))
+            self.assertIn("NON ESEGUITO", tutto)
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+
 if __name__ == "__main__":
     unittest.main()
