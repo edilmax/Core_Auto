@@ -19,10 +19,12 @@ della risposta, cosi' che «ho risposto 2xx» implichi sempre «ce l'ho scritto�
     webhook, 120 chiamate in tutto, quasi tutte aspettandosi la conferma dentro la risposta.
     Spostarla e' un lavoro a se', da fare quando non c'e' altro in volo.
   · NON ritenta da solo gli eventi rimasti indietro. Espone `pendenti()` perche' si possano
-    VEDERE -- che e' cio' su cui poggera' la casella 9 -- ma nessuno li rilavora ancora.
-  · NON deduplica l'elaborazione: `salva()` non duplica una riga gia' presente, il che e' il
-    seme della casella 8, ma la casella 8 chiede anche che due Event DIVERSI per lo stesso
-    fatto contino come uno, e questo modulo non lo sa fare.
+    VEDERE — e dal 2026-09-25 e' quello su cui poggia lo sweeper `deploy/cron_sweep_
+    eventi.py` (casella 9), che ridelivera' gli eventi salvati rifirmandoli con il secret.
+  · DEDUPLICAZIONE PER FATTO (casella 8, seconda meta', 2026-09-25): `fatto_gia_presente`
+    riconosce due Event DIVERSI che portano lo stesso fatto (stesso tipo, stesso oggetto):
+    il gestore risponde `duplicato` e non rielabora. ⚠️ La memoria non scade (la tabella
+    non cancella righe): copre i 72 ore dei ritentativi di Stripe.
 
 LOGICA. Una tabella, chiave l'identificativo dell'evento (`evt_...`). Tre stati osservabili:
 la riga c'e' (ricevuto), la riga e' segnata elaborata (gestito), la riga c'e' e non e'
@@ -90,11 +92,23 @@ class ArchivioEventiStripe:
                     elaborato_ts INTEGER NOT NULL DEFAULT 0)""")
                 con.execute("CREATE INDEX IF NOT EXISTS ix_eventi_stato "
                             "ON eventi_stripe(stato, ricevuto_ts)")
+                # CASELLA 8, seconda meta' (2026-09-25): il FATTO (tipo + oggetto) e' la
+                # seconda chiave della deduplicazione — due Event diversi per lo stesso
+                # oggetto contano come uno. Migrazione ADDITIVA: le tabelle nate prima
+                # della colonna la ricevono con ALTER, senza toccare le righe esistenti.
+                colonne = {r[1] for r in con.execute(
+                    "PRAGMA table_info(eventi_stripe)").fetchall()}
+                if "oggetto_id" not in colonne:
+                    con.execute("ALTER TABLE eventi_stripe "
+                                "ADD COLUMN oggetto_id TEXT NOT NULL DEFAULT ''")
+                con.execute("CREATE INDEX IF NOT EXISTS ix_eventi_fatto "
+                            "ON eventi_stripe(tipo, oggetto_id)")
         finally:
             con.close()
 
     # ── scrittura ───────────────────────────────────────────────────────────────
-    def salva(self, evt_id: Any, *, tipo: str = "", corpo_json: str = "") -> bool:
+    def salva(self, evt_id: Any, *, tipo: str = "", corpo_json: str = "",
+              oggetto_id: str = "") -> bool:
         """Registra l'evento. True se DOPO questa chiamata la riga c'e'.
 
         ⛔ IL VALORE DI RITORNO E' UN ESITO, NON UN COMMENTO: chi chiama deve guardarlo, ed
@@ -104,6 +118,11 @@ class ArchivioEventiStripe:
 
         ⛔ Un evento GIA' PRESENTE non e' un errore e non si duplica: Stripe consegna piu'
         volte apposta. Torna True perche' la domanda e' «c'e'?», non «l'ho scritto io adesso?».
+
+        `oggetto_id` e' l'identificativo dell'OGGETTO dell'evento (es. la `id` della
+        sessione di Checkout), la seconda meta' della casella 8: due Event con `evt_id`
+        diverso ma lo stesso fatto (stesso tipo, stesso oggetto) devono contare come uno,
+        ed e' `fatto_gia_presente` che lo guarda.
         """
         if not (isinstance(evt_id, str) and evt_id.strip()):
             return False
@@ -112,8 +131,9 @@ class ArchivioEventiStripe:
             with con:
                 con.execute(
                     "INSERT OR IGNORE INTO eventi_stripe "
-                    "(evt_id, tipo, corpo_json, ricevuto_ts) VALUES (?,?,?,?)",
-                    (evt_id, str(tipo or ""), str(corpo_json or ""), self._now()))
+                    "(evt_id, tipo, corpo_json, oggetto_id, ricevuto_ts) VALUES (?,?,?,?,?)",
+                    (evt_id, str(tipo or ""), str(corpo_json or ""),
+                     str(oggetto_id or ""), self._now()))
             r = con.execute("SELECT 1 FROM eventi_stripe WHERE evt_id=?",
                             (evt_id,)).fetchone()
             return r is not None
@@ -174,6 +194,44 @@ class ArchivioEventiStripe:
             r = con.execute("SELECT stato FROM eventi_stripe WHERE evt_id=?",
                             (evt_id,)).fetchone()
             return bool(r) and str(r[0]) == "elaborato"
+        finally:
+            con.close()
+
+    def fatto_gia_presente(self, *, tipo: str, oggetto_id: str, evt_id: str) -> bool:
+        """True se UN ALTRO evento (evt_id diverso) porta gia' lo stesso FATTO: stesso
+        tipo e stesso oggetto. E' la seconda meta' della casella 8 — due Event diversi
+        per lo stesso fatto contano come UNO, e il gestore risponde `duplicato` senza
+        rielaborare. ⛔ La memoria non scade: la tabella non cancella righe, quindi la
+        finestra copre i 72 ore dei ritentativi di Stripe (METODO 3.3: la trappola
+        classica e' la memoria corta).
+
+        Oggetto vuoto -> False: senza identificativo dell'oggetto il fatto non e'
+        riconoscibile, e il chiamante prosegue con le difese che ha (idempotenza
+        dell'evento, chiavi stabili, CAS di conferma)."""
+        if not (isinstance(oggetto_id, str) and oggetto_id.strip()):
+            return False
+        if not (isinstance(evt_id, str) and evt_id.strip()):
+            return False
+        con = self._apri()
+        try:
+            r = con.execute(
+                "SELECT 1 FROM eventi_stripe WHERE tipo=? AND oggetto_id=? AND evt_id<>?",
+                (str(tipo or ""), str(oggetto_id), str(evt_id))).fetchone()
+            return r is not None
+        finally:
+            con.close()
+
+    def corpo(self, evt_id: Any) -> str:
+        """Il corpo GREZZO salvato all'ingresso (o "": riga assente). E' un corpo GIA'
+        VERIFICATO (la firma lo giudica prima del salvataggio): lo sweeper lo ridelivera'
+        rifirmandolo col nostro secret — e' l'archivio che voucha per i propri byte."""
+        if not isinstance(evt_id, str):
+            return ""
+        con = self._apri()
+        try:
+            r = con.execute("SELECT corpo_json FROM eventi_stripe WHERE evt_id=?",
+                            (evt_id,)).fetchone()
+            return str(r[0] or "") if r else ""
         finally:
             con.close()
 

@@ -10601,6 +10601,61 @@ class TestIlBancoSIPUOGIUDICAREANCHEFUORIDALCONTENITORE(unittest.TestCase):
             "collaudi/batteria.py non nomina BANCO_DATI: e' la cartella che i due processi "
             "si scambiano, e senza quella il libro giornale resta illeggibile al banco")
 
+    @staticmethod
+    def _base_letta_dall_ambiente(testo_js):
+        """True se una riga ESEGUIBILE (non un commento) definisce BASE leggendo
+        `process.env.BASE_VISIVO`. Un commento che la nomina non basta (sbaglio S6)."""
+        import re
+        senza_blocchi = re.sub(r"/\*.*?\*/", "", testo_js, flags=re.S)
+        for riga in senza_blocchi.splitlines():
+            codice = riga.split("//", 1)[0]
+            if re.search(r"\bconst\s+BASE\s*=", codice) and "process.env.BASE_VISIVO" in codice:
+                return True
+        return False
+
+    def test_GLI_ATTREZZI_NODE_DELLA_BATTERIA_TROVANO_IL_SERVER_DELLA_BATTERIA(self):
+        """⛔ UN ROSSO CHE PARLAVA DEL SITO E INVECE PARLAVA DELLA PORTA.
+
+        Misurato il 2026-09-26 con una batteria vera: `9. Accessibilità WCAG (axe)` usciva
+        `CRASH a11y: net::ERR_CONNECTION_REFUSED at http://127.0.0.1:8099`. La batteria
+        accende il server su una porta LIBERA (`_porta_libera`) e la comunica con
+        `BASE_VISIVO`; `clickthrough_pannelli.js` la leggeva, `test_a11y.js` no, e cercava il
+        sito sulla porta fissa 8099 dove non c'era nessuno. Rilanciata con l'indirizzo
+        giusto: 0 violazioni gravi. Un rosso che non dice niente del prodotto insegna a
+        ignorare la fase che controlla l'accessibilita'.
+
+        Qui: ogni `collaudi/*.js` che la batteria lancia deve prendere BASE dall'ambiente.
+        """
+        import re
+        with io.open(os.path.join(QUI, "collaudi", "batteria.py"), encoding="utf-8") as f:
+            sorgente = f.read()
+        script = sorted(set(re.findall(r"[\"'](collaudi/[\w]+\.js)[\"']", sorgente)))
+        self.assertIn("collaudi/test_a11y.js", script,
+                      "collaudi/batteria.py non lancia piu' test_a11y.js: questa guardia non "
+                      "sa piu' cosa sta guardando")
+        ciechi = []
+        for nome in script:
+            with io.open(os.path.join(QUI, nome), encoding="utf-8") as f:
+                if not self._base_letta_dall_ambiente(f.read()):
+                    ciechi.append(nome)
+        self.assertEqual(
+            ciechi, [],
+            "questi attrezzi node lanciati dalla batteria NON leggono BASE_VISIVO: cercano il "
+            "sito su una porta fissa mentre la batteria lo accende su una porta libera, e "
+            "falliscono per la porta invece che per il prodotto -> %r" % (ciechi,))
+
+    def test_la_guardia_BASE_VISIVO_sa_distinguere(self):
+        """Controprova nelle due direzioni: grida sulla forma cieca e sul commento che
+        nomina la variabile, tace sulla forma che la legge davvero."""
+        cieco = "const BASE = process.argv[2] || 'http://127.0.0.1:8099';\n"
+        commento = "// const BASE = process.env.BASE_VISIVO\n" + cieco
+        giusto = ("const BASE = process.argv[2] || process.env.BASE_VISIVO || "
+                  "'http://127.0.0.1:8099';\n")
+        self.assertFalse(self._base_letta_dall_ambiente(cieco))
+        self.assertFalse(self._base_letta_dall_ambiente(commento))
+        self.assertFalse(self._base_letta_dall_ambiente("/* " + giusto + " */"))
+        self.assertTrue(self._base_letta_dall_ambiente(giusto))
+
     def _rete_dalla_batteria(self):
         """La funzione VERA estratta da `collaudi/batteria.py`, senza importare il modulo
         (importarlo lancerebbe la batteria intera)."""
@@ -14391,6 +14446,80 @@ class TestOgniCancellazioneDichiaraSeAzzeraIByte(unittest.TestCase):
                 self.assertTrue(str(motivo).strip(),
                                 "%s dice «non sono dati di una persona» senza dire perche'"
                                 % modulo)
+
+
+class TestLEsameDelWebhookNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
+    """⛔ D18 PUNTO 4 per `collaudi/esame_webhook.py`, l'attrezzo che scrive le caselle
+    7-10 del blocco dei soldi (webhook: firma/salvataggio, deduplicazione, sweeper,
+    rilettura dello stato). Stesso criterio delle guardie sugli altri esami: la domanda
+    non e' «ha barato?» ma «PUO' barare?», e si fa PRIMA."""
+
+    def _esame(self):
+        return self._carica("esame_webhook.py", "_esame_webhook_sotto_guardia")
+
+    def test_CON_UNA_PRECONDIZIONE_ROTTA_L_ESAME_SI_FERMA_E_NON_SCRIVE(self):
+        """Se le caselle non si leggono piu' dal piano, l'esame non deve dire ne' «verde»
+        ne' «rosso»: deve dire che non puo' misurare, e non scrivere NIENTE."""
+        esame = self._esame()
+        vera_registra = esame.scheda.registra
+        scritture = []
+
+        def _registra_spia(*a, **k):
+            scritture.append((a, k))
+            raise AssertionError("l'esame ha scritto nella scheda con una precondizione "
+                                 "rotta: e' esattamente il barare che D18 vieta")
+        try:
+            esame.testo_casella = lambda chiave: (_ for _ in ()).throw(
+                ValueError("piano illeggibile (iniezione)"))
+            esame.scheda.registra = _registra_spia
+            tutte_ok, _righe = esame.precondizioni()
+            self.assertFalse(tutte_ok,
+                             "col piano illeggibile le precondizioni si dichiarano sane: "
+                             "il metro non si accorge di essere storto (sbaglio S1)")
+            uscita = esame.main([])
+            self.assertEqual(uscita, 2,
+                             "l'esame doveva FERMARSI (uscita 2) e invece ha risposto %r"
+                             % (uscita,))
+            self.assertEqual(scritture, [], "l'esame ha scritto pur non potendo misurare")
+        finally:
+            esame.scheda.registra = vera_registra
+
+    def test_AUTOPROVA_GRIDA_COL_GUASTO_E_TACE_A_MACCHINA_SANA(self):
+        esame = self._esame()
+        uscita = esame.main(["--autoprova"])
+        self.assertEqual(uscita, 0,
+                         "l'autoprova non riesce a farsi gridare e tacere: l'esame non "
+                         "sa piu' vedere il proprio guasto")
+
+
+class TestLEsameDellaRiconciliazioneNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
+    """⛔ D18 PUNTO 4 per `collaudi/esame_riconciliazione.py`, l'attrezzo della casella 11
+    del blocco dei soldi (il giro notturno di riconciliazione, T3)."""
+
+    def _esame(self):
+        return self._carica("esame_riconciliazione.py", "_esame_riconciliazione_sotto_guardia")
+
+    def test_CON_LETTURE_INCOMPLETE_L_ESAME_SI_FERMA_E_NON_SCRIVE(self):
+        esame = self._esame()
+        vera_registra = esame.scheda.registra
+        scritture = []
+
+        def _registra_spia(*a, **k):
+            scritture.append((a, k))
+            raise AssertionError("l'esame ha scritto con letture incomplete: barare")
+        try:
+            esame.scheda.registra = _registra_spia
+            uscita = esame.main(["--da-file", "che-non-esiste.txt"])
+            self.assertEqual(uscita, 2, "senza letture l'esame si ferma (uscita 2)")
+            self.assertEqual(scritture, [], "scritture con letture assenti")
+        finally:
+            esame.scheda.registra = vera_registra
+
+    def test_AUTOPROVA_GRIDA_COL_CRON_SPENTO_E_TACE_SANO(self):
+        esame = self._esame()
+        uscita = esame.main(["--autoprova"])
+        self.assertEqual(uscita, 0,
+                         "l'autoprova non vede piu' il proprio guasto (cron spento)")
 
 
 if __name__ == "__main__":

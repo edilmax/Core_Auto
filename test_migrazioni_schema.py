@@ -1243,6 +1243,74 @@ class TestMigrazioneMarcheFase184(BaseMigrazione, unittest.TestCase):
 
 
 # ===========================================================================
+# 15. EVENTI STRIPE (fase204) — `oggetto_id` + l'indice del FATTO (casella 8)
+# ===========================================================================
+class TestMigrazioneEventiStripeFase204(BaseMigrazione, unittest.TestCase):
+    """L'archivio del webhook e' la PROVA di aver ricevuto i soldi: sul server esiste gia',
+    nato senza `oggetto_id`. Aperto dal codice di oggi deve ricevere colonna e indice
+    senza perdere un evento, e i pendenti di prima devono restare visibili allo sweeper."""
+    ORA = 1784000000
+    DDL_V1 = (
+        """CREATE TABLE IF NOT EXISTS eventi_stripe (
+                evt_id TEXT PRIMARY KEY,
+                tipo TEXT NOT NULL DEFAULT '',
+                corpo_json TEXT NOT NULL DEFAULT '',
+                stato TEXT NOT NULL DEFAULT 'da_elaborare',
+                tentativi INTEGER NOT NULL DEFAULT 0,
+                ricevuto_ts INTEGER NOT NULL,
+                elaborato_ts INTEGER NOT NULL DEFAULT 0)""",
+        "CREATE INDEX IF NOT EXISTS ix_eventi_stato ON eventi_stripe(stato, ricevuto_ts)",
+    )
+    _INS = ("INSERT INTO eventi_stripe (evt_id, tipo, corpo_json, stato, tentativi, "
+            "ricevuto_ts, elaborato_ts) VALUES (?,?,?,?,?,?,?)")
+    RIGHE_V1 = (
+        (_INS, ("evt_1a2b3c", "checkout.session.completed", '{"id":"evt_1a2b3c"}',
+                "elaborato", 0, 1783990000, 1783990001)),
+        (_INS, ("evt_4d5e6f", "identity.verification_session.verified",
+                '{"id":"evt_4d5e6f"}', "da_elaborare", 2, 1783995000, 0)),
+    )
+    TABELLE = (("eventi_stripe", ("evt_id", "tipo", "corpo_json", "stato", "tentativi",
+                                  "ricevuto_ts", "elaborato_ts"), "evt_id"),)
+    COLONNE_AGGIUNTE = {"eventi_stripe": ("oggetto_id",)}
+
+    def apri(self, percorso):
+        from fase204_eventi_stripe import crea_archivio_eventi
+        archivio = crea_archivio_eventi(percorso, orologio=lambda: self.ORA)
+        archivio.inizializza_schema()
+        return archivio
+
+    def leggi_col_prodotto(self, archivio):
+        return {"esiste": archivio.esiste("evt_1a2b3c"),
+                "elaborato": archivio.elaborato("evt_1a2b3c"),
+                "corpo": archivio.corpo("evt_4d5e6f"),
+                "pendenti": [(p["evt_id"], p["tentativi"]) for p in archivio.pendenti()],
+                # nato prima della colonna: oggetto vuoto, il fatto non e' riconoscibile
+                "fatto_vecchio": archivio.fatto_gia_presente(
+                    tipo="checkout.session.completed", oggetto_id="",
+                    evt_id="evt_nuovo")}
+
+    def atteso_dal_prodotto(self):
+        return {"esiste": True, "elaborato": True, "corpo": '{"id":"evt_4d5e6f"}',
+                "pendenti": [("evt_4d5e6f", 2)], "fatto_vecchio": False}
+
+    def test_la_deduplicazione_per_fatto_funziona_sull_archivio_migrato(self):
+        """Il motivo della colonna: dopo la migrazione un secondo Event per lo stesso
+        oggetto dev'essere riconosciuto come lo stesso fatto, e uno per un oggetto
+        diverso no."""
+        self.assertNotIn("ix_eventi_fatto", oggetti(self.vecchio, "index"))
+        archivio = self.apri(self.vecchio)
+        self.assertIn("ix_eventi_fatto", oggetti(self.vecchio, "index"))
+        self.assertIs(archivio.salva("evt_7g8h9i", tipo="checkout.session.completed",
+                                     oggetto_id="cs_test_a1"), True)
+        self.assertIs(archivio.fatto_gia_presente(tipo="checkout.session.completed",
+                                                  oggetto_id="cs_test_a1",
+                                                  evt_id="evt_altro"), True)
+        self.assertIs(archivio.fatto_gia_presente(tipo="checkout.session.completed",
+                                                  oggetto_id="cs_test_b2",
+                                                  evt_id="evt_altro"), False)
+
+
+# ===========================================================================
 # IL DEPLOY VERO: il SISTEMA INTERO acceso su una cartella di archivi VECCHI
 # ===========================================================================
 class TestAvvioSuArchiviVecchi(unittest.TestCase):
@@ -1455,7 +1523,8 @@ class TestNessunArchivioSenzaProva(unittest.TestCase):
                "fase147_tassa_comunale", "fase160_escrow_garanzia",
                "fase177_financial_controller", "fase163_accettazioni",
                "fase192_admin_accounts", "fase201_partner", "fase158_domanda",
-               "fase127_checkin_digitale", "fase184_marca_temporale")
+               "fase127_checkin_digitale", "fase184_marca_temporale",
+               "fase204_eventi_stripe")
 
     def test_ogni_modulo_coperto_ha_la_sua_classe_di_prova(self):
         moduli_provati = set()

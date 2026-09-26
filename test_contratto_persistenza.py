@@ -1538,10 +1538,15 @@ class TestContrattoEventiStripeFase204(BaseContratto, unittest.TestCase):
     COLONNE = {
         "eventi_stripe": ("evt_id TEXT PK1", "tipo TEXT NOT NULL", "corpo_json TEXT NOT NULL",
                           "stato TEXT NOT NULL", "tentativi INTEGER NOT NULL",
-                          "ricevuto_ts INTEGER NOT NULL", "elaborato_ts INTEGER NOT NULL"),
+                          "ricevuto_ts INTEGER NOT NULL", "elaborato_ts INTEGER NOT NULL",
+                          # casella 8, seconda meta' (2026-09-25): il FATTO dell'evento,
+                          # aggiunto con ALTER alle tabelle nate prima (test_migrazioni_schema)
+                          "oggetto_id TEXT NOT NULL"),
     }
     INDICI = {"ix_eventi_stato": "CREATE INDEX ix_eventi_stato ON eventi_stripe(stato, "
-                                 "ricevuto_ts)"}
+                                 "ricevuto_ts)",
+              "ix_eventi_fatto": "CREATE INDEX ix_eventi_fatto ON eventi_stripe(tipo, "
+                                 "oggetto_id)"}
     UNICI = {"eventi_stripe": ("pk(evt_id)",)}
     CHECK = {"eventi_stripe": ()}
     FK = {"eventi_stripe": ()}
