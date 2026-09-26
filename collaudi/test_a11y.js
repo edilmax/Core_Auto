@@ -2,7 +2,9 @@
 const { chromium } = require('playwright');
 const fs = require('fs');
 const axeSrc = fs.readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
-const BASE = process.argv[2] || 'http://127.0.0.1:8099';
+// La batteria accende il server su una porta LIBERA e la passa in BASE_VISIVO (2026-09-26:
+// senza, questa fase cercava la porta fissa e cadeva per la porta, non per il sito).
+const BASE = process.argv[2] || process.env.BASE_VISIVO || 'http://127.0.0.1:8099';
 
 async function analizza(page, nome) {
   await page.evaluate(axeSrc);

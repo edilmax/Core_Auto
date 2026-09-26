@@ -8364,9 +8364,19 @@ class RouterHTTP:
         #    pagato quattro volte («un booleano che nessuno legge non e' un esito»).
         _archivio = getattr(self._sys, "eventi_stripe", None)
         _evt = self._id_evento(body)
+        # CASELLA 8, seconda meta' (2026-09-25): l'identificativo dell'OGGETTO dell'evento
+        # (es. la `id` della sessione di Checkout) e' la chiave del FATTO. Due Event con
+        # `evt_id` diverso ma lo stesso fatto (stesso tipo, stesso oggetto) contano come uno.
+        _oggetto_id = ""
+        try:
+            _o = ((dati or {}).get("object", {}) or {}).get("id", "")
+            _oggetto_id = _o if isinstance(_o, str) else ""
+        except Exception:
+            _oggetto_id = ""
         if _archivio is not None and _evt:
             try:
-                _registrato = _archivio.salva(_evt, tipo=tipo, corpo_json=body or "")
+                _registrato = _archivio.salva(_evt, tipo=tipo, corpo_json=body or "",
+                                              oggetto_id=_oggetto_id)
             except Exception:
                 _registrato = False
                 logger.error("evento %s NON registrato: archivio in errore",
@@ -8387,6 +8397,19 @@ class RouterHTTP:
                 _gia = False
             if _gia:
                 return 200, {"ricevuto": True, "tipo": tipo, "duplicato": True}
+            # ⛔ E IL FATTO VA OLTRE L'IDENTIFICATIVO (2026-09-25): un evento NUOVO che
+            #    porta un fatto GIA' VISTO (stesso tipo, stesso oggetto, evt diverso —
+            #    Stripe riemette il fatto dopo un incidente lato Stripe) conta come uno:
+            #    si risponde 2xx con `duplicato` senza rielaborare. Il primo evento del
+            #    fatto, se fosse rimasto indietro, lo ritenta lo sweeper (casella 9).
+            try:
+                _fatto = bool(_archivio.fatto_gia_presente(tipo=tipo, oggetto_id=_oggetto_id,
+                                                           evt_id=_evt))
+            except Exception:
+                _fatto = False
+            if _fatto:
+                return 200, {"ricevuto": True, "tipo": tipo, "duplicato": True,
+                             "fatto": True}
         elif _archivio is not None:
             # ⚠️ WARNING e non ERROR, e il livello e' parte della riparazione: un evento
             #    senza `id` e' malformato, non un nostro guasto, e gridare a ogni consegna

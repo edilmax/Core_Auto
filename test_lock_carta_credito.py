@@ -141,10 +141,15 @@ class TestLockSulWebhook(unittest.TestCase):
         s, c = self._webhook("evt_b", rif_b, "pi_B")   # STESSO evento, ritentato
         self.assertEqual(c.get("duplicato"), True)
         self.assertEqual(len(self.sis.stripe.rimborsi), 1)
-        s, c = self._webhook("evt_b2", rif_b, "pi_B")  # NUOVO evento, stesso book
-        self.assertEqual(c.get("lock_carta"), "credito_negato")
-        # Il rimborso ripetuto porta la STESSA chiave di idempotenza: Stripe non
-        # restituisce i soldi due volte anche se il webhook arriva per giorni.
+        # ⛔ Dalla casella 8 seconda meta' (2026-09-25) il FATTO ha la sua dedup: anche un
+        #    evento NUOVO che porta lo stesso fatto (stesso tipo, stessa sessione) conta
+        #    come UNO e risponde `duplicato` senza ripassare dal lock. Prima il secondo
+        #    evento veniva rielaborato e il lock ridiceva `credito_negato` — l'effetto sui
+        #    soldi era gia' protetto dalla chiave di idempotenza stabile, ma il lavoro si
+        #    rifaceva. L'asserzione sui soldi resta: UNA sola chiave di rimborso.
+        s, c = self._webhook("evt_b2", rif_b, "pi_B")  # NUOVO evento, stesso fatto
+        self.assertEqual(c.get("duplicato"), True,
+                         "lo stesso fatto riemesso con evt nuovo conta come uno: %r" % (c,))
         self.assertEqual(len({k for _, _, k in self.sis.stripe.rimborsi}), 1)
 
     def test_una_prenotazione_senza_credito_non_tocca_il_lock(self):

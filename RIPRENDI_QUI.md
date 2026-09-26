@@ -3435,7 +3435,91 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 0f52f1d
+CONSEGNE AGGIORNATE A: 945b37d
+
+## PASSAGGIO DI CONSEGNE 13 (2026-09-25 notte, D21 a chiusura blocco) - CASELLE WEBHOOK 7-11: DEDUP+SWEEP+RICONCILIAZIONE VERDI (BLOCCO 1 = 11/15), WEBHOOK e RILETTURA ROSSE ONESTE CON LA DECISIONE AL FONDATORE:
+- CONSEGNA ("chiudili" del fondatore, potenza MAX): le cinque caselle del webhook.
+  ZERO semplici attrezzi: le caselle chiedevano anche PRODUZIONE. Fatto con D20 per
+  ogni pezzo, guardie nate rosse e poi verdi.
+- (1) DEDUP PER FATTO (casella 8, seconda meta', PRODUZIONE): fase204 colonna
+  `oggetto_id` (migrazione additiva con ALTER) + `fatto_gia_presente(tipo, oggetto_id,
+  evt_id)` + il gestore (fase83 _webhook_stripe) estrae l'id dell'oggetto, lo salva e
+  risponde `duplicato` anche per un evento NUOVO che porta un fatto GIA' VISTO (stesso
+  tipo, stessa sessione). La memoria non scade (nessun DELETE: copre i 72h di Stripe,
+  METODO 3.3). Guardie: test_webhook_dedup_fatto (3, nate rosse: il secondo evento
+  veniva rielaborato). test_lock_carta_credito evt_b2 aggiornato alla semantica nuova
+  con la giustificazione scritta (il doppio rimborso resta coperto dalla chiave stabile).
+- (2) SWEEPER (casella 9, PRODUZIONE): deploy/cron_sweep_eventi.py — legge i pendenti
+  (fase204.pendenti, >5 min), li RIDELIVERA' al gestore INTERO rifirmando il corpo
+  salvato col nostro secret (fase87.firma_di_test; l'archivio custodisce corpi gia'
+  verificati), conta i tentativi falliti (segna_tentativo), e dopo 1h (ANOMALIA_SEC)
+  e' ANOMALIA DEL GUARDIANO con email URGENTE. Vale per OGNI ramo: pagamento E KYC.
+  Guardie: test_sweep_eventi (5, nate rosse: lo script non esisteva), incluso
+  subprocess da cartella estranea. Log JSON /data/sweep_eventi.log. Cron sul VPS:
+  */15 * * * * (installato a catena finita).
+- (3) RICONCILIAZIONE (casella 11, attrezzo nuovo): collaudi/esame_riconciliazione.py
+  --da-file <letture VPS> — cron nel crontab, ultimo giro completo/fresco (<30h) con
+  email_inviata, battito <25h, config presente, e le guardie di
+  test_riconciliazione_notturna eseguite in locale. VERDE sulle letture vere del 25/9
+  (prima partenza vera del cron: stanotte 02:17 UTC), autoprova a letture finte.
+- (4) WEBHOOK (casella 7) e RILETTURA (casella 10) ROSSE ONESTE, scritte col motivo:
+  la 7 ha tre condizioni su quattro vere (firma sul grezzo, salva-prima-risposta,
+  non-2xx se non salvato); «lo elabora DOPO» NON e' fatto PER SCELTA DICHIARATA
+  (fase204: 120 chiamate in 81 banchi; il verdetto V4 potenziato giudica piu' sicuro
+  lo schema attuale). CHIUDERLA E' UNA TUA DECISIONE: architettura differita O testo
+  della casella riscritto (piano.py). La 10: la conferma crede all'evento; la
+  rilettura payment_status dall'API («autorizzato» 2026-08-08, mai realizzata) ha
+  raggio 82 banchi — lavoro a se' da schedulare. Attrezzo:
+  collaudi/esame_webhook.py (misura le 4 caselle, esegue le guardie, autoprova,
+  NON_GUARDA) + guardie D18 punto 4 in test_pipeline_ci (2+2 test).
+- (5) RIMISURA DOPO LE MODIFICHE DI PRODUZIONE (regola 16/9): l'impronta del blocco 1
+  e' cambiata -> rimisura.py ha riscritto 7 caselle; mutazione giro 3 sui 5 moduli
+  (246 uccisi, 0 sopravvissuti, 1 equivalente, ri-conferme 15/15); esame_deploy VERDE
+  47/47 su letture VPS FRESHE (raccollection 25/9 sera: 10 scambi, 95 PRE_DEPLOY,
+  due storici senza USCITA coperti da pulsante_scrive_uscita_dal 2026-09-08T15:52:20Z);
+  esame_backup VERDE 19/19 sul backup vero delle 18:41. BLOCCO 1 = 11/15.
+- Caricatore 6920 -> 6932 (misurato da fermo). La prima suite intera (6932) e' uscita
+  ROSSA con 5 guardie che avevano visto le modifiche non dichiarate: fase204 colonna
+  `oggetto_id` e indice `ix_eventi_fatto` fuori dal contratto congelato (2), l'ALTER
+  senza prova di migrazione (2), README a 428 file di test invece di 430 (1). Chiuse
+  il 26/9 senza toccare produzione: contratto aggiornato, nuova classe
+  `test_migrazioni_schema.TestMigrazioneEventiStripeFase204` (7 test, vista ROSSA 7/7
+  su una copia di fase204 senza la ALTER: «no such column: oggetto_id»), README 430.
+  Caricatore 6932 -> 6939. Suite intera 26/9: Ran 6934, OK (skipped=4), uscita 0.
+- BATTERIA INTERA 26/9 (chiave Stripe di PROVA, PAGAMENTO_BPS 500, FISSO 25, ESTERA 700):
+  24 OK, 3 FAIL, tutti e tre diagnosticati rilanciando la fase da sola:
+  (a) 8c banco 33/34: «nessun database nato nella cartella del progetto» trovava
+  `ical_feed.db` datato 11/9 (avanzo, ignorato da git, il controllo guarda la PRESENZA
+  non la nascita). Spostato fuori (non cancellato, sta nello scratchpad della sessione),
+  banco rilanciato: 34/34, e il file NON rinasce -> il codice di oggi non lo crea;
+  (b) 6c multi-vettore TIMEOUT: rilanciato da solo 18/18 OK, «0 FALLE», ma 765 s contro
+  il tetto di 700 -> e' il tetto dentro la variabilita' gia' misurata il 23/8, non il
+  prodotto (NON alzato: decisione gia' scritta sotto, «UN TIMEOUT ESCE COME [FAIL]»);
+  (c) 9 a11y CRASH ERR_CONNECTION_REFUSED :8099: `test_a11y.js` non leggeva BASE_VISIVO
+  mentre la batteria usa una porta libera. Guardia nuova
+  `test_pipeline_ci.TestIlBancoSIPUOGIUDICAREANCHEFUORIDALCONTENITORE.
+  test_GLI_ATTREZZI_NODE_DELLA_BATTERIA_TROVANO_IL_SERVER_DELLA_BATTERIA` (+ controprova),
+  vista ROSSA (nominava solo test_a11y.js), poi riparato lo strumento: 0 violazioni gravi
+  lanciandolo con la sola BASE_VISIVO. Caricatore 6939 -> 6941.
+- CHIAVETTA RIGENERATA 26/9 sera (il fondatore: la VPS Hostinger «sta per scadere»):
+  `Desktop\BOOKINVIP USB 2026`, generazione di agosto spostata in precedente_bf2e1b6\.
+  Presa dal server vivo con deploy/impacchetta.sh su 958a483: 27 database (non piu' 25),
+  verifica_impronte.sh 822/822 identici, sha256 server = PC, suite intera DENTRO la copia
+  estratta 6915 OK. In piu' rispetto ad agosto: immagine Docker viva (cc48dc3d) +
+  nginx, /etc/letsencrypt, script e .py di /root, crontab, ufw, 14 salvataggi notturni.
+  ⛔ La GUIDA di agosto sbagliava il nome del volume (`casavip_data`: Docker usa
+  `bookinvip_casavip_data`, misurato con `docker volume ls`): il sito sarebbe partito
+  sano su un volume VUOTO. Riscritta nella generazione nuova; la vecchia e' dentro
+  precedente_bf2e1b6\ e non va seguita.
+- SENTINELLA ESTERNA ROSSA 26/9 21:04-21:06 UTC (HTTP 000, 3 tentativi da Azure): server
+  su da 94 giorni, contenitori healthy, ufw 0 blocchi su 80/443, nginx non ha visto le
+  richieste -> rete fra GitHub e Hostinger, non il sito. Job rilanciato: verde 21:36 UTC.
+  RESTA: suite intera -> pre-fatto ->
+  commit -> PR -> gate -> unione -> DEPLOY VERO (fase204/fase83 entrano nell'immagine,
+  col pulsante D17) -> installazione cron sweeper sul VPS (prima il conto dei pendenti
+  in produzione: nessuna ridelivery a sorpresa) -> sonde + verifica_produzione ->
+  tre posti. Poi: (a) decisione fondatore su casella 7 e 10, (b) T5, (c) T6, (d)
+  plausibilita' col primo annuncio, (e) sentinella esterna (tu).
 
 ## PASSAGGIO DI CONSEGNE 12 (2026-09-25 sera, D21 a chiusura blocco) - ESAME RIMBORSI VERDE 8/8 + MUTAZIONE DENARO 0 SOPRAVVISSUTI + AMBIENTE RIMISURATO:
 - IL LAVORO (potenza MAX del fondatore; zero righe di produzione nel commit, i due
@@ -3806,7 +3890,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 6920 test
+SUITE ATTUALE: Ran 6941 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
