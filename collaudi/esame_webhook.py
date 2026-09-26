@@ -175,7 +175,14 @@ def misura():
     dedup_ok = (not rossi) and fatti["memoria_non_scade"]
     sweep_ok = fatti["sweep_esiste"] and not rossi
     web_motivo = ""
-    if not web_esito:
+    if not web_ok:
+        # ⛔ Il motivo qui sotto AFFERMA che tre condizioni reggono: lo si scrive solo se
+        # sono state misurate vere. Altrimenti il foglio direbbe il falso con tono sicuro.
+        web_motivo = ("NEMMENO le tre condizioni di base reggono: firma sul corpo grezzo=%s, "
+                      "salvataggio prima della risposta=%s, guardie rosse=%s"
+                      % (fatti["firma_sul_grezzo"], fatti["salva_prima_della_risposta"],
+                         ", ".join(rossi) or "nessuna"))
+    elif not web_esito:
         web_motivo = ("tre condizioni su quattro sono vere e sorvegliate (firma sul corpo "
                       "grezzo, salvataggio prima della risposta, NON-2xx se non salvato); "
                       "«lo elabora DOPO, in un passo separato» NON e' fatto PER SCELTA "
@@ -243,7 +250,7 @@ def main(argv=None):
               "scritture, niente numeri")
         return 2
     esiti, g, fatti = misura()
-    for nome, ok, rossi, dettaglio in g:
+    for nome, ok, rossi, _dettaglio in g:
         print("  guardia %-32s %s (%d rossi)" % (nome, "VERDE" if ok else "ROSSA", rossi))
     for nome, (esito, denominatore, motivo) in esiti.items():
         print("  casella %-12s %s  (denominatore %d)%s"

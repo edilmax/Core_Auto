@@ -3435,7 +3435,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 0f52f1d
+CONSEGNE AGGIORNATE A: 945b37d
 
 ## PASSAGGIO DI CONSEGNE 13 (2026-09-25 notte, D21 a chiusura blocco) - CASELLE WEBHOOK 7-11: DEDUP+SWEEP+RICONCILIAZIONE VERDI (BLOCCO 1 = 11/15), WEBHOOK e RILETTURA ROSSE ONESTE CON LA DECISIONE AL FONDATORE:
 - CONSEGNA ("chiudili" del fondatore, potenza MAX): le cinque caselle del webhook.

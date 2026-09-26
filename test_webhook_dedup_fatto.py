@@ -134,7 +134,6 @@ class TestDedupPerFatto(unittest.TestCase):
         scade prima fa passare il ritentativo del terzo giorno come evento nuovo
         (METODO 3.3). L'archivio non cancella righe: dopo 72 ore e un secondo la
         riconsegna dello stesso fatto e' ancora un duplicato."""
-        archivio = self.sis.eventi_stripe
         ora = [1700000000]
         archivio_con_orologio = crea_archivio_eventi(":memory:", orologio=lambda: ora[0])
         archivio_con_orologio.inizializza_schema()

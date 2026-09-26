@@ -14,7 +14,7 @@ import hashlib
 import hmac
 import json
 import shutil
-import subprocess
+import subprocess  # nosec B404 - esegue lo script NOSTRO del cron, nessun input esterno
 import sys
 import tempfile
 import time
@@ -224,7 +224,7 @@ class TestLoSweeperNonPUOBARARE(unittest.TestCase):
         radice = os.path.dirname(os.path.abspath(__file__))
         ambiente = {"PATH": "", "SystemRoot": os.environ.get("SystemRoot", ""),
                     "SYSTEMDRIVE": os.environ.get("SYSTEMDRIVE", "")}
-        prova = subprocess.run(
+        prova = subprocess.run(  # nosec B603 - script NOSTRO, nessun input esterno  # noqa: S603
             [sys.executable, os.path.join(radice, "deploy", "cron_sweep_eventi.py")],
             cwd=tempfile.mkdtemp(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             timeout=120, env=ambiente)              # nessuna config: NON ESEGUITO (S7)
