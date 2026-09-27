@@ -451,7 +451,9 @@ mount PRIMA di toccare il container vivo (il bind-mount e' per inode: serve ricr
 
 **S19, di nuovo.** Lo scopo dichiarato è stato allargato ai banchi DOPO averli toccati: il motivo era scritto nella conversazione, non nella traccia. Ridichiarato col motivo appena visto.
 
-**E il Guardiano ha fatto il suo mestiere mentre si rimisurava.** Al primo giro intero dopo il deploy delle 13:43Z ha contato, nelle 24 ore del registro, due accessi NEGATI al bunker del 26 settembre alle 20:38Z (`prove_legali`, sessione assente o manomessa, dall'IP 101.57.50.246): la difesa ha tenuto, e la casella «invarianti in produzione» resta rossa finché un giro intero non li ha più nella finestra.
+**E il Guardiano gridava per le nostre stesse sonde.** Il giro intero all'avvio del contenitore contava, nelle 24 ore del registro, «accessi NEGATI al bunker» dall'IP 101.57.50.246: è l'IP di questo computer, e quelle righe le scrive `verifica_produzione`, che prova apposta il bunker con una sessione manomessa per vedere che risponde 403. Le dichiara in `giudice_ultima_sonda` perché i lettori del registro non le contino — ma quel file tiene **solo l'ultima finestra**: ogni verifica sovrascrive la precedente, e le sonde dei giri di prima tornano a sembrare intrusioni per il resto delle 24 ore. Dopo ogni deploy verificato il giro intero successivo grida, e la casella «invarianti in produzione» non può diventare verde da sola. Prima l'avevo scritto come un evento da segnalare: era lo strumento (S3). Il difetto è scritto nelle consegne 18; ripararlo tocca `fase178`, quindi chiede il via del fondatore.
+
+**In produzione la sera stessa** (#227, `b1ef0a6`, scambio alle 18:06Z col pulsante): il fornitore Stripe è fra i componenti dell'avvio, quindi la rilettura è attiva sul sito vero; il giudice di produzione senza violazioni, e il webhook con una firma falsa risponde ancora 400.
 
 ### 🚀 IN PRODUZIONE: 96e86cd, il rimborso scritto nelle otto lingue — 27 settembre, «procedi al commit e fino alla fine, autorizzato» del fondatore
 

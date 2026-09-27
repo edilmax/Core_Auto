@@ -3435,7 +3435,42 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 18fda27
+CONSEGNE AGGIORNATE A: b1ef0a6
+
+## PASSAGGIO DI CONSEGNE 18 (2026-09-27 sera) - CASELLA 10 IN PRODUZIONE (#227, DEPLOY b1ef0a6); UN FALSO ALLARME DEL GUARDIANO TROVATO, DA RIPARARE COL VIA DEL FONDATORE:
+- PERMESSI: «procedi al commit e fino alla fine», «vai avanti fino alla fine», «la cosa
+  giusta», «autorizzato» (casella 10: fase83/fase85).
+- #227: commit ed10e2e (96 file), suite intera Ran 6960 OK (skipped=4) uscita 0, CI 16
+  controlli (15 success + zap skipped, gate success, anche `browser` col PIN), unione
+  verificata con una SECONDA chiamata: merged=True, master b1ef0a6.
+- DEPLOY col pulsante D17: salvataggio del giro 13:43Z verificato (27 impronte, 27 archivi
+  aperti), paracadute prec = viva bbc5ac02, scambio USCITA=0 («SCAMBIO FATTO alle
+  18:06:28Z», /root/deploy_scambio_20260927_c.log), healthy, money_path_pronto True,
+  avvisi [], `stripe(85)` fra i componenti (la rilettura e' ATTIVA in produzione), viva
+  3af1fa92. Da fuori: / 200, /api/health 200, /api/admin/controversie 401,
+  /api/bunker/invarianti 403, /api/host/payout 401, webhook con firma falsa 400;
+  verifica_produzione 190 controlli 0 violazioni.
+- ⛔ DIFETTO TROVATO (non riparato: tocca produzione, serve il via): il giro intero del
+  Guardiano (fase186._guasti_isolati) conta come intrusioni le NOSTRE sonde del bunker.
+  Misurato: l'IP delle righe «BUNKER: accesso NEGATO» (101.57.50.246) e' quello di questo
+  computer (api.ipify.org), e verifica_produzione le ha riscritte identiche alle
+  18:07:09-10Z. Il criterio unico `fase178.riga_di_rumore_nostro` le salta solo dentro
+  `giudice_ultima_sonda`, che tiene UNA finestra (l'ultima: 1790532427 1790532430): ogni
+  verifica sovrascrive la precedente, quindi le sonde dei giri di prima contano per 24 ore.
+  Effetto: dopo ogni deploy verificato il giro intero successivo scrive «GUARDIANO: N
+  stati anomali» (CRITICAL, email) e la casella «invarianti in produzione» del Blocco 1 non
+  diventa verde. Rimedio proposto: la dichiarazione tiene TUTTE le finestre delle ultime
+  24 ore (fase178 + verifica_produzione), con la guardia vista rossa prima (D20).
+- BLOCCO 1 = 14/15 (resta quella casella, per il difetto qui sopra).
+- ⛔ D21 VIOLATA, dichiarata: il fondatore ha letto `/context` = 732.7k/1m (73%) mentre
+  questo blocco era gia' scritto. La soglia del 50% e' stata superata senza fermarsi. Da
+  li' nessun lavoro nuovo: solo questo allineamento (commit, GitHub, VPS con git pull,
+  chiavetta), poi /clear. La suite di questo commit e' stata fermata e rilanciata dopo
+  questa riga (S18).
+- PROSSIMO LAVORO (col via del fondatore): riparare il falso allarme del Guardiano qui sopra
+  (fase178 + verifica_produzione, D20), poi rimisurare `esame_produzione` -> Blocco 1 15/15.
+- CHIAVETTA: si rigenera DOPO questo commit, dal server allineato; l'esito sta in
+  LEGGIMI-RIPRISTINO.txt della chiavetta.
 
 ## PASSAGGIO DI CONSEGNE 17 (2026-09-27 sera) - CASELLE 7 E 10 DEL BLOCCO 1 CHIUSE: LO STATO DEL PAGAMENTO SI RILEGGE DA STRIPE; BLOCCO 1 = 14/15:
 - PERMESSI, parole testuali del fondatore: alla domanda sulle caselle 7 e 10 «la cosa
@@ -3474,10 +3509,9 @@ CONSEGNE AGGIORNATE A: 18fda27
   money_float, produzione ogni-ora, percorso_ruoli VERDI; esame_orologi 34/34 e
   esame_rimborsi 8/8 + E2E VERDI contro Stripe di prova; a mano con letture VPS fresche
   (17:06Z): riconciliazione, backup 19/19 (finanza-20260927-134306), deploy 51/51 VERDI.
-- ROSSE ONESTE: (a) esame_produzione (blocco 1): il giro INTERO del Guardiano all'avvio del
-  13:43Z conta 2 accessi NEGATI al bunker del 26/9 20:38Z (prove_legali,
-  sessione_assente_o_manomessa, ip 101.57.50.246) — la difesa ha tenuto; la casella torna
-  al primo giro intero che non li ha piu' nelle 24 ore. (b) esame_sentinella (blocco 8):
+- ROSSE ONESTE: (a) esame_produzione (blocco 1): il giro INTERO del Guardiano conta come
+  «guasti isolati» le NOSTRE sonde del bunker (vedi consegne 18: l'IP 101.57.50.246 e'
+  quello di questo computer). (b) esame_sentinella (blocco 8):
   nessun monitor esterno (conto da aprire, decisione del fondatore) e il cron di GitHub con
   un buco di 356 minuti.
 
