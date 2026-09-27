@@ -34,6 +34,8 @@ WH = "whsec_bomb"
 
 
 def _fake_fetch(url, body, headers):
+    if not body and "/checkout/sessions/" in url:     # rilettura dello stato (casella 10)
+        return {"id": url.rsplit("/", 1)[-1], "payment_status": "paid"}
     import secrets
     return {"url": "https://x/" + secrets.token_hex(5), "id": "cs_" + secrets.token_hex(5)}
 
@@ -81,7 +83,7 @@ class TestBombardamentoConcorrente(unittest.TestCase):
 
             def paga(rif):
                 pl = json.dumps({"type": "checkout.session.completed",
-                                 "data": {"object": {"metadata": {"riferimento": rif}}}})
+                                 "data": {"object": {"id": "cs_" + rif, "metadata": {"riferimento": rif}}}})
                 r.gestisci("POST", "/api/payments/webhook", {}, pl,
                            {"Stripe-Signature": firma_di_test(pl, WH, int(time.time()))})
 
@@ -155,7 +157,7 @@ class TestBombardamentoConcorrente(unittest.TestCase):
                                "percentuale_ospite": rnd.choice([0, 50, 100])}, AK)
                         elif kind == "webhook_dup":
                             pl = json.dumps({"type": "checkout.session.completed",
-                                             "data": {"object": {"metadata": {"riferimento": rif}}}})
+                                             "data": {"object": {"id": "cs_" + rif, "metadata": {"riferimento": rif}}}})
                             r.gestisci("POST", "/api/payments/webhook", {}, pl,
                                        {"Stripe-Signature": firma_di_test(pl, WH, int(time.time()))})
                         elif kind == "tick":

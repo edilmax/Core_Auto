@@ -33,6 +33,8 @@ WH = "whsec_sr"
 
 
 def _fake_fetch(url, body, headers):
+    if not body and "/checkout/sessions/" in url:     # rilettura dello stato (casella 10)
+        return {"id": url.rsplit("/", 1)[-1], "payment_status": "paid"}
     return {"url": "https://x/cs", "id": "cs_" + str(time.time_ns())}
 
 
@@ -65,7 +67,7 @@ class TestBombardamentoSuRichiesta(unittest.TestCase):
 
             def paga(rif):
                 pl = json.dumps({"type": "checkout.session.completed",
-                                 "data": {"object": {"metadata": {"riferimento": rif}}}})
+                                 "data": {"object": {"id": "cs_" + rif, "metadata": {"riferimento": rif}}}})
                 r.gestisci("POST", "/api/payments/webhook", {}, pl,
                            {"Stripe-Signature": firma_di_test(pl, WH, int(time.time()))})
 

@@ -31,6 +31,8 @@ _FAIL_ANTICIPO = [False]   # se True, il link ANTICIPO (in_struttura) fallisce -
 
 
 def _fake_fetch(url, body, headers):
+    if not body and "/checkout/sessions/" in url:     # rilettura dello stato (casella 10)
+        return {"id": url.rsplit("/", 1)[-1], "payment_status": "paid"}
     import secrets
     b = body.decode() if isinstance(body, (bytes, bytearray)) else str(body)
     _BODIES.append(b)

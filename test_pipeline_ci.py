@@ -14491,6 +14491,34 @@ class TestLEsameDelWebhookNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
                          "l'autoprova non riesce a farsi gridare e tacere: l'esame non "
                          "sa piu' vedere il proprio guasto")
 
+    def test_LA_RILETTURA_SI_MISURA_SUL_CODICE_NON_SU_UNA_PAROLA(self):
+        """S6 (2026-09-27): fino a quel giorno la casella 10 si misurava cercando
+        `payment_status` in tutto fase83, e un commento bastava. Qui la chiamata della
+        rilettura diventa un COMMENTO (nel testo letto in memoria, nessun file toccato):
+        il nome resta scritto, il codice che rilegge no -- e l'esame deve dirlo."""
+        esame = self._esame()
+        vero = esame.testo_modulo
+        riga = 'stato_api = self._stato_pagamento_da_stripe(sessione)'
+
+        def _con_la_rilettura_commentata(nome):
+            testo = vero(nome)
+            if nome == "fase83_server.py":
+                self.assertEqual(testo.count(riga), 1,
+                                 "PREMESSA: la chiamata della rilettura non e' piu' quella "
+                                 "attesa, la guardia non sa dove iniettare")
+                testo = testo.replace(riga, 'stato_api = None  # ' + riga)
+            return testo
+        try:
+            esame.testo_modulo = _con_la_rilettura_commentata
+            fatti = esame.fatti_strutturali()
+        finally:
+            esame.testo_modulo = vero
+        self.assertFalse(fatti["rilettura_prima_della_conferma"],
+                         "la rilettura ridotta a un commento risulta ancora fatta: la "
+                         "casella 10 la spunterebbe una parola")
+        self.assertTrue(esame.fatti_strutturali()["rilettura_prima_della_conferma"],
+                        "a codice sano la rilettura deve risultare fatta")
+
 
 class TestLEsameMoneyFloatNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
     """⛔ D18 PUNTO 4 per `collaudi/esame_money_float.py`, l'attrezzo della casella «nessun

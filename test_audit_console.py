@@ -33,7 +33,9 @@ class TestAuditConsole(unittest.TestCase):
     def setUpClass(cls):
         cls._orig = _stripe.ProviderStripe._fetch_reale
         _stripe.ProviderStripe._fetch_reale = staticmethod(
-            lambda u, b, h: {"url": "https://checkout.stripe.test/cs", "id": "cs_1"})
+            lambda u, b, h: {"id": u.rsplit("/", 1)[-1], "payment_status": "paid"}
+            if not b and "/checkout/sessions/" in u
+            else {"url": "https://checkout.stripe.test/cs", "id": "cs_1"})
 
     @classmethod
     def tearDownClass(cls):

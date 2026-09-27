@@ -425,6 +425,8 @@ def _porta_libera():
 
 
 def _stripe_checkout_finto(url, body, headers):
+    if not body and "/checkout/sessions/" in url:     # rilettura dello stato (casella 10)
+        return {"id": url.rsplit("/", 1)[-1], "payment_status": "paid"}
     import secrets
     return {"url": "https://stripe.finto/" + secrets.token_hex(4),
             "id": "cs_" + secrets.token_hex(8)}
@@ -886,7 +888,7 @@ class TestKillSwitchGlobale(unittest.TestCase):
         self.assertEqual(st, 201, b)
         rif = b["riferimento"]
         payload = json.dumps({"type": "checkout.session.completed",
-                              "data": {"object": {"metadata": {"riferimento": rif}}}})
+                              "data": {"object": {"id": "cs_" + rif, "metadata": {"riferimento": rif}}}})
         ts = str(int(time.time()))
         mac = hmac.new(WH2.encode(), ("%s.%s" % (ts, payload)).encode(),
                        hashlib.sha256).hexdigest()

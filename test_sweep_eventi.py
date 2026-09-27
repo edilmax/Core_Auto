@@ -35,6 +35,10 @@ class ProviderFinto:
     def rimborsa(self, pi, importo, chiave):
         return {"ok": True, "id": "re_test"}
 
+    def stato_sessione(self, cs):
+        """La rilettura dello stato (casella 10): qui ogni sessione e' pagata con la carta."""
+        return "paid"
+
 
 def evento_conferma(evt_id, rif, pi, sessione=None):
     return json.dumps({"id": evt_id, "type": "checkout.session.completed",

@@ -49,6 +49,8 @@ SOGLIA_P95_LETTURE, SOGLIA_P95_SCRITTURE = (1.5, 3.0) if STRICT else (10.0, 15.0
 
 
 def _fake_fetch(url, body, headers):
+    if not body and "/checkout/sessions/" in url:     # rilettura dello stato (casella 10)
+        return {"id": url.rsplit("/", 1)[-1], "payment_status": "paid"}
     return {"url": "https://x/cs", "id": "cs_" + str(time.time_ns())}
 
 
@@ -150,7 +152,7 @@ class TestBenchmarkSqlite(unittest.TestCase):
                         contatori["rifiutate"] += 1
                     continue
                 pl = json.dumps({"type": "checkout.session.completed",
-                                 "data": {"object": {"metadata": {"riferimento": b["riferimento"]}}}})
+                                 "data": {"object": {"id": "cs_" + b["riferimento"], "metadata": {"riferimento": b["riferimento"]}}}})
                 # il webhook vuole il corpo RAW firmato (niente ri-serializzazioni)
                 t0w = time.perf_counter()
                 st2, c2 = r.gestisci("POST", "/api/payments/webhook", {}, pl,

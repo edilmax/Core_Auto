@@ -148,7 +148,9 @@ class TestScatto3Router(unittest.TestCase):
         from fase83_server import crea_router
         from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
         _stripe.ProviderStripe._fetch_reale = staticmethod(
-            lambda u, b, h: {"url": "x", "id": "cs_x"})
+            lambda u, b, h: {"id": u.rsplit("/", 1)[-1], "payment_status": "paid"}
+            if not b and "/checkout/sessions/" in u
+            else {"url": "x", "id": "cs_x"})
         d = tempfile.mkdtemp()
         sis = crea_sistema(ConfigCasaVIP(
             abilitato=True, segreto_hmac=b"S" * 32, con_registrazione_host=True,

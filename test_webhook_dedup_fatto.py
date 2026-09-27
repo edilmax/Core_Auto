@@ -45,6 +45,10 @@ class ProviderFinto:
         self.rimborsi.append((pi, importo, chiave))
         return {"ok": True, "id": "re_test"}
 
+    def stato_sessione(self, cs):
+        """La rilettura dello stato (casella 10): qui ogni sessione e' pagata con la carta."""
+        return "paid"
+
 
 class TestDedupPerFatto(unittest.TestCase):
     """e2e di prova: rotte vere, webhook firmato, Stripe finto al bordo."""

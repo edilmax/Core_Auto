@@ -38,6 +38,8 @@ _CHARGE_LOCK = _thr.Lock()
 
 
 def _fake_stripe(url, body, headers):
+    if not body and "/checkout/sessions/" in url:     # rilettura dello stato (casella 10)
+        return {"id": url.rsplit("/", 1)[-1], "payment_status": "paid"}
     import secrets
     _BODIES.append(body.decode() if isinstance(body, (bytes, bytearray)) else str(body))
     return {"url": "https://checkout.stripe.com/c/" + secrets.token_hex(4),

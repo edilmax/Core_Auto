@@ -1,9 +1,11 @@
-"""GUARDIA — CASELLA 7 DEL BLOCCO SOLDI: si SALVA l'evento, si risponde, si elabora DOPO.
+"""GUARDIA — CASELLA 7 DEL BLOCCO SOLDI: si SALVA l'evento prima di tutto, e il 2xx arriva
+solo su cio' che e' salvato e applicato.
 
 Testo della casella, letto da `collaudi/piano.py` e NON ricopiato a mano (la chiave della
-scheda e' il testo: una copia che coincide quasi non spuntera' mai quella casella):
-il gestore dei webhook verifica la firma sul corpo grezzo, SALVA l'evento col suo
-identificativo, risponde 200 subito -- e non 200 finche' non e' salvato -- e lo elabora DOPO.
+scheda e' il testo: una copia che coincide quasi non spuntera' mai quella casella). Il
+riassunto qui sotto e' per chi legge, non per la macchina: il gestore verifica la firma sul
+corpo grezzo, SALVA l'evento col suo identificativo prima di fare qualunque cosa, e risponde
+2xx solo quando l'evento e' salvato E applicato (riscritta il 2026-09-27: vedi piano.py).
 
 ⛔ COS'E' CHE MANCA OGGI, misurato e non supposto. `_webhook_stripe` (`fase83_server.py`)
 verifica la firma (quello c'e' gia' ed e' giusto) e poi fa TUTTO dentro la risposta:
@@ -27,15 +29,13 @@ riparazione). Non asseriscono l'esistenza di un nome -- un nome non e' un compor
 chiedono fatti osservabili. Viste rosse il 2026-09-08 sul codice di allora («non esiste
 NESSUN archivio degli eventi Stripe»), poi verdi dopo `fase204_eventi_stripe`.
 
-⛔⛔ E LA CASELLA 7 RESTA VUOTA APPOSTA, perche' qui ne e' chiusa META'.
-La casella chiede anche «lo elabora DOPO, in un passo separato»: NON e' fatto, l'elaborazione
-resta dentro la risposta. Misurato prima di decidere, e la misura e' il motivo: 81 file di
-collaudo e 19 banchi passano dal webhook, 120 chiamate in tutto, quasi tutte aspettandosi la
-conferma dentro la risposta -- spostarla e' un lavoro a se', sul percorso del denaro, da fare
-quando non c'e' altro in volo. Quello che QUI e' chiuso e' il buco vero: un evento non viene
-piu' accettato senza essere prima scritto, e uno ricevuto-e-non-gestito si VEDE.
-⛔ Nessuno spunti la casella 7 con queste guardie: misurano un'altra cosa, e una casella
-spuntata da un attrezzo che guarda altrove e' peggio di una casella vuota.
+⛔⛔ FINO AL 2026-09-27 LA CASELLA 7 CHIEDEVA ANCHE «lo elabora DOPO, in un passo separato»,
+e queste guardie ne chiudevano solo meta'. Quel giorno la casella e' stata riscritta: la guida
+di Stripe per la consegna dopo il Checkout consegna DENTRO la risposta (Checkout aspetta fino
+a 10 secondi il nostro 2xx prima di mandare il cliente alla pagina di conferma), e cio' che il
+passo separato doveva garantire -- nessun esito perso -- lo danno il NON-2xx sul non applicato
+(`test_webhook_stripe_esiti_persi.py`) e lo sweeper. Queste guardie misurano la meta' «si
+salva prima»: `collaudi/esame_webhook.py` le esegue insieme alle altre per scrivere la casella.
 
 🔑 PERCHE' UN BANCO PROPRIO E NON UNA SOTTOCLASSE di `TestWebhookStripeEsitiPersi`, che
 avrebbe dato setUp e attrezzi gratis: ereditando, i suoi quattro test sarebbero girati una

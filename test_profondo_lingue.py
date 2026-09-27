@@ -581,6 +581,8 @@ class _Posta:
 
 
 def _fetch_finto(url, body, headers):
+    if not body and "/checkout/sessions/" in url:     # rilettura dello stato (casella 10)
+        return {"id": url.rsplit("/", 1)[-1], "payment_status": "paid"}
     import secrets
     return {"url": "https://x/" + secrets.token_hex(5), "id": "cs_" + secrets.token_hex(5)}
 
@@ -647,7 +649,7 @@ class _ConRouter(unittest.TestCase):
 
     def webhook(self, riferimento):
         carico = json.dumps({"type": "checkout.session.completed",
-                             "data": {"object": {"metadata":
+                             "data": {"object": {"id": "cs_" + riferimento, "metadata":
                                                  {"riferimento": riferimento}}}})
         return self.r.gestisci("POST", "/api/payments/webhook", {}, carico,
                                {"Stripe-Signature": firma_di_test(carico, "whsec_x",

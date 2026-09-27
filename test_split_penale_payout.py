@@ -45,7 +45,9 @@ class TestSplitPenalePayout(unittest.TestCase):
     def setUpClass(cls):
         cls._orig = _stripe.ProviderStripe._fetch_reale
         _stripe.ProviderStripe._fetch_reale = staticmethod(
-            lambda u, b, h: {"url": "https://checkout.stripe.test/cs", "id": "cs_1"})
+            lambda u, b, h: {"id": u.rsplit("/", 1)[-1], "payment_status": "paid"}
+            if not b and "/checkout/sessions/" in u
+            else {"url": "https://checkout.stripe.test/cs", "id": "cs_1"})
 
     @classmethod
     def tearDownClass(cls):
@@ -100,7 +102,7 @@ class TestSplitPenalePayout(unittest.TestCase):
         _, b = self.g("POST", "/api/concierge/book",
                       {"quote_token": q["quote_token"], "email": "cli@sp.it"})
         payload = json.dumps({"type": "checkout.session.completed",
-                              "data": {"object": {"metadata":
+                              "data": {"object": {"id": "cs_" + b["riferimento"], "metadata":
                                                   {"riferimento": b["riferimento"]}}}})
         sig = firma_di_test(payload, "whsec_x", int(time.time()))
         self.r.gestisci("POST", "/api/payments/webhook", {}, payload,
@@ -234,7 +236,7 @@ class TestSplitPenalePayout(unittest.TestCase):
         self.assertEqual(self.sis.garanzia.stato(ref)["stato"], "annullato")
         # pagamento TARDIVO (link vivo, stanza ancora libera)
         payload = json.dumps({"type": "checkout.session.completed",
-                              "data": {"object": {"metadata": {"riferimento": ref}}}})
+                              "data": {"object": {"id": "cs_" + ref, "metadata": {"riferimento": ref}}}})
         sig = firma_di_test(payload, "whsec_x", int(time.time()))
         self.r.gestisci("POST", "/api/payments/webhook", {}, payload,
                         {"Stripe-Signature": sig})

@@ -86,6 +86,8 @@ def combinazioni():
 
 
 def _fetch_finto(url, body, headers):
+    if not body and "/checkout/sessions/" in url:     # rilettura dello stato (casella 10)
+        return {"id": url.rsplit("/", 1)[-1], "payment_status": "paid"}
     import secrets
     return {"url": "https://checkout.stripe.test/" + secrets.token_hex(6),
             "id": "cs_test_" + secrets.token_hex(6)}
@@ -144,7 +146,7 @@ class Banco:
         """Il pagamento vero: il webhook firmato di Stripe. Non passa da self.g perche'
         il corpo dev'essere la STRINGA su cui e' calcolata la firma, non un dict."""
         payload = json.dumps({"type": "checkout.session.completed",
-                              "data": {"object": {"metadata": {"riferimento": rif}}}})
+                              "data": {"object": {"id": "cs_" + rif, "metadata": {"riferimento": rif}}}})
         firma = firma_di_test(payload, WHSEC, int(time.time()))
         return self.r.gestisci("POST", "/api/payments/webhook", {}, payload,
                                {"Stripe-Signature": firma})

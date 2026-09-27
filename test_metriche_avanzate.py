@@ -23,6 +23,8 @@ WH = "whsec_met"
 
 
 def _fake_fetch(url, body, headers):
+    if not body and "/checkout/sessions/" in url:     # rilettura dello stato (casella 10)
+        return {"id": url.rsplit("/", 1)[-1], "payment_status": "paid"}
     import secrets
     return {"url": "https://t/" + secrets.token_hex(4), "id": "cs_" + secrets.token_hex(4)}
 
@@ -76,7 +78,7 @@ class TestMetricheAvanzate(unittest.TestCase):
                       {"quote_token": q["quote_token"], "email": "cli@met.it"})
         if paga:
             pl = json.dumps({"type": "checkout.session.completed",
-                             "data": {"object": {"metadata": {"riferimento": b["riferimento"]}}}})
+                             "data": {"object": {"id": "cs_" + b["riferimento"], "metadata": {"riferimento": b["riferimento"]}}}})
             self.r.gestisci("POST", "/api/payments/webhook", {}, pl,
                             {"Stripe-Signature": firma_di_test(pl, WH, int(time.time()))})
         return b

@@ -96,6 +96,9 @@ NON_MISURATA = "NON MISURATA: nessun collaudo verde percorre questa strada"
 STATI_CHE_TORNANO = (TORNA_DIRETTA, TORNA_PULSANTE)
 
 NON_GUARDA = (
+    "nell'E2E la sessione del Checkout e' simulata (senza browser non si completa): la "
+    "rilettura dello stato chiede a Stripe il PaymentIntent vero al suo posto "
+    "(`e2e_rimborso_stripe.rilettura_dal_pagamento_vero`)",
     "il gateway dei collaudi e' FINTO (la rete di Stripe sostituita, il provider vero): la "
     "prova che un rimborso ESCE davvero la da' solo l'E2E contro Stripe di prova, e l'E2E "
     "percorre due strade (cancellazione ospite e controversia), non sette: per le altre cinque "

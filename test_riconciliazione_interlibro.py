@@ -37,6 +37,8 @@ VAL_CITTA = [("EUR", "Roma"), ("USD", "New York"), ("JPY", "Tokyo"),
 
 
 def _fake(url, body, headers):
+    if not body and "/checkout/sessions/" in url:     # rilettura dello stato (casella 10)
+        return {"id": url.rsplit("/", 1)[-1], "payment_status": "paid"}
     return {"url": "https://x/cs", "id": "cs_" + os.urandom(5).hex()}
 
 
@@ -71,7 +73,7 @@ class TestRiconciliazioneInterlibro(unittest.TestCase):
 
     def _paga(self, r, rif, volte=1):
         pl = json.dumps({"type": "checkout.session.completed",
-                         "data": {"object": {"metadata": {"riferimento": rif}}}})
+                         "data": {"object": {"id": "cs_" + rif, "metadata": {"riferimento": rif}}}})
         for _ in range(volte):
             r.gestisci("POST", "/api/payments/webhook", {}, pl,
                        {"Stripe-Signature": firma_di_test(pl, WH, int(time.time()))})

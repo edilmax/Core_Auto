@@ -114,6 +114,8 @@ def _giorno(i):
 
 
 def _fake_fetch_stripe(url, body, headers):
+    if not body and "/checkout/sessions/" in url:     # rilettura dello stato (casella 10)
+        return {"id": url.rsplit("/", 1)[-1], "payment_status": "paid"}
     import secrets
     return {"url": "https://stripe.finto/" + secrets.token_hex(4),
             "id": "cs_" + secrets.token_hex(8)}

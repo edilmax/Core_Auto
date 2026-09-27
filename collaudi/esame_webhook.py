@@ -17,10 +17,16 @@ COME MISURA:
   2. I FATTI STRUTTURALI si leggono dal CODICE (testo dei moduli di produzione): la firma
      sul corpo grezzo, il ramo di non-2xx quando l'evento non si registra, l'assenza di
      DELETE dall'archivio (la memoria della dedup non scade), lo sweeper che ridelivera'.
-  3. LE CASELLE 7 e 10 NON SONO VERDI e l'esame lo DICE, col motivo e con la storia: la
-     7 per scelta dichiarata (il verdetto sul V4 potenziato giudica piu' sicuro lo schema
-     attuale), la 10 perche' la decisione «autorizzato» del 2026-08-08 non e' stata ancora
-     realizzata (raggio misurato: 82 banchi di prova passano dal webhook).
+  3. LE CASELLE 7 e 10 (2026-09-27, «la cosa giusta» e poi «autorizzato» del fondatore).
+     La 7 e' stata RISCRITTA sulla guida di Stripe per la consegna dopo il Checkout (si
+     consegna dentro la risposta; il perche' sta sopra la casella, in piano.py): si misura
+     con la firma sul grezzo, il salvataggio prima, il NON-2xx su cio' che non e' salvato E
+     su cio' che non e' applicato, e le guardie di quelle tre cose. La 10 si misura
+     sull'ALBERO SINTATTICO del gestore, non cercando una parola nel testo (sbaglio S6: la
+     ricerca di prima, `payment_status` ovunque in fase83, la soddisfaceva un commento): la
+     rilettura e' chiamata dentro `_webhook_stripe` PRIMA della conferma, passa dalla
+     `stato_sessione` del fornitore (fase85), e i tipi d'evento che confermano comprendono
+     `async_payment_succeeded`; piu' la guardia `test_webhook_rilettura_stato`, eseguita.
 
 ⛔ D18: precondizioni che fermano il giro, autoprova nelle due direzioni, NON_GUARDA
    stampato a ogni giro, e la guardia `TestLEsameDelWebhookNonPuoBARARE` in
@@ -51,7 +57,9 @@ BLOCCO_SOLDI = 1
 # Indici (0-based) nella lista `finito_quando` del blocco 1. ⛔ NON si ricopiano i testi.
 INDICI = {"webhook": 6, "dedup": 7, "sweep": 8, "rilettura": 9}
 COMANDO = "python collaudi/esame_webhook.py --scrivi"
-GUARDIE = ("test_webhook_dedup_fatto", "test_sweep_eventi", "test_fase87_stripe_webhook")
+GUARDIE = ("test_webhook_dedup_fatto", "test_sweep_eventi", "test_fase87_stripe_webhook",
+           "test_webhook_evento_archiviato", "test_webhook_stripe_esiti_persi",
+           "test_webhook_rilettura_stato")
 SEGNALI = {  # cio' che ogni indice DEVE dire, per accorgersi se il piano cambia ordine
     "webhook": ("firma", "salva"),
     "dedup": ("due volte", "72"),
@@ -64,9 +72,13 @@ NON_GUARDA = (
     "resta l'E2E dell'esame dei rimborsi",
     "il cron dello sweeper SUL VPS (la riga nel crontab di root) non si vede da qui: "
     "l'installazione si verifica a mano con `crontab -l`, come per la riconciliazione",
-    "la DECISIONE sulla casella 7 (architettura differita vs testo riscritto) e sulla "
-    "casella 10 (quando realizzare la rilettura: raggio 82 banchi) non e' una misura: "
-    "e' una scelta del fondatore, e qui resta scritta come tale",
+    "la rilettura della casella 10 vale quando il sistema ha un fornitore Stripe: senza "
+    "chiave non si creano link di pagamento (fase85 `crea_provider_stripe`) e la conferma "
+    "resta quella di prima. Che in produzione il fornitore ci sia (`stripe(85)` fra i "
+    "componenti dell'avvio) lo si legge dal registro del server al deploy, non da qui",
+    "il TEMPO della consegna dentro la risposta (Checkout aspetta fino a 10 secondi) non si "
+    "misura: il gestore fa fino a tre letture a Stripe, ognuna col suo timeout; oltre, "
+    "Checkout manda comunque il cliente avanti e la conferma arriva un attimo dopo",
 )
 
 
@@ -123,10 +135,34 @@ def fatti_strutturali():
     fuori["sweep_esiste"] = bool(re.search(r"_webhook_stripe_registrato", sweep)) and \
         bool(re.search(r"segna_tentativo", sweep)) and \
         bool(re.search(r"ANOMALIA_SEC = 3600", sweep))
-    # (e) la rilettura dello stato dall'API nel percorso di conferma: NON c'e' (casella
-    # 9) — si misura l'assenza, perche' il rosso onesto valga per quello che e'.
-    fuori["rilettura_nella_conferma"] = bool(re.search(
-        r"\.pagamento\(", server)) or bool(re.search(r"payment_status", server))
+    # (e) CASELLA 7: cio' che non e' APPLICATO risponde NON-2xx (Stripe ritenta).
+    fuori["non_2xx_se_non_applicato"] = bool(re.search(
+        r"return 503, \{\"errore\": \"esito_non_applicato\"", server))
+    # (f) CASELLA 10, sull'albero sintattico (codice che gira, non commenti): la rilettura
+    # e' chiamata dentro `_webhook_stripe` PRIMA della conferma; passa dalla lettura del
+    # fornitore; e gli eventi che confermano comprendono `async_payment_succeeded`.
+    funzioni = {n.name: n for n in ast.walk(albero) if isinstance(n, ast.FunctionDef)}
+
+    def _chiamate(funzione, nome):
+        return sorted(c.lineno for c in ast.walk(funzione)
+                      if isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute)
+                      and c.func.attr == nome)
+    gestore = funzioni.get("_webhook_stripe")
+    lettura = funzioni.get("_stato_pagamento_da_stripe")
+    riletture = _chiamate(gestore, "_stato_pagamento_da_stripe") if gestore else []
+    conferme = _chiamate(gestore, "_conferma_pagamento") if gestore else []
+    fuori["rilettura_prima_della_conferma"] = bool(
+        riletture and conferme and riletture[0] < conferme[0])
+    fuori["rilettura_dal_fornitore"] = bool(lettura and _chiamate(lettura, "stato_sessione"))
+    fuori["evento_differito_gestito"] = bool(gestore) and any(
+        isinstance(c, ast.Constant) and c.value == "checkout.session.async_payment_succeeded"
+        for c in ast.walk(gestore))
+    fornitore = ast.parse(testo_modulo("fase85_pagamenti_stripe.py"))
+    fuori["fornitore_legge_payment_status"] = any(
+        isinstance(f, ast.FunctionDef) and f.name == "stato_sessione"
+        and any(isinstance(c, ast.Constant) and c.value == "payment_status"
+                for c in ast.walk(f))
+        for f in ast.walk(fornitore))
     del albero
     return fuori
 
@@ -165,76 +201,81 @@ def misura():
     fatti = fatti_strutturali()
     n_guardie = sum(1 for _, ok, _, _ in g if ok)
 
-    # CAS. 7 (webhook): tre condizioni vere e una per scelta dichiarata. ⛔ La quarta
-    # («lo elabora DOPO, in un passo separato») NON esiste nel codice: il gestore
-    # elabora dentro la risposta, ed e' la scelta dichiarata in fase204 (120 chiamate in
-    # 81 banchi la presuppongono) — la casella resta rossa finche' il fondatore decide.
-    web_ok = fatti["firma_sul_grezzo"] and fatti["salva_prima_della_risposta"] \
-        and not rossi
-    web_esito = False
+    # CAS. 7 (webhook), riscritta il 2026-09-27: firma sul grezzo, salvataggio prima della
+    # risposta col NON-2xx se non salvato, NON-2xx se non applicato, guardie verdi.
+    condizioni_web = {"firma sul corpo grezzo": fatti["firma_sul_grezzo"],
+                      "salvataggio prima della risposta (NON-2xx se non salvato)":
+                          fatti["salva_prima_della_risposta"],
+                      "NON-2xx se non applicato": fatti["non_2xx_se_non_applicato"]}
+    web_esito = all(condizioni_web.values()) and not rossi
     dedup_ok = (not rossi) and fatti["memoria_non_scade"]
     sweep_ok = fatti["sweep_esiste"] and not rossi
     web_motivo = ""
-    if not web_ok:
-        # ⛔ Il motivo qui sotto AFFERMA che tre condizioni reggono: lo si scrive solo se
-        # sono state misurate vere. Altrimenti il foglio direbbe il falso con tono sicuro.
-        web_motivo = ("NEMMENO le tre condizioni di base reggono: firma sul corpo grezzo=%s, "
-                      "salvataggio prima della risposta=%s, guardie rosse=%s"
-                      % (fatti["firma_sul_grezzo"], fatti["salva_prima_della_risposta"],
+    if not web_esito:
+        web_motivo = ("condizioni non vere: %s; guardie rosse: %s"
+                      % (", ".join(k for k, v in condizioni_web.items() if not v) or "nessuna",
                          ", ".join(rossi) or "nessuna"))
-    elif not web_esito:
-        web_motivo = ("tre condizioni su quattro sono vere e sorvegliate (firma sul corpo "
-                      "grezzo, salvataggio prima della risposta, NON-2xx se non salvato); "
-                      "«lo elabora DOPO, in un passo separato» NON e' fatto PER SCELTA "
-                      "DICHIARATA: 120 chiamate in 81 banchi aspettano la conferma dentro "
-                      "la risposta, e il verdetto sul V4 potenziato (2026-09-21) giudica "
-                      "piu' sicuro lo schema attuale (2xx solo se applicato). Chiudere la "
-                      "casella richiede la scelta del fondatore: architettura differita o "
-                      "testo della casella riscritto")
-    rilettura = fatti["rilettura_nella_conferma"]
+    # CAS. 10 (rilettura): quattro fatti dell'albero sintattico e le guardie verdi.
+    condizioni_ril = {"rilettura prima della conferma in _webhook_stripe":
+                          fatti["rilettura_prima_della_conferma"],
+                      "rilettura dalla stato_sessione del fornitore":
+                          fatti["rilettura_dal_fornitore"],
+                      "async_payment_succeeded fra gli eventi che confermano":
+                          fatti["evento_differito_gestito"],
+                      "fase85.stato_sessione legge payment_status":
+                          fatti["fornitore_legge_payment_status"]}
+    rilettura = all(condizioni_ril.values()) and not rossi
     rilettura_motivo = ""
     if not rilettura:
-        rilettura_motivo = ("la conferma oggi crede al contenuto dell'evento: la rilettura "
-                            "dello stato dall'API esiste come shadow-check (fase181) e "
-                            "nella riconciliazione (fase182), NON nel percorso di conferma. "
-                            "La decisione «autorizzato» del 2026-08-08 (confermare solo con "
-                            "payment_status riletto) e' rimasta indietro: il raggio misurato "
-                            "e' 82 banchi di prova che passano dal webhook — lavoro a se', "
-                            "da schedulare col fondatore")
+        rilettura_motivo = ("condizioni non vere: %s; guardie rosse: %s"
+                            % (", ".join(k for k, v in condizioni_ril.items() if not v)
+                               or "nessuna", ", ".join(rossi) or "nessuna"))
 
     esiti = {
-        "webhook": (web_esito, 4, web_motivo),
+        "webhook": (web_esito, len(condizioni_web) + n_guardie, web_motivo),
         "dedup": (dedup_ok, 2 + n_guardie,
                   "" if dedup_ok else "guardie rosse: %s" % ", ".join(rossi)),
         "sweep": (sweep_ok, 3 + n_guardie,
                   "" if sweep_ok else "guardie rosse o sweeper incompleto"),
-        "rilettura": (rilettura, 1, rilettura_motivo),
+        "rilettura": (rilettura, len(condizioni_ril) + n_guardie, rilettura_motivo),
     }
     return esiti, g, fatti
 
 
+def _esegui(nome):
+    flusso = io.StringIO()
+    suite = unittest.TestLoader().loadTestsFromName(nome)
+    return unittest.TextTestRunner(stream=flusso, verbosity=0).run(suite).wasSuccessful(), \
+        flusso.getvalue()[-200:]
+
+
 def autoprova():
-    """D18 punto 2: col guasto dentro la guardia della dedup deve GRIDARE, a macchina
-    sana deve TACERE. Il guasto: il fatto non e' mai gia' visto (dedup spenta)."""
+    """D18 punto 2: con un guasto dentro, la guardia deve GRIDARE; a macchina sana deve
+    TACERE. Due guasti, iniettati nel processo e tolti in un `finally` (nessun file
+    toccato): la dedup spenta (il fatto non e' mai gia' visto) e la rilettura spenta (il
+    gestore torna a credere all'evento: `_stato_pagamento_da_stripe` risponde «nessun
+    fornitore»)."""
     import fase204_eventi_stripe as archivio_mod
+    import fase83_server as server_mod
+    prova_dedup = ("test_webhook_dedup_fatto.TestDedupPerFatto."
+                   "test_due_eventi_diversi_per_lo_stesso_fatto_contano_UNO")
+    prova_ril = ("test_webhook_rilettura_stato.TestLoStatoSiRileggeDallAPI."
+                 "test_SESSIONE_CHIUSA_SENZA_SOLDI_NON_CONFERMA_LA_STANZA")
     vero = archivio_mod.ArchivioEventiStripe.fatto_gia_presente
     archivio_mod.ArchivioEventiStripe.fatto_gia_presente = lambda self, **k: False
     try:
-        caricatore = unittest.TestLoader()
-        suite = caricatore.loadTestsFromName(
-            "test_webhook_dedup_fatto.TestDedupPerFatto."
-            "test_due_eventi_diversi_per_lo_stesso_fatto_contano_UNO")
-        flusso = io.StringIO()
-        esito = unittest.TextTestRunner(stream=flusso, verbosity=0).run(suite)
-        grida = not esito.wasSuccessful()
+        passa_dedup, dettaglio = _esegui(prova_dedup)
     finally:
         archivio_mod.ArchivioEventiStripe.fatto_gia_presente = vero
-    flusso2 = io.StringIO()
-    suite2 = unittest.TestLoader().loadTestsFromName(
-        "test_webhook_dedup_fatto.TestDedupPerFatto."
-        "test_due_eventi_diversi_per_lo_stesso_fatto_contano_UNO")
-    tace = unittest.TextTestRunner(stream=flusso2, verbosity=0).run(suite2).wasSuccessful()
-    return grida, tace, flusso.getvalue()[-200:]
+    vera_lettura = server_mod.RouterHTTP._stato_pagamento_da_stripe
+    server_mod.RouterHTTP._stato_pagamento_da_stripe = lambda self, sessione: None
+    try:
+        passa_ril, dettaglio_ril = _esegui(prova_ril)
+    finally:
+        server_mod.RouterHTTP._stato_pagamento_da_stripe = vera_lettura
+    grida = (not passa_dedup) and (not passa_ril)
+    tace = _esegui(prova_dedup)[0] and _esegui(prova_ril)[0]
+    return grida, tace, dettaglio + " | " + dettaglio_ril
 
 
 def main(argv=None):
@@ -261,8 +302,7 @@ def main(argv=None):
         print("  AUTOPROVA: grida col guasto=%s · tace a macchina sana=%s %s"
               % (grida, tace, "" if (grida and tace) else dettaglio))
         # L'autoprova risponde a UNA domanda sola: «l'esame sa vedere il proprio guasto?».
-        # Le caselle rosse ONESTE (7 e 10) non sono un suo fallimento e non cambiano qui
-        # il codice d'uscita.
+        # Una casella rossa non e' un suo fallimento e non cambia qui il codice d'uscita.
         return 0 if (grida and tace) else 1
     if "--scrivi" in argv:
         for chiave, (esito, denominatore, motivo) in esiti.items():

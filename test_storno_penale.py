@@ -35,7 +35,9 @@ class TestStornoPenale(unittest.TestCase):
     def setUpClass(cls):
         cls._orig = _stripe.ProviderStripe._fetch_reale
         _stripe.ProviderStripe._fetch_reale = staticmethod(
-            lambda u, b, h: {"url": "https://checkout.stripe.test/cs", "id": "cs_1"})
+            lambda u, b, h: {"id": u.rsplit("/", 1)[-1], "payment_status": "paid"}
+            if not b and "/checkout/sessions/" in u
+            else {"url": "https://checkout.stripe.test/cs", "id": "cs_1"})
 
     @classmethod
     def tearDownClass(cls):
@@ -89,7 +91,7 @@ class TestStornoPenale(unittest.TestCase):
         _, b = self.g("POST", "/api/concierge/book",
                       {"quote_token": q["quote_token"], "email": "cli@storno.it"})
         payload = json.dumps({"type": "checkout.session.completed",
-                              "data": {"object": {"metadata":
+                              "data": {"object": {"id": "cs_" + b["riferimento"], "metadata":
                                                   {"riferimento": b["riferimento"]}}}})
         sig = firma_di_test(payload, "whsec_x", int(time.time()))
         self.r.gestisci("POST", "/api/payments/webhook", {}, payload,

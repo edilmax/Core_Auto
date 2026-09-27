@@ -93,6 +93,9 @@ NON_GUARDA = (
     "per la penale l'orologio non si sposta: fase83 conta i giorni all'arrivo dal calendario, "
     "quindi si prenota a due giorni dall'arrivo (e' equivalente, ed e' dichiarato)",
     "le altre cinque caselle del blocco: non le tocca",
+    "il Checkout vero: senza browser non si completa, quindi la sessione dell'evento e' "
+    "simulata (`cs_` + il pagamento vero) e la rilettura dello stato chiede a Stripe il "
+    "PaymentIntent vero al suo posto (`e2e_rimborso_stripe.rilettura_dal_pagamento_vero`)",
 )
 
 PASSI = []
@@ -197,6 +200,8 @@ class Banco(object):
             stripe_secret_key=chiave, stripe_webhook_secret=self.WH,
             stripe_success_url="https://bookinvip.com/ok", stripe_cancel_url="https://bookinvip.com/no")
         self.sis = crea_sistema(self.cfg)
+        # la sessione qui e' simulata: la rilettura (casella 10) chiede a Stripe il pagamento vero
+        self.sis.stripe.stato_sessione = e2e.rilettura_dal_pagamento_vero(chiave)
         # GLI OROLOGI NOSTRI: gli stessi archivi, con un orologio che si sposta a mano
         self.orologio_hold = Orologio(time.time())
         self.orologio_garanzia = Orologio(time.time())

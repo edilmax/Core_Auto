@@ -203,6 +203,34 @@ class ProviderStripe:
                            payment_intent, exc.__class__.__name__, exc)
             return ""
 
+    # I tre valori che Stripe dichiara per `payment_status` della Checkout Session.
+    STATI_SESSIONE = ("paid", "unpaid", "no_payment_required")
+
+    def stato_sessione(self, sessione: Any) -> str:
+        """CASELLA 10 del blocco SOLDI: lo stato del pagamento si chiede all'API, non si
+        legge dall'evento. GET della Checkout Session e il suo `payment_status`, come
+        prescrive la guida di Stripe per la consegna (docs.stripe.com/checkout/fulfillment:
+        «Recupera la sessione di Checkout dalla API ... Controlla la proprieta'
+        payment_status»). Con i metodi a conferma differita (Pix, acceso sul conto) la
+        sessione si chiude `unpaid` e i soldi arrivano dopo.
+
+        LETTURA SOLA. Ritorna uno di `STATI_SESSIONE`, o "" se la risposta non si puo'
+        credere: input che non e' una sessione, rete, risposta di un altro oggetto, valore
+        mai dichiarato da Stripe. Il chiamante tratta "" come «non so» e non conferma."""
+        if not (isinstance(sessione, str) and sessione.startswith("cs_")):
+            return ""
+        try:
+            resp = self._fetch(STRIPE_URL + "/" + sessione, None,
+                               {"Authorization": "Bearer " + self._key})
+            if not isinstance(resp, dict) or resp.get("id") != sessione:
+                return ""
+            stato = resp.get("payment_status")
+            return stato if stato in self.STATI_SESSIONE else ""
+        except Exception as exc:
+            logger.warning("Stripe: sessione non riletta cs=%s -> %s: %s",
+                           sessione, exc.__class__.__name__, exc)
+            return ""
+
     # Rimborsi che valgono come denaro GIA' USCITO (o in uscita). Un rimborso 'failed' o
     # 'canceled' NON ha restituito niente: contarlo come fatto toglierebbe la riga dalla lista
     # di chi aspetta lasciando l'ospite senza i suoi soldi E senza nessuno che lo sappia --

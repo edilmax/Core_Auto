@@ -42,6 +42,8 @@ class TestSuRichiestaStripe(unittest.TestCase):
         self.sessioni = []
 
         def fake_fetch(url, body, headers):
+            if not body and "/checkout/sessions/" in url:     # rilettura (casella 10)
+                return {"id": url.rsplit("/", 1)[-1], "payment_status": "paid"}
             corpo = body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else str(body)
             self.sessioni.append(corpo)
             return {"url": "https://checkout.stripe.test/cs_%d" % len(self.sessioni),
@@ -96,7 +98,7 @@ class TestSuRichiestaStripe(unittest.TestCase):
 
     def _webhook(self, rif):
         payload = json.dumps({"type": "checkout.session.completed",
-                              "data": {"object": {"metadata": {"riferimento": rif}}}})
+                              "data": {"object": {"id": "cs_" + rif, "metadata": {"riferimento": rif}}}})
         sig = firma_di_test(payload, WHSEC, int(time.time()))
         return self.r.gestisci("POST", "/api/payments/webhook", {}, payload,
                                {"Stripe-Signature": sig})

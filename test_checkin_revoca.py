@@ -34,7 +34,9 @@ class TestCheckinRevoca(unittest.TestCase):
     def setUpClass(cls):
         cls._orig = _stripe.ProviderStripe._fetch_reale
         _stripe.ProviderStripe._fetch_reale = staticmethod(
-            lambda u, b, h: {"url": "https://x/cs", "id": "cs_1"})
+            lambda u, b, h: {"id": u.rsplit("/", 1)[-1], "payment_status": "paid"}
+            if not b and "/checkout/sessions/" in u
+            else {"url": "https://x/cs", "id": "cs_1"})
 
     @classmethod
     def tearDownClass(cls):
@@ -81,7 +83,7 @@ class TestCheckinRevoca(unittest.TestCase):
         _, b = self.g("POST", "/api/concierge/book",
                       {"quote_token": q["quote_token"], "email": "cli@ck.it"})
         pl = json.dumps({"type": "checkout.session.completed",
-                         "data": {"object": {"metadata": {"riferimento": b["riferimento"]}}}})
+                         "data": {"object": {"id": "cs_" + b["riferimento"], "metadata": {"riferimento": b["riferimento"]}}}})
         self.r.gestisci("POST", "/api/payments/webhook", {}, pl,
                         {"Stripe-Signature": firma_di_test(pl, WH, int(time.time()))})
         s, o = self.g("POST", "/api/checkin/pre_registra",

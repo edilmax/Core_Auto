@@ -125,6 +125,28 @@ def rimborsi_su_stripe(chiave, pi_):
     return righe, None
 
 
+def rilettura_dal_pagamento_vero(chiave):
+    """La RILETTURA DELLO STATO (casella 10) per una sessione che qui e' simulata.
+
+    Un Checkout non si completa senza browser, quindi questi giri pagano con un PaymentIntent
+    VERO in modalita' prova e poi mandano un `checkout.session.completed` la cui sessione e'
+    `cs_` + l'identificativo di quel pagamento: su Stripe quella sessione NON esiste (404).
+    Il gestore, da quando rilegge lo stato, non conferma su un 404 -- e fa bene. Qui la
+    rilettura va quindi a chiedere a Stripe lo stato del PAGAMENTO vero che la sessione
+    simula: `succeeded` -> «paid», ancora in corso -> «unpaid», errore -> «non so» ("").
+    E' la definizione di Stripe per una sessione in mode=payment, e il giudice resta Stripe."""
+    def stato_sessione(sessione):
+        if not (isinstance(sessione, str) and sessione.startswith("cs_pi_")):
+            return ""
+        pi = _chiama(chiave, "payment_intents/" + urllib.parse.quote(sessione[3:]))
+        if "_errore" in pi:
+            return ""
+        return {"succeeded": "paid", "processing": "unpaid",
+                "requires_action": "unpaid", "requires_confirmation": "unpaid",
+                "requires_payment_method": "unpaid"}.get(pi.get("status"), "")
+    return stato_sessione
+
+
 def main():
     chiave = leggi_chiave()
     print("=" * 78)
@@ -154,6 +176,7 @@ def main():
             stripe_secret_key=chiave, stripe_webhook_secret=WH,
             stripe_success_url="https://bookinvip.com/ok",
             stripe_cancel_url="https://bookinvip.com/no"))
+        sis.stripe.stato_sessione = rilettura_dal_pagamento_vero(chiave)
         r = crea_router(sis, host_key="hk", admin_key="ak",
                         base_url="https://bookinvip.com")
 

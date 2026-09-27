@@ -23,6 +23,8 @@ WH = "whsec_ar"
 
 
 def _fake_fetch(url, body, headers):
+    if not body and "/checkout/sessions/" in url:     # rilettura dello stato (casella 10)
+        return {"id": url.rsplit("/", 1)[-1], "payment_status": "paid"}
     import secrets
     return {"url": "https://t/" + secrets.token_hex(4), "id": "cs_" + secrets.token_hex(4)}
 
@@ -79,7 +81,7 @@ class TestAdminRimborsoMoney(unittest.TestCase):
                       {"quote_token": q["quote_token"], "email": "cli@ar.it"})
         rif = b["riferimento"]
         pl = json.dumps({"type": "checkout.session.completed",
-                         "data": {"object": {"metadata": {"riferimento": rif}}}})
+                         "data": {"object": {"id": "cs_" + rif, "metadata": {"riferimento": rif}}}})
         self.r.gestisci("POST", "/api/payments/webhook", {}, pl,
                         {"Stripe-Signature": firma_di_test(pl, WH, int(time.time()))})
         self.assertGreater(self._maturato(), 0, "setup: la prenotazione dev'essere pagata")
@@ -129,7 +131,7 @@ class TestAdminRimborsoMoney(unittest.TestCase):
                       {"quote_token": q["quote_token"], "email": "cli@ar.it"})
         rif = b["riferimento"]
         pl = json.dumps({"type": "checkout.session.completed",
-                         "data": {"object": {"metadata": {"riferimento": rif}}}})
+                         "data": {"object": {"id": "cs_" + rif, "metadata": {"riferimento": rif}}}})
         self.r.gestisci("POST", "/api/payments/webhook", {}, pl,
                         {"Stripe-Signature": firma_di_test(pl, WH, int(time.time()))})
         s, adm = self.g("GET", "/api/admin/prenotazioni", None, {"X-Admin-Key": "ak"})
@@ -194,6 +196,8 @@ def _fetch_registrante(url, body, headers):
     CHIAMATE.append({"url": url,
                      "body": (body or b"").decode("utf-8", "replace"),
                      "headers": dict(headers or {})})
+    if not body and "/checkout/sessions/" in url:     # rilettura dello stato (casella 10)
+        return {"id": url.rsplit("/", 1)[-1], "payment_status": "paid"}
     if "/refunds" in url:
         return {"id": "re_" + secrets.token_hex(4), "status": "succeeded",
                 "amount": 1, "object": "refund"}
@@ -440,6 +444,8 @@ def _fetch_stripe_con_memoria(url, body, headers):
                            "headers": dict(headers or {})})
     if STRIPE_FINTO["esplode"]:
         raise RuntimeError("Stripe irraggiungibile: rete assente")
+    if not body and "/checkout/sessions/" in url:     # rilettura dello stato (casella 10)
+        return {"id": url.rsplit("/", 1)[-1], "payment_status": "paid"}
     if "/refunds" in url and not body:
         # LETTURA — GET /v1/refunds?payment_intent=pi_...
         pi = (parse_qs(urlparse(url).query).get("payment_intent") or [""])[0]
