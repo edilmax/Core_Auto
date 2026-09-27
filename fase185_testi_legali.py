@@ -42,7 +42,7 @@ LINGUA_CHE_FA_FEDE = "it"
 # caso di divergenza fa fede l'italiano — la clausola resta dentro ogni versione.
 LINGUA_RIPIEGO = "en"
 
-TERMINI_VERSIONE = "2026-08-10"   # tariffa tecnica: 3% secco -> 5% + 0,25 EUR (7% valuta estera)
+TERMINI_VERSIONE = "2026-09-27"   # cap. 7: cosa torna all'ospite che cancella (politica + tassa intera, 48 ore)
 PRIVACY_VERSIONE = "2026-09-12"   # dichiarato il termine delle comunicazioni (§4)
 
 # Per quanti ANNI si tengono le comunicazioni di una prenotazione (chat e prove foto).
@@ -169,6 +169,10 @@ Le condizioni di cancellazione sono indicate su ogni annuncio. Se l'Host cancell
 prenotazione gia' pagata, o l'alloggio risulta non disponibile, e' dovuta una penale pari
 al {PENALE}% dell'importo, compensata dagli incassi futuri dell'Host o registrata come
 debito.
+Se l'Ospite cancella, gli viene restituita la parte del prezzo prevista dalla politica di
+cancellazione dell'annuncio, piu' la tassa di soggiorno per intero, senza alcuna trattenuta a
+suo carico. Se cancella entro 48 ore dalla prenotazione e mancano almeno 3 giorni all'arrivo,
+il rimborso e' totale, qualunque sia la politica.
 
 8. RECENSIONI
 Le recensioni sono ammesse solo dopo un soggiorno reale e concluso, una sola volta per
@@ -241,6 +245,10 @@ the position is regularised.
 Cancellation conditions are shown on each listing. If the Host cancels an already paid
 booking, or the accommodation turns out to be unavailable, a penalty equal to {PENALE}% of
 the amount is due, offset against the Host's future earnings or recorded as a debt.
+If the Guest cancels, they get back the part of the price set by the listing's cancellation
+policy, plus the tourist tax in full, with no deduction charged to them. If they cancel
+within 48 hours of booking and at least 3 days before arrival, the refund is in full,
+whatever the policy.
 
 8. REVIEWS
 Reviews are allowed only after a real, completed stay, once per booking. Offensive, false
@@ -317,6 +325,10 @@ Las condiciones de cancelacion se indican en cada anuncio. Si el Anfitrion cance
 reserva ya pagada, o el alojamiento resulta no disponible, se devenga una penalizacion
 igual al {PENALE}% del importe, compensada con los cobros futuros del Anfitrion o
 registrada como deuda.
+Si el Huesped cancela, se le devuelve la parte del precio prevista por la politica de
+cancelacion del anuncio, mas el impuesto turistico integro, sin ninguna retencion a su cargo.
+Si cancela dentro de las 48 horas siguientes a la reserva y faltan al menos 3 dias para la
+llegada, el reembolso es total, sea cual sea la politica.
 
 8. VALORACIONES
 Las valoraciones solo se admiten tras una estancia real y concluida, una sola vez por
@@ -393,6 +405,10 @@ Les conditions d'annulation sont indiquees sur chaque annonce. Si l'Hote annule 
 reservation deja payee, ou si le logement se revele indisponible, une penalite egale a
 {PENALE}% du montant est due, compensee sur les encaissements futurs de l'Hote ou
 enregistree comme dette.
+Si le Voyageur annule, il recupere la part du prix prevue par la politique d'annulation de
+l'annonce, plus la taxe de sejour en totalite, sans aucune retenue a sa charge. S'il annule
+dans les 48 heures suivant la reservation et qu'il reste au moins 3 jours avant l'arrivee,
+le remboursement est integral, quelle que soit la politique.
 
 8. AVIS
 Les avis ne sont admis qu'apres un sejour reel et acheve, une seule fois par reservation.
@@ -469,6 +485,10 @@ Die Stornobedingungen sind bei jedem Inserat angegeben. Storniert der Gastgeber 
 bereits bezahlte Buchung oder ist die Unterkunft nicht verfuegbar, faellt eine
 Vertragsstrafe in Hoehe von {PENALE}% des Betrags an, die mit kuenftigen Einnahmen des
 Gastgebers verrechnet oder als Verbindlichkeit erfasst wird.
+Storniert der Gast, erhaelt er den Teil des Preises zurueck, den die Stornobedingungen des
+Inserats vorsehen, dazu die Kurtaxe vollstaendig, ohne jeden Abzug zu seinen Lasten. Storniert
+er innerhalb von 48 Stunden nach der Buchung und mindestens 3 Tage vor der Anreise, wird der
+volle Betrag erstattet, unabhaengig von den Stornobedingungen.
 
 8. BEWERTUNGEN
 Bewertungen sind nur nach einem tatsaechlichen und abgeschlossenen Aufenthalt zulaessig,
@@ -543,6 +563,10 @@ As condicoes de cancelamento sao indicadas em cada anuncio. Se o Anfitriao cance
 reserva ja paga, ou se o alojamento nao estiver disponivel, e devida uma penalizacao
 igual a {PENALE}% do montante, compensada com os recebimentos futuros do Anfitriao ou
 registada como divida.
+Se o Hospede cancelar, recebe de volta a parte do preco prevista pela politica de
+cancelamento do anuncio, mais a taxa turistica na totalidade, sem qualquer retencao a seu
+cargo. Se cancelar nas 48 horas seguintes a reserva e faltarem pelo menos 3 dias para a
+chegada, o reembolso e total, seja qual for a politica.
 
 8. AVALIACOES
 As avaliacoes so sao admitidas apos uma estadia real e concluida, uma unica vez por
@@ -591,6 +615,7 @@ BookinVIP は宿泊施設を所有・運営・管理しません。宿泊契約�
 
 7. キャンセルおよび違約金
 キャンセル条件は各掲載に表示されます。ホストが支払済みの予約を取り消した場合、または宿泊施設が利用できない場合、金額の {PENALE}% に相当する違約金が発生し、ホストの将来の入金から相殺されるか、債務として記録されます。
+ゲストがキャンセルした場合、掲載のキャンセルポリシーに定める代金の部分に加えて宿泊税の全額が返金され、ゲストの負担で差し引かれることはありません。予約から48時間以内にキャンセルし、到着まで3日以上ある場合は、ポリシーにかかわらず全額が返金されます。
 
 8. レビュー
 レビューは、実際に完了した宿泊の後に、予約ごとに1回のみ投稿できます。侮辱的、虚偽または宣伝目的の内容は削除されることがあります。
@@ -633,6 +658,7 @@ BookinVIP 不拥有、不经营也不控制任何住宿。住宿合同直接在�
 
 7. 取消与违约金
 取消条件在每个房源页面列明。若房东取消已付款的预订，或住宿实际不可用，应支付相当于订单金额 {PENALE}% 的违约金，该款项将从房东未来收入中抵扣或记录为欠款。
+房客取消预订时，将退还房源取消政策所规定的价款部分，以及住宿税全额，不作任何扣除。若在预订后48小时内取消且距入住至少还有3天，则无论取消政策如何，均全额退款。
 
 8. 评价
 仅允许在真实且已完成的住宿之后发表评价，每笔预订限一次。侮辱性、虚假或商业推广内容可能被删除。

@@ -14492,6 +14492,120 @@ class TestLEsameDelWebhookNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
                          "sa piu' vedere il proprio guasto")
 
 
+class TestLEsameMoneyFloatNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
+    """⛔ D18 PUNTO 4 per `collaudi/esame_money_float.py`, l'attrezzo della casella «nessun
+    numero con la virgola tocca un prezzo» del blocco dei soldi. Il modo di barare piu'
+    facile e' restringere il perimetro: «zero rilievi» su meno file e' ancora zero."""
+
+    def _esame(self):
+        return self._carica("esame_money_float.py", "_esame_money_float_sotto_guardia")
+
+    def _non_scrive(self, esame):
+        vera = esame.scheda.registra
+        scritture = []
+
+        def _spia(*a, **k):
+            scritture.append((a, k))
+            raise AssertionError("l'esame ha scritto nella scheda senza poter misurare")
+        esame.scheda.registra = _spia
+        return vera, scritture
+
+    def test_CON_IL_PIANO_ILLEGGIBILE_L_ESAME_SI_FERMA_E_NON_SCRIVE(self):
+        esame = self._esame()
+        vera, scritture = self._non_scrive(esame)
+        try:
+            esame.testo_casella = lambda: (_ for _ in ()).throw(
+                ValueError("piano illeggibile (iniezione)"))
+            self.assertFalse(esame.precondizioni()[0])
+            self.assertEqual(esame.main(["--scrivi"]), 2)
+            self.assertEqual(scritture, [])
+        finally:
+            esame.scheda.registra = vera
+
+    def test_SENZA_DEPLOY_NEL_PERIMETRO_L_ESAME_SI_FERMA(self):
+        """Il buco trovato il 2026-09-27: l'ispettore da solo non guarda `deploy/`, dove
+        stanno gli script del cron che maneggiano soldi. Un perimetro che lo perde deve
+        fermare l'esame, non dare uno zero su meno file."""
+        esame = self._esame()
+        vera, scritture = self._non_scrive(esame)
+        vero_perimetro = esame.perimetro
+        try:
+            esame.perimetro = lambda: [f for f in vero_perimetro()
+                                       if os.sep + "deploy" + os.sep not in f]
+            self.assertFalse(esame.precondizioni()[0],
+                             "col perimetro senza deploy/ le precondizioni si dichiarano "
+                             "sane: lo zero varrebbe per meno codice di quanto dice")
+            self.assertEqual(esame.main(["--scrivi"]), 2)
+            self.assertEqual(scritture, [])
+        finally:
+            esame.perimetro = vero_perimetro
+            esame.scheda.registra = vera
+
+    def test_IL_PERIMETRO_CONTIENE_IL_CODICE_DEI_SOLDI(self):
+        nomi = {os.path.relpath(f, QUI).replace(os.sep, "/") for f in self._esame().perimetro()}
+        for atteso in ("fase85_pagamenti_stripe.py", "fase83_server.py", "main_casavip.py",
+                       "deploy/cron_riconciliazione.py", "deploy/cron_sweep_eventi.py"):
+            self.assertIn(atteso, nomi, "il perimetro dell'esame non contiene %s" % atteso)
+
+    def test_AUTOPROVA_GRIDA_COL_GUASTO_E_TACE_A_MACCHINA_SANA(self):
+        self.assertEqual(self._esame().main(["--autoprova"]), 0,
+                         "l'autoprova non riesce a farsi gridare e tacere: l'esame non "
+                         "sa piu' vedere il proprio guasto")
+
+
+class TestLEsameRimborsoScrittoNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
+    """⛔ D18 PUNTO 4 per `collaudi/esame_rimborso_scritto.py`, l'attrezzo della casella
+    «chi paga cosa in un rimborso e' SCRITTO». Due modi facili di barare: guardare meno
+    lingue di quelle che il documento serve, e scrivere una cifra (le 48 ore) diversa da
+    quella che il motore applica."""
+
+    def _esame(self):
+        return self._carica("esame_rimborso_scritto.py", "_esame_rimborso_scritto_sotto_guardia")
+
+    def _fermo_senza_scrivere(self, esame):
+        vera = esame.scheda.registra
+        scritture = []
+
+        def _spia(*a, **k):
+            scritture.append((a, k))
+            raise AssertionError("l'esame ha scritto nella scheda senza poter misurare")
+        esame.scheda.registra = _spia
+        try:
+            self.assertFalse(esame.precondizioni()[0])
+            self.assertEqual(esame.main(["--scrivi"]), 2)
+            self.assertEqual(scritture, [])
+        finally:
+            esame.scheda.registra = vera
+
+    def test_CON_IL_PIANO_ILLEGGIBILE_L_ESAME_SI_FERMA_E_NON_SCRIVE(self):
+        esame = self._esame()
+        esame.testo_casella = lambda: (_ for _ in ()).throw(ValueError("iniezione"))
+        self._fermo_senza_scrivere(esame)
+
+    def test_UNA_LINGUA_DEI_TERMINI_NON_COPERTA_FERMA_L_ESAME(self):
+        """Se i termini imparano una lingua nuova e l'esame no, quella lingua passerebbe
+        senza la frase: l'esame deve accorgersene e fermarsi."""
+        esame = self._esame()
+        tolta = dict(esame.ALL_OSPITE)
+        tolta.pop("zh")
+        vera = esame.ALL_OSPITE
+        try:
+            esame.ALL_OSPITE = tolta
+            self._fermo_senza_scrivere(esame)
+        finally:
+            esame.ALL_OSPITE = vera
+
+    def test_LE_CIFRE_SI_LEGGONO_DAL_MOTORE(self):
+        ore, giorni = self._esame().numeri_del_motore()
+        import fase83_server
+        self.assertEqual(ore * 3600, fase83_server.SECONDI_RIPENSAMENTO)
+        self.assertGreater(giorni, 0)
+
+    def test_AUTOPROVA_GRIDA_COL_GUASTO_E_TACE_A_TESTO_COMPLETO(self):
+        self.assertEqual(self._esame().main(["--autoprova"]), 0,
+                         "l'autoprova non riesce a farsi gridare e tacere")
+
+
 class TestLEsameDellaRiconciliazioneNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
     """⛔ D18 PUNTO 4 per `collaudi/esame_riconciliazione.py`, l'attrezzo della casella 11
     del blocco dei soldi (il giro notturno di riconciliazione, T3)."""
