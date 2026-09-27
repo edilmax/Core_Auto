@@ -41,6 +41,7 @@ import urllib.request
 from abc import ABC, abstractmethod
 from enum import Enum
 from concurrent.futures import ThreadPoolExecutor
+from decimal import Decimal, InvalidOperation
 from email.message import EmailMessage
 from email.mime.text import MIMEText
 from dataclasses import dataclass, field, fields, asdict
@@ -1905,6 +1906,21 @@ _EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
 _TEL_RE = re.compile(r"(?:\+?\d[\d\s().\-]{7,}\d)")
 
 
+def _prezzo_esatto(valore) -> str:
+    """Il prezzo in euro come DECIMALE esatto, reso in testo per SQLite (la colonna
+    `prezzo` e' REAL e l'affinita' lo converte da se'). Mai `float()` su un prezzo: e' la
+    regola «money-float» del blocco dei soldi (collaudi/esame_money_float.py). Un valore
+    non numerico o non finito e' un errore, come lo era con `float()` — tranne infinito e
+    NaN, che `float()` lasciava passare e che un prezzo non puo' essere."""
+    try:
+        d = Decimal(str(valore or 0))
+    except InvalidOperation:
+        raise ValueError("prezzo non valido: %r" % (valore,)) from None
+    if not d.is_finite():
+        raise ValueError("prezzo non finito: %r" % (valore,))
+    return str(d)
+
+
 def _estrai_contatti(testo: str) -> dict:
     """Estrae la prima email e il primo telefono plausibili da un testo libero."""
     email = _EMAIL_RE.search(testo or "")
@@ -1983,7 +1999,7 @@ class IngestoreVIP:
                             "punteggio=excluded.punteggio, "
                             "modalita_ingresso=excluded.modalita_ingresso",
                             (url, annuncio.get("titolo", "Annuncio VIP"),
-                             testo, float(annuncio.get("prezzo", 0.0) or 0.0),
+                             testo, _prezzo_esatto(annuncio.get("prezzo", 0)),
                              citta, "ingest_vip", self.PUNTEGGIO_VIP, adesso,
                              "", annuncio.get("paese", ""),
                              contatti["email"], contatti["telefono"],
@@ -2031,7 +2047,7 @@ class FlashHostManager:
                     "data_scadenza=excluded.data_scadenza, stato='flash'",
                     (url, dati.get("titolo", "Flash host"),
                      dati.get("testo", ""),
-                     float(dati.get("prezzo", 0.0) or 0.0),
+                     _prezzo_esatto(dati.get("prezzo", 0)),
                      dati.get("citta", "Flash"), "flash_host", 1.0,
                      adesso.isoformat(timespec="seconds"),
                      dati.get("paese", ""), "flash", "flash", scadenza))

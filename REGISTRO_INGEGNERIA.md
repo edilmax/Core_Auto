@@ -439,6 +439,12 @@ mount PRIMA di toccare il container vivo (il bind-mount e' per inode: serve ricr
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🧮 DUE CASELLE DEI SOLDI CHIUSE, E UN METRO CHE GUARDAVA MENO DI QUANTO DICEVA — 27 settembre, «autorizzato»
+
+**Lo zero dell'ispettore non era uno zero su tutto.** La casella chiedeva zero rilievi «money-float» su tutto il codice, e nominava come metro l'ispettore statico. L'ispettore però scandisce solo i `.py` della cartella principale: `deploy/`, dove girano gli script del cron che maneggiano soldi, non l'aveva mai guardato. Un suo zero avrebbe spuntato la casella lasciando fuori proprio il codice che parla con Stripe di notte. L'esame nuovo usa la regola vera dell'ispettore su un perimetro che include `deploy/`, e si ferma se lo perde. I tre rilievi rimasti stavano in codice spento; sono stati chiusi lo stesso, perché la casella dice «tutto».
+
+**Il rimborso scritto doveva dire anche il ripensamento.** La casella chiedeva di scrivere all'ospite che gli torna il prezzo secondo la politica e la tassa intera. Il motore però applica anche le 48 ore di ripensamento, che vincono su ogni politica, e i termini non le nominavano in nessuna lingua. Scrivere solo «secondo la politica» sarebbe stato impreciso proprio nel caso più favorevole all'ospite. L'esame prende le cifre dal codice che le applica, così il testo non può promettere un'ora diversa da quella vera.
+
 ### 🚀 IN PRODUZIONE: ff06639, lo sweeper nel cron, la chiavetta presa dopo — 27 settembre, «autorizzato» del fondatore
 
 **La CI ha fermato il primo giro, e aveva ragione due volte.** Il cricchetto statico ha visto sei segnalazioni nuove nei file del 25 settembre. Cinque erano igiene. La sesta era una variabile calcolata e mai usata in `esame_webhook`: le tre condizioni di base della casella 7. Il motivo stampato accanto alla casella diceva «tre condizioni su quattro sono vere» senza guardarle; se una fosse caduta, il foglio avrebbe mentito con tono sicuro. Ora lo dice solo dopo averle misurate. Un avviso di stile che nascondeva un'affermazione non verificata.

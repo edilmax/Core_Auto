@@ -26,6 +26,7 @@ import time
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Any, List, Optional, Tuple
 
 logger = logging.getLogger("core_auto.ricerca")
@@ -43,7 +44,7 @@ class CriteriRicerca:
 class Proposta:
     titolo: str
     localita: str
-    prezzo: float
+    prezzo: Decimal   # euro, esatto: mai float su un prezzo (regola money-float)
     url: str
     punteggio: float
 
@@ -108,7 +109,7 @@ class RicercaTavolaVIP(RicercaProvider):
         finally:
             conn.close()
         return [Proposta(titolo=r[0] or "", localita=r[1] or "",
-                         prezzo=float(r[2] or 0.0), url=r[3] or "",
+                         prezzo=Decimal(str(r[2] or 0)), url=r[3] or "",
                          punteggio=float(r[4] or 0.0)) for r in righe]
 
 

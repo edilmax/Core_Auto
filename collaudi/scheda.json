@@ -372,11 +372,11 @@
  "506a24febc87": {
   "blocco": 6,
   "comando": "python collaudi/esame_plausibilita.py --scrivi",
-  "commit": "cd74846",
+  "commit": "afafa00",
   "condizione": "ogni numero mostrato ha senso nel mondo vero (modo di rompersi 10)",
   "denominatore": 2,
   "esito": false,
-  "impronta": "55c470307e9a",
+  "impronta": "2e3f03a7216c",
   "impronte_moduli": {
    "fase107_traduzione_annunci": "e0fc5c8e8eb1",
    "fase113_messaggistica": "c3a8712be969",
@@ -388,14 +388,14 @@
    "fase139_chatbot_guest": "72a347f6fbfe",
    "fase166_geocoder": "162da4a35b88",
    "fase175_poi_osm": "c1ad5e11dd94",
-   "fase26_ricerca": "3dc66d4cb1ac",
+   "fase26_ricerca": "c51cf25fe989",
    "fase57_vetrina": "f5e82f1a19f3",
    "fase61_localizzazione": "6ca2f962ff78",
    "fase63_recensioni": "5e00244ea3f5",
    "fase74_sensory_engine": "6f64cb3f6e59"
   },
   "motivo": "[mostrati] il catalogo elenca almeno un annuncio (zero annunci = casella NON misurata) (annunci=0 totale dichiarato=0)",
-  "quando": "2026-09-25T15:45:47"
+  "quando": "2026-09-27T10:39:34"
  },
  "555972b586e3": {
   "blocco": 2,
@@ -426,11 +426,11 @@
  "5c447a0ee514": {
   "blocco": 5,
   "comando": "python collaudi/esame_legale.py --casella spunte --scrivi",
-  "commit": "eeea05f",
+  "commit": "afafa00",
   "condizione": "le 3 spunte obbligatorie sono bloccate lato browser E rifiutate 422 lato server",
   "denominatore": 36,
   "esito": true,
-  "impronta": "c6a66f968ea0",
+  "impronta": "06ba8d65adaf",
   "impronte_moduli": {
    "fase100_dac7": "e5c0be6c61a5",
    "fase103_reverse_charge": "5ca652e5af5a",
@@ -438,13 +438,13 @@
    "fase151_alloggiati_web": "32eaf4440a62",
    "fase154_giurisdizioni_marketing": "7edab3faacdd",
    "fase156_erasure": "d20180c27f1c",
-   "fase163_accettazioni": "b7c3c40a76f6",
+   "fase163_accettazioni": "4e008e19ffc8",
    "fase184_marca_temporale": "dd31eb53f86c",
-   "fase185_testi_legali": "4d520fb7df3d",
+   "fase185_testi_legali": "6490ad245b9f",
    "fase79_dichiarazione": "fdafb04a19ea"
   },
   "motivo": "",
-  "quando": "2026-09-16T13:07:47"
+  "quando": "2026-09-27T10:39:30"
  },
  "63e1e98393ea": {
   "blocco": 10,
@@ -479,14 +479,53 @@
   "motivo": "",
   "quando": "2026-09-16T17:07:26"
  },
+ "6ede8f323461": {
+  "blocco": 1,
+  "comando": "python collaudi/esame_rimborso_scritto.py --scrivi",
+  "commit": "afafa00",
+  "condizione": "chi paga cosa in un rimborso e' SCRITTO dove si legge, in tutte le lingue, e coincide col motore: all'ospite che gli torna il prezzo secondo la politica e la tassa di soggiorno per intero, senza trattenute; all'host, nel contratto, che sulla parte trattenuta commissione e tariffa tecnica restano dovute pro quota e che il costo del gestore di pagamento non torna a nessuno",
+  "denominatore": 763,
+  "esito": true,
+  "impronta": "f8f9deb2f351",
+  "impronte_moduli": {
+   "fase101_stripe_connect": "30d6d6acc8ee",
+   "fase102_motore_autonomo": "5f821fcc906f",
+   "fase104_gateway_asia": "f0f1fed87367",
+   "fase131_payout_dashboard": "06cd8f312f05",
+   "fase133_split_quote_uguali": "900818f6ee45",
+   "fase149_deposito_cauzionale": "272fe8e92880",
+   "fase15_idempotency": "bfcd5e8ca68b",
+   "fase160_escrow_garanzia": "dbf2a26f8a0a",
+   "fase162_pagamenti_pendenti": "bfb1d8443d21",
+   "fase167_credito_single_use": "84db76bef110",
+   "fase177_financial_controller": "c49d832d573c",
+   "fase17_money": "4f56d5c69a04",
+   "fase181_audit_console": "f03c9196f159",
+   "fase182_riconciliazione": "360574b705b8",
+   "fase183_carta_offsession": "cad1b678abff",
+   "fase186_guardiano": "0dc20d8aae10",
+   "fase188_paga_struttura": "b06f26f76cda",
+   "fase191_blocco_globale": "0e25d2e0ab6f",
+   "fase199_invarianti": "00192bca45b2",
+   "fase202_invarianti_archivi": "55487d36c717",
+   "fase204_eventi_stripe": "fe137fbed93a",
+   "fase35_pagamenti": "abd2cab5c989",
+   "fase65_split_payment": "2f6d24e7b1fe",
+   "fase85_pagamenti_stripe": "a50affaae836",
+   "fase87_stripe_webhook": "d597430f8f64",
+   "fase99_multicurrency": "61a3b5a0c820"
+  },
+  "motivo": "",
+  "quando": "2026-09-27T10:38:15"
+ },
  "7d0c5b891c14": {
   "blocco": 5,
   "comando": "python collaudi/esame_legale.py --casella lingue --scrivi",
-  "commit": "eeea05f",
+  "commit": "afafa00",
   "condizione": "termini e privacy sono leggibili in tutte le lingue dichiarate",
   "denominatore": 43,
   "esito": true,
-  "impronta": "c6a66f968ea0",
+  "impronta": "06ba8d65adaf",
   "impronte_moduli": {
    "fase100_dac7": "e5c0be6c61a5",
    "fase103_reverse_charge": "5ca652e5af5a",
@@ -494,13 +533,13 @@
    "fase151_alloggiati_web": "32eaf4440a62",
    "fase154_giurisdizioni_marketing": "7edab3faacdd",
    "fase156_erasure": "d20180c27f1c",
-   "fase163_accettazioni": "b7c3c40a76f6",
+   "fase163_accettazioni": "4e008e19ffc8",
    "fase184_marca_temporale": "dd31eb53f86c",
-   "fase185_testi_legali": "4d520fb7df3d",
+   "fase185_testi_legali": "6490ad245b9f",
    "fase79_dichiarazione": "fdafb04a19ea"
   },
   "motivo": "",
-  "quando": "2026-09-16T13:07:47"
+  "quando": "2026-09-27T10:39:31"
  },
  "7d18024afbe0": {
   "blocco": 1,
@@ -660,11 +699,11 @@
  "a5c77ac6c76a": {
   "blocco": 5,
   "comando": "python collaudi/esame_oblio.py --scrivi",
-  "commit": "eeea05f",
+  "commit": "afafa00",
   "condizione": "il giro del CANCELLAMI e' percorso intero: ogni archivio che conteneva il dato e' pulito oppure DICHIARATO trattenuto per legge col suo perche', e il dato non si rilegge dai byte di quelli da pulire",
   "denominatore": 7,
   "esito": true,
-  "impronta": "c6a66f968ea0",
+  "impronta": "06ba8d65adaf",
   "impronte_moduli": {
    "fase100_dac7": "e5c0be6c61a5",
    "fase103_reverse_charge": "5ca652e5af5a",
@@ -672,13 +711,13 @@
    "fase151_alloggiati_web": "32eaf4440a62",
    "fase154_giurisdizioni_marketing": "7edab3faacdd",
    "fase156_erasure": "d20180c27f1c",
-   "fase163_accettazioni": "b7c3c40a76f6",
+   "fase163_accettazioni": "4e008e19ffc8",
    "fase184_marca_temporale": "dd31eb53f86c",
-   "fase185_testi_legali": "4d520fb7df3d",
+   "fase185_testi_legali": "6490ad245b9f",
    "fase79_dichiarazione": "fdafb04a19ea"
   },
   "motivo": "",
-  "quando": "2026-09-16T13:07:50"
+  "quando": "2026-09-27T10:39:33"
  },
  "a6c9694a48f1": {
   "blocco": 2,
@@ -705,6 +744,45 @@
   },
   "motivo": "27 punti SOPRAVVISSUTI: il guasto passa e i test restano verdi; 52 punti NON ESAMINATI (oltre il tetto 15 · oltre il tempo 37 · i test non hanno finito in tempo 0): un punto lasciato fuori non e' un punto sano, e' un punto che nessuno ha guardato. Se il giro doveva essere corto, dichiaralo con --parziale",
   "quando": "2026-09-17T03:22:31"
+ },
+ "b083bc980d6f": {
+  "blocco": 1,
+  "comando": "python collaudi/esame_money_float.py --scrivi",
+  "commit": "afafa00",
+  "condizione": "nessun numero con la virgola tocca un prezzo o un importo: l'ispettore statico conta ZERO rilievi money-float su tutto il codice, non solo sul percorso del pagamento",
+  "denominatore": 593,
+  "esito": true,
+  "impronta": "f8f9deb2f351",
+  "impronte_moduli": {
+   "fase101_stripe_connect": "30d6d6acc8ee",
+   "fase102_motore_autonomo": "5f821fcc906f",
+   "fase104_gateway_asia": "f0f1fed87367",
+   "fase131_payout_dashboard": "06cd8f312f05",
+   "fase133_split_quote_uguali": "900818f6ee45",
+   "fase149_deposito_cauzionale": "272fe8e92880",
+   "fase15_idempotency": "bfcd5e8ca68b",
+   "fase160_escrow_garanzia": "dbf2a26f8a0a",
+   "fase162_pagamenti_pendenti": "bfb1d8443d21",
+   "fase167_credito_single_use": "84db76bef110",
+   "fase177_financial_controller": "c49d832d573c",
+   "fase17_money": "4f56d5c69a04",
+   "fase181_audit_console": "f03c9196f159",
+   "fase182_riconciliazione": "360574b705b8",
+   "fase183_carta_offsession": "cad1b678abff",
+   "fase186_guardiano": "0dc20d8aae10",
+   "fase188_paga_struttura": "b06f26f76cda",
+   "fase191_blocco_globale": "0e25d2e0ab6f",
+   "fase199_invarianti": "00192bca45b2",
+   "fase202_invarianti_archivi": "55487d36c717",
+   "fase204_eventi_stripe": "fe137fbed93a",
+   "fase35_pagamenti": "abd2cab5c989",
+   "fase65_split_payment": "2f6d24e7b1fe",
+   "fase85_pagamenti_stripe": "a50affaae836",
+   "fase87_stripe_webhook": "d597430f8f64",
+   "fase99_multicurrency": "61a3b5a0c820"
+  },
+  "motivo": "",
+  "quando": "2026-09-27T10:38:10"
  },
  "bf93b1c1b0ce": {
   "blocco": 7,
@@ -949,11 +1027,11 @@
  "e0c5eaf17028": {
   "blocco": 6,
   "comando": "python collaudi/esame_testi_congelati.py --scrivi",
-  "commit": "4c96811",
+  "commit": "afafa00",
   "condizione": "nessun testo resta congelato in italiano dove la pagina dichiara 8 lingue: l'occhio del fondatore conta ZERO parole ferme sulle pagine che non sono gusci riempiti dal server",
   "denominatore": 72,
   "esito": true,
-  "impronta": "55c470307e9a",
+  "impronta": "2e3f03a7216c",
   "impronte_moduli": {
    "fase107_traduzione_annunci": "e0fc5c8e8eb1",
    "fase113_messaggistica": "c3a8712be969",
@@ -965,14 +1043,14 @@
    "fase139_chatbot_guest": "72a347f6fbfe",
    "fase166_geocoder": "162da4a35b88",
    "fase175_poi_osm": "c1ad5e11dd94",
-   "fase26_ricerca": "3dc66d4cb1ac",
+   "fase26_ricerca": "c51cf25fe989",
    "fase57_vetrina": "f5e82f1a19f3",
    "fase61_localizzazione": "6ca2f962ff78",
    "fase63_recensioni": "5e00244ea3f5",
    "fase74_sensory_engine": "6f64cb3f6e59"
   },
   "motivo": "",
-  "quando": "2026-09-24T00:41:58"
+  "quando": "2026-09-27T10:39:33"
  },
  "ec84faaea398": {
   "blocco": 2,

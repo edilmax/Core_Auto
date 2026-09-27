@@ -3435,7 +3435,39 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: ff06639
+CONSEGNE AGGIORNATE A: afafa00
+
+## PASSAGGIO DI CONSEGNE 15 (2026-09-27) - BLOCCO 1 = 13/15: MONEY-FLOAT ZERO E RIMBORSO SCRITTO IN 8 LINGUE, RESTANO SOLO LE DUE DECISIONI DEL FONDATORE:
+- PERMESSI, parole testuali del fondatore: «vai avanti» (misura e attrezzi), poi
+  «autorizzato» (le modifiche di produzione qui sotto).
+- CASELLA «nessun numero con la virgola tocca un prezzo»: attrezzo nuovo
+  `collaudi/esame_money_float.py` (usa la `scan_py` VERA di ispettore_statico, non una
+  copia). ⛔ Buco trovato e chiuso: l'ispettore da solo guarda solo i .py della radice, NON
+  `deploy/` (gli script del cron che maneggiano soldi); l'esame li include e si FERMA se il
+  perimetro li perde (guardia vista rossa). 3 rilievi, tutti in codice NON raggiungibile
+  dalla produzione: `fase26_ricerca.py:111` -> `Decimal(str(...))` (l'unico consumatore,
+  fase27, porta gia' in centesimi con euro_to_cents); `assistente_gestionale.py` (2 punti) ->
+  `_prezzo_esatto` (Decimal, rifiuta infinito e NaN che float() lasciava passare; testo
+  verso la colonna REAL). Guardie nuove viste ROSSE sulle versioni vecchie dei file.
+  Misura: 0 rilievi su 593 file. Casella scritta VERDE.
+- CASELLA «chi paga cosa in un rimborso e' SCRITTO»: attrezzo nuovo
+  `collaudi/esame_rimborso_scritto.py`, nato ROSSO (40 parole mancanti). Misura: parole nel
+  cap. 7 dei termini in TUTTE le lingue di fase185 e nel contratto in tutte le lingue di
+  fase163; le cifre (48 ore, 3 giorni) LETTE da fase83; la regola di fase111 provata su tutte
+  le politiche (rimborso + trattenuto = pagato, ripensamento = intero); i fatti del percorso
+  di cancellazione letti da fase83 (tassa sommata intera, quota host = imp*tratt//pagato);
+  4 guardie ESEGUITE (64 test). Testi: termini cap. 7 in 8 lingue (versione 2026-09-27),
+  contratto art. 6-TER it/en (versione 2026-09-27: l'unico host in produzione e' il fondatore
+  con un account di prova, lo ha detto lui il 27/9). `collaudi/dati_realistici.py` allineato
+  (la sua guardia era diventata rossa, come dichiara). Casella scritta VERDE.
+- ⚠️ I testi legali nuovi non li ha letti un avvocato: l'esame lo dichiara in NON_GUARDA.
+- RIMISURA (regola 16/9): le modifiche a fase163/fase185/fase26 hanno fatto scadere 5
+  caselle di altri blocchi; `rimisura.py`: legale spunte/lingue, oblio, testi congelati
+  VERDI; plausibilita' (blocco 6) ROSSA ONESTA: il catalogo pubblico ha 0 annunci perche'
+  l'unico, `casa-test`, e' `sospeso` (misurato sul VPS) — «zero annunci = casella NON
+  misurata». Si riaccende col primo annuncio pubblico.
+- RESTA (Blocco 1): casella 7 (elaborare DOPO la risposta) e casella 10 (rilettura dall'API,
+  ~82 banchi) — decisioni del fondatore. Poi deploy di questo lavoro e chiavetta rigenerata.
 
 ## PASSAGGIO DI CONSEGNE 14 (2026-09-27 notte) - CATENA CHIUSA: #223 UNITA, DEPLOY ff06639 IN PRODUZIONE, SWEEPER NEL CRON, CHIAVETTA RIGENERATA, QUATTRO POSTI ALLINEATI:
 - PERMESSI, parole testuali del fondatore in questa sessione: «procedi al commit»
@@ -3923,7 +3955,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 6941 test
+SUITE ATTUALE: Ran 6952 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

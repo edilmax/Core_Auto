@@ -827,5 +827,23 @@ class TestDistribuzioneIntegrazione(unittest.TestCase):
         self.assertEqual(tuple(self._metriche(pid)), (1, 0, 1))  # 1 fallimento
 
 
+class TestIlPrezzoNonPassaPerFloat(unittest.TestCase):
+    """Regola money-float del blocco dei soldi (2026-09-27): il prezzo degli annunci
+    ingeriti passa per un Decimal esatto, mai per `float()`. E un prezzo non puo' essere
+    infinito o NaN, che `float()` lasciava passare fino al database."""
+
+    def test_il_prezzo_resta_esatto(self):
+        import assistente_gestionale as ag
+        self.assertEqual(ag._prezzo_esatto("12.50"), "12.50")
+        self.assertEqual(ag._prezzo_esatto(0.1), "0.1")
+        self.assertEqual(ag._prezzo_esatto(None), "0")
+
+    def test_infinito_e_nan_non_sono_prezzi(self):
+        import assistente_gestionale as ag
+        for cattivo in ("inf", "nan", float("inf"), "dodici"):
+            with self.assertRaises(ValueError, msg="accettato come prezzo: %r" % (cattivo,)):
+                ag._prezzo_esatto(cattivo)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

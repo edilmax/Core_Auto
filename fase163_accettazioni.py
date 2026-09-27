@@ -27,7 +27,7 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 # Bump questa versione a OGNI modifica sostanziale del testo -> gli host dovranno ri-accettare.
-CONTRATTO_HOST_VERSIONE = "2026-09-07"
+CONTRATTO_HOST_VERSIONE = "2026-09-27"   # art. 6-TER: chi paga cosa nella cancellazione dell'Ospite
 
 # ── TESTO DEL CONTRATTO (it = lingua che fa fede) ─────────────────────────────
 _IT = """CONTRATTO HOST BOOKINVIP — Versione {VER}
@@ -104,6 +104,14 @@ La tariffa tecnica e' destinata a coprire i costi del servizio di pagamento; a s
 circuito della carta utilizzata dall'Ospite e dell'importo della transazione, il costo
 effettivamente sostenuto da BookinVIP puo' risultare inferiore o superiore alla tariffa.
 L'Ospite non sostiene alcuna commissione (modello 0% Ospite).
+
+ART. 6-TER — CANCELLAZIONE DELL'OSPITE: CHI PAGA COSA.
+Se l'Ospite cancella, gli si restituisce la parte del prezzo prevista dalla politica di
+cancellazione dell'Annuncio e la tassa di soggiorno per intero, senza trattenute a suo carico.
+All'Host spetta la parte del Payout proporzionale alla quota trattenuta: su quella quota la
+Commissione e la tariffa tecnica restano dovute pro quota. Il costo applicato dal gestore di
+pagamento sull'incasso non viene restituito dal gestore in caso di rimborso e non torna a
+nessuna delle parti.
 
 ART. 7 — DIVIETO DI DISINTERMEDIAZIONE (ANTI-CIRCONVENZIONE).
 E' vietato all'Host dirottare fuori dalla Piattaforma prenotazioni originate su di essa, o
@@ -233,6 +241,13 @@ applies also during periods in which the platform Commission is 0%. Current fee 
 The technical fee is intended to cover payment-service costs; depending on the card scheme used
 by the Guest and on the transaction amount, the cost actually borne by BookinVIP may be lower
 or higher than the fee. The Guest bears no commission (0% Guest model).
+
+ART. 6-TER — GUEST CANCELLATION: WHO PAYS WHAT. If the Guest cancels, they are refunded the
+part of the price set by the Listing's cancellation policy and the tourist tax in full, with no
+deduction charged to them. The Host is entitled to the part of the Payout proportional to the
+retained share: on that share the Commission and the technical fee remain due pro rata. The
+cost charged by the payment processor on the collection is not refunded by the processor in
+case of a refund and is not returned to either party.
 
 ART. 7 — ANTI-CIRCUMVENTION. The Host may not divert off-Platform any booking originated on it,
 solicit the Guest to book elsewhere, or exchange contacts/payments to avoid the Commission.

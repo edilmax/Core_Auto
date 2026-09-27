@@ -115,6 +115,18 @@ class TestRicercaTavolaVIP(unittest.TestCase):
         self.assertTrue(r.ok)
         self.assertEqual([p.titolo for p in r.proposte], ["Villa"])
 
+    def test_il_prezzo_arriva_DECIMALE_esatto_non_float(self):
+        """Regola money-float del blocco dei soldi (2026-09-27): il prezzo letto dal
+        database diventa un Decimal esatto, non un float. Il consumatore a valle
+        (fase27, euro_to_cents) lo porta in centesimi senza aritmetica binaria."""
+        from decimal import Decimal
+        from fase17_money import euro_to_cents
+        prov = RicercaTavolaVIP(self.db)
+        p = prov.cerca(CriteriRicerca("Milano", limite=5))[0]
+        self.assertIs(type(p.prezzo), Decimal, "il prezzo e' tornato %r" % (p.prezzo,))
+        self.assertEqual(p.prezzo, Decimal("300.0"))
+        self.assertEqual(euro_to_cents(p.prezzo), 30000)
+
 
 class TestOrchestrazione(unittest.TestCase):
 
