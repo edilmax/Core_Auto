@@ -11,7 +11,7 @@ test dedicato.
 import unittest
 
 from fase85_pagamenti_stripe import (
-    ADDEBITI_URL, MOVIMENTI_URL, PAGAMENTI_URL, RIMBORSI_URL, ProviderStripe,
+    ADDEBITI_URL, MOVIMENTI_URL, PAGAMENTI_URL, RIMBORSI_URL, STRIPE_URL, ProviderStripe,
     crea_provider_stripe,
 )
 
@@ -372,6 +372,72 @@ class TestIBuchiDelGiudice(unittest.TestCase):
         self.assertEqual(_p(FetchFinto({PAGAMENTI_URL: {}})).impronta_carta("pi_ok"), "")
         self.assertEqual(_p(FetchFinto({PAGAMENTI_URL: {"latest_charge": {}}}))
                          .impronta_carta("pi_ok"), "")
+
+
+class TestLaRiletturaDelloStato(unittest.TestCase):
+    """CASELLA 10 del blocco SOLDI: `stato_sessione` chiede a Stripe il `payment_status`
+    della Checkout Session. Il gestore del webhook conferma solo su «paid» (o «nessun
+    pagamento richiesto»), aspetta su «unpaid», e su "" non conferma e fa ritentare: quindi
+    "" deve voler dire SEMPRE «non so», mai un valore inventato."""
+
+    def _sessione(self, **campi):
+        return FetchFinto({STRIPE_URL + "/": dict({"id": "cs_ok"}, **campi)})
+
+    def test_legge_con_un_GET_della_sessione_e_la_chiave_nell_intestazione(self):
+        f = self._sessione(payment_status="paid")
+        self.assertEqual(_p(f).stato_sessione("cs_ok"), "paid")
+        self.assertEqual(len(f.chiamate), 1)
+        url, corpo, intestazioni = f.chiamate[0]
+        self.assertEqual(url, STRIPE_URL + "/cs_ok")
+        self.assertIsNone(corpo, "una lettura e' un GET: nessun corpo")
+        self.assertEqual(intestazioni, {"Authorization": "Bearer sk_test_k"})
+
+    def test_i_tre_stati_dichiarati_da_Stripe_passano_tali_e_quali(self):
+        self.assertEqual(ProviderStripe.STATI_SESSIONE, ("paid", "unpaid", "no_payment_required"))
+        for stato in ("paid", "unpaid", "no_payment_required"):
+            with self.subTest(stato=stato):
+                self.assertEqual(_p(self._sessione(payment_status=stato))
+                                 .stato_sessione("cs_ok"), stato)
+
+    def test_un_valore_mai_dichiarato_e_non_so(self):
+        for stato in ("processing", "PAID", "", None, 1, True, ["paid"]):
+            with self.subTest(stato=stato):
+                self.assertEqual(_p(self._sessione(payment_status=stato))
+                                 .stato_sessione("cs_ok"), "")
+        self.assertEqual(_p(FetchFinto({STRIPE_URL + "/": {"id": "cs_ok"}}))
+                         .stato_sessione("cs_ok"), "", "senza payment_status: non so")
+
+    def test_la_risposta_di_UN_ALTRO_oggetto_non_si_crede(self):
+        """Un errore di Stripe, un proxy, una sessione diversa: se l'`id` non e' quello
+        chiesto, il `paid` che contiene non parla di questa sessione."""
+        for risposta in ({"id": "cs_altra", "payment_status": "paid"},
+                         {"payment_status": "paid"},
+                         {"error": {"code": "resource_missing"}}):
+            with self.subTest(risposta=risposta):
+                self.assertEqual(_p(FetchFinto({STRIPE_URL + "/": risposta}))
+                                 .stato_sessione("cs_ok"), "")
+        for risposta in (None, ["paid"], "paid", 7):
+            with self.subTest(risposta=risposta):
+                p = _p(lambda u, b, h, r=risposta: r)
+                self.assertEqual(p.stato_sessione("cs_ok"), "")
+
+    def test_un_identificativo_che_non_e_una_sessione_non_parte_nemmeno(self):
+        f = self._sessione(payment_status="paid")
+        for cattivo in (None, "", "pi_1", "cs", 123, b"cs_ok", ["cs_ok"]):
+            with self.subTest(input=cattivo):
+                self.assertEqual(_p(f).stato_sessione(cattivo), "")
+        self.assertEqual(f.chiamate, [], "nessuna chiamata a Stripe per un input non valido")
+        self.assertEqual(_p(f).stato_sessione("cs_"), "", "id vuoto dopo il prefisso: la "
+                         "risposta parla di cs_ok, non di cs_")
+
+    def test_la_rete_che_cade_e_non_so_col_motivo_nel_registro(self):
+        with self.assertLogs("core_auto.pagamenti_stripe", level="WARNING") as registro:
+            esito = _p(FetchFinto(solleva=OSError("timeout"))).stato_sessione("cs_ok")
+        self.assertEqual(esito, "")
+        riga = registro.output[0]
+        self.assertIn("cs_ok", riga)
+        self.assertIn("OSError", riga)
+        self.assertIn("timeout", riga)
 
 
 if __name__ == "__main__":

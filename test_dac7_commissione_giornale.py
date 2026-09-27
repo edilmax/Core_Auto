@@ -30,6 +30,8 @@ WH = "whsec_dc"
 
 
 def _fake(url, body, headers):
+    if not body and "/checkout/sessions/" in url:     # rilettura dello stato (casella 10)
+        return {"id": url.rsplit("/", 1)[-1], "payment_status": "paid"}
     return {"url": "https://x/cs", "id": "cs_" + os.urandom(5).hex()}
 
 
@@ -98,7 +100,7 @@ class TestDac7CommissioneGiornale(unittest.TestCase):
                      {"quote_token": q["quote_token"], "email": "c%d@x.it" % i})
             rif, vt = b["riferimento"], b["voucher_token"]
             pl = json.dumps({"type": "checkout.session.completed",
-                             "data": {"object": {"metadata": {"riferimento": rif}}}})
+                             "data": {"object": {"id": "cs_" + rif, "metadata": {"riferimento": rif}}}})
             r.gestisci("POST", "/api/payments/webhook", {}, pl,
                        {"Stripe-Signature": firma_di_test(pl, WH, int(time.time()))})
             g("POST", "/api/garanzia/conferma", {"voucher_token": vt})
@@ -165,7 +167,7 @@ class TestDac7CommissioneGiornale(unittest.TestCase):
                  {"quote_token": q["quote_token"], "email": "z@x.it"})
         rif = b["riferimento"]
         pl = json.dumps({"type": "checkout.session.completed",
-                         "data": {"object": {"metadata": {"riferimento": rif}}}})
+                         "data": {"object": {"id": "cs_" + rif, "metadata": {"riferimento": rif}}}})
         for _ in range(4):                       # replay x4
             r.gestisci("POST", "/api/payments/webhook", {}, pl,
                        {"Stripe-Signature": firma_di_test(pl, WH, int(time.time()))})

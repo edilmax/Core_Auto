@@ -132,6 +132,8 @@ _CHIAMATE = []
 
 def _fake_stripe_fetch(url, body, headers):
     """Checkout Session finta: nessuna rete, e conserva il corpo per ispezionarlo."""
+    if not body and "/checkout/sessions/" in url:     # rilettura dello stato (casella 10)
+        return {"id": url.rsplit("/", 1)[-1], "payment_status": "paid"}
     import secrets
     _CHIAMATE.append(body)
     return {"url": "https://stripe.finto/" + secrets.token_hex(4),

@@ -38,6 +38,8 @@ from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
 
 
 def _fake_fetch(url, body, headers):
+    if not body and "/checkout/sessions/" in url:     # rilettura dello stato (casella 10)
+        return {"id": url.rsplit("/", 1)[-1], "payment_status": "paid"}
     import secrets
     return {"url": "https://x/" + secrets.token_hex(5), "id": "cs_" + secrets.token_hex(5)}
 
@@ -131,7 +133,7 @@ class TestEmailCiclo(unittest.TestCase):
 
     def _webhook(self, rif):
         pl = json.dumps({"type": "checkout.session.completed",
-                         "data": {"object": {"metadata": {"riferimento": rif}}}})
+                         "data": {"object": {"id": "cs_" + rif, "metadata": {"riferimento": rif}}}})
         return self.r.gestisci("POST", "/api/payments/webhook", {}, pl,
                                {"Stripe-Signature": firma_di_test(pl, "whsec_x",
                                                                   int(time.time()))})

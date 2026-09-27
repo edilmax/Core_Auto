@@ -256,10 +256,27 @@ BLOCCHI = (
             #    si risponde 200 SEMPRE (finche' non e' salvato, non 200: Stripe ritenta fino a
             #    3 giorni); l'elaborazione viene DOPO e, se fallisce, il retry e' NOSTRO e il
             #    fallimento e' un'anomalia del Guardiano, non un codice HTTP.
+            #    ⛔ RISCRITTA IL 2026-09-27 («la cosa giusta» del fondatore, D12). La casella
+            #    diceva «risponde 200 subito ... e lo elabora DOPO, in un passo separato», dalla
+            #    pagina GENERICA dei webhook (docs.stripe.com/webhooks: «Restituisci rapidamente
+            #    una risposta 2xx», «Gestire gli eventi in modo asincrono»). Ma la guida di Stripe
+            #    per il NOSTRO caso -- la consegna dopo il Checkout, docs.stripe.com/checkout/
+            #    fulfillment, letta il 2026-09-27 -- consegna DENTRO il gestore e risponde 200
+            #    dopo, e dice che Checkout aspetta fino a 10 secondi la risposta al
+            #    `checkout.session.completed` prima di mandare il cliente alla pagina di
+            #    conferma: rispondere prima di confermare lo farebbe atterrare su una stanza non
+            #    ancora sua. Le due pagine tirano in versi opposti; per il Checkout vale la
+            #    seconda. Cosa rendeva «piu' sicuro» lo schema attuale (verdetto del 21/9) e' lo
+            #    stesso che la casella chiedeva al passo separato: nessun esito perso. Qui lo
+            #    danno il NON-2xx su cio' che non e' applicato (Stripe ritenta fino a tre giorni)
+            #    e lo sweeper (casella 9) sugli eventi rimasti indietro. ⚠️ Limite dichiarato,
+            #    dalla stessa pagina generica: l'elaborazione sincrona non regge un'ondata di
+            #    consegne; oggi non c'e', e la casella non lo misura.
             "il gestore dei webhook di Stripe verifica la firma sul corpo grezzo, SALVA "
-            "l'evento con il suo identificativo, risponde 200 subito (e NON 200 finche' "
-            "l'evento non e' salvato, cosi' Stripe ritenta) e lo elabora DOPO, in un passo "
-            "separato",
+            "l'evento con il suo identificativo prima di fare qualunque cosa, e risponde 2xx "
+            "solo quando l'evento e' salvato E applicato: altrimenti NON-2xx, cosi' Stripe "
+            "ritenta e l'evento resta allo sweeper. La consegna avviene dentro la risposta, "
+            "come nella guida di Stripe per il Checkout",
             "un evento Stripe consegnato due volte entro 72 ore viene elaborato UNA volta "
             "sola: la memoria della deduplicazione degli eventi (evt_) dura almeno 3 giorni, "
             "e due Event diversi per lo stesso fatto (stesso oggetto e stesso tipo) contano "

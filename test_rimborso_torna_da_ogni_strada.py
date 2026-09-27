@@ -77,6 +77,9 @@ class _StripeCheRicorda:
         if "/refunds" in url and not body:
             pi = (parse_qs(urlparse(url).query).get("payment_intent") or [""])[0]
             return {"object": "list", "data": list(self.per_pi.get(pi, []))}
+        if "/checkout/sessions/" in url and not body:
+            # la rilettura dello stato (casella 10): la sessione e' pagata, forma vera
+            return {"id": url.rstrip("/").rsplit("/", 1)[-1], "payment_status": "paid"}
         if "/payment_intents/" in url and not body:
             pi = url.split("?", 1)[0].rstrip("/").rsplit("/", 1)[-1]
             return {"id": pi, "latest_charge": {"payment_method_details":

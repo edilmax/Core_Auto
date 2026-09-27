@@ -521,7 +521,9 @@ class TestI3SullaProvaFirmataVera(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.d, True)
         self._fetch_vero = _stripe.ProviderStripe._fetch_reale
         _stripe.ProviderStripe._fetch_reale = staticmethod(
-            lambda url, body, headers: {"url": "https://x/y", "id": "cs_prova202"})
+            lambda url, body, headers: {"id": url.rsplit("/", 1)[-1], "payment_status": "paid"}
+            if not body and "/checkout/sessions/" in url
+            else {"url": "https://x/y", "id": "cs_prova202"})
         self.addCleanup(setattr, _stripe.ProviderStripe, "_fetch_reale", self._fetch_vero)
         d = self.d
         # valori FINTI che accendono il provider (la rete e' sostituita sopra): non sono segreti
@@ -570,7 +572,7 @@ class TestI3SullaProvaFirmataVera(unittest.TestCase):
         self.assertEqual(s, 201, b)
         rif = b["riferimento"]
         pl = json.dumps({"type": "checkout.session.completed",
-                         "data": {"object": {"metadata": {"riferimento": rif}}}})
+                         "data": {"object": {"id": "cs_" + rif, "metadata": {"riferimento": rif}}}})
         s, _ = self.router.gestisci("POST", "/api/payments/webhook", {}, pl,
                                     {"Stripe-Signature": firma_di_test(pl, "whsec_x",
                                                                        int(time.time()))})

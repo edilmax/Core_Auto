@@ -112,7 +112,7 @@ def _host_token(g):
 def _webhook(r, rif):
     """Consegna il webhook Stripe firmato sul body GREZZO (come multivettore V1b)."""
     pl = json.dumps({"type": "checkout.session.completed",
-                     "data": {"object": {"metadata": {"riferimento": rif}}}})
+                     "data": {"object": {"id": "cs_" + rif, "metadata": {"riferimento": rif}}}})
     return r.gestisci("POST", "/api/payments/webhook", {}, pl,
                       {"Stripe-Signature": firma_di_test(pl, "whsec_x", int(time.time()))})
 

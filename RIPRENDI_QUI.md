@@ -3435,7 +3435,51 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 96e86cd
+CONSEGNE AGGIORNATE A: 18fda27
+
+## PASSAGGIO DI CONSEGNE 17 (2026-09-27 sera) - CASELLE 7 E 10 DEL BLOCCO 1 CHIUSE: LO STATO DEL PAGAMENTO SI RILEGGE DA STRIPE; BLOCCO 1 = 14/15:
+- PERMESSI, parole testuali del fondatore: alla domanda sulle caselle 7 e 10 «la cosa
+  giusta», poi alla domanda sul via di produzione «autorizzato».
+- DECISIONE (D12, con le fonti D25: docs.stripe.com/checkout/fulfillment,
+  docs.stripe.com/webhooks, docs.stripe.com/payments/pix/accept-a-payment, lette il 27/9):
+  casella 10 FATTA nel codice; casella 7 RISCRITTA sulla guida del Checkout (consegna dentro
+  la risposta; il perche' sopra la casella in collaudi/piano.py).
+- DIFETTO LATENTE CHIUSO: sul conto Stripe e' acceso Pix (configurazione metodi letta in sola
+  lettura: amazon_pay apple_pay bancontact blik card eps kakao_pay klarna link mb_way naver_pay
+  payco pix samsung_pay satispay); con Pix la sessione si chiude PRIMA dei soldi. Il gestore
+  confermava su `completed` senza rileggere e ignorava `async_payment_succeeded`.
+- PRODUZIONE (autorizzato): fase85 `stato_sessione` (GET della sessione, payment_status,
+  id verificato); fase83 `_stato_pagamento_da_stripe` + rilettura prima di ogni scrittura su
+  `completed` e `async_payment_succeeded` (paid/no_payment_required -> conferma; unpaid ->
+  200 in attesa; «non so» -> 503; senza sessione -> 200 senza conferma, WARNING
+  evento_malformato); fase204 solo docstring.
+- GUARDIE: test_webhook_rilettura_stato (6, nata ROSSA 4/5 sul codice di prima; il ramo
+  malformato visto rosso a parte), test_fase85 TestLaRiletturaDelloStato (6),
+  test_pipeline_ci test_LA_RILETTURA_SI_MISURA_SUL_CODICE_NON_SU_UNA_PAROLA (vista rossa
+  con la misura «per parola» rimessa con l'editor; sha256 dell'esame identico dopo,
+  8003856F...). esame_webhook: la 10 si misura sull'albero sintattico, la 7 coi tre fatti +
+  6 guardie eseguite; autoprova con due guasti (dedup spenta, rilettura spenta).
+- RAGGIO: ~75 banchi con rete Stripe finta senza il GET della sessione e ~60 eventi senza
+  `id` della sessione, corretti con l'editor file per file (primo giro 116 rossi su 900,
+  tutti dello strumento; uno era un VERDE per il motivo sbagliato:
+  test_webhook_stripe_esiti_persi [1]). Secondo giro sui 69 moduli toccati: Ran 929, OK.
+  ⚠️ S19: scopo allargato DOPO aver toccato i banchi; ridichiarato col motivo nella traccia.
+- FUORI SUITE: e2e_rimborso_stripe/esame_orologi rileggono il PaymentIntent VERO al posto
+  della sessione simulata (dichiarato nei NON_GUARDA); avvia_server_visivo con chiave
+  `sk_test_` dichiara «RILETTURA SIMULATA» (un banco non completa un Checkout).
+- MISURE: caricatore 6952 -> 6965 (0 moduli rotti); file di test 430 -> 431. Mutazione sui 5
+  moduli del denaro `--tetto 70` (fase85 ora ha 65 punti; col 62 ne restavano 2 fuori e il
+  Giudice non spuntava): 251 provati, 250 uccisi, 0 sopravvissuti, 1 equivalente,
+  ri-conferme 15/15, uscita 0. Rimisura: esame_soldi, webhook, rimborso_scritto,
+  money_float, produzione ogni-ora, percorso_ruoli VERDI; esame_orologi 34/34 e
+  esame_rimborsi 8/8 + E2E VERDI contro Stripe di prova; a mano con letture VPS fresche
+  (17:06Z): riconciliazione, backup 19/19 (finanza-20260927-134306), deploy 51/51 VERDI.
+- ROSSE ONESTE: (a) esame_produzione (blocco 1): il giro INTERO del Guardiano all'avvio del
+  13:43Z conta 2 accessi NEGATI al bunker del 26/9 20:38Z (prove_legali,
+  sessione_assente_o_manomessa, ip 101.57.50.246) — la difesa ha tenuto; la casella torna
+  al primo giro intero che non li ha piu' nelle 24 ore. (b) esame_sentinella (blocco 8):
+  nessun monitor esterno (conto da aprire, decisione del fondatore) e il cron di GitHub con
+  un buco di 356 minuti.
 
 ## PASSAGGIO DI CONSEGNE 16 (2026-09-27 pomeriggio) - CONSEGNE 15 IN PRODUZIONE: #225 UNITA, DEPLOY 96e86cd, TESTI NUOVI SERVITI DAL SITO VIVO:
 - PERMESSI, parole testuali del fondatore in questa sessione: «rilancia, procedi al
@@ -3988,7 +4032,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 6952 test
+SUITE ATTUALE: Ran 6965 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

@@ -295,9 +295,13 @@ class FintoStripeForm(_FintoSevero):
         h = dict(headers or {})
         self.richieste.append({"url": url, "headers": h, "campi": _campi(body),
                                "corpo": body})
-        _controlla_stripe(self, url, body, h)
+        # Il metodo lo decide il CORPO, come in `fase85._fetch_reale`: senza corpo e' un GET.
+        _controlla_stripe(self, url, body, h, metodo=("POST" if body else "GET"))
         if self._guasto is not None:
             raise self._guasto
+        if not body and "/checkout/sessions/" in url:
+            # la rilettura dello stato (casella 10): la forma vera della Checkout Session
+            return {"id": url.rstrip("/").rsplit("/", 1)[-1], "payment_status": "paid"}
         r = self._risposta
         return r(self.richieste[-1]) if callable(r) else r
 

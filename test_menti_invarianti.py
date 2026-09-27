@@ -35,6 +35,8 @@ AZIONI = ["quote", "book", "pay", "pay2", "cancel", "adminref", "hostcancel",
 
 
 def _fake_fetch(url, body, headers):
+    if not body and "/checkout/sessions/" in url:     # rilettura dello stato (casella 10)
+        return {"id": url.rsplit("/", 1)[-1], "payment_status": "paid"}
     import secrets
     return {"url": "https://x/" + secrets.token_hex(5), "id": "cs_" + secrets.token_hex(5)}
 
@@ -81,7 +83,7 @@ class TestMentiInvarianti(unittest.TestCase):
 
             def paga(rif):
                 pl = json.dumps({"type": "checkout.session.completed",
-                                 "data": {"object": {"metadata": {"riferimento": rif}}}})
+                                 "data": {"object": {"id": "cs_" + rif, "metadata": {"riferimento": rif}}}})
                 r.gestisci("POST", "/api/payments/webhook", {}, pl,
                            {"Stripe-Signature": firma_di_test(pl, WH, int(time.time()))})
 

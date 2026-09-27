@@ -8308,6 +8308,25 @@ class RouterHTTP:
         e = d.get("id")
         return e if isinstance(e, str) and e.strip() else ""
 
+    def _stato_pagamento_da_stripe(self, sessione):
+        """CASELLA 10: il `payment_status` della sessione RILETTO dall'API (fase85).
+
+        None = nessun fornitore Stripe: senza chiave il sistema non crea link di pagamento
+        (fase85 `crea_provider_stripe`), quindi non c'e' niente da rileggere e la conferma
+        resta quella di prima. In produzione il fornitore c'e' (`stripe(85)` fra i
+        componenti all'avvio). "" = non so (rete, risposta non credibile, fornitore senza
+        la lettura): chi chiama NON conferma."""
+        fornitore = getattr(self._sys, "stripe", None)
+        if fornitore is None:
+            return None
+        try:
+            stato = fornitore.stato_sessione(sessione)
+        except Exception:
+            logger.warning("rilettura della sessione esplosa (trattata come «non so»)",
+                           exc_info=True)
+            return ""
+        return stato if isinstance(stato, str) else ""
+
     def _webhook_stripe_registrato(self, body, headers):
         """UN SOLO PUNTO D'USCITA, perche' «gestito» si dice una volta sola.
 
@@ -8421,7 +8440,10 @@ class RouterHTTP:
         # niente da salvare, perche' un evento malformato non e' un nostro guasto e
         # ritentarlo per giorni non lo aggiusta.
         esito_perso = ""
-        if tipo == "checkout.session.completed":
+        # ⛔ DUE EVENTI PORTANO UN PAGAMENTO: `completed` (la sessione si e' chiusa) e
+        #    `async_payment_succeeded` (i soldi di un metodo a conferma differita sono
+        #    arrivati DOPO). La guida di Stripe li manda entrambi alla stessa consegna.
+        if tipo in ("checkout.session.completed", "checkout.session.async_payment_succeeded"):
             obj0 = (dati or {}).get("object", {}) or {}
             meta0 = obj0.get("metadata", {}) or {}
             # SCATTO ③ (fase183): sessione di SALVATAGGIO CARTA (mode=setup), NON un pagamento.
@@ -8434,6 +8456,35 @@ class RouterHTTP:
                 rif = meta0.get("riferimento", "")
             except Exception:
                 rif = ""
+            # ⛔ CASELLA 10: SI CONFERMA SOLO CIO' CHE STRIPE DICE PAGATO, riletto dall'API
+            #    con l'identificativo della sessione -- mai dal corpo dell'evento, che e' una
+            #    fotografia e puo' arrivare fuori ordine. Prima di scrivere qualunque cosa:
+            #    se la rilettura non riesce non si e' toccato niente, e il NON-2xx fa
+            #    ritentare Stripe (e lascia l'evento allo sweeper).
+            sessione = obj0.get("id", "")
+            stato_api = self._stato_pagamento_da_stripe(sessione)
+            if stato_api == "" and not (isinstance(sessione, str) and sessione.startswith("cs_")):
+                # Evento senza la sessione: Stripe non lo manda mai, non c'e' niente da
+                # rileggere e quindi niente da confermare. Non si fa ritentare: malformato
+                # resta malformato (stessa scelta del «nessun 'cs_'» qui sotto, ferrea 10).
+                logger.warning("webhook | codice: evento_malformato | sottocodice: "
+                               "sessione_assente | messaggio: niente da rileggere, niente "
+                               "conferma per riferimento '%s'", _rif_per_registro(rif))
+                return 200, {"ricevuto": True, "tipo": tipo, "confermato": False,
+                             "motivo": "sessione_assente"}
+            if stato_api == "unpaid":
+                # Sessione chiusa, soldi non ancora arrivati (Pix): l'evento e' gestito.
+                # Se i soldi arrivano, arriva `async_payment_succeeded` e conferma lui.
+                logger.info("Stripe: sessione chiusa SENZA pagamento per riferimento '%s' "
+                            "(conferma differita)", _rif_per_registro(rif))
+                return 200, {"ricevuto": True, "tipo": tipo, "pagamento": "in_attesa"}
+            if stato_api == "":
+                logger.error("webhook | codice: esito_non_applicato | sottocodice: "
+                             "rilettura_stato_fallita | messaggio: stato del pagamento non "
+                             "riletto da Stripe, niente conferma, rispondo 503 (evento '%s')",
+                             tipo)
+                return 503, {"errore": "esito_non_applicato",
+                             "sottocodice": "rilettura_stato_fallita"}
             # AUDIT CONSOLE: salva l'id sessione (cs_...) -> shadow-check Stripe possibile
             # per sempre su questa prenotazione. ISOLATO dalla CONFERMA, che avviene
             # comunque qui sotto -- ma NON piu' dalla RISPOSTA: se il salvataggio non

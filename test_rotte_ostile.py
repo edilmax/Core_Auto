@@ -76,6 +76,8 @@ _RIMBORSI_FINTI = {}
 def _fake_stripe(url, body, headers):
     import secrets
     from urllib.parse import urlparse, parse_qs
+    if not body and "/checkout/sessions/" in url:     # rilettura dello stato (casella 10)
+        return {"id": url.rsplit("/", 1)[-1], "payment_status": "paid"}
     if "/refunds" in url and not body:
         # LETTURA — GET /v1/refunds?payment_intent=...  (docs.stripe.com/api/refunds/list)
         pi = (parse_qs(urlparse(url).query).get("payment_intent") or [""])[0]

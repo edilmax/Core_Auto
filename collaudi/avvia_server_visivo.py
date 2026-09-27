@@ -128,6 +128,21 @@ def _prepara(porta):
         sistema.stripe._fetch = _provider_finto()
         print("STRIPE_FINTO: provider del banco senza rete, sessioni deterministiche",
               flush=True)
+    # ⛔ LA RILETTURA DELLO STATO (casella 10, 2026-09-27) E' SIMULATA SOLO QUI, E LO DICE.
+    #    Il gestore dei webhook conferma solo cio' che Stripe, riletto, dice pagato. Un banco
+    #    non puo' completare un Checkout senza browser: con la chiave finta di serie la
+    #    sessione non esiste, con STRIPE_FINTO nemmeno, con una chiave di PROVA vera esiste
+    #    ma nessuno la paga. In tutti e tre i casi il pagamento del banco e' simulato per
+    #    costruzione (e' il webhook firmato che il banco manda), quindi la rilettura risponde
+    #    come Stripe dopo il pagamento. Mai con una chiave viva; mai in produzione (collaudi/
+    #    non entra nell'immagine). La rilettura vera la provano test_webhook_rilettura_stato
+    #    e test_fase85_pagamenti_stripe.
+    if sistema.stripe is not None and sistema.config.stripe_secret_key.startswith("sk_test_"):
+        sistema.stripe.stato_sessione = (
+            lambda sessione: "paid" if isinstance(sessione, str) and sessione.startswith("cs_")
+            else "")
+        print("RILETTURA SIMULATA: il banco non completa un Checkout, la sessione risulta "
+              "pagata (chiave di prova, solo collaudi)", flush=True)
     return sistema
 
 

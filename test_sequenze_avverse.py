@@ -47,6 +47,8 @@ SEQUENZE = [
 
 
 def _fake(url, body, headers):
+    if not body and "/checkout/sessions/" in url:     # rilettura dello stato (casella 10)
+        return {"id": url.rsplit("/", 1)[-1], "payment_status": "paid"}
     return {"url": "x", "id": "cs_" + os.urandom(4).hex()}
 
 
@@ -113,7 +115,7 @@ class TestSequenzeAvverse(unittest.TestCase):
             if nome not in pren:
                 return
             pl = json.dumps({"type": "checkout.session.completed",
-                             "data": {"object": {"metadata": {"riferimento": pren[nome]["rif"]}}}})
+                             "data": {"object": {"id": "cs_" + pren[nome]["rif"], "metadata": {"riferimento": pren[nome]["rif"]}}}})
             r.gestisci("POST", "/api/payments/webhook", {}, pl,
                        {"Stripe-Signature": firma_di_test(pl, "whx", int(time.time()))})
 

@@ -13,11 +13,11 @@ rendere quella perdita DEFINITIVA. Questo modulo esiste per spostare la scrittur
 della risposta, cosi' che «ho risposto 2xx» implichi sempre «ce l'ho scritto».
 
 ⚠️ COSA QUESTO MODULO **NON** FA, dichiarato qui e non scoperto dopo (D18 punto 3):
-  · NON sposta l'elaborazione fuori dalla risposta. La casella 7 del blocco SOLDI chiede
-    anche «lo elabora DOPO, in un passo separato»: quello NON e' fatto, e la casella resta
-    VUOTA apposta. Misurato prima di decidere: 81 file di collaudo e 19 banchi passano dal
-    webhook, 120 chiamate in tutto, quasi tutte aspettandosi la conferma dentro la risposta.
-    Spostarla e' un lavoro a se', da fare quando non c'e' altro in volo.
+  · NON sposta l'elaborazione fuori dalla risposta, ed e' voluto: la guida di Stripe per la
+    consegna dopo il Checkout consegna dentro il gestore (Checkout aspetta fino a 10 secondi
+    il 2xx prima di mandare il cliente alla pagina di conferma). La casella 7 del blocco
+    SOLDI chiedeva un passo separato fino al 2026-09-27, quando e' stata riscritta su quella
+    guida (il perche' per esteso sta nel commento sopra la casella, in collaudi/piano.py).
   · NON ritenta da solo gli eventi rimasti indietro. Espone `pendenti()` perche' si possano
     VEDERE — e dal 2026-09-25 e' quello su cui poggia lo sweeper `deploy/cron_sweep_
     eventi.py` (casella 9), che ridelivera' gli eventi salvati rifirmandoli con il secret.

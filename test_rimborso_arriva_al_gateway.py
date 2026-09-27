@@ -130,13 +130,21 @@ class _SpiaGateway:
         return {"ok": True, "id": "re_finto_%d" % len(self.chiamate)}
 
 
+def _rete_finta(u, b, h):
+    """La rete di Stripe, finta. Il GET della sessione (la rilettura dello stato, casella 10)
+    risponde «pagata» con la forma vera della Checkout Session; ogni altra chiamata crea una
+    sessione di comodo, come prima."""
+    if not b and "/checkout/sessions/" in u:
+        return {"id": u.rsplit("/", 1)[-1], "payment_status": "paid"}
+    return {"url": "https://x/cs", "id": "cs_" + str(time.time_ns())}
+
+
 class _BancoGateway(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
         cls._orig = _stripe.ProviderStripe._fetch_reale
-        _stripe.ProviderStripe._fetch_reale = staticmethod(
-            lambda u, b, h: {"url": "https://x/cs", "id": "cs_" + str(time.time_ns())})
+        _stripe.ProviderStripe._fetch_reale = staticmethod(_rete_finta)
 
     @classmethod
     def tearDownClass(cls):

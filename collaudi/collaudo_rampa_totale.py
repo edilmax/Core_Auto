@@ -34,7 +34,9 @@ os.chdir(REPO)
 import fase85_pagamenti_stripe as _stripe
 
 _stripe.ProviderStripe._fetch_reale = staticmethod(
-    lambda u, b, h: {"url": "https://x/y", "id": "cs_" + os.urandom(4).hex()})
+    lambda u, b, h: {"id": u.rsplit("/", 1)[-1], "payment_status": "paid"}
+    if not b and "/checkout/sessions/" in u
+    else {"url": "https://x/y", "id": "cs_" + os.urandom(4).hex()})
 
 from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import crea_router
@@ -226,7 +228,7 @@ def m5():
             return
         rif = b["riferimento"]
         pl = json.dumps({"type": "checkout.session.completed",
-                         "data": {"object": {"metadata": {"riferimento": rif}}}})
+                         "data": {"object": {"id": "cs_" + rif, "metadata": {"riferimento": rif}}}})
         s2, _ = r.gestisci("POST", "/api/payments/webhook", {}, pl,
                            {"Stripe-Signature": firma_di_test(pl, "whsec_x", int(time.time()))})
         if s2 != 200:

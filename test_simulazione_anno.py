@@ -32,6 +32,8 @@ WH = "whsec_anno"
 
 
 def _fake_checkout(url, body, headers):
+    if not body and "/checkout/sessions/" in url:     # rilettura dello stato (casella 10)
+        return {"id": url.rsplit("/", 1)[-1], "payment_status": "paid"}
     import secrets
     return {"url": "https://ck.test/" + secrets.token_hex(6), "id": "cs_" + secrets.token_hex(6)}
 
@@ -70,7 +72,7 @@ class TestSimulazioneAnno(unittest.TestCase):
 
     def _paga(self, rif):
         payload = json.dumps({"type": "checkout.session.completed",
-                              "data": {"object": {"metadata": {"riferimento": rif}}}})
+                              "data": {"object": {"id": "cs_" + rif, "metadata": {"riferimento": rif}}}})
         sig = firma_di_test(payload, WH, int(time.time()))
         return self.r.gestisci("POST", "/api/payments/webhook", {}, payload,
                                {"Stripe-Signature": sig})

@@ -27,6 +27,8 @@ WHSEC = "whsec_cx"
 
 
 def _fake_checkout(url, body, headers):
+    if not body and "/checkout/sessions/" in url:     # rilettura dello stato (casella 10)
+        return {"id": url.rsplit("/", 1)[-1], "payment_status": "paid"}
     import secrets
     return {"url": "https://checkout.stripe.test/" + secrets.token_hex(6),
             "id": "cs_test_" + secrets.token_hex(6)}
@@ -122,7 +124,7 @@ class TestConnectEscrow(unittest.TestCase):
                       {"quote_token": q["quote_token"], "email": "cli@cx.it"})
         self.assertEqual(s, 201, b)
         payload = json.dumps({"type": "checkout.session.completed",
-                              "data": {"object": {"metadata": {"riferimento": b["riferimento"]}}}})
+                              "data": {"object": {"id": "cs_" + b["riferimento"], "metadata": {"riferimento": b["riferimento"]}}}})
         sig = firma_di_test(payload, WHSEC, int(time.time()))
         s, _ = self.r.gestisci("POST", "/api/payments/webhook", {}, payload,
                                {"Stripe-Signature": sig})

@@ -60,6 +60,8 @@ class _Posta:
 
 def _stripe_finto(_url, _body, _headers):
     """Sostituto in-house della chiamata HTTP a Stripe: nessuna rete, esito deterministico."""
+    if not _body and "/checkout/sessions/" in _url:   # rilettura dello stato (casella 10)
+        return {"id": _url.rsplit("/", 1)[-1], "payment_status": "paid"}
     import secrets
     n = secrets.token_hex(6)
     return {"url": "https://checkout.finto/" + n, "id": "cs_" + n}
@@ -494,7 +496,7 @@ class TestHappyAltroHTTP(unittest.TestCase):
         cls.voucher = b["voucher_token"]
         cls.rif_pagato = b["riferimento"]
         payload = json.dumps({"type": "checkout.session.completed",
-                              "data": {"object": {"metadata":
+                              "data": {"object": {"id": "cs_" + cls.rif_pagato, "metadata":
                                                   {"riferimento": cls.rif_pagato}}}})
         s, w = cls.r.gestisci("POST", "/api/payments/webhook", {}, payload,
                               {"Stripe-Signature": firma_di_test(payload, "whsec_collaudo",

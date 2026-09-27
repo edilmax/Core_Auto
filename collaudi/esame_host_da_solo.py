@@ -120,6 +120,8 @@ def _fetch_finto(url, body, headers):
     da «ho scritto pagato nel database». Stessa forma del finto di `test_admin_rimborso_money`."""
     import secrets
     CHIAMATE_STRIPE.append({"url": url, "body": (body or b"").decode("utf-8", "replace")})
+    if not body and "/checkout/sessions/" in url:     # rilettura dello stato (casella 10)
+        return {"id": url.rsplit("/", 1)[-1], "payment_status": "paid"}
     if "/refunds" in url:
         return {"id": "re_" + secrets.token_hex(4), "status": "succeeded", "amount": 1}
     return {"url": "https://pagamento/" + secrets.token_hex(4), "id": "cs_" + secrets.token_hex(4)}

@@ -40,6 +40,8 @@ STATI_OK = {"libero", "pieno", "chiuso", "non_caricato", "in_trattativa"}
 
 
 def _fake_fetch(url, body, headers):
+    if not body and "/checkout/sessions/" in url:     # rilettura dello stato (casella 10)
+        return {"id": url.rsplit("/", 1)[-1], "payment_status": "paid"}
     return {"url": "https://x/cs", "id": "cs_" + str(time.time_ns())}
 
 
@@ -76,7 +78,7 @@ class TestBombardamentoCalendarioTutti(unittest.TestCase):
 
             def paga(rif):
                 pl = json.dumps({"type": "checkout.session.completed",
-                                 "data": {"object": {"metadata": {"riferimento": rif}}}})
+                                 "data": {"object": {"id": "cs_" + rif, "metadata": {"riferimento": rif}}}})
                 r.gestisci("POST", "/api/payments/webhook", {}, pl,
                            {"Stripe-Signature": firma_di_test(pl, WH, int(time.time()))})
 
@@ -257,7 +259,7 @@ class TestBombardamentoCalendarioTutti(unittest.TestCase):
             _, b0 = g("POST", "/api/concierge/book",
                       {"quote_token": q0["quote_token"], "email": "x@ct.it"})
             pl = json.dumps({"type": "checkout.session.completed",
-                             "data": {"object": {"metadata":
+                             "data": {"object": {"id": "cs_" + b0["riferimento"], "metadata":
                                                  {"riferimento": b0["riferimento"]}}}})
             r.gestisci("POST", "/api/payments/webhook", {}, pl,
                        {"Stripe-Signature": firma_di_test(pl, WH, int(time.time()))})

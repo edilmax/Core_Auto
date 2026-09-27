@@ -104,6 +104,8 @@ NETTO_HOST = NETTO - COMMISSIONE - COSTO_CARTA    # 26070
 
 def _fake_stripe_fetch(url, body, headers):
     """Checkout Session finta: nessuna rete, id/url deterministici per chiamata."""
+    if not body and "/checkout/sessions/" in url:     # rilettura dello stato (casella 10)
+        return {"id": url.rsplit("/", 1)[-1], "payment_status": "paid"}
     import secrets
     return {"url": "https://stripe.finto/" + secrets.token_hex(4),
             "id": "cs_" + secrets.token_hex(8)}

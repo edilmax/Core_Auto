@@ -258,6 +258,12 @@ class GatewayDiProva(object):
         return {"ok": True, "rimborsato_cents": self.rimborsati.get(pi, 0),
                 "conteggio": 1 if self.rimborsati.get(pi) else 0}
 
+    def stato_sessione(self, cs):
+        """La rilettura dello stato del pagamento (casella 10 del blocco soldi): il banco
+        paga con la carta, quindi la sessione e' pagata."""
+        self.chiamate.append(("stato_sessione", str(cs), 0, ""))
+        return "paid"
+
 
 class Banco(object):
     """⛔ Il bunker vuole `bunker_password` nella configurazione: senza, ogni sua rotta

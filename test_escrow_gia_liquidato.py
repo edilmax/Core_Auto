@@ -44,6 +44,8 @@ WHSEC = "whsec_escrow_liq"
 
 
 def _fake_fetch(url, body, headers):
+    if not body and "/checkout/sessions/" in url:     # rilettura dello stato (casella 10)
+        return {"id": url.rsplit("/", 1)[-1], "payment_status": "paid"}
     import secrets
     return {"url": "https://checkout.stripe.test/" + secrets.token_hex(6),
             "id": "cs_test_" + secrets.token_hex(6)}
@@ -115,7 +117,7 @@ class TestEscrowGiaLiquidato(unittest.TestCase):
                       {"quote_token": q["quote_token"], "email": "cli@liq.it"})
         self.assertEqual(s, 201, b)
         payload = json.dumps({"type": "checkout.session.completed",
-                              "data": {"object": {"metadata":
+                              "data": {"object": {"id": "cs_" + b["riferimento"], "metadata":
                                                   {"riferimento": b["riferimento"]}}}})
         sig = firma_di_test(payload, WHSEC, int(time.time()))
         s2, _ = self.r.gestisci("POST", "/api/payments/webhook", {}, payload,

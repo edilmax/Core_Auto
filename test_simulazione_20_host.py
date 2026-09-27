@@ -48,6 +48,8 @@ SOGLIA = 3
 
 
 def _fake_fetch(url, body, headers):    # Stripe finto: sessione con url+id, nessuna rete
+    if not body and "/checkout/sessions/" in url:     # rilettura dello stato (casella 10)
+        return {"id": url.rsplit("/", 1)[-1], "payment_status": "paid"}
     return {"url": "https://checkout.stripe.test/" + secrets.token_hex(6),
             "id": "cs_test_" + secrets.token_hex(8)}
 
@@ -127,7 +129,7 @@ class TestSimulazione20Host(unittest.TestCase):
 
     def _webhook(self, rif):
         payload = json.dumps({"type": "checkout.session.completed",
-                              "data": {"object": {"metadata": {"riferimento": rif}}}})
+                              "data": {"object": {"id": "cs_" + rif, "metadata": {"riferimento": rif}}}})
         sig = firma_di_test(payload, WHSEC, int(time.time()))
         return self.r.gestisci("POST", "/api/payments/webhook", {}, payload,
                                {"Stripe-Signature": sig})
