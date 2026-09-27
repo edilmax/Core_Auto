@@ -439,6 +439,14 @@ mount PRIMA di toccare il container vivo (il bind-mount e' per inode: serve ricr
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🚀 IN PRODUZIONE: 96e86cd, il rimborso scritto nelle otto lingue — 27 settembre, «procedi al commit e fino alla fine, autorizzato» del fondatore
+
+**La suite rifatta da capo, e questa volta è arrivata in fondo.** Il giro precedente era morto per memoria bassa. Rilanciato da fermo, staccato, da PowerShell vera: 6947 test eseguiti su 6952 raccolti, verde, uscita 0. I cinque di scarto sono le guardie sul ripristino dei backup, che si mettono da parte quando openssl manca, e hanno un nome. Durante il giro la piattaforma ha ucciso per memoria bassa la vedetta che lo aspettava, non la suite: un lavoro staccato che scrive da sé il codice d'uscita in fondo al registro sopravvive a chi lo guarda (S8).
+
+**Quattro file di produzione risultavano toccati durante il giro, e nessuno era cambiato.** La data di modifica cadeva dentro la suite. Era `test_mutation_money`, che rompe apposta tre moduli del denaro e li riscrive in binario coi byte originali, controllandone l'impronta. Contenuto identico al commit. La data diceva il vero sul *quando*, niente sul *cosa*: si guarda l'impronta, non la data (regola ferrea 13).
+
+**Il deploy.** Prima la prova che il salvataggio si legge: il giro del contenitore di backup delle 11:41Z, 27 impronte uguali e 27 archivi aperti davvero. Paracadute agganciato all'immagine viva, scambio col pulsante, verifica: avvio pulito coi soldi pronti, nessuna variabile di pagamento che vinca sul codice, sonde da fuori su indirizzi che rispondono (401 e 403, mai 404), il giudice di produzione senza violazioni. E la prova che conta per questo lavoro: il sito vivo serve termini e contratto nella versione nuova, letti dalle rotte pubbliche in quattro lingue.
+
 ### 🧮 DUE CASELLE DEI SOLDI CHIUSE, E UN METRO CHE GUARDAVA MENO DI QUANTO DICEVA — 27 settembre, «autorizzato»
 
 **Lo zero dell'ispettore non era uno zero su tutto.** La casella chiedeva zero rilievi «money-float» su tutto il codice, e nominava come metro l'ispettore statico. L'ispettore però scandisce solo i `.py` della cartella principale: `deploy/`, dove girano gli script del cron che maneggiano soldi, non l'aveva mai guardato. Un suo zero avrebbe spuntato la casella lasciando fuori proprio il codice che parla con Stripe di notte. L'esame nuovo usa la regola vera dell'ispettore su un perimetro che include `deploy/`, e si ferma se lo perde. I tre rilievi rimasti stavano in codice spento; sono stati chiusi lo stesso, perché la casella dice «tutto».

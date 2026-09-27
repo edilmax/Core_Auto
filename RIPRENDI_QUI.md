@@ -3435,7 +3435,40 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: afafa00
+CONSEGNE AGGIORNATE A: 96e86cd
+
+## PASSAGGIO DI CONSEGNE 16 (2026-09-27 pomeriggio) - CONSEGNE 15 IN PRODUZIONE: #225 UNITA, DEPLOY 96e86cd, TESTI NUOVI SERVITI DAL SITO VIVO:
+- PERMESSI, parole testuali del fondatore in questa sessione: «rilancia, procedi al
+  commit e fino alla fine, autorizzato», poi «vai avanti fino alla fine».
+- SUITE rifatta da capo (la precedente era morta per memoria bassa): PowerShell vera,
+  staccata, lancia.ps1, registro suite_20260927_121646.log in Core_Auto_GUARDIE_PRONTE:
+  Ran 6947 tests in 2030.605s, OK (skipped=4), CODICE_USCITA_DIRETTO=0. Caricatore da
+  fermo 6952, 0 moduli non importabili; scarto 5 = guardie sul ripristino dei backup
+  (openssl=assente nel registro). ⚠️ La vedetta che aspettava il giro e' stata uccisa
+  dalla piattaforma per memoria bassa; la suite no (processo staccato).
+- CRICCHETTO locale prima del commit: ruff 0 nuove (674 contro 686), bandit 0 nuove,
+  ruff stretto della CI «All checks passed!».
+- COMMIT 7f62e32 (i 13 file delle consegne 15), pre-fatto 10 controlli 0 rossi.
+  PR #225: CI 16 controlli, 15 success + zap skipped, gate success. Unione verificata
+  con una SECONDA chiamata: merged=True, merge commit 96e86cd.
+- DEPLOY col pulsante D17: salvataggio verificato PRIMA (contenitore di backup, giro
+  11:41Z: 27 impronte uguali, 27 archivi aperti con integrity_check ok; notturno 03:40Z
+  27 ok), paracadute OK (prec = viva 365ac1de), scambio USCITA=0 (registro
+  /root/deploy_scambio_20260927_b.log, «SCAMBIO FATTO alle 13:43:06Z»), verifica:
+  healthy, money_path_pronto True, avvisi [], nessuna PAGAMENTO_, viva bbc5ac02.
+  Da fuori: / 200, /api/health 200, /api/admin/controversie 401,
+  /api/bunker/invarianti 403, /api/host/payout 401; verifica_produzione 190 controlli
+  0 violazioni. /api/legale/documento?doc=termini (it en de zh) e
+  /api/legale/contratto-host rispondono versione 2026-09-27, il contratto con l'art. 6-TER.
+- ⚠️ Sul computer 5 file risultano «M» (fase188, fase57, fase81, fase98, main_casavip)
+  ma `git diff --quiet` esce 0: stesso contenuto del commit, git segnala solo la
+  conversione dei fine riga. Non toccati.
+- CHIAVETTA: si rigenera DOPO questo commit, dal server allineato (una sola volta, con
+  la prova di ripristino); l'esito sta in LEGGIMI-RIPRISTINO.txt della chiavetta.
+  ⛔ Difetto trovato: GUIDA-VPS-NUOVA.txt al passo 4 fa cercare l'immagine cc48dc3d,
+  che non gira piu' da due deploy: si corregge rigenerandola.
+- RESTA (Blocco 1, 13/15): casella 7 (elaborare DOPO la risposta) e casella 10
+  (rilettura dall'API, ~82 banchi) — decisioni del fondatore.
 
 ## PASSAGGIO DI CONSEGNE 15 (2026-09-27) - BLOCCO 1 = 13/15: MONEY-FLOAT ZERO E RIMBORSO SCRITTO IN 8 LINGUE, RESTANO SOLO LE DUE DECISIONI DEL FONDATORE:
 - PERMESSI, parole testuali del fondatore: «vai avanti» (misura e attrezzi), poi
