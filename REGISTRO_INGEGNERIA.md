@@ -439,6 +439,16 @@ mount PRIMA di toccare il container vivo (il bind-mount e' per inode: serve ricr
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🚀 IN PRODUZIONE: ff06639, lo sweeper nel cron, la chiavetta presa dopo — 27 settembre, «autorizzato» del fondatore
+
+**La CI ha fermato il primo giro, e aveva ragione due volte.** Il cricchetto statico ha visto sei segnalazioni nuove nei file del 25 settembre. Cinque erano igiene. La sesta era una variabile calcolata e mai usata in `esame_webhook`: le tre condizioni di base della casella 7. Il motivo stampato accanto alla casella diceva «tre condizioni su quattro sono vere» senza guardarle; se una fosse caduta, il foglio avrebbe mentito con tono sicuro. Ora lo dice solo dopo averle misurate. Un avviso di stile che nascondeva un'affermazione non verificata.
+
+**Il deploy.** Pulsante D17 a tappe: paracadute agganciato all'immagine viva, scambio, verifica. `money_path_pronto: True`, 190 controlli di produzione senza violazioni, e la migrazione additiva di `eventi_stripe` passata sull'archivio vero con l'integrità intatta. Prima di mettere lo sweeper nel cron si è contato l'archivio: zero eventi, quindi nessuna riconsegna a sorpresa di pagamenti vecchi.
+
+**Lo strumento che taceva.** Il primo controllo del cron non trovava niente dopo venti minuti. Il cron scriveva, ma dove lo dice la sua riga: la redirezione la esegue la shell dell'host, non il contenitore, e io guardavo dentro il contenitore. È la S3 ancora una volta: il silenzio di uno strumento è una misura dello strumento prima che del codice.
+
+**La chiavetta dopo, non prima.** Era stata presa la sera prima, perché la VPS sta per scadere. Col deploy è diventata vecchia di un commit, quindi è stata rifatta dal server vivo e provata col ripristino (827 file su 827, suite dentro la copia verde). La guida di agosto aveva due errori che nessuno aveva visto, perché nessuno l'aveva mai seguita fino in fondo: il nome del volume dati e una rotta di sonda inesistente.
+
 ### 🔁 DEDUP PER FATTO E SWEEPER DEGLI EVENTI: un webhook perso non è più perso — 25 settembre, «chiudili» del fondatore (potenza MAX)
 
 **Da dove nasce.** Caselle 7-11 del Blocco 1 (webhook): «strumenti da accendere», dicevano le consegne 11 — ma leggendo fase204 la verità era più onesta: la casella 8 (dedup per fatto) e la 9 (sweeper + anomalia) chiedevano PRODUZIONE, non solo misure. La casella 7 (elabora DOPO) è una scelta dichiarata (il V4 potenziato giudica più sicuro lo schema attuale) e la 10 (rilettura API) ha un raggio da solo: 82 banchi di prova.
