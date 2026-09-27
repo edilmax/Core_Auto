@@ -3435,7 +3435,40 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 945b37d
+CONSEGNE AGGIORNATE A: ff06639
+
+## PASSAGGIO DI CONSEGNE 14 (2026-09-27 notte) - CATENA CHIUSA: #223 UNITA, DEPLOY ff06639 IN PRODUZIONE, SWEEPER NEL CRON, CHIAVETTA RIGENERATA, QUATTRO POSTI ALLINEATI:
+- PERMESSI, parole testuali del fondatore in questa sessione: «procedi al commit»
+  (commit 945b37d e 9659762), «autorizzato» (deploy), poi «procedi al commit e fino
+  alla fine, autorizzato» (questa registrazione e il suo allineamento).
+- CI della #223: il primo giro fermo sul job `qualita` (cricchetto statico: ruff 4 +
+  bandit 2 NUOVE, tutte nei file nuovi del 25/9, nessuna in produzione). Chiuse nel codice
+  in 9659762 — fra queste `web_ok` di esame_webhook, calcolata e mai usata mentre il
+  motivo AFFERMAVA «tre condizioni su quattro vere»: ora lo afferma solo se misurate.
+  Secondo giro: 16/16 verdi, gate success. Unione verificata con una SECONDA chiamata:
+  merged=True, merge commit ff06639.
+- DEPLOY col pulsante D17: paracadute OK (prec = viva cc48dc3d), scambio USCITA=0
+  (registro /root/deploy_scambio_20260927.log, «SCAMBIO FATTO alle 23:41:24Z»), verifica:
+  money_path_pronto True, avvisi [], nessuna PAGAMENTO_ nell'ambiente, viva 365ac1de.
+  Migrazione sull'archivio VERO: eventi_stripe ha `oggetto_id` + `ix_eventi_fatto`,
+  integrity_check ok. Da fuori: / 200, /api/health 200, verifica_produzione 190
+  controlli 0 violazioni.
+- SWEEPER: prima di accenderlo contati i pendenti nell'archivio vero = 0 righe (nessuna
+  riconsegna a sorpresa). Lanciato a mano: pendenti=0, uscita 0. Riga aggiunta al crontab
+  di root (copia prima: /root/_crontab_prima_20260927_sweep.bak), giri veri alle 23:45 e
+  00:00 UTC. ⚠️ Il suo `>> /data/sweep_cron.log` lo scrive la shell dell'HOST: il file sta
+  su /data del server, non nel volume; il registro JSON (/data/sweep_eventi.log) sta
+  invece DENTRO il contenitore. Il mio primo controllo guardava il posto sbagliato e
+  taceva (S3: il sospetto va prima allo strumento).
+- CHIAVETTA rigenerata DOPO il deploy (generazione 958a483 in precedente_958a483\):
+  verifica_impronte 827/827 su ff06639, 27 database integri, suite dentro la copia
+  estratta Ran 6936 OK, immagine viva 365ac1de + crontab con lo sweeper.
+  ⛔ `/api/admin/lista` NON esiste (404): la guida della chiavetta ora sonda
+  `/api/admin/controversie` -> 401.
+- QUATTRO POSTI su ff06639 (computer, GitHub, VPS, chiavetta), CI di master 16/16.
+- RESTA (decisioni del fondatore sul Blocco 1, 11/15): casella 7 (elaborare DOPO la
+  risposta) e casella 10 (rilettura dall'API, ~82 banchi); poi le due senza decisione
+  pendente: chi paga cosa nel rimborso scritto in tutte le lingue, zero money-float.
 
 ## PASSAGGIO DI CONSEGNE 13 (2026-09-25 notte, D21 a chiusura blocco) - CASELLE WEBHOOK 7-11: DEDUP+SWEEP+RICONCILIAZIONE VERDI (BLOCCO 1 = 11/15), WEBHOOK e RILETTURA ROSSE ONESTE CON LA DECISIONE AL FONDATORE:
 - CONSEGNA ("chiudili" del fondatore, potenza MAX): le cinque caselle del webhook.
