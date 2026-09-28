@@ -3435,10 +3435,35 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 74584b0
+CONSEGNE AGGIORNATE A: f8219c3
 
-## PASSAGGIO DI CONSEGNE 20 (2026-09-28 sera) - PASSO 1 CHIUSO (#230, 6d2a635, CHIAVETTA RIGENERATA); BLOCCO SULLA CARTA IN PRODUZIONE (#231, DEPLOY 6590a2a); REVISIONE DI GML: DUE DIFETTI VERI RIPARATI SUL RAMO gml-revisione-20260928:
-- STATO DOPO IL DEPLOY (aggiornato alle 22:3x del 28/9): #231 unita (CI 16 controlli, gate
+## PASSAGGIO DI CONSEGNE 20 (2026-09-28 notte) - BLOCCO SULLA CARTA IN PRODUZIONE (#231 + #232, DEPLOY f8219c3); BLOCCO 1 SOLDI 15/15; BLOCCO 8 2/3; MACCHINA 35 SU 43; REVISIONE INDIPENDENTE DI GML AVVIATA:
+- STATO FINALE (misurato il 28/9 dopo le 23:07 ora del PC): #232 unita (CI 16 controlli, gate
+  success; merged=True verificato con una seconda chiamata, master f8219c3). SECONDO DEPLOY col
+  pulsante D17: salvataggio del giro 20260928-200555 verificato (27/27, USCITA=0); paracadute
+  prec = viva bf133ae0 (/root/deploy_paracadute_20260928_2307.log, USCITA=0); «SCAMBIO FATTO
+  alle 21:07:25Z» USCITA=0 (/root/deploy_scambio_20260928_2307.log); verifica: healthy,
+  money_path_pronto True, avvisi [], VPS f8219c3, viva cefa7a55; all'avvio INVARIANTI ARCHIVI
+  violazioni=0 e «GUARDIANO: nessuno stato anomalo»; da fuori 200/200/401/403/401;
+  verifica_produzione 190 controlli 0 violazioni. CASELLE: Blocco 1 soldi 15/15 (l'ultima,
+  «ogni ora», VERDE 8/8 su due righe orarie a 3600 s, 20:05:52Z e 21:05:52Z); Blocco 8:
+  salvataggio VERDE 19/19 (finanza-20260928-200555, copia scaricata poi cancellata), deploy VERDE
+  59/59 (letture in Core_Auto_GUARDIE_PRONTE\letture_deploy_20260928_2310.txt), sentinella ROSSA
+  (manca il monitor esterno, lo apre il fondatore). La macchina intera: 35 caselle su 43 (per
+  blocco: 15/15, 4/5, 4/5, 1/3, 3/4, 1/2, 2/2, 2/3, 2/2, 1/2 -- `python collaudi/scheda.py
+  --blocco N`).
+- ⛔ CORREZIONE DI QUESTO STESSO BLOCCO: nelle stesure di stasera c'erano due ore STIMATE e
+  sbagliate («aggiornato alle 22:3x», il file era delle 22:11; «verso le 18:40» per la domanda
+  del fondatore, ora mai letta). Tolte. Stessa svista nel file di coordinamento con GML, corretta
+  li' in fondo. Regola che ne esce: un'ora si LEGGE dal computer prima di scriverla.
+- IL FILE DI COORDINAMENTO CON GML 5.5 FLASH: `C:\Users\MaxDanno\Desktop\claude&gml fhash.txt`
+  (fuori dal repository, proposto dal fondatore; ruoli e regole riscritti da Claude e incollati
+  dal fondatore: GML revisore in SOLA LETTURA e scrittore di testi, Claude scrive e prova il
+  codice e verifica sul codice ogni rilievo; si scrive solo in fondo, ogni voce finisce con
+  «TURNO: ...»). Claude lo sorveglia ogni 20 secondi quando e' in sessione; GML lo rilegge da
+  solo ogni 15 minuti. Compito 1 (revisione della #231) e Compito 2 (riverifica della #232):
+  CHIUSI; GML ha ritirato il rilievo 3A dopo averlo riverificato nel codice.
+- STATO DOPO IL PRIMO DEPLOY: #231 unita (CI 16 controlli, gate
   success; merged=True verificato con una seconda chiamata, master 6590a2a). Deploy col
   pulsante D17: salvataggio del giro 20260928-194809 verificato (27 archivi, 27 impronte, 27
   integrity_check ok, USCITA=0); paracadute prec = viva 924000d3
@@ -3469,8 +3494,9 @@ CONSEGNE AGGIORNATE A: 74584b0
   usato (manca il controllo «autorizzato == totale»).
 - PERMESSI, parole testuali del fondatore in questa sessione: «procedi al commit (documenti
   delle consegne 19 e lavori del punto 2)», «Autorizzato il blocco sulla carta (fase85, fase83
-  e cio' che serve), fino alla fine»; verso le 18:40 ha chiesto «ci stiamo complicando troppo?»,
-  gli e' stato chiesto «finisci» o «fermo», ha risposto «ok vai avanti fino alla fine».
+  e cio' che serve), fino alla fine»; in serata ha chiesto «ci stiamo complicando troppo?», gli
+  e' stato chiesto «finisci» o «fermo», ha risposto «ok vai avanti fino alla fine»; poi «ok vai
+  avanti» e, per il lavoro in due con GML, «rispettate le regole».
 - PASSO 1 FATTO: suite del 28/9 15:50 verde (Ran 6963, uscita 0); commit 6fa0c3d, PR #230 (CI
   16 controlli, gate success), unione verificata con una seconda chiamata (merged=True, master
   6d2a635); VPS solo `git pull` (immagine invariata 924000d3, health 200). CHIAVETTA rigenerata
@@ -3496,12 +3522,21 @@ CONSEGNE AGGIORNATE A: 74584b0
   alla prenotazione, non alla cancellazione): vede solo le date tornate libere nel calendario.
 - AMBIENTE: sul PC il cricchetto segnala due avvisi pip-audit su `anyio` (pacchetto di questo
   computer; in CI il controllo e' verde): e' ambiente, non codice.
-- RESTA, in ordine: suite -> commit della chiusura bandit -> CI #231 verde -> unione verificata
-  -> salvataggio verificato + deploy col pulsante D17 -> le 15 caselle del Blocco 1 rimisurate
-  (esame_produzione dopo il deploy, la casella «ogni ora» almeno un'ora dopo, la riconciliazione
-  con un giro del cron lanciato a mano) -> la PROVA VERA con la carta del fondatore (arrivo fra
-  10 giorni: una prenotazione cancellata subito = annullo a costo zero; una lasciata = incasso
-  dopo 48 ore) -> documenti -> chiavetta.
+- RESTA, in ordine (tutto il resto di questa lista e' FATTO, vedi sopra):
+  1. questo commit di documenti: VPS con solo `git pull`, poi la chiavetta rigenerata dal server
+     (la generazione 6d2a635 va in `precedente_6d2a635\`);
+  2. la PROVA VERA con la carta del fondatore, l'unico giudice che nessun test sostituisce:
+     arrivo fra 10 giorni; una prenotazione cancellata subito = su Stripe il pagamento risulta
+     ANNULLATO e la commissione e' zero; una lasciata = dopo 48 ore (+ il giro orario) risulta
+     INCASSATA e nel giornale nascono incasso e commissione. Fino a quel giorno, che una sessione
+     col blocco si chiuda `unpaid` resta presa dalla documentazione di Stripe (limite dichiarato
+     nel registro);
+  3. le due MANCANZE trovate (servono decisione e «autorizzato»): la frase delle 48 ore nel
+     contratto dell'host (foglio di lancio, punto 3) e l'avviso all'host quando l'ospite cancella;
+  4. i tre testi (Stripe, avvocato, host di Roma) consegnati al fondatore in chat;
+  5. le 8 caselle che mancano alla macchina intera (35 su 43): non fermano il lancio (decisione del
+     fondatore del 28/9); due dipendono da lui (sentinella esterna; almeno un annuncio per
+     l'esame di plausibilita').
 
 ## PASSAGGIO DI CONSEGNE 19 (2026-09-28) - FALSO ALLARME DEL GUARDIANO RIPARATO E IN PRODUZIONE (#229, DEPLOY 0c96370): BLOCCO 1 SOLDI 15/15; FOGLIO DI LANCIO; PROSSIMO LAVORO: IL BLOCCO SULLA CARTA:
 - DEPLOY col pulsante D17 dopo le 13:46Z: salvataggio del giro 20260928-120635 verificato
