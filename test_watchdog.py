@@ -412,6 +412,30 @@ class TestUnErroreFrescoArrivaSuTelegramEntroDieciMinuti(unittest.TestCase):
         self.assertTrue(any("198.51.100.7" in e for e in r["esempi"])
                         and any("CONTROVERSIA" in e for e in r["esempi"]), r["esempi"])
 
+    def test_il_lettore_onora_TUTTE_le_finestre_dichiarate_non_solo_l_ultima(self):
+        """⛔ D20 — scritta PRIMA della riparazione e vista ROSSA sul codice di produzione.
+        Lo stesso difetto del Guardiano (`test_guardiano`, «TUTTE le finestre»), visto dal
+        lettore dei dieci minuti: due verifiche a cinque minuti l'una dall'altra (un deploy e
+        subito la batteria) e il Telegram gridava per le sonde della prima, perche' la seconda
+        dichiarazione cancellava la prima. Un'intrusione fuori da tutte e due conta ancora."""
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        ora = int(time.time())
+        sonda = ("BUNKER: accesso NEGATO azione=prove_legali "
+                 "motivo=sessione_assente_o_manomessa ip=203.0.113.9")
+        with open(os.path.join(d, "app.log"), "w", encoding="utf-8") as f:
+            f.write(self._riga(ora - 600, "CRITICAL", sonda) + "\n")
+            f.write(self._riga(ora - 300, "CRITICAL", sonda) + "\n")
+            f.write(self._riga(ora - 60, "CRITICAL", "BUNKER: accesso NEGATO azione=prove_legali "
+                               "motivo=sessione_assente_o_manomessa ip=198.51.100.7") + "\n")
+        self.assertTrue(wd.dichiara_sonde_giudice(d, inizio=ora - 605, fine=ora - 595))
+        self.assertTrue(wd.dichiara_sonde_giudice(d, inizio=ora - 305, fine=ora - 295))
+        r = wd.errori_freschi(d, ora=ora)
+        self.assertEqual(r["conta"], 1,
+                         "le sonde della verifica PRECEDENTE contano come intrusioni (resta solo "
+                         "l'ultima finestra), oppure l'intrusione vera e' sparita: %r" % (r,))
+        self.assertTrue(all("198.51.100.7" in e for e in r["esempi"]), r["esempi"])
+
 
 class TestLEsitoDelGuardianoArrivaAUnaPersona(unittest.TestCase):
     """⛔ D20 — scritta PRIMA della riparazione e vista ROSSA sul codice di produzione.

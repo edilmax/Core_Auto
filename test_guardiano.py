@@ -446,6 +446,67 @@ class TestGuastiIsolatiNelRegistro(_Base):
                          "una negazione DENTRO la finestra dichiarata conta ancora come "
                          "intrusione, oppure una FUORI e' sparita: %r" % (gi,))
 
+    def test_il_Guardiano_onora_TUTTE_le_finestre_delle_sue_24_ore_non_solo_l_ultima(self):
+        """⛔ D20 — scritta PRIMA della riparazione e vista ROSSA sul codice di produzione.
+
+        Misurato sul server il 2026-09-27: il giro intero delle 18:06:25Z ha scritto
+        «GUARDIANO: 6 stato/i anomalo/i» contando le negazioni CRITICAL del 26/9 (20:38 e
+        23:41), tutte dall'IP di questo computer (101.57.50.246, riconfermato con
+        api.ipify.org il 28/9): le NOSTRE sonde. Erano state dichiarate, ma
+        `dichiara_sonde_giudice` riscriveva il file a ogni verifica e ne restava UNA finestra,
+        l'ultima: le sonde dei giri precedenti tornavano intrusioni per 24 ore. Bastano due
+        verifiche nello stesso giorno (un deploy e la batteria). Come i silenzi di Alertmanager
+        (ognuno col suo startsAt/endsAt, molti attivi insieme): qui due giri del giudice a otto
+        ore di distanza, due righe CRITICAL ciascuno dentro la propria finestra, e
+        un'intrusione vera FUORI da tutte e due. Il Guardiano conta quella, e solo quella."""
+        import os
+        sonda = ("BUNKER: accesso NEGATO azione=prove_legali "
+                 "motivo=sessione_assente_o_manomessa ip=203.0.113.9")
+        sis = self._sistema_con_registro([
+            self._riga(self.now - 36000, "CRITICAL", sonda),
+            self._riga(self.now - 35999, "CRITICAL", sonda),
+            self._riga(self.now - 7200, "CRITICAL", sonda),
+            self._riga(self.now - 7199, "CRITICAL", sonda),
+            self._riga(self.now - 3600, "CRITICAL", "BUNKER: accesso NEGATO azione=prove_legali "
+                       "motivo=sessione_assente_o_manomessa ip=198.51.100.7"),
+        ])
+        from fase178_watchdog import dichiara_sonde_giudice
+        dati = os.path.dirname(sis.config.db_finanza)
+        for inizio, fine in ((self.now - 36005, self.now - 35995),
+                             (self.now - 7205, self.now - 7195)):
+            self.assertTrue(dichiara_sonde_giudice(dati, inizio=inizio, fine=fine),
+                            "misura non valida: la dichiarazione non e' stata scritta")
+        gi = G.scansiona(sis, ora=lambda: self.now)["anomalie"].get("guasti_isolati") or {}
+        self.assertEqual(gi.get("conta"), 1,
+                         "le sonde di un giro PRECEDENTE del giudice contano come intrusioni "
+                         "(resta solo l'ultima finestra), oppure l'intrusione vera e' sparita: %r"
+                         % (gi,))
+        self.assertTrue(gi["esempi"] and all("198.51.100.7" in e for e in gi["esempi"]),
+                        "l'esempio non e' l'intrusione vera: %r" % (gi,))
+
+    def test_le_finestre_scadute_si_buttano_ma_non_prima_che_il_Guardiano_le_rilegga(self):
+        """Le finestre non si accumulano per sempre (Alertmanager butta i silenzi scaduti dopo
+        `--data.retention`), ma una finestra non puo' sparire finche' il lettore piu' lungo
+        (`_guasti_isolati`, ORE_GUASTI_ISOLATI) puo' ancora incontrare le sue righe: sarebbe
+        lo stesso falso allarme, rimandato. Il limite lo tiene questa prova, non la memoria."""
+        import os
+        import fase178_watchdog as wd
+        self.assertGreaterEqual(wd.MAX_ETA_SONDE_GIUDICE_SEC, G.ORE_GUASTI_ISOLATI * 3600,
+                                "le finestre si buttano prima che il Guardiano smetta di "
+                                "rileggerne le righe: le nostre sonde tornano intrusioni")
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        t, m = self.now, wd.MAX_ETA_SONDE_GIUDICE_SEC
+        self.assertTrue(wd.dichiara_sonde_giudice(d, inizio=t - 5, fine=t))
+        self.assertTrue(wd.dichiara_sonde_giudice(d, inizio=t + m - 5, fine=t + m))
+        self.assertEqual(wd.finestra_sonde_giudice(d), [(t - 5, t), (t + m - 5, t + m)],
+                         "una finestra ancora dentro la conservazione e' stata buttata")
+        self.assertTrue(wd.dichiara_sonde_giudice(d, inizio=t + m + 1, fine=t + m + 1))
+        self.assertEqual(wd.finestra_sonde_giudice(d), [(t + m - 5, t + m), (t + m + 1, t + m + 1)],
+                         "una finestra scaduta resta nel file: si accumulano per sempre")
+        with open(os.path.join(d, wd.NOME_SONDE_GIUDICE)) as f:
+            self.assertEqual(len(f.read().splitlines()), 2)
+
 
 class TestEscrowBloccato(_Base):
 
