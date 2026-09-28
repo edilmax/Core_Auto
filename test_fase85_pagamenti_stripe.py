@@ -8,8 +8,10 @@ E le guardie di `TestIBuchiDelGiudice` (2026-09-04): rimborsa, rimborsi_di, comm
 e i ripieghi di crea_link/crea_link_anticipo, nate dai 49 mutanti sopravvissuti al giro col solo
 test dedicato.
 """
+import json
 import unittest
 
+import fase85_pagamenti_stripe as _f85
 from fase85_pagamenti_stripe import (
     ADDEBITI_URL, MOVIMENTI_URL, PAGAMENTI_URL, RIMBORSI_URL, STRIPE_URL, ProviderStripe,
     crea_provider_stripe,
@@ -438,6 +440,195 @@ class TestLaRiletturaDelloStato(unittest.TestCase):
         self.assertIn("cs_ok", riga)
         self.assertIn("OSError", riga)
         self.assertIn("timeout", riga)
+
+
+class TestIlBloccoSullaCarta(unittest.TestCase):
+    """IL BLOCCO SULLA CARTA (consegne 19): il link chiede a Stripe di AUTORIZZARE la carta senza
+    incassare, quando le 48 ore di ripensamento possono servire; poi quattro gesti sul
+    PaymentIntent -- rileggerlo, incassarlo, annullarlo -- ognuno con la sua risposta onesta.
+    Misurato su Stripe di prova il 28/9: blocco `requires_capture` senza movimenti di saldo,
+    annullo `canceled` a costo zero, incasso `succeeded`, il rimborso di un pagamento NON
+    incassato Stripe lo RIFIUTA («You must cancel the PaymentIntent»)."""
+
+    def test_la_soglia_dei_sei_giorni_e_le_date_che_non_si_leggono(self):
+        import datetime
+        oggi = datetime.date(2027, 1, 1)
+        casi = [("2027-01-07", True), ("2027-03-01", True), ("2027-01-06", False),
+                ("2027-01-01", False), ("2026-12-01", False), ("", False), (None, False),
+                ("2027-02-30", False), (20270107, False), ("07/01/2027", False)]
+        for check_in, atteso in casi:
+            with self.subTest(check_in=check_in):
+                self.assertIs(_f85.blocco_sulla_carta(check_in, oggi=oggi), atteso)
+        self.assertEqual(_f85.GIORNI_MINIMI_BLOCCO, 6)
+        # senza `oggi` conta il giorno UTC di adesso
+        adesso = datetime.datetime.now(datetime.timezone.utc).date()
+        self.assertIs(_f85.blocco_sulla_carta((adesso + datetime.timedelta(days=6)).isoformat()),
+                      True)
+        self.assertIs(_f85.blocco_sulla_carta((adesso + datetime.timedelta(days=5)).isoformat()),
+                      False)
+
+    def test_il_link_chiede_il_blocco_SOLO_sulle_carte_e_solo_quando_serve(self):
+        manuale = "payment_method_options%5Bcard%5D%5Bcapture_method%5D=manual"
+        spy = FetchSpy()
+        _p(spy).crea_link(dict(DATI, check_in="2099-01-10"))
+        self.assertIn(manuale, spy.body)
+        self.assertNotIn("payment_intent_data%5Bcapture_method%5D", spy.body,
+                         "il blocco su TUTTI i metodi fermerebbe quelli che non lo reggono")
+        for check_in in (None, "", "2020-01-01"):
+            with self.subTest(check_in=check_in):
+                spy2 = FetchSpy()
+                d = dict(DATI)
+                if check_in is not None:
+                    d["check_in"] = check_in
+                self.assertEqual(_p(spy2).crea_link(d), "https://checkout.stripe.com/c/sess_123")
+                self.assertNotIn("capture_method", spy2.body)
+
+    def test_pagamento_della_sessione_rilegge_la_sessione_e_poi_il_pagamento(self):
+        f = FetchFinto({STRIPE_URL + "/cs_ok": {"id": "cs_ok", "payment_intent": "pi_1"},
+                        PAGAMENTI_URL + "/pi_1": {"id": "pi_1", "status": "requires_capture",
+                                                  "amount_capturable": 2500}})
+        self.assertEqual(_p(f).pagamento_della_sessione("cs_ok"),
+                         {"ok": True, "pi": "pi_1", "stato": "requires_capture",
+                          "incassabile_cents": 2500, "motivo": ""})
+        self.assertEqual([u for u, _b, _h in f.chiamate],
+                         [STRIPE_URL + "/cs_ok", PAGAMENTI_URL + "/pi_1"])
+        self.assertTrue(all(b is None for _u, b, _h in f.chiamate), "due LETTURE: nessun corpo")
+        self.assertEqual(f.chiamate[0][2], {"Authorization": "Bearer sk_test_k"})
+        # una sessione senza pagamento: niente e' bloccato, e lo si dice senza un'altra chiamata
+        f2 = FetchFinto({STRIPE_URL + "/cs_ok": {"id": "cs_ok", "payment_intent": None}})
+        self.assertEqual(_p(f2).pagamento_della_sessione("cs_ok"),
+                         {"ok": True, "pi": "", "stato": "", "incassabile_cents": 0,
+                          "motivo": ""})
+        self.assertEqual(len(f2.chiamate), 1)
+        # un importo che non e' un intero non diventa un numero
+        f3 = FetchFinto({STRIPE_URL + "/cs_ok": {"id": "cs_ok", "payment_intent": "pi_1"},
+                         PAGAMENTI_URL + "/pi_1": {"id": "pi_1", "status": "requires_capture",
+                                                   "amount_capturable": "2500"}})
+        self.assertEqual(_p(f3).pagamento_della_sessione("cs_ok")["incassabile_cents"], 0)
+
+    def test_pagamento_della_sessione_non_crede_a_risposte_di_un_altro_oggetto(self):
+        casi = [
+            {STRIPE_URL + "/cs_ok": {"id": "cs_altra", "payment_intent": "pi_1"}},
+            {STRIPE_URL + "/cs_ok": "stringa"},
+            {STRIPE_URL + "/cs_ok": {"id": "cs_ok", "payment_intent": "pi_1"},
+             PAGAMENTI_URL + "/pi_1": {"id": "pi_altro", "status": "requires_capture"}},
+            {STRIPE_URL + "/cs_ok": {"id": "cs_ok", "payment_intent": "pi_1"},
+             PAGAMENTI_URL + "/pi_1": None},
+        ]
+        for risposte in casi:
+            with self.subTest(risposte=risposte):
+                esito = _p(FetchFinto(risposte)).pagamento_della_sessione("cs_ok")
+                self.assertIs(esito["ok"], False)
+                self.assertEqual((esito["pi"], esito["stato"], esito["incassabile_cents"]),
+                                 ("", "", 0))
+                self.assertTrue(esito["motivo"].startswith("risposta_inattesa"), esito)
+        f = FetchFinto()
+        for cattivo in (None, "", "pi_1", "cs_", 7, b"cs_ok"):
+            with self.subTest(input=cattivo):
+                self.assertEqual(_p(f).pagamento_della_sessione(cattivo),
+                                 {"ok": False, "pi": "", "stato": "", "incassabile_cents": 0,
+                                  "motivo": "sessione_assente"})
+        self.assertEqual(f.chiamate, [])
+        with self.assertLogs("core_auto.pagamenti_stripe", level="WARNING") as reg:
+            esito = _p(FetchFinto(solleva=OSError("timeout"))).pagamento_della_sessione("cs_ok")
+        self.assertIs(esito["ok"], False)
+        self.assertEqual(esito["motivo"], "OSError: timeout")
+        self.assertIn("cs_ok", reg.output[0])
+
+    def test_stato_pagamento_legge_il_PaymentIntent_e_dice_non_lo_so(self):
+        f = FetchFinto({PAGAMENTI_URL + "/pi_1": {"id": "pi_1", "status": "succeeded"}})
+        self.assertEqual(_p(f).stato_pagamento("pi_1"),
+                         {"ok": True, "stato": "succeeded", "motivo": ""})
+        self.assertEqual([(u, b) for u, b, _h in f.chiamate], [(PAGAMENTI_URL + "/pi_1", None)])
+        for risposta in ({"id": "pi_2", "status": "succeeded"}, {"status": "succeeded"},
+                         {"id": "pi_1", "status": 5}, None, "x"):
+            with self.subTest(risposta=risposta):
+                esito = _p(FetchFinto({PAGAMENTI_URL + "/pi_1": risposta})).stato_pagamento("pi_1")
+                self.assertEqual((esito["ok"], esito["stato"]), (False, ""))
+                self.assertTrue(esito["motivo"].startswith("risposta_inattesa"), esito)
+        f2 = FetchFinto()
+        for cattivo in (None, "", "cs_1", 3):
+            with self.subTest(input=cattivo):
+                self.assertEqual(_p(f2).stato_pagamento(cattivo),
+                                 {"ok": False, "stato": "", "motivo": "payment_intent_assente"})
+        self.assertEqual(f2.chiamate, [])
+        with self.assertLogs("core_auto.pagamenti_stripe", level="WARNING"):
+            esito = _p(FetchFinto(solleva=OSError("giu"))).stato_pagamento("pi_1")
+        self.assertEqual(esito, {"ok": False, "stato": "", "motivo": "OSError: giu"})
+
+    def _gesto(self, nome, suffisso, stato_buono, corpo_atteso):
+        url = PAGAMENTI_URL + "/pi_1/" + suffisso
+        f = FetchFinto({url: {"id": "pi_1", "status": stato_buono}})
+        self.assertEqual(getattr(_p(f), nome)("pi_1", " chiave-9 "),
+                         {"ok": True, "id": "pi_1", "motivo": stato_buono})
+        self.assertEqual(len(f.chiamate), 1)
+        u, corpo, intest = f.chiamate[0]
+        self.assertEqual(u, url)
+        self.assertTrue(corpo, "un POST vuoto il nostro fetch lo manderebbe come GET")
+        self.assertEqual(corpo.decode(), corpo_atteso)
+        self.assertEqual(intest["Idempotency-Key"], "chiave-9")
+        self.assertEqual(intest["Authorization"], "Bearer sk_test_k")
+        for risposta in ({"id": "pi_1", "status": "requires_capture"}, {"id": "pi_2",
+                         "status": stato_buono}, {"status": stato_buono}, None, "x"):
+            with self.subTest(gesto=nome, risposta=risposta):
+                esito = getattr(_p(FetchFinto({url: risposta})), nome)("pi_1", "k")
+                self.assertEqual((esito["ok"], esito["id"]), (False, ""))
+                self.assertTrue(esito["motivo"].startswith("risposta_inattesa"), esito)
+        f2 = FetchFinto()
+        for args, motivo in ((("cs_1", "k"), "payment_intent_assente"),
+                             ((None, "k"), "payment_intent_assente"),
+                             (("pi_1", "  "), "chiave_idempotenza_assente"),
+                             (("pi_1", None), "chiave_idempotenza_assente")):
+            with self.subTest(gesto=nome, args=args):
+                self.assertEqual(getattr(_p(f2), nome)(*args),
+                                 {"ok": False, "id": "", "motivo": motivo})
+        self.assertEqual(f2.chiamate, [], "un gesto rifiutato non tocca Stripe")
+        with self.assertLogs("core_auto.pagamenti_stripe", level="ERROR") as reg:
+            esito = getattr(_p(FetchFinto(solleva=RuntimeError("giu"))), nome)("pi_1", "k")
+        self.assertEqual(esito, {"ok": False, "id": "", "motivo": "RuntimeError: giu"})
+        self.assertIsInstance(reg.records[-1].exc_info, tuple)
+        self.assertIn("pi_1", reg.records[-1].getMessage())
+
+    def test_incassa_POST_capture_ok_solo_su_succeeded(self):
+        self._gesto("incassa", "capture", "succeeded", "metadata%5Borigine%5D=bookinvip")
+
+    def test_annulla_POST_cancel_ok_solo_su_canceled(self):
+        self._gesto("annulla", "cancel", "canceled", "cancellation_reason=requested_by_customer")
+
+    def test_il_motivo_di_un_rifiuto_di_Stripe_porta_codice_e_messaggio(self):
+        """Ferrea 9: «HTTP Error 400» e basta non distingue «gia' incassato» da «scaduto». Il
+        corpo della risposta d'errore di Stripe si legge, dentro un try (fase101 insegna)."""
+        import io
+        import urllib.error
+        corpo = json.dumps({"error": {"code": "payment_intent_unexpected_state",
+                                      "message": "already captured"}}).encode()
+        err = urllib.error.HTTPError(PAGAMENTI_URL + "/pi_1/capture", 400, "Bad Request", {},
+                                     io.BytesIO(corpo))
+        with self.assertLogs("core_auto.pagamenti_stripe", level="ERROR"):
+            esito = _p(FetchFinto(solleva=err)).incassa("pi_1", "k")
+        self.assertIs(esito["ok"], False)
+        self.assertIn("400", esito["motivo"])
+        self.assertIn("payment_intent_unexpected_state", esito["motivo"])
+        self.assertIn("already captured", esito["motivo"])
+
+        def motivo_con(corpo_errore):
+            e = urllib.error.HTTPError(PAGAMENTI_URL + "/pi_1/cancel", 400, "Bad Request", {},
+                                       io.BytesIO(json.dumps(corpo_errore).encode()))
+            with self.assertLogs("core_auto.pagamenti_stripe", level="ERROR"):
+                return _p(FetchFinto(solleva=e)).annulla("pi_1", "k")["motivo"]
+        # riga 78, `and` -> `or`: un errore SENZA codice ne' messaggio non si inventa un suffisso
+        self.assertEqual(motivo_con({"error": {}}), "HTTPError: HTTP Error 400: Bad Request")
+        # riga 78, `or` -> `and`: basta il codice da solo (Stripe non manda sempre il messaggio)
+        self.assertEqual(motivo_con({"error": {"code": "resource_missing"}}),
+                         "HTTPError: HTTP Error 400: Bad Request | codice: resource_missing"
+                         " | messaggio: -")
+        # un corpo d'errore che non e' JSON (un proxy, una pagina HTML): non si tace, si DICE
+        e = urllib.error.HTTPError(PAGAMENTI_URL + "/pi_1/cancel", 502, "Bad Gateway", {},
+                                   io.BytesIO(b"<html>bad gateway</html>"))
+        with self.assertLogs("core_auto.pagamenti_stripe", level="ERROR"):
+            motivo = _p(FetchFinto(solleva=e)).annulla("pi_1", "k")["motivo"]
+        self.assertEqual(motivo, "HTTPError: HTTP Error 502: Bad Gateway | corpo dell'errore "
+                                 "illeggibile")
 
 
 if __name__ == "__main__":

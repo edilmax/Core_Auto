@@ -70,11 +70,19 @@ def stripe_sessioni_pagate(chiave: str, da_ts: int, *, fetch: Any = None,
                            tronchi: Optional[List[str]] = None
                            ) -> List[Dict[str, Any]]:
     """Le checkout session PAGATE del periodo: [{riferimento, cents, valuta, id}].
-    Le non pagate (link creati e abbandonati) NON sono incassi: filtrate."""
+    Le non pagate (link creati e abbandonati) NON sono incassi: filtrate.
+    ⛔ IL BLOCCO SULLA CARTA (consegne 19): una sessione chiusa col pagamento solo AUTORIZZATO
+    e' `unpaid` («i fondi non sono ancora disponibili»); quando noi lo INCASSIAMO a fine finestra
+    il PaymentIntent diventa `succeeded`, e che la sessione passi a `paid` la documentazione non
+    lo dice. Quindi si espande il pagamento e vale anche lui: incassato = incasso vero, ancora
+    bloccato = non ancora (e nemmeno il giornale lo ha)."""
     f = fetch or _fetch_reale
     out = []
-    for s in _pagina("checkout/sessions", chiave, da_ts, f, tronchi=tronchi):
-        if s.get("payment_status") != "paid":
+    for s in _pagina("checkout/sessions", chiave, da_ts, f,
+                     extra={"expand[]": "data.payment_intent"}, tronchi=tronchi):
+        pi = s.get("payment_intent")
+        incassata_dopo = isinstance(pi, dict) and pi.get("status") == "succeeded"
+        if s.get("payment_status") != "paid" and not incassata_dopo:
             continue
         rif = ((s.get("metadata") or {}).get("riferimento") or "").strip()
         out.append({"riferimento": rif, "cents": int(s.get("amount_total") or 0),

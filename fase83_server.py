@@ -589,6 +589,13 @@ GIORNI_INVITO_RECENSIONE = 14
 SECONDI_RIPENSAMENTO = 48 * 3600          # 172.800: quarantotto ore VERE
 
 
+def _blocco(rec: Any) -> Dict[str, Any]:
+    """Lo stato del BLOCCO SULLA CARTA di una prenotazione pendente (fase162, un lettore solo).
+    Record assente o illeggibile = 'nessuno': il flusso di sempre."""
+    from fase162_pagamenti_pendenti import blocco_della_carta
+    return blocco_della_carta(rec.get("corpo_json") if isinstance(rec, dict) else None)
+
+
 def _entro_ripensamento(voucher: Dict[str, Any]) -> bool:
     """Vero se dalla prenotazione sono passati meno di 172.800 secondi.
 
@@ -4595,6 +4602,7 @@ class RouterHTTP:
                 logger.warning("admin rimborso: chiusura garanzia fallita (ignorata)", exc_info=True)
                 _falliti.append("escrow_annullato")
         _era_pagato, _pi, _tot, _valuta = False, "", 0, "EUR"
+        _senza_incasso = False
         pp = getattr(self._sys, "pagamenti_pendenti", None)
         if pp is not None:
             try:
@@ -4612,7 +4620,9 @@ class RouterHTTP:
                     _tot = tot
                     _valuta = dj.get("valuta") or "EUR"
                     _pi = str(dj.get("stripe_pi") or "")
-                    if tot > 0:
+                    # BLOCCO SULLA CARTA: soldi mai entrati -> si ANNULLA, niente riga
+                    _senza_incasso = _era_pagato and self._chiudi_blocco(rif, rec)
+                    if tot > 0 and not _senza_incasso:
                         self._giornale(tipo="rimborso", riferimento=rif, soggetto="ospite:" + rif,
                                        importo_cents=tot, valuta=_valuta,
                                        causale="rimborso disposto da admin")
@@ -4632,6 +4642,9 @@ class RouterHTTP:
         _rimborso = ""
         if not _era_pagato:
             _rimborso = "nessun incasso da restituire (la prenotazione non risulta pagata)"
+        elif _senza_incasso:
+            _rimborso = ("pagamento solo AUTORIZZATO sulla carta: annullato (o annullo ritentato "
+                         "dal giro orario), nessun incasso da restituire")
         elif not _pi:
             # Incassata ma senza l'identificativo del pagamento: NON e' un silenzio innocuo.
             _rimborso = ("PAGATA ma pagamento non identificabile (nessun pi_): "
@@ -5971,6 +5984,7 @@ class RouterHTTP:
                         "totale_cents": corpo.get("totale_cents"),
                         "prezzo_guest_cents": corpo.get("prezzo_guest_cents"),
                         "valuta": corpo.get("valuta"),   # like-for-like anche sul su-richiesta approvato
+                        "check_in": rec.get("check_in", ""),   # il blocco sulla carta (fase85)
                         "riferimento": ref, "email": rec.get("email", ""),
                         "scade_secondi": HOLD_APPROVAZIONE_SEC})
                 except Exception:
@@ -6451,6 +6465,16 @@ class RouterHTTP:
             rec = pp.info(rif)
             if rec is None or rec.get("stato") != "pagato":
                 return                                # nessun incasso online -> niente transfer
+            # ⛔ BLOCCO SULLA CARTA: se i soldi dell'ospite sono solo AUTORIZZATI (o
+            # l'autorizzazione e' finita senza incasso), il bonifico partirebbe dal NOSTRO saldo.
+            # Nel calendario normale non capita mai (si incassa a fine finestra, giorni prima
+            # dell'arrivo): se capita e' un incasso mancato, e decide una persona.
+            if _blocco(rec)["stato"] in ("aperto", "annullato"):
+                logger.error("BONIFICO FERMATO | RIF: %s | il pagamento dell'ospite NON e' "
+                             "incassato (blocco sulla carta %s): pagare l'host adesso vorrebbe "
+                             "dire anticipare soldi nostri", _rif_per_registro(rif),
+                             _blocco(rec)["stato"])
+                return
             host_id = rec.get("host_id") or ""
             info = reg.info_host(host_id) if host_id else None
             acct = (info or {}).get("stripe_account_id", "")
@@ -6685,7 +6709,9 @@ class RouterHTTP:
                 gz.annulla(ref)
             except Exception:
                 pass
-        if pagata and guest > 0:
+        # BLOCCO SULLA CARTA: cancellazione dell'host = tutto all'ospite -> si ANNULLA, e senza
+        # soldi entrati non c'e' riga di rimborso (la penale dell'host resta: e' un deterrente).
+        if pagata and guest > 0 and not self._chiudi_blocco(ref, rec):
             # SCATOLA NERA del RIMBORSO all'ospite (cancellazione host = rimborso 100%)
             self._giornale(tipo="rimborso", riferimento=ref, soggetto="ospite:" + ref,
                            importo_cents=int(guest), valuta=valuta,
@@ -7050,6 +7076,18 @@ class RouterHTTP:
                          "rimborso_cents": 0, "credito_viaggio_cents": 0,
                          "credito_viaggio_token": "", "money_unit": "cents_integer",
                          "nota": "prenotazione gia' cancellata: nessun nuovo credito."}
+        # IL BLOCCO SULLA CARTA, PRIMA della cassaforte e del bonifico: nelle 48 ore il blocco si
+        # ANNULLA (niente riga di rimborso: i soldi non sono mai entrati); con una penale si
+        # INCASSA tutto prima, cosi' la quota dell'host esiste davvero quando parte il bonifico.
+        _senza_incasso = False
+        if pagato_davvero and _rec is not None:
+            try:
+                _senza_incasso = self._chiudi_blocco(
+                    rif, _rec, int(r.get("trattenuto_cents", 0) or 0))
+            except Exception:
+                logger.error("cancellazione %s: chiusura del blocco sulla carta esplosa (il "
+                             "giro orario la ritenta)", _rif_per_registro(rif), exc_info=True)
+                _senza_incasso = _blocco(_rec)["stato"] in ("aperto", "annullato")
         # ESCROW PRIMA del resto: serve sapere quanto TIENE l'host (quota-penale della
         # politica) per decidere il payout. host_tiene vale SOLO se la chiusura CAS riesce.
         host_tiene = 0
@@ -7166,7 +7204,7 @@ class RouterHTTP:
         # ⚠️ DICHIARATO: `evento_id` vale 'rimborso:<rif>' ed e' idempotente, quindi se poi
         # l'admin esegue un rimborso di importo DIVERSO il giornale tiene QUESTO. E' una
         # proprieta' che le altre due strade hanno gia': non nasce qui.
-        if pagato_davvero and rimborso_totale > 0:
+        if pagato_davvero and rimborso_totale > 0 and not _senza_incasso:
             self._giornale(tipo="rimborso", riferimento=rif, soggetto="ospite:" + str(rif),
                            importo_cents=int(rimborso_totale),
                            valuta=v.get("valuta", "EUR"),
@@ -7189,7 +7227,8 @@ class RouterHTTP:
                              _rif_per_registro(rif), rimborso_totale)
         # il credito nasce dal trattenuto ORIGINALE della politica: il taglio anti-perdita
         # (tetto di cassa) non deve MAI coniare Credito Viaggio nuovo dal nulla.
-        cv_cents, cv_token = self._credito_anti_rimpianto(tratt_originale,
+        # (e su un blocco mai incassato la penale non e' mai entrata: niente credito da coniare)
+        cv_cents, cv_token = self._credito_anti_rimpianto(0 if _senza_incasso else tratt_originale,
                                                           v.get("valuta", "EUR"))
         if pagato_davvero:                     # C3: conferma cancellazione + rimborso in email
             self._email_cancellazione(rif, rimborso_totale, v.get("valuta", "EUR"), cv_cents)
@@ -7440,20 +7479,26 @@ class RouterHTTP:
         logger.critical("LOCK CARTA | carta gia' usata per un altro credito: RIMBORSO "
                         "PIENO e prenotazione RIFIUTATA per '%s'", _rif_per_registro(rif))
         importo = int(corpo.get("totale_cents", 0) or corpo.get("prezzo_guest_cents", 0) or 0)
-        es_rim = {"ok": False, "motivo": "importo_assente"}
-        if importo > 0 and pi_id:
-            es_rim = provider.rimborsa(pi_id, importo, "lock-carta:" + str(rif))
-        try:
-            self._giornale(tipo="rimborso", riferimento=rif,
-                           soggetto="ospite:" + str(rif),
-                           importo_cents=importo,
-                           valuta=corpo.get("valuta") or "EUR",
-                           evento_id="lock_carta:" + str(rif),
-                           causale="lock 1-carta=1-sconto: carta gia' usata per un altro "
-                                   "credito; rimborso pieno (%s)" % es_rim.get("motivo", ""))
-        except Exception:
-            logger.error("LOCK CARTA: riga di giornale NON scritta per '%s' (il rimborso "
-                         "dovuto non deve sparire)", _rif_per_registro(rif), exc_info=True)
+        # BLOCCO SULLA CARTA: il pagamento e' solo autorizzato -> si ANNULLA (a costo zero, e
+        # Stripe il rimborso lo rifiuterebbe); niente riga di rimborso per soldi mai entrati.
+        if self._chiudi_blocco(rif, rec):
+            logger.info("LOCK CARTA: pagamento bloccato sulla carta per '%s' ANNULLATO",
+                        _rif_per_registro(rif))
+        else:
+            es_rim = {"ok": False, "motivo": "importo_assente"}
+            if importo > 0 and pi_id:
+                es_rim = provider.rimborsa(pi_id, importo, "lock-carta:" + str(rif))
+            try:
+                self._giornale(tipo="rimborso", riferimento=rif,
+                               soggetto="ospite:" + str(rif),
+                               importo_cents=importo,
+                               valuta=corpo.get("valuta") or "EUR",
+                               evento_id="lock_carta:" + str(rif),
+                               causale="lock 1-carta=1-sconto: carta gia' usata per un altro "
+                                       "credito; rimborso pieno (%s)" % es_rim.get("motivo", ""))
+            except Exception:
+                logger.error("LOCK CARTA: riga di giornale NON scritta per '%s' (il rimborso "
+                             "dovuto non deve sparire)", _rif_per_registro(rif), exc_info=True)
         pp_.marca_da_rimborsare(rif)
         _idem = str(rec.get("idem_key") or "")
         try:
@@ -8472,12 +8517,31 @@ class RouterHTTP:
                                "conferma per riferimento '%s'", _rif_per_registro(rif))
                 return 200, {"ricevuto": True, "tipo": tipo, "confermato": False,
                              "motivo": "sessione_assente"}
+            pi_bloccato = ""
             if stato_api == "unpaid":
-                # Sessione chiusa, soldi non ancora arrivati (Pix): l'evento e' gestito.
-                # Se i soldi arrivano, arriva `async_payment_succeeded` e conferma lui.
-                logger.info("Stripe: sessione chiusa SENZA pagamento per riferimento '%s' "
-                            "(conferma differita)", _rif_per_registro(rif))
-                return 200, {"ricevuto": True, "tipo": tipo, "pagamento": "in_attesa"}
+                # IL BLOCCO SULLA CARTA: `unpaid` vuol dire «i fondi non sono ancora disponibili»
+                # (oggetto Checkout Session, docs.stripe.com). Due casi con rimedi opposti, e li
+                # distingue il PaymentIntent riletto dall'API: `requires_capture` = carta
+                # AUTORIZZATA, soldi garantiti -> si conferma e si incassa a fine finestra;
+                # altrimenti (Pix) i soldi stanno arrivando e conferma `async_payment_succeeded`.
+                blocco = self._blocco_da_stripe(sessione)
+                if blocco is not None and not blocco.get("ok"):
+                    logger.error("webhook | codice: esito_non_applicato | sottocodice: "
+                                 "rilettura_pagamento_fallita | messaggio: sessione unpaid e "
+                                 "pagamento non riletto, niente conferma, rispondo 503 "
+                                 "(evento '%s')", tipo)
+                    return 503, {"errore": "esito_non_applicato",
+                                 "sottocodice": "rilettura_pagamento_fallita"}
+                if not (blocco and blocco.get("stato") == "requires_capture"
+                        and str(blocco.get("pi") or "").startswith("pi_")):
+                    # Sessione chiusa, soldi non ancora arrivati (Pix): l'evento e' gestito.
+                    # Se i soldi arrivano, arriva `async_payment_succeeded` e conferma lui.
+                    logger.info("Stripe: sessione chiusa SENZA pagamento per riferimento '%s' "
+                                "(conferma differita)", _rif_per_registro(rif))
+                    return 200, {"ricevuto": True, "tipo": tipo, "pagamento": "in_attesa"}
+                pi_bloccato = blocco["pi"]
+                logger.info("Stripe: pagamento BLOCCATO sulla carta per riferimento '%s': si "
+                            "conferma, si incassa a fine finestra", _rif_per_registro(rif))
             if stato_api == "":
                 logger.error("webhook | codice: esito_non_applicato | sottocodice: "
                              "rilettura_stato_fallita | messaggio: stato del pagamento non "
@@ -8496,6 +8560,8 @@ class RouterHTTP:
                 # pagamento restituire. Fino al 2026-08-16 non lo salvava nessuno, e il
                 # rimborso all'ospite andava eseguito A MANO dal pannello Stripe.
                 pi_id = (dati or {}).get("object", {}).get("payment_intent", "")
+                if pi_bloccato:
+                    pi_id = pi_bloccato          # quello riletto dall'API, non quello dell'evento
                 pp_ = getattr(self._sys, "pagamenti_pendenti", None)
                 if pp_ is not None and rif and hasattr(pp_, "salva_stripe_session"):
                     # ⛔ IL RITORNO SI GUARDA. E' dichiarato `-> bool` e dice False anche
@@ -8528,6 +8594,24 @@ class RouterHTTP:
             except Exception:
                 logger.warning("salvataggio cs_ fallito (ISOLATO)", exc_info=True)
                 esito_perso = "salvataggio_sessione_fallito"
+            # ⛔ IL BLOCCO SI SCRIVE PRIMA DELLA CONFERMA: e' cio' che impedisce alla conferma di
+            #    scrivere un incasso che Stripe non ha fatto. Se non si riesce a scriverlo non si
+            #    conferma niente e Stripe ritenta (una prenotazione che non esiste non si blocca
+            #    qui: la conferma lo dira', come per ogni pagamento senza prenotazione).
+            if pi_bloccato:
+                try:
+                    _segnato = self._segna_blocco_aperto(rif, pi_bloccato)
+                except Exception:
+                    logger.error("blocco sulla carta: scrittura esplosa per %s",
+                                 _rif_per_registro(rif), exc_info=True)
+                    _segnato = False
+                if _segnato is False:
+                    logger.error("webhook | codice: esito_non_applicato | sottocodice: "
+                                 "blocco_non_segnato | messaggio: pagamento bloccato su '%s' "
+                                 "non scritto, niente conferma, rispondo 503",
+                                 _rif_per_registro(rif))
+                    return 503, {"errore": "esito_non_applicato",
+                                 "sottocodice": "blocco_non_segnato"}
             # LOCK 1-CARTA=1-SCONTO: se la carta ha gia' pagato con un altro credito il
             # pagamento viene restituito PER INTERO e la prenotazione NON si conferma
             # (200 comunque: l'esito e' gestito, Stripe non deve ritentare).
@@ -8698,6 +8782,182 @@ class RouterHTTP:
         self._carta_sweep_ts = _t.time()
         return self.riscuoti_debiti_carta()
 
+    # ── IL BLOCCO SULLA CARTA (consegne 19, 2026-09-28, «autorizzato» del fondatore) ──────────
+    # Il pagamento di una prenotazione con l'arrivo lontano si AUTORIZZA sulla carta e si INCASSA
+    # a fine finestra di ripensamento (fase85 `blocco_sulla_carta`). Dentro la finestra una
+    # cancellazione ANNULLA l'autorizzazione e non costa niente a nessuno; un rimborso invece ci
+    # costava la commissione di Stripe, che non la restituisce. Le regole, tutte qui:
+    #   · il blocco CONFERMA la prenotazione (i soldi sono garantiti) ma NON scrive incassi: il
+    #     giornale racconta i soldi che Stripe ha davvero (`_riasserisci_incasso` aspetta);
+    #   · un blocco si chiude in due modi soli: ANNULLO (tutto torna all'ospite) o INCASSO
+    #     PIENO, mai parziale (una sola acquisizione per pagamento, e il resto si perde);
+    #   · un annullo non e' un rimborso: nessuna riga «rimborso» per soldi mai entrati;
+    #   · nessun bonifico all'host su un blocco non incassato (`_trasferisci_all_host`).
+
+    def _blocco_da_stripe(self, sessione):
+        """Rilegge dall'API il pagamento dietro una sessione `unpaid`. None = il fornitore non sa
+        rileggerlo (comportamento di prima); un dict con `ok=False` = NON LO SO."""
+        fornitore = getattr(self._sys, "stripe", None)
+        leggi = getattr(fornitore, "pagamento_della_sessione", None) \
+            if fornitore is not None else None
+        if leggi is None:
+            return None
+        try:
+            esito = leggi(sessione)
+        except Exception:
+            logger.warning("rilettura del pagamento della sessione esplosa (trattata come «non "
+                           "so»)", exc_info=True)
+            return {"ok": False}
+        return esito if isinstance(esito, dict) else {"ok": False}
+
+    def _segna_blocco_aperto(self, rif, pi):
+        """Scrive sulla prenotazione il blocco e la FINE della finestra (istante del voucher
+        firmato + 48 ore). Voucher illeggibile -> adesso: si incassa al primo giro, perche' un
+        blocco che nessuno sa quando incassare e' un'autorizzazione che scade (7 giorni).
+        None se la prenotazione non esiste; False se la scrittura non riesce."""
+        import time as _t
+        pp = getattr(self._sys, "pagamenti_pendenti", None)
+        rec = pp.info(rif) if (pp is not None and rif) else None
+        if rec is None:
+            return None
+        fine = int(_t.time())
+        try:
+            dj = json.loads(rec.get("corpo_json") or "{}")
+            v = self._sys.firma.decodifica(dj.get("voucher_token") or "")
+            ts = v.get("prenotato_ts") if isinstance(v, dict) else None
+            if isinstance(ts, int) and not isinstance(ts, bool) and ts > 0:
+                fine = ts + SECONDI_RIPENSAMENTO
+        except Exception:
+            logger.warning("blocco sulla carta: istante del voucher illeggibile per %s, si "
+                           "incassa al primo giro", _rif_per_registro(rif), exc_info=True)
+        return pp.segna_blocco(rif, blocco_pi=pi, blocco_incassa_dal_ts=fine)
+
+    def _stato_pi(self, pi):
+        """Lo stato del PaymentIntent riletto dall'API, "" se non si sa."""
+        fornitore = getattr(self._sys, "stripe", None)
+        leggi = getattr(fornitore, "stato_pagamento", None) if fornitore is not None else None
+        if leggi is None:
+            return ""
+        try:
+            esito = leggi(pi)
+        except Exception:
+            return ""
+        return str(esito.get("stato") or "") if isinstance(esito, dict) and esito.get("ok") \
+            else ""
+
+    def _incassa_blocco(self, rif, pi):
+        """INCASSA il blocco e, solo dopo, scrive i conti. -> 'incassato' | 'annullato' |
+        'fallito'. Se Stripe rifiuta si RILEGGE il pagamento: `succeeded` = incassato davvero
+        (un giro precedente e' morto dopo l'incasso), `canceled` = autorizzazione scaduta o
+        annullata su una prenotazione confermata: soldi mai entrati, e si grida."""
+        import time as _t
+        pp = getattr(self._sys, "pagamenti_pendenti", None)
+        fornitore = getattr(self._sys, "stripe", None)
+        incassa = getattr(fornitore, "incassa", None) if fornitore is not None else None
+        esito = incassa(pi, "incasso:" + rif) if incassa is not None \
+            else {"ok": False, "motivo": "fornitore senza incasso"}
+        ok = isinstance(esito, dict) and esito.get("ok")
+        stato = "succeeded" if ok else self._stato_pi(pi)
+        if stato == "succeeded":
+            pp.segna_blocco(rif, blocco_incassato_ts=int(_t.time()))
+            self._riasserisci_incasso(pp.info(rif), rif)
+            logger.info("BLOCCO SULLA CARTA | INCASSATO | rif %s | pi %s",
+                        _rif_per_registro(rif), pi)
+            return "incassato"
+        if stato == "canceled":
+            pp.segna_blocco(rif, blocco_annullato_ts=int(_t.time()))
+            logger.error("BLOCCO SULLA CARTA | codice: autorizzazione_scaduta | riferimento: %s "
+                         "| pi: %s | messaggio: la prenotazione risulta PAGATA ma l'autorizzazione "
+                         "sulla carta e' scaduta o annullata: i soldi non sono mai entrati. "
+                         "Contattare l'ospite prima dell'arrivo", _rif_per_registro(rif), pi)
+            return "annullato"
+        logger.error("BLOCCO SULLA CARTA | codice: incasso_fallito | riferimento: %s | pi: %s "
+                     "| motivo: %s | stato su Stripe: %r | messaggio: INCASSO NON RIUSCITO, si "
+                     "ritenta al prossimo giro orario", _rif_per_registro(rif), pi,
+                     _testo_per_registro(str((esito or {}).get("motivo") or "")), stato)
+        return "fallito"
+
+    def _annulla_blocco(self, rif, pi):
+        """ANNULLA il blocco. -> 'annullato' | 'incassato' | 'fallito'. Se Stripe rifiuta si
+        rilegge il pagamento: `canceled` = gia' annullato; `succeeded` = qualcuno l'ha incassato
+        un istante prima (il giro orario): allora i soldi CI SONO, i conti si scrivono e chi
+        chiama deve restituirli con la riga di rimborso di sempre."""
+        import time as _t
+        pp = getattr(self._sys, "pagamenti_pendenti", None)
+        fornitore = getattr(self._sys, "stripe", None)
+        annulla = getattr(fornitore, "annulla", None) if fornitore is not None else None
+        esito = annulla(pi, "annullo:" + rif) if annulla is not None \
+            else {"ok": False, "motivo": "fornitore senza annullo"}
+        ok = isinstance(esito, dict) and esito.get("ok")
+        stato = "canceled" if ok else self._stato_pi(pi)
+        if stato == "canceled":
+            pp.segna_blocco(rif, blocco_annullato_ts=int(_t.time()))
+            logger.info("BLOCCO SULLA CARTA | ANNULLATO | rif %s | pi %s: nessun incasso, "
+                        "nessun rimborso, nessuna commissione", _rif_per_registro(rif), pi)
+            return "annullato"
+        if stato == "succeeded":
+            pp.segna_blocco(rif, blocco_incassato_ts=int(_t.time()))
+            self._riasserisci_incasso(pp.info(rif), rif)
+            logger.warning("BLOCCO SULLA CARTA | gia' INCASSATO quando si e' chiesto l'annullo "
+                           "| rif %s | pi %s: si restituisce col rimborso di sempre",
+                           _rif_per_registro(rif), pi)
+            return "incassato"
+        logger.error("BLOCCO SULLA CARTA | codice: annullo_fallito | riferimento: %s | pi: %s | "
+                     "motivo: %s | messaggio: ANNULLO NON RIUSCITO, lo ritenta il giro orario; "
+                     "se non riesce mai, l'autorizzazione scade da sola (soldi liberati)",
+                     _rif_per_registro(rif), pi,
+                     _testo_per_registro(str((esito or {}).get("motivo") or "")))
+        return "fallito"
+
+    def _chiudi_blocco(self, rif, rec, trattenuto=0):
+        """Una prenotazione PAGATA si chiude (cancellazione, rimborso, pagamento non
+        confermabile): cosa ne e' del blocco? True = i soldi NON sono mai entrati (annullato,
+        o annullo da ritentare): NIENTE riga di rimborso. False = i soldi sono entrati (nessun
+        blocco, o gia' incassato): si restituiscono come sempre.
+        Con una penale da trattenere (`trattenuto` > 0) si INCASSA tutto e poi si rimborsa la
+        parte dovuta: un incasso parziale libererebbe il resto per sempre. Con i sei giorni di
+        fase85 capita solo se la cancellazione arriva dopo le 48 ore e prima del giro orario."""
+        b = _blocco(rec)
+        if b["stato"] in ("nessuno", "incassato"):
+            return False
+        if b["stato"] == "annullato":
+            return True
+        if trattenuto > 0:
+            return self._incassa_blocco(rif, b["pi"]) != "incassato"
+        return self._annulla_blocco(rif, b["pi"]) != "incassato"
+
+    def _incassa_blocchi(self, ora_ts=None):
+        """IL GIRO ORARIO DEL BLOCCO SULLA CARTA (tick orario di `avvia_server`). Per ogni blocco
+        aperto: prenotazione 'pagato' e finestra finita -> INCASSA; prenotazione chiusa
+        ('rimborsato', 'cancellata_host') -> ANNULLA (ritenta l'annullo fallito al momento della
+        cancellazione). Gli altri stati sono un webhook a meta': li decide lui."""
+        import time as _t
+        conta = {"incassati": 0, "annullati": 0, "falliti": 0, "in_finestra": 0}
+        pp = getattr(self._sys, "pagamenti_pendenti", None)
+        if pp is None or not hasattr(pp, "blocchi_aperti"):
+            return conta
+        ora = ora_ts if isinstance(ora_ts, int) and not isinstance(ora_ts, bool) \
+            else int(_t.time())
+        for rec in pp.blocchi_aperti():
+            rif = str(rec.get("riferimento") or "")
+            b = _blocco(rec)
+            stato = rec.get("stato")
+            if stato == "pagato":
+                if ora < b["incassa_dal_ts"]:
+                    conta["in_finestra"] += 1
+                    continue
+                esito = self._incassa_blocco(rif, b["pi"])
+            elif stato in ("rimborsato", "cancellata_host"):
+                esito = self._annulla_blocco(rif, b["pi"])
+            else:
+                continue
+            conta[{"incassato": "incassati", "annullato": "annullati"}.get(esito, "falliti")] += 1
+        if conta["incassati"] or conta["annullati"] or conta["falliti"]:
+            logger.info("BLOCCHI SULLA CARTA | incassati=%d annullati=%d falliti=%d "
+                        "in_finestra=%d", conta["incassati"], conta["annullati"],
+                        conta["falliti"], conta["in_finestra"])
+        return conta
+
     def _riasserisci_incasso(self, rec, rif):
         """Passi derivati IDEMPOTENTI del pagamento: tassa nel ledger + payout 'maturato'.
         Sicuri da rieseguire (registra_riscossione e aggiorna_stato('maturato') sono no-op
@@ -8706,6 +8966,13 @@ class RouterHTTP:
         sul webhook di RETRY, per SANARE un crash del primo handler a meta' (BUG #32:
         crash dopo il CAS 'pagato' ma prima di questi passi -> tassa persa dal ledger citta'
         + payout bloccato 'in_attesa' per sempre, con Stripe che ritenta a vuoto)."""
+        # ⛔ IL BLOCCO SULLA CARTA: finche' i soldi sono solo AUTORIZZATI (o l'autorizzazione e'
+        # finita senza incasso) non nascono ne' incasso ne' commissione ne' tassa ne' payout
+        # maturato. Li scrive `_incassa_blocco`, dopo che Stripe ha incassato davvero.
+        if _blocco(rec)["stato"] in ("aperto", "annullato"):
+            logger.info("incasso NON registrato per %s: il pagamento e' bloccato sulla carta "
+                        "(si registra all'incasso)", _rif_per_registro(rif))
+            return
         try:
             if isinstance(rec, dict) and rec.get("tassa_cents", 0) > 0:
                 led = getattr(self._sys, "tassa_comunale", None)
@@ -8804,6 +9071,13 @@ class RouterHTTP:
             # guardia un pagamento tardivo su una prenotazione cancellata diventava
             # 'pagato' -> soldi senza stanza + payout indebito.
             if stato not in ("in_attesa", "scaduto"):
+                # BLOCCO SULLA CARTA: i soldi non sono mai entrati -> si ANNULLA, niente da
+                # rimborsare e niente riga (Stripe rifiuterebbe il rimborso, misurato il 28/9).
+                if self._chiudi_blocco(rif, rec):
+                    logger.info("pagamento BLOCCATO su '%s' in stato '%s' (non confermabile): "
+                                "annullato sulla carta, niente da rimborsare",
+                                _rif_per_registro(rif), stato)
+                    return
                 logger.error("RIMBORSARE: pagamento ricevuto per '%s' in stato '%s' (non "
                              "confermabile: prenotazione cancellata/non approvata). Rimborsare "
                              "manualmente dal dashboard Stripe.",
@@ -8850,14 +9124,22 @@ class RouterHTTP:
                 except Exception:
                     esito = None
                 if not getattr(esito, "ok", False):
-                    logger.error("RIMBORSARE: pagamento tardivo su stanza già presa - rif '%s' "
-                                 "(alloggio %s %s->%s). Il cliente va rimborsato.",
-                                 _rif_per_registro(rif), rec.get("alloggio_id"),
-                                 rec.get("check_in"), rec.get("check_out"))
                     try:
                         pp.marca_da_rimborsare(rif)
                     except Exception:
                         pass
+                    # BLOCCO SULLA CARTA: soldi mai entrati -> annullo, nessuna riga e nessun
+                    # «RIMBORSARE» nel registro (un allarme su niente da fare e' un falso
+                    # allarme, ferrea 10). Si chiude DOPO la marcatura: il giro orario non
+                    # incassa mai una prenotazione chiusa.
+                    if self._chiudi_blocco(rif, pp.info(rif) or rec):
+                        logger.info("pagamento tardivo BLOCCATO su stanza gia' presa - rif '%s': "
+                                    "annullato sulla carta", _rif_per_registro(rif))
+                        return
+                    logger.error("RIMBORSARE: pagamento tardivo su stanza già presa - rif '%s' "
+                                 "(alloggio %s %s->%s). Il cliente va rimborsato.",
+                                 _rif_per_registro(rif), rec.get("alloggio_id"),
+                                 rec.get("check_in"), rec.get("check_out"))
                     # SCATOLA NERA DEL RIMBORSO. Senza questa riga il cliente non entra nella
                     # lista dei rimborsi dovuti -- che nasce dal giornale -- e l'unica traccia
                     # resta il registro qui sopra, che qualcuno deve RICORDARSI di leggere: un
@@ -12219,6 +12501,14 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
 
         def _tick_garanzia():
             while True:
+                try:
+                    # IL BLOCCO SULLA CARTA (consegne 19): incasso a fine finestra e annullo dei
+                    # blocchi rimasti su prenotazioni chiuse. PRIMA del rilascio, cosi' nello
+                    # stesso giro un bonifico trova i soldi gia' incassati.
+                    router._incassa_blocchi()
+                except Exception:
+                    logger.error("giro dei blocchi sulla carta fallito (thread TENUTO VIVO)",
+                                 exc_info=True)
                 try:
                     # «Se non si mettono d'accordo subentriamo noi» (2026-09-06, «autorizzato»):
                     # PRIMA del rilascio, o arriva a soldi gia' partiti. Un giro fallito qui non

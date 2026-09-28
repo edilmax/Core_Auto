@@ -29,6 +29,8 @@ import logging
 import re
 from typing import Any, Callable, Dict, List, Optional
 
+from fase162_pagamenti_pendenti import blocco_della_carta
+
 logger = logging.getLogger("core_auto.audit_console")
 
 _RE_NOTA = re.compile(r"^(ND|NC)-\d{4}-\d{1,6}$", re.IGNORECASE)
@@ -97,9 +99,15 @@ def _semaforo_coerenza(pren: Optional[Dict[str, Any]], payout: Optional[Dict[str
     """Confronto incrociato dei libri: ogni violazione e' un ROSSO col suo perche'."""
     problemi: List[str] = []
     stato = (pren or {}).get("stato", "")
-    if stato == "pagato" and "incasso" not in tipi_giornale:
+    # IL BLOCCO SULLA CARTA (consegne 19): col pagamento solo AUTORIZZATO l'incasso nel giornale
+    # arriva a fine finestra, e una cancellazione ANNULLA senza riga di rimborso. Non sono
+    # buchi: sono i soldi che Stripe non ha mai preso. Un blocco SCADUTO su una prenotazione
+    # pagata, invece, resta un rosso.
+    blocco = blocco_della_carta((pren or {}).get("corpo_json"))["stato"]
+    if stato == "pagato" and "incasso" not in tipi_giornale and blocco != "aperto":
         problemi.append("stato 'pagato' ma NESSUN 'incasso' nel giornale")
-    if stato == "rimborsato" and "rimborso" not in tipi_giornale:
+    if stato == "rimborsato" and "rimborso" not in tipi_giornale \
+            and blocco not in ("aperto", "annullato"):
         problemi.append("stato 'rimborsato' ma NESSUN 'rimborso' nel giornale")
     st_pay = (payout or {}).get("stato", "")
     bonifico_nel_giornale = ("payout_host" in tipi_giornale
@@ -135,6 +143,14 @@ def _semaforo_stripe(pren: Optional[Dict[str, Any]],
     if paid == nostro_pagato or ((pren or {}).get("stato") == "rimborsato"):
         return {"colore": "verde", "payment_status": esito.get("payment_status"),
                 "cs": cs}
+    # IL BLOCCO SULLA CARTA: la sessione resta `unpaid` («fondi non ancora disponibili») mentre
+    # la carta e' autorizzata, e che passi a `paid` dopo l'incasso la documentazione non lo dice.
+    # ⚠️ Limite dichiarato: qui si legge la SESSIONE, non il pagamento; l'incasso vero lo
+    # confronta la riconciliazione notturna (fase182) coi movimenti di Stripe.
+    blocco = blocco_della_carta(dj if isinstance(dj, dict) else {})["stato"]
+    if nostro_pagato and not paid and blocco in ("aperto", "incassato"):
+        return {"colore": "verde", "payment_status": esito.get("payment_status"), "cs": cs,
+                "nota": "carta autorizzata (blocco %s): la sessione resta 'unpaid'" % blocco}
     return {"colore": "rosso", "nota": "Stripe dice '%s' ma da noi lo stato e' '%s'"
             % (esito.get("payment_status"), (pren or {}).get("stato")), "cs": cs}
 

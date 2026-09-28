@@ -11,6 +11,7 @@ Durevole SQLite (conn-per-op, row_factory=Row), idempotente, denaro in cents int
 """
 from __future__ import annotations
 
+import json
 import logging
 import sqlite3
 import time
@@ -47,6 +48,42 @@ def _sorgenti_ammesse() -> Dict[str, tuple]:
 
 
 _AMMESSI = _sorgenti_ammesse()
+
+# IL BLOCCO SULLA CARTA (consegne 19, 2026-09-28): i campi del corpo_json che dicono se il
+# pagamento di una prenotazione e' solo AUTORIZZATO sulla carta. Li scrive fase83 (webhook,
+# cancellazioni, giro orario); li leggono il giornale, il bonifico e chi sorveglia (fase202,
+# fase181) -- tutti attraverso `blocco_della_carta`, mai a mano.
+CAMPI_BLOCCO = ("blocco_pi", "blocco_incassa_dal_ts", "blocco_incassato_ts",
+                "blocco_annullato_ts")
+
+
+def blocco_della_carta(corpo: Any) -> Dict[str, Any]:
+    """Lo stato del BLOCCO SULLA CARTA scritto nel corpo di una prenotazione (dict o testo JSON).
+    Ritorna {'pi', 'stato', 'incassa_dal_ts'}, con `stato`:
+      'nessuno'   pagamento incassato subito, o nessun pagamento: il flusso di sempre;
+      'aperto'    carta autorizzata, soldi NON incassati: niente incasso nel giornale, niente
+                  bonifico all'host;
+      'incassato' incassato (a fine finestra, o prima per una cancellazione con penale);
+      'annullato' autorizzazione annullata (cancellazione) o scaduta: soldi mai entrati."""
+    if isinstance(corpo, str):
+        try:
+            corpo = json.loads(corpo or "{}")
+        except (TypeError, ValueError):
+            corpo = {}
+    if not isinstance(corpo, dict):
+        corpo = {}
+    pi = corpo.get("blocco_pi")
+    if not (isinstance(pi, str) and pi.startswith("pi_")):
+        return {"pi": "", "stato": "nessuno", "incassa_dal_ts": 0}
+    fine = corpo.get("blocco_incassa_dal_ts")
+    fine = fine if isinstance(fine, int) and not isinstance(fine, bool) and fine > 0 else 0
+    if corpo.get("blocco_incassato_ts"):
+        stato = "incassato"
+    elif corpo.get("blocco_annullato_ts"):
+        stato = "annullato"
+    else:
+        stato = "aperto"
+    return {"pi": pi, "stato": stato, "incassa_dal_ts": fine}
 
 
 class _ConnCondivisa:
@@ -263,6 +300,60 @@ class PagamentiPendenti:
             return False
         finally:
             con.close()
+
+    def segna_blocco(self, riferimento: Any, **campi: Any) -> bool:
+        """Scrive i campi del BLOCCO SULLA CARTA nel corpo_json (merge, MAI sovrascrive il
+        resto). Solo i nomi di `CAMPI_BLOCCO`: un nome sbagliato e' un errore del chiamante e
+        non scrive niente, invece di lasciare un campo che nessuno legge. Idempotente.
+        False se il riferimento non esiste o la scrittura non riesce (ISOLATA)."""
+        if not (isinstance(riferimento, str) and riferimento):
+            return False
+        nuovi = {k: v for k, v in campi.items() if k in CAMPI_BLOCCO and v not in (None, "")}
+        if not nuovi or len(nuovi) != len(campi):
+            return False
+        con = self._apri()
+        try:
+            with con:
+                r = con.execute("SELECT corpo_json FROM pendenti WHERE riferimento=?",
+                                (riferimento,)).fetchone()
+                if r is None:
+                    return False
+                try:
+                    dj = json.loads(r["corpo_json"] or "{}")
+                    if not isinstance(dj, dict):
+                        dj = {}
+                except Exception:
+                    dj = {}
+                if all(dj.get(k) == v for k, v in nuovi.items()):
+                    return True                       # gia' scritto (ritentativo)
+                dj.update(nuovi)
+                con.execute("UPDATE pendenti SET corpo_json=? WHERE riferimento=?",
+                            (json.dumps(dj, ensure_ascii=False), riferimento))
+                return True
+        except Exception:
+            logger.warning("segna_blocco fallita (ISOLATA)", exc_info=True)
+            return False
+        finally:
+            con.close()
+
+    def blocchi_aperti(self, *, limit: int = 500) -> List[Dict[str, Any]]:
+        """Le prenotazioni con un BLOCCO SULLA CARTA ancora aperto (autorizzato, ne' incassato ne'
+        annullato), in QUALUNQUE stato: il giro orario di fase83 le incassa se sono 'pagato' e la
+        finestra e' finita, le annulla se sono state chiuse. Le chiuse si escludono GIA' nella
+        query, cosi' il tetto non si riempie di righe finite e non lascia fuori quelle aperte."""
+        lim = limit if isinstance(limit, int) and not isinstance(limit, bool) \
+            and 0 < limit <= 5000 else 500
+        con = self._apri()
+        try:
+            righe = con.execute(
+                "SELECT * FROM pendenti WHERE corpo_json LIKE '%blocco_pi%' "
+                "AND corpo_json NOT LIKE '%blocco_incassato_ts%' "
+                "AND corpo_json NOT LIKE '%blocco_annullato_ts%' "
+                "ORDER BY creato_ts LIMIT ?", (lim,)).fetchall()
+        finally:
+            con.close()
+        return [self._riga(r) for r in righe
+                if blocco_della_carta(r["corpo_json"])["stato"] == "aperto"]
 
     def cerca_prenotazioni(self, termine: Any, *, limit: int = 10, offset: int = 0
                            ) -> Dict[str, Any]:
@@ -747,6 +838,11 @@ class PagamentiPendenti:
             # fetta NON la restituisce (misurato: `fee: 0` sulla riga di rimborso).
             if persa:
                 reale = dj.get("costo_stripe_reale_cents")
+                # IL BLOCCO SULLA CARTA ANNULLATO: Stripe non ha incassato niente, quindi non ha
+                # trattenuto niente (misurato il 28/9: zero movimenti di saldo). E' un costo
+                # NOTO, e vale zero -- non un dato che manca.
+                if blocco_della_carta(dj)["stato"] == "annullato":
+                    reale = 0
                 if isinstance(reale, int) and not isinstance(reale, bool) and reale >= 0:
                     out["costo_stripe_irrecuperabile"]["conteggio"] += 1
                     out["costo_stripe_irrecuperabile"]["cents"] += reale
