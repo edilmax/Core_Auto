@@ -7086,7 +7086,8 @@ class RouterHTTP:
                     rif, _rec, int(r.get("trattenuto_cents", 0) or 0))
             except Exception:
                 logger.error("cancellazione %s: chiusura del blocco sulla carta esplosa (il "
-                             "giro orario la ritenta)", _rif_per_registro(rif), exc_info=True)
+                             "giro orario ANNULLERA' il blocco: una penale, se c'era, non entra)",
+                             _rif_per_registro(rif), exc_info=True)
                 _senza_incasso = _blocco(_rec)["stato"] in ("aperto", "annullato")
         # ESCROW PRIMA del resto: serve sapere quanto TIENE l'host (quota-penale della
         # politica) per decidere il payout. host_tiene vale SOLO se la chiusura CAS riesce.
@@ -8866,6 +8867,13 @@ class RouterHTTP:
             return "incassato"
         if stato == "canceled":
             pp.segna_blocco(rif, blocco_annullato_ts=int(_t.time()))
+            # Si RILEGGE lo stato: il giro orario lavora su una fotografia, e se nel frattempo
+            # l'ospite ha cancellato (e annullato) gridare «risulta PAGATA» e' un falso allarme
+            # (ferrea 10; trovato dalla revisione di GML 5.5 Flash il 28/9).
+            if (pp.info(rif) or {}).get("stato") != "pagato":
+                logger.info("BLOCCO SULLA CARTA | gia' annullato su una prenotazione chiusa | "
+                            "rif %s | pi %s", _rif_per_registro(rif), pi)
+                return "annullato"
             logger.error("BLOCCO SULLA CARTA | codice: autorizzazione_scaduta | riferimento: %s "
                          "| pi: %s | messaggio: la prenotazione risulta PAGATA ma l'autorizzazione "
                          "sulla carta e' scaduta o annullata: i soldi non sono mai entrati. "
@@ -8923,7 +8931,21 @@ class RouterHTTP:
         if b["stato"] == "annullato":
             return True
         if trattenuto > 0:
-            return self._incassa_blocco(rif, b["pi"]) != "incassato"
+            esito = self._incassa_blocco(rif, b["pi"])
+            if esito == "fallito":
+                # ⛔ LIMITE DICHIARATO (revisione di GML 5.5 Flash, 28/9): la prenotazione si chiude
+                # e il giro orario, su una prenotazione chiusa, ANNULLA -- non ritenta l'incasso.
+                # Quindi la penale non entra piu': lo si GRIDA qui, col suo nome, invece di
+                # lasciare nel registro la promessa «si ritenta» che su questa strada non vale.
+                # Chi perde: l'host (la sua quota della penale). Frequenza: serve un guasto di
+                # Stripe nell'istante della cancellazione, fra la fine delle 48 ore e il giro.
+                logger.error("BLOCCO SULLA CARTA | codice: penale_non_incassata | riferimento: %s "
+                             "| pi: %s | trattenuto: %d | messaggio: la cancellazione chiude la "
+                             "prenotazione e il giro orario ANNULLERA' l'autorizzazione: la penale "
+                             "NON entra (quota dell'host persa). Decidere a mano: incassarla da "
+                             "Stripe prima del prossimo giro, o lasciarla",
+                             _rif_per_registro(rif), b["pi"], trattenuto)
+            return esito != "incassato"
         return self._annulla_blocco(rif, b["pi"]) != "incassato"
 
     def _incassa_blocchi(self, ora_ts=None):

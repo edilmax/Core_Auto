@@ -3435,9 +3435,38 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: f168b9b
+CONSEGNE AGGIORNATE A: 74584b0
 
-## PASSAGGIO DI CONSEGNE 20 (2026-09-28 sera) - PASSO 1 CHIUSO (#230, 6d2a635, CHIAVETTA RIGENERATA); BLOCCO SULLA CARTA COSTRUITO SUL RAMO blocco-carta-20260928 (PR #231), IN CORSA VERSO LA PRODUZIONE:
+## PASSAGGIO DI CONSEGNE 20 (2026-09-28 sera) - PASSO 1 CHIUSO (#230, 6d2a635, CHIAVETTA RIGENERATA); BLOCCO SULLA CARTA IN PRODUZIONE (#231, DEPLOY 6590a2a); REVISIONE DI GML: DUE DIFETTI VERI RIPARATI SUL RAMO gml-revisione-20260928:
+- STATO DOPO IL DEPLOY (aggiornato alle 22:3x del 28/9): #231 unita (CI 16 controlli, gate
+  success; merged=True verificato con una seconda chiamata, master 6590a2a). Deploy col
+  pulsante D17: salvataggio del giro 20260928-194809 verificato (27 archivi, 27 impronte, 27
+  integrity_check ok, USCITA=0); paracadute prec = viva 924000d3
+  (/root/deploy_paracadute_20260928_2205.log, USCITA=0); «SCAMBIO FATTO alle 20:05:55Z»
+  USCITA=0 (/root/deploy_scambio_20260928_2205.log); verifica: healthy, money_path_pronto True,
+  avvisi [], stripe(85), VPS 6590a2a, viva bf133ae0; all'avvio INVARIANTI ARCHIVI violazioni=0 e
+  «GUARDIANO: nessuno stato anomalo (tutto quadra)». Da fuori 200/200/401/403/401;
+  verifica_produzione 190 controlli 0 violazioni.
+- CASELLE DEL BLOCCO 1 rimisurate sul codice nuovo: mutazione dei cinque moduli su 74584b0 (292
+  punti, 291 uccisi, 0 sopravvissuti); rimisura.py (esame_soldi 2, esame_rimborsi,
+  esame_orologi, esame_webhook 4, rimborso scritto, money-float, coerenza) tutte verdi;
+  esame_produzione --scrivi VERDE 9/9 sul deploy nuovo; riconciliazione VERDE con un giro del
+  cron lanciato a mano col codice nuovo (ok, 0 fantasmi, email partita; letture in
+  Core_Auto_GUARDIE_PRONTE\letture_riconciliazione_20260928_2208.txt). 14 su 15: resta la casella
+  «ogni ora», che vuole due righe orarie dopo il riavvio delle 20:05Z. `fase83` sta nel BLOCCO
+  8, non nel Blocco 1: le riparazioni qui sotto non fanno scadere le caselle dei soldi, fanno
+  scadere quelle del Blocco 8 (salvataggio, deploy), da rimisurare dopo il prossimo deploy.
+- REVISIONE INDIPENDENTE di GML 5.5 Flash (file di coordinamento sul Desktop, «claude&gml
+  fhash.txt», proposto dal fondatore; GML solo lettura, Claude verifica sul codice). VERI e
+  riparati con la guardia vista rossa prima: la penale che evapora (il registro prometteva «si
+  ritenta», ora ERROR `penale_non_incassata`; il retry vero NON e' costruito: limite
+  dichiarato, perde l'host la quota di penale, evento raro); il falso allarme «risulta PAGATA»
+  su una prenotazione appena cancellata (ora si rilegge lo stato); la lacuna del 503
+  `blocco_non_segnato` (guardia vista rossa col guasto iniettato, ripristino sha256 identico).
+  FALSO: il blocco aperto su stati saltati (lo copre lo sweeper degli eventi, casella 9).
+  DUBBI dichiarati: merge senza CAS in `segna_blocco`; secondo pagamento sullo stesso
+  riferimento (non raggiungibile oggi); tetto 500 di `blocchi_aperti`; `incassabile_cents` non
+  usato (manca il controllo «autorizzato == totale»).
 - PERMESSI, parole testuali del fondatore in questa sessione: «procedi al commit (documenti
   delle consegne 19 e lavori del punto 2)», «Autorizzato il blocco sulla carta (fase85, fase83
   e cio' che serve), fino alla fine»; verso le 18:40 ha chiesto «ci stiamo complicando troppo?»,
@@ -4237,7 +4266,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 6996 test
+SUITE ATTUALE: Ran 6999 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
