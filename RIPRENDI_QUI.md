@@ -3507,6 +3507,24 @@ lavorare?» -> si', quelle dei soldi).
 - Commissioni e tariffa tecnica: README e CLAUDE.md (regola zero 4). Rimborso automatico:
   decisione futura del fondatore, non ferma il lancio.
 
+### 🗣️ DETTE DAL FONDATORE IL 28/9 E RIMASTE FUORI DA QUESTE CONSEGNE (il file era sotto suite; riportate dalla memoria di sessione il 28/9 pomeriggio)
+1. ALLARMI, la sua paura: «se diventano una decina di host e ogni giorno arrivano 50
+   comunicazioni di errori, vado in fallimento». Stato misurato dalla sessione del 28/9: in un
+   giorno normale arrivano 2 email (il riepilogo del Guardiano «tutto quadra», una al giorno;
+   i conti della notte). Il Telegram del watchdog parte solo al cambio di stato, con un
+   promemoria ogni 6 ore (`deploy/watchdog.sh`, REMINDER_H=6). Il riepilogo non cresce con gli
+   host. Nelle 24 ore prima del deploy il server aveva scritto zero errori veri. Un falso
+   allarme e' un difetto e si ripara subito (ferrea 10).
+2. BASTA TEST NUOVI: «sono quattro mesi che facciamo test, devo pubblicare e contattare gli
+   host». Si lavora solo sul foglio di lancio; il resto delle caselle dei blocchi 2-10 va
+   avanti dopo, senza fermare il lancio.
+3. LA LEVA PER FARSI SCEGLIERE E' IL PREZZO, non la cancellazione: l'ospite non paga
+   commissione e l'host paga meno delle altre piattaforme. La casella del Blocco 4 «da noi
+   costa sempre meno che su Booking» non e' mai stata misurata: lavoro da fare DOPO il lancio.
+   NON e' nel foglio di lancio: la aggiunge solo il fondatore.
+4. EMAIL DEL SITO FIRMATE, verificato il 28/9 dal DNS pubblico: SPF
+   (include:_spf.mail.hostinger.com), DKIM (selettore `hostingermail1`), DMARC `p=none`.
+
 ### 💳 PROSSIMO LAVORO: IL BLOCCO SULLA CARTA (autorizzazione senza incasso), 7 giorni
 - PERCHE': Stripe NON restituisce la sua commissione sui rimborsi («Le commissioni di
   elaborazione di Stripe relative alla transazione originale non vengono rimborsate»,
@@ -4182,7 +4200,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 6968 test
+SUITE ATTUALE: Ran 6996 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

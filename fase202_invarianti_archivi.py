@@ -38,6 +38,10 @@ l'unico punto in cui questo modulo INTERPRETA invece di leggere:
   Le garanzie 'in_garanzia', 'contestato', 'risolto', 'annullato' NON sono giudicate da I5 (il
   suo vocabolario e' rilasciato/trattenuto): le aperte le guarda il Guardiano (escrow bloccati,
   soldi su rimborsata).
+  E per I2 (consegne 19, il BLOCCO SULLA CARTA): una prenotazione 'pagato' col pagamento solo
+  AUTORIZZATO sulla carta, dentro la finestra piu' `GRAZIA_INCASSO_BLOCCO_SEC`, si giudica
+  'autorizzata' (nessun incasso ancora, ed e' giusto); oltre, o con l'autorizzazione finita
+  senza incasso, torna 'pagato' e grida.
 
 COSA NON FA, dichiarato (D18 punto 3):
   - non scrive MAI: `PRAGMA query_only=1` su ogni connessione, e un archivio che non si apre e'
@@ -63,6 +67,7 @@ import sqlite3
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
+from fase162_pagamenti_pendenti import blocco_della_carta
 from fase199_invarianti import (STATI_OCCUPANTI, i1_doppia_conferma, i2_bilancio_pagamenti,
                                 i3_prova_prima_del_commit, i4_denaro_non_negativo,
                                 i5_escrow_coerente)
@@ -78,6 +83,10 @@ CODICI = ("I1", "I2", "I3", "I4", "I5")
 # riassunto dell'email la stampa cosi' com'e' (fase186 non la conosce per nome).
 CHIAVE_ANOMALIA = "invarianti_violati"
 TIMEOUT_SQLITE = 30          # standard del progetto (bug #36): sotto contesa aspetta, mai 'locked'
+# IL BLOCCO SULLA CARTA: quanto dopo la fine della finestra un blocco non incassato e' ancora
+# un ritardo e non un incasso mancato. Il giro che incassa gira ogni ORA: la grazia copre
+# qualche giro fallito (rete, Stripe lento) prima di gridare ogni ora nel registro.
+GRAZIA_INCASSO_BLOCCO_SEC = 6 * 3600
 # Stati di `fase162` (pendenti) tradotti nel vocabolario di I5 (vedi il docstring).
 _ESITO_DA_STATO = {"pagato": "completata", "rimborsato": "rimborsata",
                    "cancellata_host": "cancellata_host"}
@@ -255,8 +264,9 @@ def _corpo(p: Dict[str, Any]) -> Dict[str, Any]:
         return {}
 
 
-def _giudica_i2(prenotazioni: List[Dict[str, Any]], giornale: List[Dict[str, Any]]
-                ) -> Tuple[List[Any], List[str]]:
+def _giudica_i2(prenotazioni: List[Dict[str, Any]], giornale: List[Dict[str, Any]],
+                ora_ts: Optional[int] = None) -> Tuple[List[Any], List[str]]:
+    ora = ora_ts if isinstance(ora_ts, int) and not isinstance(ora_ts, bool) else int(time.time())
     incassi: Dict[str, List[int]] = {}
     for r in giornale:
         if r.get("tipo") == "incasso":
@@ -272,7 +282,17 @@ def _giudica_i2(prenotazioni: List[Dict[str, Any]], giornale: List[Dict[str, Any
         dovuto = _intero(c.get("totale_cents"))
         if dovuto is None:
             dovuto = _intero(c.get("prezzo_guest_cents"))
-        astratte.append({"rif": p.get("rif"), "stato": p.get("stato"),
+        stato = p.get("stato")
+        # IL BLOCCO SULLA CARTA (consegne 19): una prenotazione confermata col pagamento solo
+        # AUTORIZZATO non ha ancora incassi, e dentro la finestra (piu' la grazia) e' giusto.
+        # Si giudica come «autorizzata» -- nessun «saldato» da pretendere, resta il «mai oltre il
+        # dovuto». Fuori tempo, o con l'autorizzazione finita senza incasso, torna 'pagato' e I2
+        # GRIDA: e' l'allarme strutturale dell'incasso mancato, che non dipende dal registro.
+        b = blocco_della_carta(c)
+        if (stato == "pagato" and b["stato"] == "aperto"
+                and ora <= b["incassa_dal_ts"] + GRAZIA_INCASSO_BLOCCO_SEC):
+            stato = "autorizzata"
+        astratte.append({"rif": p.get("rif"), "stato": stato,
                          "totale_dovuto_cents": dovuto if dovuto is not None else 0,
                          "pagamenti_cents": incassi.get(str(p.get("rif")), [])})
     note = []
@@ -338,7 +358,7 @@ def scansiona_archivi(dir_dati: str, *, ora: Any = None) -> Dict[str, Any]:
 
     _tenta("I1", lambda: _giudica_i1(dati["prenotazioni"], dati["inventario"]))
     if any(t.endswith(".libro_giornale") for t in dati["tabelle_lette"]):
-        _tenta("I2", lambda: _giudica_i2(dati["prenotazioni"], dati["giornale"]))
+        _tenta("I2", lambda: _giudica_i2(dati["prenotazioni"], dati["giornale"], ora_ts=ora_ts))
     else:
         non_eseguiti.append("I2: manca il giornale (libro_giornale): il bilancio dei pagamenti "
                             "non e' stato verificato")

@@ -25,11 +25,62 @@ chiave -> provider non creato. Denaro in centesimi interi.
 """
 from __future__ import annotations
 
+import datetime
 import json
 import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 logger = logging.getLogger("core_auto.pagamenti_stripe")
+
+# ⛔ IL BLOCCO SULLA CARTA (consegne 19, 2026-09-28, «autorizzato» del fondatore). Il link chiede
+# a Stripe di AUTORIZZARE la carta senza incassare quando le 48 ore di ripensamento possono
+# servire: un annullo prima dell'incasso costa zero, un rimborso dopo costa la commissione di
+# Stripe, che non la restituisce (docs.stripe.com/refunds) e che per l'art. 6-ter paghiamo noi.
+# Misurato su Stripe di prova il 28/9: blocco `requires_capture` senza movimenti di saldo,
+# annullo `canceled` con zero movimenti, incasso `succeeded` con la sua commissione.
+# SEI GIORNI, e il conto e' questo: il diritto alle 48 ore chiede l'arrivo a >= 3 giorni nel fuso
+# dell'alloggio (fase83 `_entro_ripensamento`); dentro le 48 ore la data cambia al massimo DUE
+# volte; e qui si conta col giorno UTC, che dal fuso dell'alloggio dista al piu' UN giorno.
+# 3 + 2 + 1 = 6: con l'arrivo ad almeno 6 giorni, OGNI cancellazione dentro la finestra ha
+# diritto al rimborso pieno, quindi il blocco si chiude sempre con un annullo, mai con un incasso
+# parziale. E l'autorizzazione dura 7 giorni (docs.stripe.com/payments/place-a-hold-on-a-payment-
+# method, transazioni avviate dal cliente): l'incasso a fine finestra (48 ore) ci sta dentro.
+GIORNI_MINIMI_BLOCCO = 6
+
+
+def blocco_sulla_carta(check_in: Any, *, oggi: Optional[datetime.date] = None) -> bool:
+    """Vero se il pagamento di una prenotazione con questo arrivo va BLOCCATO sulla carta invece
+    che incassato subito. Una data che non si legge dice False: si resta sul flusso di sempre
+    (incasso subito), che e' quello provato da mesi."""
+    if not isinstance(check_in, str):
+        return False
+    try:
+        arrivo = datetime.date.fromisoformat(check_in)
+    except ValueError:
+        return False
+    oggi = oggi or datetime.datetime.now(datetime.timezone.utc).date()
+    return (arrivo - oggi).days >= GIORNI_MINIMI_BLOCCO
+
+
+def _motivo_errore(exc: BaseException) -> str:
+    """Il motivo di un fallimento verso Stripe con codice e messaggio (regola ferrea 9): «HTTP Error
+    400» da solo non distingue «gia' incassato» da «autorizzazione scaduta», che hanno rimedi
+    opposti. Il corpo della risposta d'errore si legge TUTTO dentro un `try`: una diagnostica che
+    solleva e' peggio di nessuna (la lezione di fase101, 2026-08-08)."""
+    try:
+        testo = "%s: %s" % (exc.__class__.__name__, exc)
+    except Exception:
+        testo = exc.__class__.__name__
+    try:
+        leggi = getattr(exc, "read", None)
+        if callable(leggi):
+            err = (json.loads(leggi().decode("utf-8", "replace") or "{}") or {}).get("error")
+            if isinstance(err, dict) and (err.get("code") or err.get("message")):
+                testo += " | codice: %s | messaggio: %s" % (err.get("code") or "-",
+                                                             err.get("message") or "-")
+    except Exception:
+        pass
+    return testo
 
 STRIPE_URL = "https://api.stripe.com/v1/checkout/sessions"
 RIMBORSI_URL = "https://api.stripe.com/v1/refunds"
@@ -99,6 +150,12 @@ class ProviderStripe:
                 ("client_reference_id", ref),
                 ("metadata[riferimento]", ref),
             ]
+            # IL BLOCCO SULLA CARTA, e SOLO sulle carte: `payment_intent_data[capture_method]`
+            # varrebbe per tutti i metodi, e quelli che il blocco non lo reggono (iDEAL, SEPA,
+            # Pix...) non potrebbero piu' pagare. Cosi' le carte si autorizzano, gli altri
+            # metodi incassano subito come sempre (docs.stripe.com, «place a hold»).
+            if blocco_sulla_carta(dati.get("check_in")):
+                params.append(("payment_method_options[card][capture_method]", "manual"))
             email = dati.get("email")
             if isinstance(email, str) and "@" in email:
                 params.append(("customer_email", email))
@@ -113,6 +170,106 @@ class ProviderStripe:
             logger.warning("Stripe: creazione link fallita (ISOLATA -> None)",
                            exc_info=True)
             return None
+
+    def pagamento_della_sessione(self, sessione: Any) -> Dict[str, Any]:
+        """IL PAGAMENTO DIETRO UNA SESSIONE CHIUSA SENZA SOLDI DISPONIBILI (`unpaid`): e' BLOCCATO
+        sulla carta (`requires_capture`, i soldi sono garantiti) o sta ancora arrivando (Pix)?
+        Due letture: la sessione, per sapere QUALE pagamento c'e' dietro, e il PaymentIntent. Il
+        pagamento non si prende dal corpo dell'evento (casella 10: l'evento e' una fotografia).
+
+        Ritorna sempre un dict {'ok', 'pi', 'stato', 'incassabile_cents', 'motivo'}.
+        `ok=False` vuol dire «NON LO SO» (rete, risposta di un altro oggetto): chi chiama non
+        conferma e fa ritentare. Una sessione senza pagamento dietro e' `ok=True` con `pi` vuoto:
+        niente e' bloccato."""
+        vuoto: Dict[str, Any] = {"ok": False, "pi": "", "stato": "", "incassabile_cents": 0,
+                                 "motivo": ""}
+        if not (isinstance(sessione, str) and sessione.startswith("cs_") and len(sessione) > 3):
+            return dict(vuoto, motivo="sessione_assente")
+        intestazione = {"Authorization": "Bearer " + self._key}
+        try:
+            s = self._fetch(STRIPE_URL + "/" + sessione, None, intestazione)
+            if not isinstance(s, dict) or s.get("id") != sessione:
+                return dict(vuoto, motivo="risposta_inattesa: %r" % (s,))
+            pi = s.get("payment_intent")
+            if not (isinstance(pi, str) and pi.startswith("pi_")):
+                return dict(vuoto, ok=True)
+            p = self._fetch(PAGAMENTI_URL + "/" + pi, None, intestazione)
+            if not (isinstance(p, dict) and p.get("id") == pi
+                    and isinstance(p.get("status"), str) and p.get("status")):
+                return dict(vuoto, motivo="risposta_inattesa: %r" % (p,))
+            importo = p.get("amount_capturable")
+            return {"ok": True, "pi": pi, "stato": p["status"],
+                    "incassabile_cents": importo if _intero_pos(importo) else 0, "motivo": ""}
+        except Exception as exc:
+            motivo = _motivo_errore(exc)
+            logger.warning("Stripe: pagamento della sessione non riletto cs=%s -> %s",
+                           sessione, motivo)
+            return dict(vuoto, motivo=motivo)
+
+    def stato_pagamento(self, payment_intent: Any) -> Dict[str, Any]:
+        """LO STATO DI UN PAGAMENTO riletto dall'API: serve a capire un gesto che Stripe ha
+        rifiutato. «Gia' incassato» (`succeeded`) e «scaduto o annullato» (`canceled`) sono due
+        fatti opposti, e la risposta d'errore non basta a distinguerli con certezza.
+        Ritorna {'ok', 'stato', 'motivo'}; `ok=False` = NON LO SO."""
+        if not (isinstance(payment_intent, str) and payment_intent.startswith("pi_")):
+            return {"ok": False, "stato": "", "motivo": "payment_intent_assente"}
+        try:
+            p = self._fetch(PAGAMENTI_URL + "/" + payment_intent, None,
+                            {"Authorization": "Bearer " + self._key})
+            if not (isinstance(p, dict) and p.get("id") == payment_intent
+                    and isinstance(p.get("status"), str) and p.get("status")):
+                return {"ok": False, "stato": "", "motivo": "risposta_inattesa: %r" % (p,)}
+            return {"ok": True, "stato": p["status"], "motivo": ""}
+        except Exception as exc:
+            motivo = _motivo_errore(exc)
+            logger.warning("Stripe: stato del pagamento non riletto pi=%s -> %s",
+                           payment_intent, motivo)
+            return {"ok": False, "stato": "", "motivo": motivo}
+
+    def incassa(self, payment_intent: Any, chiave_idem: Any) -> Dict[str, Any]:
+        """INCASSA un pagamento BLOCCATO sulla carta (POST .../capture), a fine finestra di
+        ripensamento. Tutto l'importo autorizzato: mai un incasso parziale, che rilascerebbe il
+        resto per sempre (docs.stripe.com, «place a hold»: una sola acquisizione per pagamento).
+        ⛔ `chiave_idem` stabile per quel pagamento: un ritentativo non puo' fare due incassi.
+        ok solo se Stripe risponde `succeeded` su QUEL pagamento."""
+        return self._gesto(payment_intent, chiave_idem, "capture",
+                           [("metadata[origine]", "bookinvip")], "succeeded", "INCASSO")
+
+    def annulla(self, payment_intent: Any, chiave_idem: Any) -> Dict[str, Any]:
+        """ANNULLA un pagamento BLOCCATO sulla carta (POST .../cancel): i soldi tornano
+        disponibili all'ospite e non paga nessuno. Su un pagamento NON incassato e' l'unica
+        strada: Stripe rifiuta il rimborso («You must cancel the PaymentIntent to reverse the
+        authorization instead of refunding the Charge directly», misurato il 28/9).
+        ok solo se Stripe risponde `canceled` su QUEL pagamento."""
+        return self._gesto(payment_intent, chiave_idem, "cancel",
+                           [("cancellation_reason", "requested_by_customer")], "canceled",
+                           "ANNULLO")
+
+    def _gesto(self, payment_intent: Any, chiave_idem: Any, suffisso: str,
+               params: List[Tuple[str, str]], stato_atteso: str, nome: str) -> Dict[str, Any]:
+        if not (isinstance(payment_intent, str) and payment_intent.startswith("pi_")):
+            return {"ok": False, "id": "", "motivo": "payment_intent_assente"}
+        if not (isinstance(chiave_idem, str) and chiave_idem.strip()):
+            return {"ok": False, "id": "", "motivo": "chiave_idempotenza_assente"}
+        try:
+            from urllib.parse import urlencode
+            # ⛔ IL CORPO NON E' MAI VUOTO: `_fetch_reale` sceglie il metodo dal corpo, e un corpo
+            # vuoto diventerebbe un GET -- cioe' una lettura al posto dell'incasso, senza errore.
+            body = urlencode(params).encode("utf-8")
+            headers = {"Authorization": "Bearer " + self._key,
+                       "Content-Type": "application/x-www-form-urlencoded",
+                       "Idempotency-Key": chiave_idem.strip()}
+            resp = self._fetch(PAGAMENTI_URL + "/" + payment_intent + "/" + suffisso, body,
+                               headers)
+            if (isinstance(resp, dict) and resp.get("id") == payment_intent
+                    and resp.get("status") == stato_atteso):
+                return {"ok": True, "id": payment_intent, "motivo": stato_atteso}
+            return {"ok": False, "id": "", "motivo": "risposta_inattesa: %r" % (resp,)}
+        except Exception as exc:
+            motivo = _motivo_errore(exc)
+            logger.error("Stripe: %s FALLITO pi=%s -> %s", nome, payment_intent, motivo,
+                         exc_info=True)
+            return {"ok": False, "id": "", "motivo": motivo}
 
     def rimborsa(self, payment_intent: Any, importo_cents: Any,
                  chiave_idem: Any) -> Dict[str, Any]:
