@@ -24,15 +24,15 @@
  "0d485cbbe89e": {
   "blocco": 8,
   "comando": "python collaudi/esame_deploy.py --da-file <letture> --scrivi",
-  "commit": "18fda27",
+  "commit": "0c96370",
   "condizione": "il deploy passa sempre dal protocollo D17, mai a mano",
-  "denominatore": 51,
+  "denominatore": 55,
   "esito": true,
-  "impronta": "5381733f54e8",
+  "impronta": "5a53b24ce50b",
   "impronte_moduli": {
    "fase13_protocollo_finale": "2dce22f058cc",
    "fase16_outbox": "a47de5874653",
-   "fase178_watchdog": "91a971322681",
+   "fase178_watchdog": "56a06eda2b82",
    "fase23_datastore": "45f9c0f96325",
    "fase28_gateway": "650f256a6d9a",
    "fase29_backpressure": "d905d8e921b7",
@@ -46,7 +46,7 @@
    "fase86_email": "19069663f9d1"
   },
   "motivo": "",
-  "quando": "2026-09-27T19:12:33"
+  "quando": "2026-09-28T15:49:52"
  },
  "0f42c4387710": {
   "blocco": 1,
@@ -345,15 +345,15 @@
  "3a547df3a743": {
   "blocco": 8,
   "comando": "python collaudi/esame_backup.py --file <db.gz> --sha <.sha256> --manifest <MANIFEST.txt> --scrivi",
-  "commit": "18fda27",
+  "commit": "0c96370",
   "condizione": "il salvataggio e' stato RIPRISTINATO e letto, non solo prodotto",
   "denominatore": 19,
   "esito": true,
-  "impronta": "5381733f54e8",
+  "impronta": "5a53b24ce50b",
   "impronte_moduli": {
    "fase13_protocollo_finale": "2dce22f058cc",
    "fase16_outbox": "a47de5874653",
-   "fase178_watchdog": "91a971322681",
+   "fase178_watchdog": "56a06eda2b82",
    "fase23_datastore": "45f9c0f96325",
    "fase28_gateway": "650f256a6d9a",
    "fase29_backpressure": "d905d8e921b7",
@@ -367,7 +367,7 @@
    "fase86_email": "19069663f9d1"
   },
   "motivo": "",
-  "quando": "2026-09-27T19:12:33"
+  "quando": "2026-09-28T10:39:41"
  },
  "50691c557e6e": {
   "blocco": 1,
@@ -622,10 +622,10 @@
  "813b9082642c": {
   "blocco": 1,
   "comando": "python collaudi/esame_produzione.py --scrivi",
-  "commit": "18fda27",
+  "commit": "0c96370",
   "condizione": "gli invarianti sono verificati in PRODUZIONE, non solo nei test",
   "denominatore": 14,
-  "esito": false,
+  "esito": true,
   "impronta": "7eb074e03ba9",
   "impronte_moduli": {
    "fase101_stripe_connect": "30d6d6acc8ee",
@@ -655,8 +655,8 @@
    "fase87_stripe_webhook": "d597430f8f64",
    "fase99_multicurrency": "61a3b5a0c820"
   },
-  "motivo": "l'ULTIMO giro INTERO del Guardiano e' finito pulito (GUARDIANO: nessuno stato anomalo), ha meno di 25 h e ha verificato gli invarianti (la sua riga INVARIANTI ARCHIVI lo precede) (GUARDIANO: 4 stato/i anomalo/i -> {'guasti_isolati': {'conta · eta 3.4 h · riga INVARIANTI ARCHIVI subito prima: si')",
-  "quando": "2026-09-27T19:06:21"
+  "motivo": "",
+  "quando": "2026-09-28T15:49:35"
  },
  "8267c64a367a": {
   "blocco": 4,

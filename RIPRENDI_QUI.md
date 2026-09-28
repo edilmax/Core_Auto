@@ -3435,28 +3435,123 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 895656a
+CONSEGNE AGGIORNATE A: 0c96370
 
-## PASSAGGIO DI CONSEGNE 19 (2026-09-28 mattina) - IL FALSO ALLARME DEL GUARDIANO RIPARATO NEL CODICE (fase178), NON ANCORA COMMITTATO NE' IN PRODUZIONE:
-- PERMESSI, parole testuali del fondatore in questa sessione: «autorizzato fino alla fine»
-  (fase178). ⛔ «procedi al commit» NON ancora detto: senza, niente commit (B1).
+## PASSAGGIO DI CONSEGNE 19 (2026-09-28) - FALSO ALLARME DEL GUARDIANO RIPARATO E IN PRODUZIONE (#229, DEPLOY 0c96370): BLOCCO 1 SOLDI 15/15; FOGLIO DI LANCIO; PROSSIMO LAVORO: IL BLOCCO SULLA CARTA:
+- DEPLOY col pulsante D17 dopo le 13:46Z: salvataggio del giro 20260928-120635 verificato
+  (27 archivi, 27 impronte uguali, 27 integrity_check ok); paracadute prec = viva 3af1fa92
+  (/root/deploy_paracadute_20260928.log, USCITA=0); scambio «SCAMBIO FATTO alle 13:48:06Z»
+  USCITA=0 (/root/deploy_scambio_20260928.log); verifica: healthy, money_path_pronto True,
+  avvisi [], nessuna PAGAMENTO_, VPS 0c96370, viva 924000d3. Giro intero all'avvio:
+  «GUARDIANO: nessuno stato anomalo (tutto quadra)» 13:48:02Z, INVARIANTI ARCHIVI violazioni=0.
+  verifica_produzione 190 controlli 0 violazioni; il file delle finestre ne tiene DUE (27/9
+  18:07 e 28/9 13:49:12-15), le CRITICAL delle sonde 13:49:14 dentro la nuova. Da fuori: / 200,
+  /api/health 200, /api/admin/controversie 401, /api/bunker/invarianti 403, /api/host/payout 401.
+- esame_produzione --scrivi VERDE 9/9 (denominatore 14) -> BLOCCO 1 = 15 SU 15.
+  esame_deploy --scrivi VERDE 55/55 (con --con-guasto 3 rossi), impronta del Blocco 8
+  5a53b24ce50b: casella «deploy» rimisurata; «salvataggio» gia' rimisurata stamattina.
+- PERMESSI, parole testuali del fondatore in questa sessione: «autorizzato  fino alla fine»,
+  «autorizzato fgino alla fine», «procedi al commit   autorizzato fino alla fine caselle solti
+  verdi e super testeti, capitolo chiuso», «ok vai avanti fino alla fine», e sul blocco sulla
+  carta: «si costruiscila e riporta tutte le caselle verdi».
 - STATO VERIFICATO all'avvio (07:13Z): master 895656a su computer, GitHub e VPS; immagine viva
   3af1fa92; chiavetta su 895656a; Blocco 1 = 14/15. I cinque file segnati «M» sul computer
-  (fase188, fase57, fase81, fase98, main_casavip) differiscono SOLO per i fine riga:
-  `git diff` vuoto.
+  (fase188, fase57, fase81, fase98, main_casavip) differiscono SOLO per i fine riga
+  (`git diff` vuoto): non toccati.
 - RIPARAZIONE (D20, guardie viste rosse prima): la voce «LE FINESTRE DELLE SONDE SI
-  AGGIUNGONO» in REGISTRO_INGEGNERIA.md dice cosa, perche', le fonti D25 e le prove.
-  Solo fase178_watchdog.py (+39/-15); fase186 e verifica_produzione non cambiano.
-- ⛔ PRIMA DEL DEPLOY NON SI LANCIA verifica_produzione: col fase178 vecchio sul server
-  cancellerebbe la finestra del 27/9 18:07Z e il falso allarme ripartirebbe.
-- TEMPI, misurati su una copia dei dati veri: il giro intero conta 2 (le sonde del 27/9
-  13:43:33, finestra gia' persa) fino alle 13:43:33Z di oggi, 0 dopo. Un deploy DOPO quell'ora
-  -> il giro all'avvio del contenitore esce pulito -> esame_produzione --scrivi -> Blocco 1
-  15/15. Un deploy PRIMA -> la casella diventa verde col giro intero di 24 ore dopo.
-- RAGGIO SUL PIANO: fase178 sta nel Blocco 8. Le sue due caselle verdi (salvataggio,
-  deploy) cambiano impronta e vanno RIMISURATE dopo il deploy (esame_backup, esame_deploy).
-  Il Blocco 1 non cambia impronta (fase186 non e' toccato).
-- CARICATORE 6965 -> 6968 (+3 guardie, MODULI_NON_IMPORTABILI=0).
+  AGGIUNGONO» in REGISTRO_INGEGNERIA.md dice cosa, perche', le fonti D25 e le prove. Solo
+  fase178_watchdog.py (+39/-15). Commit 37f575a, suite intera Ran 6963 OK (skipped=4) uscita 0,
+  PR #229: CI 16 controlli (15 success + zap skipped, gate success), unione verificata con una
+  SECONDA chiamata (merged=True, master 0c96370). Computer e GitHub su 0c96370.
+- BLOCCO 8, casella «salvataggio» RIMISURATA (fase178 ne cambia l'impronta, ora 5a53b24ce50b):
+  esame_backup su finanza-20260928-060632 (sha256 uguale server/PC): VERDE 19/19; con
+  --con-guasto 4 rossi. Casella «deploy» rimisurata DOPO il deploy (sopra), con le letture a
+  riposo del raccoglitore /root/raccogli_letture_deploy_20260928.py (lo schema di
+  esame_deploy; il paracadute si legge da /root/deploy_paracadute_*.log: i deploy futuri
+  salvano la tappa `paracadute` in un file con quel nome, o quel passo torna rosso).
+- Il deploy e' stato fatto DOPO le 13:43:33Z apposta: prima il giro all'avvio avrebbe contato
+  le due sonde del 27/9 13:43:33, la cui finestra il codice vecchio aveva gia' cancellato.
+
+### 🚀 FOGLIO DI LANCIO (proposto al fondatore il 28/9; si aggiunge una riga SOLO se la scrive lui)
+1. ✅ FATTO il 28/9: deploy di 0c96370 e Blocco 1 soldi 15/15 (esame_produzione --scrivi).
+2. IL BLOCCO SULLA CARTA a 7 giorni (sotto), poi le 15 caselle dei soldi RIMISURATE verdi.
+3. Una frase nel contratto dell'host (fase163, testo intero SOLO in italiano e inglese; le altre
+   sei lingue hanno solo il titolo): le 48 ore di ripensamento vincono sulla politica
+   dell'host. Oggi l'art. 6-ter dice solo «la parte prevista dalla politica di cancellazione»:
+   un host con «non rimborsabile» non lo sa. fase163 sta nel BLOCCO 5: le sue 3 caselle verdi
+   vanno rimisurate. Serve «autorizzato» per QUESTO lavoro.
+4. Il contratto lo controlla un avvocato (lo sceglie il fondatore). Domande pronte: la clausola
+   delle 48 ore; il regolamento UE 2019/1150 (piattaforme verso imprese: nel codice e nei testi
+   non e' nominato, grep del 28/9); il Brasile (art. 49 CDC).
+5. Sentinella esterna gratuita (UptimeRobot o Better Stack): il conto lo apre il fondatore.
+6. Il primo host, a Roma: lo contatta il fondatore.
+📨 TRE TESTI (pensati per «GML 5.3», l'altra IA del fondatore; poi il fondatore: «fai tutto tu»
+-> li scrive la SESSIONE NUOVA, subito, prima del blocco sulla carta. Se un giorno si passano a
+GML 5.3, vanno stampati sotto l'intestazione «📨 GML 5.3», richiesta del fondatore): (1) messaggio in inglese al supporto Stripe per l'autorizzazione estesa a 30
+giorni (capture_method=manual, request_extended_authorization=if_available, piano standard:
+attivabile? costi? conforme se l'importo e' gia' noto?); (2) foglio di una pagina per l'avvocato
+coi punti 4(a)-(c) qui sopra piu' le clausole vessatorie artt. 1341-1342 c.c.; (3) primo contatto
+per un host a Roma, max 120 parole, SOLO i dati di commissione e tariffa tecnica di README.
+I risultati il fondatore li incolla in sessione e si controllano contro il codice prima dell'uso.
+Il resto delle caselle dei blocchi 2-10 e' lavoro di qualita' che continua DOPO e non ferma il
+lancio (domanda del fondatore: «una volta che tutte le caselle sono verdi, posso iniziare a
+lavorare?» -> si', quelle dei soldi).
+
+### 🔒 SCELTE GIA' FATTE - NON SI RIAPRONO (il 28/9 una sessione ha provato a riaprire le 48 ore: errore)
+- Le 48 ORE DI RIPENSAMENTO restano come sono: rimborso 100% entro 48 ore dalla prenotazione se
+  all'arrivo mancano almeno 3 giorni (fase83 `SECONDI_RIPENSAMENTO`, `_entro_ripensamento`,
+  usata in fase111). E' una scelta commerciale del fondatore, non un obbligo: UE art. 16 (l)
+  dir. 2011/83 esclude il recesso per l'alloggio a date fisse; California SB 644 chiede 24 ore;
+  Brasile all'avvocato. L'idea del fondatore: «ho prenotato, dopo due ore ho trovato uno
+  migliore, ma avevo gia' pagato».
+- Commissioni e tariffa tecnica: README e CLAUDE.md (regola zero 4). Rimborso automatico:
+  decisione futura del fondatore, non ferma il lancio.
+
+### 💳 PROSSIMO LAVORO: IL BLOCCO SULLA CARTA (autorizzazione senza incasso), 7 giorni
+- PERCHE': Stripe NON restituisce la sua commissione sui rimborsi («Le commissioni di
+  elaborazione di Stripe relative alla transazione originale non vengono rimborsate»,
+  docs.stripe.com/refunds), e per l'art. 6-ter la paga la PIATTAFORMA su ogni rimborso pieno
+  (le 48 ore E la cancellazione gratuita dell'host). Misurato il 20/8 sul conto vero: 1 EUR,
+  commissione 27 centesimi, rimborso dopo 16 minuti, commissione persa. Sul caso del fondatore
+  (20 notti a 100 EUR = 2000 EUR): da 30,25 EUR (carta europea 1,5% + 0,25) a 105,25 EUR
+  (extraeuropea con cambio 5,25% + 0,25), tariffe da stripe.com/it/pricing e
+  collaudi/conti_stripe.py. «Puoi annullare un pagamento prima che venga completato senza alcun
+  costo» (docs.stripe.com/refunds); Stripe stessa consiglia l'autorizzazione manuale a chi ha
+  molti rimborsi subito dopo l'addebito. Studiato gia' il 20/8 (REGISTRO, voce «RICERCA LEGALE
+  SUL RIPENSAMENTO»), MAI costruito: `capture_method` compare 0 volte nel codice (28/9).
+- COSA DICE STRIPE (letto il 28/9, docs.stripe.com/payments/place-a-hold-on-a-payment-method,
+  /payments/extended-authorization, /api/checkout/sessions/object):
+  · Checkout: `payment_intent_data[capture_method]=manual`, oppure SOLO sulle carte
+    `payment_method_options[card][capture_method]=manual` (gli altri metodi incassano subito);
+  · validita' su carta online, transazione avviata dal cliente: 7 giorni (Visa MIT 5); la
+    scadenza esatta sta nel campo `capture_before` della charge;
+  · supportano il blocco: carte, PayPal, Klarna, Affirm, Afterpay, Cash App Pay; NON iDEAL, ACH
+    (e sul nostro conto sono accesi anche pix, bancontact, blik, eps, mb_way, satispay...: li'
+    resta l'incasso subito e il rimborso che costa);
+  · `payment_status` della sessione: «paid» = fondi disponibili, «unpaid» = non ancora. Con il
+    blocco i fondi NON sono disponibili: la conferma di oggi (casella 10: conferma SOLO su
+    paid/no_payment_required, «unpaid» -> 200 in attesa) NON confermerebbe la prenotazione.
+    Va insegnato che PaymentIntent `requires_capture` = pagamento garantito -> si conferma;
+  · evento `payment_intent.amount_capturable_updated` quando il cliente completa con blocco;
+  · incasso: POST /v1/payment_intents/{id}/capture prima di `capture_before`; annullo:
+    POST /v1/payment_intents/{id}/cancel (stati ammessi: requires_capture e altri);
+  · ⚠️ l'oggetto sessione dice «You can't confirm or cancel the PaymentIntent for a Checkout
+    Session. To cancel, expire the Checkout Session instead»: vale per la sessione APERTA? Da
+    MISURARE su Stripe di prova prima di scrivere codice;
+  · 30 giorni («autorizzazione estesa»): Visa/Mastercard/Amex per alloggi, ma Stripe la da'
+    col piano IC+ o chiedendola al supporto (solo il titolare del conto, il fondatore); e
+    avverte che per molti circuiti vale solo quando l'importo finale non e' noto.
+- ORDINE: (a) tre misure con Stripe DI PROVA (chiave sul Desktop, mai sk_live): payment_status e
+  stato del PaymentIntent con blocco; annullo DOPO il completamento a costo zero (fee 0 nella
+  balance transaction); incasso prima della scadenza; (b) guardie D20 viste rosse; (c) il blocco
+  SOLO sulle prenotazioni con diritto alle 48 ore (arrivo >= 3 giorni); incasso a fine finestra;
+  cancellazione nella finestra = annullo, non rimborso; un incasso fallito = anomalia del
+  Guardiano; (d) i moduli toccati sono del BLOCCO 1 (fase85, fase83...): tutte le 15 caselle
+  si RIMISURANO, mutazione compresa. Tempo onesto dichiarato al fondatore: 1-2 giorni.
+- DOPO la costruzione: il fondatore chiede a Stripe i 30 giorni (il messaggio lo prepara la
+  sessione); se si', da 7 a 30 e' una modifica piccola.
+- CONTESTO: il fondatore ha letto `/context` = 452.9k/1m (45%) prima della pubblicazione di
+  oggi: il blocco sulla carta parte in una SESSIONE NUOVA dopo `/clear` (D21).
 
 ## PASSAGGIO DI CONSEGNE 18 (2026-09-27 sera) - CASELLA 10 IN PRODUZIONE (#227, DEPLOY b1ef0a6); UN FALSO ALLARME DEL GUARDIANO TROVATO, DA RIPARARE COL VIA DEL FONDATORE:
 - PERMESSI: «procedi al commit e fino alla fine», «vai avanti fino alla fine», «la cosa

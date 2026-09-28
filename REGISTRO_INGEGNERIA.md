@@ -452,6 +452,8 @@ mount PRIMA di toccare il container vivo (il bind-mount e' per inode: serve ricr
 **La prova sui dati veri.** `app.log` e `giudice_ultima_sonda` copiati dal server il 28/9 alle 07:24Z, poi `fase186._guasti_isolati` col `fase178` riparato. Il file vecchio si legge come `[(1790532427, 1790532430)]`. Il giro intero conta **2** fino al 28/9 13:43:32Z (le due CRITICAL del 27/9 13:43:33, la cui finestra l'aveva già cancellata il codice di prima: non la si riscrive a mano dopo il fatto, si lascia invecchiare) e **0** dalle 13:43:34Z. Una seconda dichiarazione su una copia lascia due finestre, e il giro dopo conta **0**.
 
 **Il raggio sul piano.** `fase178_watchdog` sta nel **Blocco 8**, non nel Blocco 1 (`fase186` sì, ma non è cambiato): le caselle dei soldi non scadono, mentre le due verdi del Blocco 8 (salvataggio e deploy) cambiano impronta e vanno rimisurate.
+
+**In produzione lo stesso giorno** (#229, `0c96370`, scambio alle 13:48:06Z col pulsante, dopo le 13:43:33Z di proposito). Il giro intero all'avvio del contenitore ha scritto «GUARDIANO: nessuno stato anomalo (tutto quadra)». La verifica di produzione subito dopo (190 controlli, 0 violazioni) ha **aggiunto** la sua finestra: nel file ce ne sono due, e le sue due righe CRITICAL cadono dentro la nuova. `esame_produzione --scrivi` verde 9 su 9: **Blocco 1 soldi 15 su 15**. Il Blocco 8 rimisurato sulla nuova impronta: salvataggio 19/19, deploy 55/55.
 **Caricatore:** 6965 → **6968** (+3, `MODULI_NON_IMPORTABILI=0`).
 
 ### 🔁 LO STATO DEL PAGAMENTO SI CHIEDE A STRIPE (casella 10), E LA CASELLA 7 RISCRITTA SULLA GUIDA DEL CHECKOUT — 27 settembre, «la cosa giusta» e poi «autorizzato» del fondatore
