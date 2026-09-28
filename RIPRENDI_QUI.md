@@ -3435,7 +3435,28 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: b1ef0a6
+CONSEGNE AGGIORNATE A: 895656a
+
+## PASSAGGIO DI CONSEGNE 19 (2026-09-28 mattina) - IL FALSO ALLARME DEL GUARDIANO RIPARATO NEL CODICE (fase178), NON ANCORA COMMITTATO NE' IN PRODUZIONE:
+- PERMESSI, parole testuali del fondatore in questa sessione: «autorizzato fino alla fine»
+  (fase178). ⛔ «procedi al commit» NON ancora detto: senza, niente commit (B1).
+- STATO VERIFICATO all'avvio (07:13Z): master 895656a su computer, GitHub e VPS; immagine viva
+  3af1fa92; chiavetta su 895656a; Blocco 1 = 14/15. I cinque file segnati «M» sul computer
+  (fase188, fase57, fase81, fase98, main_casavip) differiscono SOLO per i fine riga:
+  `git diff` vuoto.
+- RIPARAZIONE (D20, guardie viste rosse prima): la voce «LE FINESTRE DELLE SONDE SI
+  AGGIUNGONO» in REGISTRO_INGEGNERIA.md dice cosa, perche', le fonti D25 e le prove.
+  Solo fase178_watchdog.py (+39/-15); fase186 e verifica_produzione non cambiano.
+- ⛔ PRIMA DEL DEPLOY NON SI LANCIA verifica_produzione: col fase178 vecchio sul server
+  cancellerebbe la finestra del 27/9 18:07Z e il falso allarme ripartirebbe.
+- TEMPI, misurati su una copia dei dati veri: il giro intero conta 2 (le sonde del 27/9
+  13:43:33, finestra gia' persa) fino alle 13:43:33Z di oggi, 0 dopo. Un deploy DOPO quell'ora
+  -> il giro all'avvio del contenitore esce pulito -> esame_produzione --scrivi -> Blocco 1
+  15/15. Un deploy PRIMA -> la casella diventa verde col giro intero di 24 ore dopo.
+- RAGGIO SUL PIANO: fase178 sta nel Blocco 8. Le sue due caselle verdi (salvataggio,
+  deploy) cambiano impronta e vanno RIMISURATE dopo il deploy (esame_backup, esame_deploy).
+  Il Blocco 1 non cambia impronta (fase186 non e' toccato).
+- CARICATORE 6965 -> 6968 (+3 guardie, MODULI_NON_IMPORTABILI=0).
 
 ## PASSAGGIO DI CONSEGNE 18 (2026-09-27 sera) - CASELLA 10 IN PRODUZIONE (#227, DEPLOY b1ef0a6); UN FALSO ALLARME DEL GUARDIANO TROVATO, DA RIPARARE COL VIA DEL FONDATORE:
 - PERMESSI: «procedi al commit e fino alla fine», «vai avanti fino alla fine», «la cosa
@@ -4066,7 +4087,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 6965 test
+SUITE ATTUALE: Ran 6968 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

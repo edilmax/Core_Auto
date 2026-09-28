@@ -53,10 +53,18 @@ NOME_ESITO = "guardiano_ultimo_esito"
 # server scrive quelle negazioni CRITICAL, com'e' giusto per il mondo. Ma le rileggono DUE
 # lettori nostri (`errori_freschi` qui sotto e `fase186._guasti_isolati`), e il 2026-09-14
 # 33 sonde nostre sono diventate «7 stati anomali» e un Telegram: un falso allarme
-# fabbricato da noi (ferrea 10). Il giudice dichiara qui [inizio, fine] delle sue sonde
-# (`dichiara_sonde_giudice`) e i lettori le saltano SOLO dentro quella finestra
-# (`riga_di_rumore_nostro`): una negazione fuori dalla finestra resta un'intrusione.
+# fabbricato da noi (ferrea 10). Ogni giro del giudice AGGIUNGE qui [inizio, fine] delle sue
+# sonde (`dichiara_sonde_giudice`) e i lettori le saltano SOLO dentro una di quelle finestre
+# (`riga_di_rumore_nostro`): una negazione fuori da tutte resta un'intrusione.
 NOME_SONDE_GIUDICE = "giudice_ultima_sonda"
+# Quanto resta una finestra. Fino al 2026-09-28 la nuova CANCELLAVA la vecchia: le sonde dei
+# giri precedenti tornavano intrusioni, e il giro intero del 27/9 18:06Z ha scritto «6 stati
+# anomali» per le nostre verifiche del giorno prima. Come i silenzi di Alertmanager (ognuno col
+# suo inizio e la sua fine, molti attivi insieme, quelli scaduti buttati dopo `--data.retention`),
+# una finestra si butta solo quando il lettore piu' lungo (`fase186._guasti_isolati`, che rilegge
+# ORE_GUASTI_ISOLATI) non puo' piu' incontrarne le righe, piu' un'ora di grazia come il battito.
+# Lo tiene `test_guardiano`, `test_le_finestre_scadute_si_buttano_ma_non_prima_che_il_Guardiano_le_rilegga`.
+MAX_ETA_SONDE_GIUDICE_SEC = 25 * 3600
 
 NOME_LETTURA_CI = "ci_ultima_lettura"
 # Il guardiano interroga GitHub a ogni giro (ogni 10 minuti da cron): tre ore sono DICIOTTO
@@ -248,32 +256,48 @@ def leggi_esito_guardiano(dir_dati: str) -> Optional[Dict[str, Any]]:
 
 def dichiara_sonde_giudice(dir_dati: str, *, inizio: int, fine: int) -> bool:
     """Il giudice dichiara la finestra [inizio, fine] (secondi dal 1970, ora del server) delle
-    sue sonde con credenziali finte. Stesse regole del battito: senza una cartella vera non si
-    scrive niente e si ritorna False, e un guasto qui non solleva mai."""
+    sue sonde con credenziali finte. La AGGIUNGE a quelle gia' dichiarate e butta quelle finite
+    piu' di MAX_ETA_SONDE_GIUDICE_SEC prima di questa. Stesse regole del battito: senza una
+    cartella vera non si scrive niente e si ritorna False, e un guasto qui non solleva mai.
+    ⚠️ Limite dichiarato: due giudici che dichiarano nello stesso istante possono perdere una
+    finestra (vince chi scrive per ultimo): si sbaglia nel verso del falso allarme, mai in quello
+    che zittisce."""
     if not dir_dati or not os.path.isdir(dir_dati):
         return False
     try:
+        inizio, fine = int(inizio), int(fine)
+        tenute = [(a, b) for a, b in (finestra_sonde_giudice(dir_dati) or [])
+                  if b >= fine - MAX_ETA_SONDE_GIUDICE_SEC]
         with open(os.path.join(dir_dati, NOME_SONDE_GIUDICE), "w") as f:
-            f.write("%d %d\n" % (int(inizio), int(fine)))
+            f.write("".join("%d %d\n" % w for w in tenute + [(inizio, fine)]))
         return True
     except (OSError, ValueError, TypeError):
         return False
 
 
-def finestra_sonde_giudice(dir_dati: str) -> Optional[Tuple[int, int]]:
-    """(inizio, fine) dichiarati dal giudice, o None se non ha mai dichiarato niente: e allora
-    NESSUNA riga e' rumore nostro -- si sbaglia nel verso che non zittisce."""
+def finestra_sonde_giudice(dir_dati: str) -> Optional[List[Tuple[int, int]]]:
+    """Le finestre (inizio, fine) dichiarate dal giudice, una per riga e nell'ordine in cui sono
+    state scritte, o None se non ne ha mai dichiarata nessuna: e allora NESSUNA riga e' rumore
+    nostro -- si sbaglia nel verso che non zittisce. Una riga illeggibile si salta da sola: non
+    zittisce niente e non fa perdere le altre."""
     if not dir_dati:
         return None
     try:
         with open(os.path.join(dir_dati, NOME_SONDE_GIUDICE)) as f:
-            a, b = f.readline().split()[:2]
-        return int(a), int(b)
+            righe = f.read().splitlines()
     except (OSError, ValueError):
         return None
+    finestre = []
+    for r in righe:
+        try:
+            a, b = r.split()[:2]
+            finestre.append((int(a), int(b)))
+        except ValueError:
+            continue
+    return finestre or None
 
 
-def riga_di_rumore_nostro(riga: str, ts: int, finestra: Optional[Tuple[int, int]]) -> bool:
+def riga_di_rumore_nostro(riga: str, ts: int, finestre: Optional[List[Tuple[int, int]]]) -> bool:
     """Una riga ERROR/CRITICAL scritta da NOI misurando, non da un guasto. E' l'UNICO criterio,
     condiviso dai due lettori del registro (`errori_freschi` qui e `fase186._guasti_isolati`):
     due copie sarebbero due verita', e una resterebbe indietro.
@@ -281,14 +305,14 @@ def riga_di_rumore_nostro(riga: str, ts: int, finestra: Optional[Tuple[int, int]
          `guardiano_anomalo`, letto da `guardiano_ultimo_esito`; riletta il giorno dopo teneva
          acceso l'allarme da sola (misurato sul server il 2026-09-15: conta 33 = 32 sonde + 1
          riga sua);
-      2. una negazione del Bunker («BUNKER: accesso NEGATO») DENTRO la finestra che il giudice
-         ha dichiarato. Fuori dalla finestra e' un'intrusione, e conta.
+      2. una negazione del Bunker («BUNKER: accesso NEGATO») DENTRO una delle finestre che il
+         giudice ha dichiarato. Fuori da tutte e' un'intrusione, e conta.
     ⚠️ Limite dichiarato: un'intrusione vera nei secondi in cui il giudice sonda viene saltata
     anch'essa. La finestra e' larga quanto le sonde, non di piu', e la dichiara solo chi puo'
     scrivere nella cartella dei dati del server."""
     if "GUARDIANO: " in riga and "stato/i anomalo/i" in riga:
         return True
-    if finestra and "BUNKER: accesso NEGATO" in riga and finestra[0] <= ts <= finestra[1]:
+    if finestre and "BUNKER: accesso NEGATO" in riga and any(a <= ts <= b for a, b in finestre):
         return True
     return False
 
