@@ -395,6 +395,56 @@ class TestIlBonificoAspettaLIncasso(_Base):
         self.assertEqual(len(self.connect.bonifici), 1, "%r" % (self.connect.bonifici,))
 
 
+class TestLaRevisioneDiGML(_Base):
+    """I tre rilievi VERI della revisione indipendente di GML 5.5 Flash sulla #231 (28/9 sera,
+    file di coordinamento sul Desktop), controllati sul codice prima di scrivere queste guardie."""
+
+    def test_UN_BLOCCO_GIA_ANNULLATO_NON_GRIDA_PAGATA_SU_UNA_PRENOTAZIONE_CANCELLATA(self):
+        """Il giro orario legge l'elenco dei blocchi, e un istante dopo l'ospite cancella e
+        annulla: il giro, con la fotografia vecchia, prova a incassare, Stripe dice «annullato».
+        Gridare «la prenotazione risulta PAGATA» su una prenotazione CANCELLATA e' un falso
+        allarme (ferrea 10): si rilegge lo stato, e si grida solo se e' davvero 'pagato'."""
+        rif, vt, tot = self.prenota("2027-04-10", "2027-04-12")
+        _s, _c, pi = self.paga_bloccato(rif, tot)
+        self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
+        self.assertEqual(self.stripe.pagamenti[pi], "canceled", "PREMESSA: annullato")
+        with self.assertLogs("core_auto.server", level="INFO") as reg:
+            self.r._incassa_blocco(rif, pi)           # il giro con la fotografia vecchia
+        errori = [r.getMessage() for r in reg.records if r.levelname == "ERROR"]
+        self.assertEqual(errori, [], "FALSO ALLARME su una prenotazione cancellata: %r" % errori)
+
+    def test_LA_PENALE_NON_INCASSATA_GRIDA_COME_TALE(self):
+        """L'ospite cancella dopo le 48 ore (politica non rimborsabile: c'e' una penale da
+        trattenere) mentre il blocco e' ancora aperto, e l'incasso non riesce. Il giro orario, su
+        una prenotazione chiusa, ANNULLA: la penale non entra mai. Il registro non puo' promettere
+        «si ritenta»: deve dire che la penale e' persa, col riferimento."""
+        from unittest import mock
+        rif, vt, tot = self.prenota("2027-04-10", "2027-04-12")
+        self.paga_bloccato(rif, tot)
+        self.stripe.esito_incasso = {"ok": False, "id": "", "motivo": "URLError: rete"}
+        dopo = time.time() + SECONDI_RIPENSAMENTO + 3600
+        with mock.patch("time.time", return_value=dopo), \
+                self.assertLogs("core_auto.server", level="ERROR") as reg:
+            self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
+        testi = [r.getMessage() for r in reg.records]
+        self.assertTrue(any("penale_non_incassata" in t and rif[:8] in t for t in testi),
+                        "LA PENALE EVAPORA IN SILENZIO: nessun ERROR 'penale_non_incassata' "
+                        "col riferimento: %r" % testi)
+
+    def test_SE_IL_BLOCCO_NON_SI_SCRIVE_SI_RISPONDE_503_E_NON_SI_CONFERMA(self):
+        """Il ramo difensivo che nessuno eseguiva (D19): la scrittura del blocco fallisce. Senza
+        il blocco scritto, la conferma scriverebbe un incasso che Stripe non ha fatto: quindi 503
+        (Stripe ritenta, lo sweeper degli eventi pure), prenotazione non confermata, evento non
+        segnato come elaborato."""
+        rif, _vt, tot = self.prenota("2027-04-10", "2027-04-12")
+        self.sis.pagamenti_pendenti.segna_blocco = lambda *a, **k: False
+        s, c, _pi = self.paga_bloccato(rif, tot)
+        self.assertEqual((s, c.get("sottocodice")), (503, "blocco_non_segnato"), "%r %r" % (s, c))
+        self.assertNotEqual(self.stato(rif), "pagato")
+        self.assertEqual(self.movimenti(rif, "incasso"), [])
+        self.assertFalse(self.sis.eventi_stripe.elaborato("evt_blocco1"))
+
+
 class TestIlLinkVeroChiedeIlBlocco(unittest.TestCase):
     """CABLAGGIO, anello per anello (collaudo 2): dal preventivo al CORPO della sessione di
     Checkout, col fornitore VERO (fase85, montato dal bootstrap come in produzione) e solo la
