@@ -38,6 +38,10 @@ SEG = b"b" * 32
 HK = {"X-Host-Key": "hk"}
 AK = {"X-Admin-Key": "ak"}
 WHSEC = "whsec_blocco"
+# ⛔ VALORE FINTO IN UNA COSTANTE, non scritto sul posto: `bandit` (B106) segnala un argomento
+# il cui NOME contiene «secret»/«key» quando riceve un valore letterale (stesso rimedio di
+# test_webhook_evento_archiviato: un rilievo NUOVO si chiude nel codice).
+CHIAVE_FINTA = "sk_test_blocco"
 
 
 class StripeColBlocco:
@@ -417,7 +421,7 @@ class TestIlLinkVeroChiedeIlBlocco(unittest.TestCase):
             abilitato=True, segreto_hmac=SEG, db_catalogo=f"{d}/c.db",
             db_inventario=f"{d}/i.db", db_registro_host=f"{d}/r.db", db_pendenti=f"{d}/p.db",
             db_payout=f"{d}/pay.db", db_garanzia=f"{d}/g.db", commissione_bps=1000,
-            psp_bps=500, stripe_secret_key="sk_test_blocco", stripe_webhook_secret=WHSEC,
+            psp_bps=500, stripe_secret_key=CHIAVE_FINTA, stripe_webhook_secret=WHSEC,
             stripe_success_url="https://bookinvip.com/grazie.html",
             stripe_cancel_url="https://bookinvip.com/annullato.html"))
         self.r = crea_router(self.sis, host_key="hk", base_url="https://bookinvip.com")

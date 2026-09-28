@@ -622,6 +622,13 @@ class TestIlBloccoSullaCarta(unittest.TestCase):
         self.assertEqual(motivo_con({"error": {"code": "resource_missing"}}),
                          "HTTPError: HTTP Error 400: Bad Request | codice: resource_missing"
                          " | messaggio: -")
+        # un corpo d'errore che non e' JSON (un proxy, una pagina HTML): non si tace, si DICE
+        e = urllib.error.HTTPError(PAGAMENTI_URL + "/pi_1/cancel", 502, "Bad Gateway", {},
+                                   io.BytesIO(b"<html>bad gateway</html>"))
+        with self.assertLogs("core_auto.pagamenti_stripe", level="ERROR"):
+            motivo = _p(FetchFinto(solleva=e)).annulla("pi_1", "k")["motivo"]
+        self.assertEqual(motivo, "HTTPError: HTTP Error 502: Bad Gateway | corpo dell'errore "
+                                 "illeggibile")
 
 
 if __name__ == "__main__":

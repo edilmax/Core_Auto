@@ -3435,7 +3435,44 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 0c96370
+CONSEGNE AGGIORNATE A: f168b9b
+
+## PASSAGGIO DI CONSEGNE 20 (2026-09-28 sera) - PASSO 1 CHIUSO (#230, 6d2a635, CHIAVETTA RIGENERATA); BLOCCO SULLA CARTA COSTRUITO SUL RAMO blocco-carta-20260928 (PR #231), IN CORSA VERSO LA PRODUZIONE:
+- PERMESSI, parole testuali del fondatore in questa sessione: «procedi al commit (documenti
+  delle consegne 19 e lavori del punto 2)», «Autorizzato il blocco sulla carta (fase85, fase83
+  e cio' che serve), fino alla fine»; verso le 18:40 ha chiesto «ci stiamo complicando troppo?»,
+  gli e' stato chiesto «finisci» o «fermo», ha risposto «ok vai avanti fino alla fine».
+- PASSO 1 FATTO: suite del 28/9 15:50 verde (Ran 6963, uscita 0); commit 6fa0c3d, PR #230 (CI
+  16 controlli, gate success), unione verificata con una seconda chiamata (merged=True, master
+  6d2a635); VPS solo `git pull` (immagine invariata 924000d3, health 200). CHIAVETTA rigenerata
+  dal server: verifica_impronte 830/830 VERIFICA_USCITA=0 (letto con virgolette SINGOLE: con le
+  doppie PowerShell espande `$?` in locale), 27 db integri qui e sul server, sha256 uguali per
+  gli 8 pezzi, suite DENTRO la copia estratta Ran 6963 OK uscita 0, copia cancellata; la
+  generazione 895656a sta in `precedente_895656a\`. Rimisura obbligatoria prima del lavoro nuovo:
+  casella «sentinella esterna» del Blocco 8 misurata ROSSA (manca il monitor esterno: punto 5
+  del foglio di lancio, il conto lo apre il fondatore).
+- I TRE TESTI (Stripe 30 giorni in inglese, foglio per l'avvocato, primo contatto host Roma, 93
+  parole contate a macchina) sono scritti e si consegnano al fondatore in chat a fine lavoro.
+  Misurato il 28/9 su Stripe di prova: `request_extended_authorization` -> «This account is not
+  eligible for the requested card features» (i 30 giorni vanno chiesti al supporto).
+- BLOCCO SULLA CARTA: cosa fa, fonti, misure, guardie e limiti nella voce del registro «IL
+  BLOCCO SULLA CARTA». Commit f168b9b (suite Ran 6991 OK dopo un primo giro ROSSO per il numero
+  dei file di test scritto a mano nel README: 431 -> 432). Mutazione della casella dei cinque
+  moduli su f168b9b: 292 punti, 291 uccisi, 0 sopravvissuti, 1 equivalente, uscita 0. La CI
+  della #231 ha fermato `qualita` (bandit: B110 in fase85, B106 nel test): chiusi nel codice.
+  fase85 e' cambiato di nuovo, quindi la mutazione della casella va RIFATTA.
+- DUE MANCANZE TROVATE, scritte e NON riparate (servono decisione e «autorizzato»): (1) il
+  contratto dell'host non dice che le 48 ore valgono anche con «non rimborsabile» (foglio di
+  lancio, punto 3); (2) quando l'OSPITE cancella, l'HOST non riceve nessun messaggio (lo riceve
+  alla prenotazione, non alla cancellazione): vede solo le date tornate libere nel calendario.
+- AMBIENTE: sul PC il cricchetto segnala due avvisi pip-audit su `anyio` (pacchetto di questo
+  computer; in CI il controllo e' verde): e' ambiente, non codice.
+- RESTA, in ordine: suite -> commit della chiusura bandit -> CI #231 verde -> unione verificata
+  -> salvataggio verificato + deploy col pulsante D17 -> le 15 caselle del Blocco 1 rimisurate
+  (esame_produzione dopo il deploy, la casella «ogni ora» almeno un'ora dopo, la riconciliazione
+  con un giro del cron lanciato a mano) -> la PROVA VERA con la carta del fondatore (arrivo fra
+  10 giorni: una prenotazione cancellata subito = annullo a costo zero; una lasciata = incasso
+  dopo 48 ore) -> documenti -> chiavetta.
 
 ## PASSAGGIO DI CONSEGNE 19 (2026-09-28) - FALSO ALLARME DEL GUARDIANO RIPARATO E IN PRODUZIONE (#229, DEPLOY 0c96370): BLOCCO 1 SOLDI 15/15; FOGLIO DI LANCIO; PROSSIMO LAVORO: IL BLOCCO SULLA CARTA:
 - DEPLOY col pulsante D17 dopo le 13:46Z: salvataggio del giro 20260928-120635 verificato

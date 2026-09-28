@@ -79,7 +79,9 @@ def _motivo_errore(exc: BaseException) -> str:
                 testo += " | codice: %s | messaggio: %s" % (err.get("code") or "-",
                                                              err.get("message") or "-")
     except Exception:
-        pass
+        # Un corpo che non si legge (un proxy, una pagina HTML) si DICE, non si tace: e' un
+        # osservabile anche lui (ferrea 9), e un `pass` qui lo cancellerebbe (bandit B110).
+        testo += " | corpo dell'errore illeggibile"
     return testo
 
 STRIPE_URL = "https://api.stripe.com/v1/checkout/sessions"
