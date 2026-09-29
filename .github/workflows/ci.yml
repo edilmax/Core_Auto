@@ -45,29 +45,29 @@ permissions:
 # ============================================================================
 #  BLOCCANTI (entrano nel job finale "gate"):
 #    money-smoke · full-suite · full-suite-311 · copertura · mutazione · qualita ·
-#    w3c · accessibilita · atheris · immagine
+#    w3c · accessibilita · atheris · immagine · browser
 #  NON BLOCCANTI (fuori dal "gate", di proposito):
 #    lint-severo  -> lint severo su codice gia' scritto: informativo, si legge il log
 #    zap          -> gira solo a schedule/manuale, non ad ogni commit
-#    browser      -> click-through dei 3 pannelli col browser vero: nuovo, in prova
 #
-#  PERCHE' `browser` STA FUORI, E A TERMINE (aggiunto il 2026-08-18). Sta fuori PER
-#  DECISIONE, non per dimenticanza: e' l'unico controllo che accende un server vero e
-#  pilota un browser vero, quindi e' anche l'unico che puo' diventare rosso per un
-#  motivo che non e' il prodotto (porta occupata sul runner, browser che non si scarica,
-#  attesa scaduta). Prima si guarda che sia STABILE, poi conta per tutti.
-#  >>> CONDIZIONE D'INGRESSO, scritta subito perche' "provvisorio" non diventi "per
-#      sempre": 5 giri consecutivi su master verdi e senza ritocchi al job. Allora lo si
-#      aggiunge ai `needs` del job finale e si sposta questa riga fra i BLOCCANTI --
-#      spostarla e' ANCHE il gesto tecnico, perche' test_pipeline_ci.py legge questa
-#      mappa e pretende che i due elenchi e i `needs` dicano la stessa cosa.
+#  `browser` E' ENTRATO NEL GATE IL 2026-09-29. Era stato aggiunto il 2026-08-18 FUORI dal
+#  gate, per decisione e a termine: e' l'unico controllo che accende un server vero e pilota
+#  un browser vero, quindi l'unico che puo' diventare rosso per un motivo che non e' il
+#  prodotto (porta occupata sul runner, browser che non si scarica, attesa scaduta). La
+#  condizione d'ingresso, scritta quel giorno perche' "provvisorio" non diventasse "per
+#  sempre", era: 5 giri consecutivi su master verdi e senza ritocchi al job.
+#  MISURATA dall'API delle Actions il 2026-09-29, non ricordata: l'ultimo ritocco al job e'
+#  del 2026-09-19 (5e7fe00, il PIN), e da li' al giro di d8d27da il job `browser` e' stato
+#  `success` in 49 giri di fila su master su 49 (push e notturni). Nel frattempo e' stato
+#  proprio lui l'unico a guardare il checkout dell'ospite, la pubblicazione dell'host e il
+#  PIN: un suo rosso deve fermare l'unione come quello di tutti gli altri.
 #
 #  ATTENZIONE, distinzione che va detta e non intuita: "bloccante" qui vuol dire
 #  "il gate lo aspetta e il suo esito conta". Fra i bloccanti, w3c e' l'unico che
 #  NON BLOCCA SUI RILIEVI (il suo comando finisce con `|| true`, vedi la sua
 #  dichiarazione): resta nel gate perche' se il validatore stesso non gira il job
 #  e' rosso e il gate lo vede, ma un errore HTML da solo non ferma la build.
-#  Gli altri nove bloccano davvero sul contenuto.
+#  Gli altri dieci bloccano davvero sul contenuto.
 #
 #  >>> DA FARE A MANO DAL FONDATORE (io non ho accesso alle impostazioni di GitHub):
 #      Settings -> Branches -> Branch protection rule su "master" ->
@@ -778,7 +778,7 @@ jobs:
   #  ha un DENOMINATORE (40 tentativi dichiarati) e, se scade, il passo esce con 1
   #  e stampa il registro del server: mai un "verde per assenza di prove".
   browser:
-    name: browser (3 pannelli + percorsi ospite-host, checkout, pubblicazione e PIN - NON blocca, vedi mappa in cima)
+    name: browser (3 pannelli + percorsi ospite-host, checkout, pubblicazione e PIN)
     runs-on: ubuntu-latest
     # 25 e non 20 dal 2026-08-18: il tetto dev'essere piu' largo dei DUE tentativi di
     # scaricamento del browser (5+5 minuti), se no il secondo tentativo non ha il tempo di
@@ -853,8 +853,8 @@ jobs:
           cat server_visivo.log
           exit 1
 
-      # Nessun `|| true`: l'esito del browser e' l'esito del job. Che poi il job non
-      # entri nel gate e' una scelta dichiarata in cima, non un disarmo nascosto qui.
+      # Nessun `|| true`: l'esito del browser e' l'esito del job, e dal 2026-09-29 il job
+      # sta nel gate (la condizione d'ingresso e la sua misura sono nella mappa in cima).
       - name: Click-through dei 3 pannelli (PC + Mobile) col browser vero
         run: node collaudi/clickthrough_pannelli.js
 
@@ -1213,6 +1213,7 @@ jobs:
       - accessibilita
       - atheris
       - immagine
+      - browser
     steps:
       # Nota: i nomi dei job con il trattino si leggono con le parentesi quadre
       # (needs['full-suite']) — e' la forma sicura documentata da GitHub.
@@ -1228,6 +1229,7 @@ jobs:
           echo "accessibilita ..... ${{ needs.accessibilita.result }}"
           echo "atheris ........... ${{ needs.atheris.result }}"
           echo "immagine .......... ${{ needs.immagine.result }}"
+          echo "browser ........... ${{ needs.browser.result }}"
           {
             echo "## Esito della CI"
             echo ""
@@ -1243,6 +1245,7 @@ jobs:
             echo "| accessibilita | ${{ needs.accessibilita.result }} |"
             echo "| atheris | ${{ needs.atheris.result }} |"
             echo "| immagine | ${{ needs.immagine.result }} |"
+            echo "| browser | ${{ needs.browser.result }} |"
             echo ""
             echo "I job \`lint-severo\` e \`zap\` sono informativi e non contano qui."
           } >> "$GITHUB_STEP_SUMMARY"
@@ -1285,7 +1288,7 @@ jobs:
           ${{ contains(needs.*.result, 'failure')
           || contains(needs.*.result, 'cancelled')
           || contains(needs.*.result, 'skipped')
-          || join(needs.*.result, ' ') != 'success success success success success success success success success success' }}
+          || join(needs.*.result, ' ') != 'success success success success success success success success success success success' }}
         run: |
           echo "::error title=CI ROSSA::Almeno un job bloccante non e' verde, OPPURE non ha consegnato nessun esito. Guarda la tabella qui sopra: se un job ha esito diverso da 'success' e' quello da aprire; se una riga e' VUOTA quel job non e' mai partito (guasto di GitHub o runner mai assegnato) e il suo controllo NON e' stato fatto."
           exit 1

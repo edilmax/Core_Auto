@@ -669,6 +669,31 @@
   "motivo": "",
   "quando": "2026-09-07T16:45:06"
  },
+ "8567495fd163": {
+  "blocco": 4,
+  "comando": "python collaudi/esame_prezzi.py --scrivi",
+  "commit": "d8d27da",
+  "condizione": "le relazioni metamorfiche reggono: raddoppiare le notti raddoppia il listino e la quota fissa della carta resta una sola, gli sconti seguono l'ordine dichiarato e l'inverso sposta al massimo un centesimo, la commissione tocca solo l'host, il credito viene per ultimo e non lo paga l'host, la tassa cresce esatta con paganti e notti e un esente in piu' non la cambia",
+  "denominatore": 3300,
+  "esito": true,
+  "impronta": "16b54b3dfa6e",
+  "impronte_moduli": {
+   "fase106_dynamic_pricing": "da3e8db92758",
+   "fase119_calendario_prezzi": "639b1cc7da79",
+   "fase125_confronto_guest": "119ea6fb913c",
+   "fase147_tassa_comunale": "88b662186bf3",
+   "fase189_price_alerts": "4bc332dab757",
+   "fase190_rate_parity": "9f33601570d0",
+   "fase43_commissione": "36a13525e3a0",
+   "fase44_prezzo": "ae9adeea4b07",
+   "fase45_pricing": "8e36b1a277d9",
+   "fase66_tassa_soggiorno": "c859506f2386",
+   "fase69_trasparenza": "19e03f01b95e",
+   "fase98_policy_commissione": "1b48eafd7c29"
+  },
+  "motivo": "",
+  "quando": "2026-09-29T13:49:06"
+ },
  "98ef97fd624f": {
   "blocco": 1,
   "comando": "python collaudi/esame_riconciliazione.py --da-file <letture> --scrivi",

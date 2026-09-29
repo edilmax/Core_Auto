@@ -1286,14 +1286,14 @@ class TestNeedsDelGateCompleto(unittest.TestCase):
         leggere e tornasse una lista vuota, i due confronti dinamici qui sotto
         potrebbero passare a vuoto. Questa lista scritta a mano lo impedisce."""
         self.assertEqual(sorted(self.bloccanti),
-                         ["accessibilita", "atheris", "copertura", "full-suite",
+                         ["accessibilita", "atheris", "browser", "copertura", "full-suite",
                           "full-suite-311", "immagine", "money-smoke", "mutazione",
                           "qualita", "w3c"],
                          "se hai aggiunto un job BLOCCANTE devi aggiornare questa "
                          "lista di proposito, dopo esserti accertato che sia anche "
                          "nei needs del gate: e' il punto in cui la decisione si "
                          "prende invece di scivolare")
-        self.assertEqual(sorted(self.non_bloccanti), ["browser", "lint-severo", "zap"],
+        self.assertEqual(sorted(self.non_bloccanti), ["lint-severo", "zap"],
                          "un job non bloccante in piu' significa un controllo il cui "
                          "rosso non ferma nessuno: deve essere una scelta esplicita")
 
@@ -1332,13 +1332,13 @@ class TestNeedsDelGateCompleto(unittest.TestCase):
         self.assertIn("NON blocca", lint.get("name", ""),
                       "lint-severo deve dichiarare nel proprio nome che non blocca: e' "
                       "cio' che si legge nell'elenco dei check su GitHub")
-        # `browser` (2026-08-18) sta fuori dal gate a termine: finche' ci sta, chi legge
-        # l'elenco dei check su GitHub deve vedere DAL NOME che il suo rosso non ferma
-        # nessuno. Il giorno che entra nel gate, questa riga si toglie insieme al nome.
+        # `browser` e' stato fuori dal gate dal 2026-08-18 al 2026-09-29, con «NON blocca» nel
+        # nome; e' entrato nel gate a condizione d'ingresso misurata (mappa in cima a ci.yml),
+        # e il nome non lo dice piu': un check bloccante che si dichiara non bloccante
+        # mentirebbe a chi legge l'elenco su GitHub quanto il contrario.
         browser = self.doc["jobs"]["browser"]
-        self.assertIn("NON blocca", browser.get("name", ""),
-                      "browser deve dichiarare nel proprio nome che non blocca: un "
-                      "check che sembra bloccante e non lo e' e' peggio che non averlo")
+        self.assertNotIn("NON blocca", browser.get("name", ""),
+                         "browser sta nel gate: il suo nome non puo' dire che non blocca")
 
     def test_il_gate_gira_sempre_anche_quando_qualcuno_e_rosso(self):
         gate = self.doc["jobs"][GATE]
@@ -12465,14 +12465,16 @@ class TestLEsameDeiPrezziNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
     giudizio conti i casi; e che `--con-guasto --scrivi` si fermi. Scritta il 2026-09-07 dalla
     chat A; vista ROSSA col guasto iniettato nell'attrezzo (la relazione R1 resa sempre vera).
 
-    ⛔ IL RITROVAMENTO DELLA NOTTE, che questa guardia tiene fermo: la relazione R2 («l'ordine
-    degli sconti non cambia il totale») NON regge sull'aritmetica di fase59 -- lo sconto lungo
-    PRIMA e il -12% DOPO, con la divisione intera, differiscono di un centesimo dall'ordine
-    inverso (misurato sul motore vero: 26 notti da 1,00 EUR con sconto 28,02%: 16,48 contro
-    16,47). Il motore finto «sano» qui sotto copia quell'aritmetica e R2 e' ROSSA anche su di
-    lui, per costruzione; sul motore «ordine inverso» tace. Se un giorno R2 diventa verde sul
-    motore sano, vuol dire che qualcuno ha cambiato l'aritmetica (o la relazione): questa guardia
-    lo dice.
+    ⛔ IL RITROVAMENTO DEL 7/9, e come si e' chiuso il 29/9: la vecchia R2 («l'ordine degli
+    sconti non cambia il totale») NON reggeva sull'aritmetica di fase59 -- lo sconto lungo PRIMA
+    e il -12% DOPO, con la divisione intera, differiscono di un centesimo dall'ordine inverso
+    (26 notti da 1,00 EUR con sconto 28,02%: 16,48 contro 16,47). Il fondatore ha scelto di
+    riscrivere la CASELLA, non il motore: la R2 di oggi pretende l'ordine DICHIARATO al
+    centesimo e tollera 1 centesimo verso l'inverso (limite dimostrato nell'esame). Quindi
+    adesso e' il motore «ordine inverso» a far gridare R2, e quello sano tace. Se un giorno il
+    motore sano fa gridare R2, qualcuno ha cambiato l'aritmetica degli sconti: questa guardia lo
+    dice. E ogni relazione nuova (R5 commissione, R6 prezzo doppio, R7 credito, R8-R10 tassa) ha
+    il SUO guasto che la fa gridare, sul motore e sulla tassa finti.
     """
 
     def _esame(self):
@@ -12491,16 +12493,37 @@ class TestLEsameDeiPrezziNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
         self.assertEqual(q["costo_pagamento_cents"], 10000 * t["psp_bps"] // 10000 + t["psp_fisso"])
 
     def test_LE_RELAZIONI_DICONO_ROSSO_SOLO_DOVE_C_E_IL_GUASTO(self):
+        """Tutti i casi dell'autoprova, con un seme DIVERSO dal suo: il motore e la tassa sani
+        tacciono su tutte e dieci le relazioni, e ogni guasto accende esattamente le sue."""
         esame = self._esame()
         t = {"psp_bps": 500, "psp_fisso": 25, "commissione_bps": 1000}
-        rosse = lambda guasto: set(  # noqa: E731
-            m.split(" ")[0] for m in esame.giudica(
-                esame.relazioni(esame.motore_finto(guasto, t), t, casi=25, seme=3))[2])
-        self.assertEqual(rosse(None), {"R2"}, "sul motore sano (aritmetica di fase59) solo R2 e' rossa")
-        self.assertEqual(rosse("ordine_inverso"), set(), "scontando prima il -12%, R2 tace")
-        self.assertIn("R1", rosse("doppio_piu_uno"))
-        self.assertIn("R1b", rosse("fisso_per_notte"))
-        self.assertIn("R4", rosse("prezzo_alto_costa_meno"))
+        visti = set()
+        for nome, guasto, guasto_tassa, attese in esame.CASI_AUTOPROVA:
+            esiti = esame.relazioni(esame.motore_finto(guasto, t), t, casi=40, seme=3,
+                                    tassa=esame.tassa_finta(guasto_tassa))
+            rosse = set(m.split(" ")[0] for m in esame.giudica(esiti)[2])
+            self.assertEqual(rosse, attese, "«%s»: rosse %s, attese %s" % (nome, rosse, attese))
+            visti |= rosse
+            self.assertEqual(len(esiti), 11, "le relazioni sono undici (R1, R1b, R2-R10)")
+        # il DENOMINATORE: ogni relazione e' stata vista gridare da almeno un guasto
+        tutte = {"R1", "R1b", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9", "R10"}
+        self.assertEqual(visti, tutte, "relazioni mai viste rosse: %s" % (tutte - visti))
+        self.assertEqual(esame.CASI_AUTOPROVA[0][3], set(), "il primo caso e' quello sano")
+
+    def test_IL_CREDITO_E_LA_TASSA_VERI_ENTRANO_DAVVERO(self):
+        """S7: R7 e R8-R10 provano qualcosa solo se il gettone di credito ENTRA nel motore vero e
+        la tassa vera risponde. Costa due quote e una tassa."""
+        esame = self._esame()
+        t = esame.tariffe_di_produzione()
+        senza = esame.motore_vero(10000, notti=1, tariffe=t)
+        con = esame.motore_vero(10000, notti=1, tariffe=t, credito_cents=100)
+        self.assertEqual(senza["sconto_credito_cents"], 0)
+        self.assertGreater(con["sconto_credito_cents"], 0, "il gettone di credito non entra")
+        self.assertEqual(con["prezzo_guest_cents"], senza["prezzo_guest_cents"] - con["sconto_credito_cents"])
+        tassa, fissa, perc = esame.tassa_vera(
+            dict(per_persona_notte_cents=200, percentuale_bps=100), notti=2, ospiti=3,
+            imponibile=10000, esenti=1)
+        self.assertEqual((tassa, fissa, perc), (900, 800, 100))
 
     def test_IL_GIUDIZIO_CONTA_I_CASI_E_UNA_RELAZIONE_A_ZERO_CASI_NON_E_VERDE(self):
         esame = self._esame()

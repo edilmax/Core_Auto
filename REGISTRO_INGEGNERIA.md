@@ -439,6 +439,24 @@ mount PRIMA di toccare il container vivo (il bind-mount e' per inode: serve ricr
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🧾 BLOCCO 4, LA CASELLA METAMORFICA: undici relazioni sul preventivo e sulla tassa VERI, la frase falsa riscritta, e `browser` nel gate — 29 settembre, «autorizzato fai la cosa giusta» del fondatore
+
+**Perché.** La casella «le relazioni metamorfiche reggono» del Blocco 4 aspettava dal 7/9: `collaudi/esame_prezzi.py` la misurava ROSSA perché la frase «l'ordine degli sconti non cambia il totale» è falsa sul motore vero per un centesimo (sconto lungo, poi -12% sul netto già scontato, due divisioni intere: 26 notti da 1,00 EUR con 28,02% danno 16,48 contro 16,47). Due strade: riscrivere la frase (A) o calcolare gli sconti in un passo solo in `fase59` (B, produzione). Il fondatore: «autorizzato fai la cosa giusta».
+
+**La scelta: A, e il perché.** Il limite di un centesimo è **dimostrato**, non scelto: in qualunque ordine il prezzo dell'ospite sta in [g, g+2) con g = L(1-a)(1-b) esatto (ogni divisione intera sbaglia di meno di 1, e il primo errore arriva ridotto di (1-b)), quindi due interi in quell'intervallo distano al massimo 1. La B avrebbe toccato il codice dei soldi in produzione, chiesto un deploy e la rimisura delle caselle, per cambiare di un centesimo alcuni preventivi senza vantaggio per nessuno — e la ripartizione fra le due voci di sconto mostrate avrebbe avuto comunque bisogno di un ordine. Stessa conclusione della verifica del Compito 4 di GML (29/9, file di coordinamento): «la relazione onesta è il congelamento dell'ordine».
+
+**Cosa fa adesso l'esame.** Undici relazioni, Hypothesis a seme fisso, 300 casi l'una: R1 (2n notti = listino esatto x2), R1b (la quota fissa della carta resta una), **R2 nuova** (il prezzo dell'ospite è ESATTAMENTE quello dell'ordine dichiarato, ricalcolato coi tassi che il motore dichiara, e l'inverso dista al massimo 1 centesimo), R3 (conservazione), R4 (monotonia), e dalla specifica di GML verificata: **R5** la commissione tocca solo l'host (quattro commissioni di prova: listino, sconti, ospite, tassa, totale e costo carta identici; l'host cambia esattamente della differenza), **R6** il prezzo a notte raddoppiato (listino esatto, sconti entro 1, ospite fra 2g-2 e 2g+1: margine dimostrato nell'esame), **R7** il credito per ultimo e non a carico dell'host (gettone firmato dalla stessa firma del concierge, come in produzione; se il credito non entra la relazione dice ROSSO, S7), **R8-R10** sulla tassa VERA `fase66.calcola_tassa` (un esente in più non cambia niente; il doppio dei paganti raddoppia esatta la componente fissa; il doppio delle notti la raddoppia dentro i tetti). La tassa si prova su `fase66`, non su `fase147`, perché è `fase66` che il preventivo chiama (`fase81._tassa_alloggio`): era una delle tre affermazioni false della specifica, corretta il 29/9 mattina.
+
+**Le misure.** Motore vero: 11 su 11, denominatore 3300, casella scritta (`scheda.py --blocco 4` = **2 su 3**, impronta 16b54b3dfa6e). Col guasto dentro (`--con-guasto`): R1, R2, R3, R6 rosse con numeri veri del motore. Autoprova: dodici casi su un motore e una tassa finti, un guasto per ogni relazione, e ognuno accende ESATTAMENTE le sue (il sano nessuna). Al primo giro l'autoprova ha detto una cosa vera che non avevo previsto: il motore che «dimezza lo sconto dopo il calcolo» dichiara un -6% e ne applica -12%, e la R2 lo prende; l'attesa è stata corretta col motivo scritto accanto. Tre secondi per 3300 casi sembravano pochi: rimisurato, 2000 quote vere costano 0,11 s.
+
+**Le guardie, viste ROSSE col guasto iniettato con l'editor e ripristino sha256 identico.** `test_pipeline_ci.TestLEsameDeiPrezziNonPuoBARARE`: la guardia sulle relazioni passa TUTTI i casi dell'autoprova con un seme diverso e pretende che ogni relazione sia stata vista gridare (rossa togliendo dalla R7 il controllo «l'host non scende»: «il credito tolto anche all'host: rosse nessuna, attesa R7»); quella nuova sul credito e sulla tassa veri (rossa due volte: gettone non presentato, «0 not greater than 0»; esenti ignorati, «(1300, 1200, 100) != (900, 800, 100)»).
+
+**Il lavoro obbligatorio 4 è tolto dalla lista** di `regole_avvio.py` nello stesso commit, con la nota «FATTO e TOLTO» come i precedenti: uno dei suoi tre esempi era proprio la frase falsa.
+
+**`browser` entra nel gate.** La mappa in cima a `ci.yml` lo teneva fuori dal 2026-08-18 «a termine», con la condizione d'ingresso scritta: 5 giri verdi di fila su master senza ritocchi al job. Misurata dall'API delle Actions: ultimo ritocco il 19/9 (5e7fe00), poi **49 giri su 49** `success` su master fino a d8d27da. Spostato fra i bloccanti (mappa, `needs`, tabella degli esiti, stringa del denominatore), tolto «NON blocca» dal nome; le guardie `TestNeedsDelGateCompleto` e `TestUnJobCheNonConsegnaNiente` viste ROSSE togliendolo dai `needs` (ripristino sha256 identico). ⚠️ Il commento del job diceva già «questo job STA NEL GATE» mentre non ci stava: adesso è vero.
+
+**Difetti trovati per strada, scritti e NON riparati.** (1) Il pre-volo dice «cercarle davvero costa ~25 minuti» per le bombe a tempo, e le consegne 21 lo ripetevano: lo strumento stesso dichiara 156 minuti misurati il 1/9 e chiama «falsa di sei volte» la vecchia stima. (2) Due voci della lista dei lavori obbligatori (l'orologio nostro contro Stripe, il denominatore) risultano ✅ FATTO dalla loro stessa prova e restano nella lista. (3) `RIPRENDI_QUI.md` riporta un «MANDATO PERMANENTE del fondatore (2026-09-21)» su commit e unioni che contraddice B1: vale B1, finché il fondatore non dice altro.
+
 ### 🧬 LA MUTAZIONE SULLE RIGHE NUOVE DEL BLOCCO SULLA CARTA: 43 sopravvissuti su fase83, e nessuno era un difetto del codice — 29 settembre, «procedi al commit per i punti 1 e 2» del fondatore
 
 **Perché.** Il blocco sulla carta (#231, #232) è in produzione dal 28/9 con la sua suite verde; la casella dei soldi del Blocco 1 copre `fase85` (identico dal 74584b0: 291 esaminati, 0 sopravvissuti), ma le righe nuove in `fase83`, `fase162`, `fase181`, `fase182` e `fase202` non le aveva mai giudicate nessuno. La domanda del collaudo 10: se quelle righe fossero sbagliate, un test se ne accorgerebbe?
@@ -6307,8 +6325,11 @@ conteggio delle regole ha mentito tre volte (75 → 103 → 104) finché a conta
   `test_property_soldi.py`, sull'aritmetica dello split di una controversia. ⛔ Al primo giro ha
   trovato una relazione **FALSA scritta da me**, non un difetto del prodotto (la divisione
   intera non si distribuisce sul raddoppio: 1 al 50% da' 0, ma 2 al 50% da' 1) — ed è
-  esattamente per questo che vale. ⚠️ **Resta da allargare**: è accesa su UN punto, non su
-  tutta l'aritmetica del denaro
+  esattamente per questo che vale. ✅ **Allargata** (la riga diceva «accesa su UN punto»): le
+  relazioni sul denaro di `test_property_soldi.py` (casella 4 del Blocco 1) e, dal
+  2026-09-29, `collaudi/esame_prezzi.py` sul preventivo vero e sulla tassa vera (casella 2 del
+  Blocco 4, undici relazioni). Quante e quali caselle la usano lo dice `python
+  collaudi/scheda.py`, non questa riga
 
 ⛔ **IL COLLO DI BOTTIGLIA NON È LA PROFONDITÀ, È LA LARGHEZZA.** Dieci tecniche in casa,
 applicate a circa un terzo dei moduli dei soldi. **Aggiungere strumenti ALLONTANA dalla fine**

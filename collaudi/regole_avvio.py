@@ -244,6 +244,15 @@ def stampa_i_divieti(n=None):
 #    ha avuto CINQUE difetti (scarto doppio · SQLite fermo · processi figli · stesso processo
 #    per le due passate · `time.gmtime`), ognuno dei quali accusava test SANI: tre li aveva
 #    gia' accusati. Si sono visti solo aprendo i casi uno per uno, mai leggendo il codice.
+# ✅ FATTO il 2026-09-29 e TOLTO da questa lista nello stesso commit: «collaudi metamorfici
+#    sull'aritmetica del denaro». Vive in `collaudi/esame_prezzi.py`: undici relazioni sul
+#    preventivo VERO (`fase59.quota`) e sulla tassa VERA (`fase66.calcola_tassa`), 3300 casi,
+#    che scrivono la casella del Blocco 4 (`python collaudi/scheda.py --blocco 4`); autoprova su
+#    un motore e una tassa finti, un guasto per relazione; guardia
+#    `test_pipeline_ci.TestLEsameDeiPrezziNonPuoBARARE`. ⛔ Uno dei tre esempi di questa voce era
+#    FALSO: «l'ordine in cui si applicano gli sconti non cambia il totale» sposta un centesimo
+#    (due divisioni intere, misurato il 2026-09-07). Il fondatore ha scelto di riscrivere la
+#    frase, non il motore: l'ordine e' quello dichiarato e l'inverso dista al massimo 1 centesimo.
 LAVORI_IN_SOSPESO = (
     {
         "nome": "CodeQL",
@@ -318,29 +327,6 @@ LAVORI_IN_SOSPESO = (
             "cerca": "esame_orologi",
             "se_manca": "nessun attrezzo sposta l'orologio nostro contro Stripe di prova: "
                         "hold, payout e penale non sono mai stati visti scadere davvero",
-        },
-    },
-    {
-        "nome": "collaudi metamorfici sull'aritmetica del denaro",
-        "costo": "mezza sessione",
-        "priorita": "MEDIA — e va fatto insieme a F6 «chi perde se va storta»",
-        "perche": "e' l'UNICA delle 11 tecniche di verifica avanzata che il progetto non ha "
-                  "(le altre 10 erano gia' in casa)",
-        "fatto_quando": "esistono relazioni provate sull'aritmetica dei soldi, per esempio: "
-                        "raddoppiare le notti raddoppia la componente fissa · un ospite "
-                        "esente in piu' non cambia la tassa · l'ordine in cui si applicano "
-                        "gli sconti non cambia il totale. ⛔ SOLO sull'aritmetica del denaro, "
-                        "non su tutto: allargarlo e' il modo in cui questi progetti non "
-                        "finiscono mai",
-        "prova": {
-            "tipo": "testo",
-            "dove": (("", "test_", ".py"),),
-            "cerca": "metamorf",
-            "parziale": "misurato il 2026-08-15: esiste `TestRelazioniMetamorfiche` in "
-                        "test_fase119_calendario_prezzi.py. ⛔ Il lavoro chiede l'aritmetica "
-                        "del DENARO (tassa, commissione, ordine degli sconti): va guardato "
-                        "se quelle relazioni la coprono, o se coprono solo il calendario",
-            "se_manca": "nessun collaudo prova relazioni metamorfiche",
         },
     },
     {
