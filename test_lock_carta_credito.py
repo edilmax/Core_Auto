@@ -176,6 +176,66 @@ class TestLockSulWebhook(unittest.TestCase):
         self.assertTrue(any("LOCK CARTA" in r for r in log.output),
                         "il fail-open va DICHIARATO nel registro, non tace")
 
+    # ── il ramo del RIMBORSO PIENO ai margini (Giudice sul diff del blocco sulla carta,
+    #    2026-09-29: fase83 ha reindentato questo ramo sotto `if self._chiudi_blocco(...)`, e
+    #    quattro suoi punti sopravvivevano con questi test accesi) ──────────────────────────
+    def _carta_riusata(self, pi_b="pi_B", **corpo_b):
+        """A paga col suo credito; B (credito diverso) paga con la STESSA carta: scatta il lock.
+        `corpo_b` riscrive campi del corpo di B prima del pagamento."""
+        import sqlite3
+        rif_a = self._prenota("2027-02-10", "2027-02-12", self._credito("uno"))
+        rif_b = self._prenota("2027-02-15", "2027-02-17", self._credito("due"),
+                              email="altra@x.it")
+        if corpo_b:
+            rec = self.sis.pagamenti_pendenti.info(rif_b)
+            corpo = dict(json.loads(rec["corpo_json"]), **corpo_b)
+            con = sqlite3.connect(self.dir + "/p.db")
+            with con:
+                con.execute("UPDATE pendenti SET corpo_json=? WHERE riferimento=?",
+                            (json.dumps(corpo), rif_b))
+            con.close()
+        self.sis.stripe.impronte = {"pi_A": "FP-1", pi_b: "FP-1"}
+        self._webhook("evt_a", rif_a, "pi_A")
+        chieste, vero = [], self.r._giornale
+        self.r._giornale = lambda *a, **k: (chieste.append(k), vero(*a, **k))[1]
+        with self.assertLogs("core_auto.server", level="CRITICAL"):
+            s, c = self._webhook("evt_b", rif_b, pi_b)
+        self.assertEqual((s, c.get("lock_carta")), (200, "credito_negato"), "PREMESSA: il lock")
+        return rif_b, [k for k in chieste if k.get("tipo") == "rimborso"]
+
+    def test_il_lock_con_importo_zero_non_chiede_un_rimborso_a_stripe(self):
+        self._carta_riusata(totale_cents=0, prezzo_guest_cents=0)
+        self.assertEqual(self.sis.stripe.rimborsi, [],
+                         "rimborso di ZERO chiesto a Stripe: lo rifiuta, e resta un errore nel log")
+
+    def test_il_lock_senza_identificativo_del_pagamento_non_chiede_un_rimborso(self):
+        self._carta_riusata(pi_b="")
+        self.assertEqual(self.sis.stripe.rimborsi, [],
+                         "rimborso chiesto a Stripe senza sapere QUALE pagamento restituire")
+
+    def test_il_lock_scrive_la_riga_nella_valuta_della_prenotazione(self):
+        _rif, righe = self._carta_riusata(valuta="USD")
+        self.assertEqual([k.get("valuta") for k in righe], ["USD"],
+                         "la riga di rimborso esce in una valuta diversa da quella pagata")
+
+    def test_il_lock_che_non_riesce_a_scrivere_la_riga_lascia_la_traccia(self):
+        import sqlite3
+        rif_a = self._prenota("2027-02-10", "2027-02-12", self._credito("uno"))
+        rif_b = self._prenota("2027-02-15", "2027-02-17", self._credito("due"),
+                              email="altra@x.it")
+        self.sis.stripe.impronte = {"pi_A": "FP-1", "pi_B": "FP-1"}
+        self._webhook("evt_a", rif_a, "pi_A")
+
+        def esplode(*a, **k):
+            raise sqlite3.OperationalError("disco pieno")
+        self.r._giornale = esplode
+        with self.assertLogs("core_auto.server", level="ERROR") as reg:
+            self._webhook("evt_b", rif_b, "pi_B")
+        rec = [r for r in reg.records if "riga di giornale NON scritta" in r.getMessage()]
+        self.assertEqual(len(rec), 1, "il rimborso dovuto sparisce in silenzio")
+        self.assertIsInstance(rec[0].exc_info, tuple)
+        self.assertIs(rec[0].exc_info[0], sqlite3.OperationalError)
+
 
 class TestLegaCartaSpeculare(unittest.TestCase):
     """Il registro: stessa semantica di `consuma`, nelle due direzioni."""
