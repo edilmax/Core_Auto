@@ -3435,7 +3435,79 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: f8219c3
+CONSEGNE AGGIORNATE A: 7ad5ef1
+
+## PASSAGGIO DI CONSEGNE 21 (2026-09-29) - MUTAZIONE SULLE RIGHE NUOVE DEL BLOCCO SULLA CARTA: 134 MUTANTI, 132 UCCISI, 2 EQUIVALENTI PER COSTRUZIONE; 40 GUARDIE NUOVE VISTE ROSSE; NESSUNA RIGA DI PRODUZIONE CAMBIATA:
+- STATO VERIFICATO all'inizio (09:40 ora del PC): computer, GitHub e VPS su 7ad5ef1 (sul VPS
+  `git rev-parse`), immagine viva cefa7a55, paracadute bf133ae0, /api/health 200; chiavetta
+  `Desktop\BOOKINVIP USB 2026` generata su 7ad5ef1 (LEGGIMI-RIPRISTINO: 831/831 impronte, suite
+  nella copia Ran 6994 OK). I file fase188, fase57, fase81, fase98 e main_casavip risultano
+  modificati solo per i fine riga (`git diff` vuoto): non si committano.
+- PERMESSI, parole testuali del fondatore: «procedi al commit per i punti 1 e 2»; «Le due
+  mancanze ... aspettano il mio "autorizzato": non toccarle»; «Controlla il contesto con me a
+  ogni blocco chiuso»; sulla pulizia del codice morto: «la pulizia dopo la prova vera, dopo
+  parliamo e vediamo cosa c'e' a disposizione di nuovo per test».
+- IL METODO. `collaudi/mutazione_prodotto.py --diff 6d2a635` cosi' com'e' NON andava: tetto di
+  40 mutanti in comune fra i file (su 175 generati sul diff, 134 nei cinque file chiesti) e occhi
+  scelti in ordine alfabetico (per fase83 gli otto primi fra 227, senza `test_blocco_carta`).
+  Si e' usato il ciclo VERO dello strumento (`giro_sul_diff`: base verde, traccia, ripristino,
+  bytecode) con due cose dichiarate: un modulo per volta e gli occhi scelti a mano; primo giro in
+  un albero separato (`git worktree` su 7ad5ef1, `Desktop\Core_Auto_M`). Il pilota sta nella
+  cartella temporanea della sessione, non nel repository. fase85 escluso: identico dal 74584b0,
+  misurato nella casella del Blocco 1 (291 esaminati, 0 sopravvissuti).
+- I NUMERI (primo giro, occhi dedicati): fase182 4/4 uccisi; fase181 13/13; fase202 3/5 (2
+  sopravvissuti); fase162 14/25 (11); fase83 44/87 (43). Secondo passo sui 43 di fase83, per zone
+  e coi test di quelle strade accesi: rimborso admin 1 ucciso su 4, cancellazione host 0 su 1,
+  cancellazione ospite 0 su 5, lock carta 0 su 5; le funzioni nuove del blocco (28) le conosce
+  solo test_blocco_carta. Per OGNI sopravvissuto una guardia, vista ROSSA sul mutante (il Giudice
+  rilanciato sulle sole righe dei sopravvissuti con le SOLE guardie nuove come occhi: zona E
+  32/32, zone A+B 7/7, zona C 8/8, lock 4/5, fase162 21/25 -- i 4 restanti li uccidevano gia' i
+  test di prima -- e fase202 col guasto iniettato con l'editor). I punti che il generatore non sa
+  rompere (a cavallo di due righe, catene, colonna sbagliata per un carattere non ASCII): 7,
+  rotti a mano con l'editor, tutti visti rossi, ripristino sha256 identico ogni volta.
+- 2 EQUIVALENTI PER COSTRUZIONE, NON dichiarati nello schedario (per toglierli si riscrive la
+  riga, ed e' produzione: serve «autorizzato»): `fase162:79` (`fine > 0` contro `>= 0`: allo zero
+  entrambi i rami danno 0) e `fase83:7489` (`{"ok": False, ...}` del lock carta: la chiave `ok`
+  non la legge nessuno, si usa solo `motivo` alla 7499).
+- DIFETTO MINORE TROVATO, scritto e NON riparato: nel rimborso dell'admin, se `marca_da_rimborsare`
+  esplode, la risposta dice «PAGATA ma pagamento non identificabile (nessun pi_)» anche quando il
+  pi_ c'e' (e' letto dopo il passo esploso). Dice comunque «da restituire A MANO», quindi nessun
+  soldo si perde; il testo e' impreciso.
+- LE GUARDIE (tutte in file di test, zero righe di produzione): `test_blocco_carta.py` +36
+  (I2 al confine della grazia e senza istante; `segna_blocco` e `blocchi_aperti` ai confini;
+  webhook con rilettura esplosa o storta, scrittura del blocco esplosa; fine finestra con istante
+  non valido o voucher illeggibile; fornitore senza incasso o annullo; motivo di Stripe nel
+  registro; autorizzazione scaduta su prenotazione pagata; `_chiudi_blocco` per ogni stato; giro
+  orario senza elenco, senza istante, al secondo esatto, che parla e che tace; pagamento tardivo
+  su stanza presa; rimborso admin su un blocco; nessuna riga di rimborso chiesta per zero euro;
+  cancellazione dell'ospite ai margini; la traccia del tick letta sull'albero sintattico);
+  `test_lock_carta_credito.py` +4 (importo zero, identificativo assente, valuta della riga,
+  traccia dell'errore). I dieci file toccati dai test girati insieme: Ran 370, OK.
+- CARICATORE 6999 -> 7039 (+40), misurato da fermo da PowerShell prima della suite (S14).
+- CONTESTO letto dal fondatore alla chiusura del blocco: 48% (`/context`, 476.9k su 1M). D21: il
+  punto 2 si apre in una sessione NUOVA. La decisione sulla casella del Blocco 4 e' stata chiesta
+  il 29/9 (A: riscrivere il testo della casella, consigliata; B: sconto in un passo in fase59,
+  «autorizzato»): se la risposta non e' scritta qui sotto, si richiede.
+- AVVISO: lo schedario delle bombe a tempo e' di 28 giorni fa; oltre i 30 il pre-volo diventa
+  ROSSO (rimisura: `python collaudi/bombe_a_tempo.py`, circa 25 minuti).
+- RESTA, in ordine:
+  1. questo lavoro: suite intera, commit, PR, CI, unione; sul VPS solo `git pull` (niente
+     produzione cambiata); il contesto si controlla col fondatore a blocco chiuso;
+  2. BLOCCO 4, la casella metamorfica: l'attrezzo c'e' gia' (`collaudi/esame_prezzi.py`, dal 7/9)
+     e misura R2 «l'ordine degli sconti non cambia il totale» ROSSA per un centesimo (sconto lungo
+     poi -12%, due divisioni intere). Serve la decisione del fondatore, aperta dall'8/9: riscrivere
+     il testo della casella («nell'ordine dichiarato») o lo sconto in un passo in fase59
+     («autorizzato»). Dalla specifica di GML (verificata sul codice il 29/9: tre affermazioni false
+     corrette nel file di coordinamento) si aggiungono le relazioni che l'esame non ha: la
+     commissione tocca solo l'host, prezzo a notte raddoppiato, credito per ultimo, tassa su fase66
+     (quella del preventivo: fase81:293-298; fase147 e' il registro comunale);
+  3. la PROVA VERA con la carta del fondatore (consegne 20, punto RESTA 2);
+  4. le due MANCANZE (frase delle 48 ore nel contratto host, avviso all'host quando l'ospite
+     cancella) e le due righe degli equivalenti: aspettano «autorizzato»;
+  5. dopo la prova vera: la PULIZIA del codice morto (misurata con `collaudi/raggiungibilita.py`,
+     spento non e' morto; e' anche la decisione 7 dell'8/9 sui 18 moduli vecchi), poi si parla
+     degli strumenti nuovi per i test. MiroFish (proposto da un testo esterno) NON fa prove su un
+     sito: simula opinioni su social finti (repository ufficiale 666ghj/MiroFish, AGPL-3.0).
 
 ## PASSAGGIO DI CONSEGNE 20 (2026-09-28 notte) - BLOCCO SULLA CARTA IN PRODUZIONE (#231 + #232, DEPLOY f8219c3); BLOCCO 1 SOLDI 15/15; BLOCCO 8 2/3; MACCHINA 35 SU 43; REVISIONE INDIPENDENTE DI GML AVVIATA:
 - STATO FINALE (misurato il 28/9 dopo le 23:07 ora del PC): #232 unita (CI 16 controlli, gate
@@ -4301,7 +4373,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 6999 test
+SUITE ATTUALE: Ran 7039 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

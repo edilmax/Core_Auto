@@ -564,6 +564,36 @@ class TestISorveglientiConosconoIlBlocco(unittest.TestCase):
                                 "il giro gira ogni ora: una grazia piu' corta di qualche giro "
                                 "griderebbe su un ritardo normale")
 
+    def test_I2_all_ultimo_secondo_della_grazia_tace_e_a_quello_dopo_grida(self):
+        """Il confine della grazia e' COMPRESO: sopravviveva il `<=` diventato `<` (Giudice sul
+        diff del blocco, 2026-09-29, fase202:293)."""
+        from fase202_invarianti_archivi import GRAZIA_INCASSO_BLOCCO_SEC, _giudica_i2
+        fine = 1_900_000_000
+        pren = [{"rif": "CONFINE", "stato": "pagato", "corpo_json": json.dumps(
+            {"totale_cents": 5000, "blocco_pi": "pi_c", "blocco_incassa_dal_ts": fine})}]
+        viol, _ = _giudica_i2(pren, [], ora_ts=fine + GRAZIA_INCASSO_BLOCCO_SEC)
+        self.assertEqual(viol, [], "all'ultimo secondo della grazia il blocco e' ancora in regola")
+        viol, _ = _giudica_i2(pren, [], ora_ts=fine + GRAZIA_INCASSO_BLOCCO_SEC + 1)
+        self.assertEqual([v[0] for v in viol], ["CONFINE"],
+                         "un secondo dopo la grazia il blocco non incassato e' un incasso mancato")
+
+    def test_I2_senza_un_istante_valido_usa_l_orologio_vero(self):
+        """`ora_ts` assente o booleano non e' un istante: vale l'orologio vero. Sopravviveva
+        l'`and` diventato `or` (fase202:269): con None il confronto esplodeva, con True l'istante
+        diventava 1 e un blocco scaduto da anni restava «autorizzato» per sempre."""
+        from fase202_invarianti_archivi import _giudica_i2
+        adesso = int(time.time())
+
+        def p(rif, fine):
+            return {"rif": rif, "stato": "pagato", "corpo_json": json.dumps(
+                {"totale_cents": 5000, "blocco_pi": "pi_" + rif, "blocco_incassa_dal_ts": fine})}
+        dentro, scaduto = p("DENTRO", adesso + 86400), p("SCADUTO", 1_000_000_000)
+        for senza_istante in (None, True, False):
+            viol, _ = _giudica_i2([dentro, scaduto], [], ora_ts=senza_istante)
+            self.assertEqual([v[0] for v in viol], ["SCADUTO"],
+                             "ora_ts=%r: deve valere l'orologio vero (DENTRO tace, SCADUTO grida)"
+                             % (senza_istante,))
+
     def test_la_riconciliazione_conta_le_sessioni_incassate_dopo_il_blocco(self):
         from fase182_riconciliazione import stripe_sessioni_pagate
         chiamate = []
@@ -612,6 +642,589 @@ class TestISorveglientiConosconoIlBlocco(unittest.TestCase):
         rimborsata = {"stato": "rimborsato", "corpo_json": json.dumps({"stripe_cs": "cs_x"})}
         self.assertEqual(_semaforo_coerenza(rimborsata, None, [])["colore"], "rosso",
                          "senza blocco, «rimborsato» senza riga di rimborso resta un rosso vero")
+
+
+class TestSegnaBloccoEBlocchiApertiAiConfini(unittest.TestCase):
+    """`segna_blocco` e `blocchi_aperti` di fase162 sugli ingressi che il flusso normale non
+    manda mai. Nate dal Giudice sul diff del blocco (2026-09-29): 10 sopravvissuti su 25, perche'
+    nessun test chiamava queste due funzioni fuori dal cammino felice. Il False di `segna_blocco`
+    non e' un dettaglio: e' cio' che fa rispondere 503 `blocco_non_segnato` a fase83."""
+
+    CORPO = {"ospite": "Nicolò Città", "totale_cents": 5000}
+
+    def setUp(self):
+        import os
+        from fase162_pagamenti_pendenti import crea_pagamenti_pendenti
+        self.dir = tempfile.mkdtemp()
+        self.db = os.path.join(self.dir, "pendenti.db")
+        self.pp = crea_pagamenti_pendenti(self.db)
+        self.pp.inizializza_schema()
+        for rif in ("RIF", "123"):
+            self.assertTrue(self.pp.registra(rif, alloggio_id="a", check_in="2030-01-01",
+                                             check_out="2030-01-03",
+                                             corpo_json=json.dumps(self.CORPO, ensure_ascii=False)))
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def grezzo(self, rif):
+        import sqlite3
+        con = sqlite3.connect(self.db)
+        try:
+            return con.execute("SELECT corpo_json FROM pendenti WHERE riferimento=?",
+                               (rif,)).fetchone()[0]
+        finally:
+            con.close()
+
+    def test_un_riferimento_che_non_e_una_stringa_piena_non_scrive(self):
+        prima = self.grezzo("123")
+        for rif in (None, "", 123):
+            self.assertIs(self.pp.segna_blocco(rif, blocco_pi="pi_x"), False, "rif=%r" % (rif,))
+        self.assertEqual(self.grezzo("123"), prima,
+                         "il numero 123 non e' il riferimento '123': SQLite li confronterebbe uguali")
+
+    def test_si_scrivono_solo_i_campi_del_blocco_e_tutti_o_nessuno(self):
+        prima = self.grezzo("RIF")
+        for campi in ({}, {"nome_sbagliato": "x"}, {"blocco_pi": None}, {"blocco_pi": ""},
+                      {"blocco_pi": "pi_x", "nome_sbagliato": "y"}):
+            self.assertIs(self.pp.segna_blocco("RIF", **campi), False, "campi=%r" % (campi,))
+        self.assertEqual(self.grezzo("RIF"), prima, "una richiesta rifiutata non scrive niente")
+
+    def test_un_riferimento_che_non_esiste_risponde_False(self):
+        self.assertIs(self.pp.segna_blocco("NON_ESISTE", blocco_pi="pi_x"), False)
+
+    def test_la_scrittura_che_fallisce_risponde_False_e_lascia_la_traccia(self):
+        import sqlite3
+        con = sqlite3.connect(self.db)
+        with con:
+            con.execute("CREATE TRIGGER no_update BEFORE UPDATE ON pendenti "
+                        "BEGIN SELECT RAISE(ABORT, 'disco pieno'); END")
+        con.close()
+        with self.assertLogs("core_auto.pagamenti_pendenti", level="WARNING") as registro:
+            esito = self.pp.segna_blocco("RIF", blocco_pi="pi_x")
+        self.assertIs(esito, False, "una scrittura non riuscita non puo' dire «segnato»")
+        rec = [r for r in registro.records if "segna_blocco" in r.getMessage()]
+        self.assertEqual(len(rec), 1)
+        self.assertIsInstance(rec[0].exc_info, tuple, "la riga deve portare l'eccezione intera")
+        self.assertTrue(issubclass(rec[0].exc_info[0], sqlite3.Error))
+
+    def test_la_riga_riscritta_resta_leggibile_come_le_altre(self):
+        self.assertIs(self.pp.segna_blocco("RIF", blocco_pi="pi_x"), True)
+        grezzo = self.grezzo("RIF")
+        self.assertIn("Nicolò Città", grezzo,
+                      "il modulo scrive il corpo in UTF-8 leggibile (come alle righe gemelle): "
+                      "chi cerca un nome nel file deve trovarlo anche dopo il blocco")
+        self.assertEqual(json.loads(grezzo), dict(self.CORPO, blocco_pi="pi_x"))
+
+    def test_un_tetto_non_valido_torna_quello_di_serie(self):
+        for rif in ("RIF", "123"):
+            self.assertIs(self.pp.segna_blocco(rif, blocco_pi="pi_" + rif), True)
+        self.assertEqual(len(self.pp.blocchi_aperti(limit=1)), 1, "un tetto valido vale")
+        for tetto in (True, False, 0, -1, 5001, "3", None):
+            self.assertEqual(len(self.pp.blocchi_aperti(limit=tetto)), 2, "limit=%r" % (tetto,))
+
+    def test_il_tetto_massimo_dichiarato_vale_davvero(self):
+        import sqlite3
+        con = sqlite3.connect(self.db)
+        with con:
+            con.executemany(
+                "INSERT INTO pendenti (riferimento, alloggio_id, check_in, check_out, corpo_json,"
+                " scadenza_ts, creato_ts) VALUES (?, 'a', '2030-01-01', '2030-01-03', ?, 1, 1)",
+                [("B%03d" % i, json.dumps({"blocco_pi": "pi_%d" % i})) for i in range(501)])
+        con.close()
+        self.assertEqual(len(self.pp.blocchi_aperti()), 500, "di serie il tetto e' 500")
+        self.assertEqual(len(self.pp.blocchi_aperti(limit=5000)), 501,
+                         "5000 e' ammesso: il confine e' compreso")
+
+
+class _Registro:
+    """Raccoglie TUTTO cio' che scrive il server, anche niente (su Python 3.9 `assertNoLogs`
+    non c'e', e la direzione «tace» di un allarme va provata quanto l'altra, ferrea 10)."""
+
+    def __init__(self):
+        import logging
+        self.records = []
+        self._log = logging.getLogger("core_auto.server")
+        self._h = logging.Handler(level=logging.DEBUG)
+        self._h.emit = self.records.append
+
+    def __enter__(self):
+        import logging
+        self._livello = self._log.level
+        self._log.addHandler(self._h)
+        self._log.setLevel(logging.DEBUG)
+        return self
+
+    def __exit__(self, *a):
+        self._log.removeHandler(self._h)
+        self._log.setLevel(self._livello)
+
+    def testi(self, livello=None):
+        return [r.getMessage() for r in self.records if livello in (None, r.levelname)]
+
+
+class TestIRamiDelBloccoCheNessunoEseguiva(_Base):
+    """fase83, le funzioni del blocco sulla carta fuori dal cammino felice. Nate dal Giudice sul
+    diff del blocco (2026-09-29): 28 sopravvissuti su 87 in queste funzioni, rami difensivi che
+    nessun test eseguiva (D19) -- Stripe che non risponde o risponde storto, un fornitore senza
+    incasso o annullo, un istante non valido, il confine esatto della finestra, il motivo che
+    deve arrivare nel registro (ferrea 9)."""
+
+    def _bloccata(self):
+        rif, vt, tot = self.prenota("2027-04-10", "2027-04-12")
+        _s, _c, pi = self.paga_bloccato(rif, tot)
+        self.assertEqual(self.stato(rif), "pagato", "PREMESSA: il blocco ha confermato")
+        return rif, vt, tot, pi
+
+    # ── il webhook ───────────────────────────────────────────────────────────────
+    def test_la_sessione_unpaid_senza_blocco_risponde_il_corpo_intero(self):
+        rif, _vt, _tot = self.prenota("2027-04-18", "2027-04-20")
+        self.stripe.sessioni["cs_pix"] = ("unpaid", "pi_pix")
+        self.stripe.pagamenti["pi_pix"] = "processing"
+        s, c = self.evento("evt_pix", "checkout.session.completed", rif, "cs_pix", "pi_pix")
+        self.assertEqual((s, c), (200, {"ricevuto": True, "tipo": "checkout.session.completed",
+                                        "pagamento": "in_attesa"}))
+        self.assertNotIn("blocco_pi", self.corpo(rif),
+                         "un pagamento che NON e' requires_capture non e' un blocco")
+
+    def test_una_rilettura_che_esplode_o_risponde_storto_fa_ritentare(self):
+        import logging
+        rif, _vt, tot = self.prenota("2027-04-14", "2027-04-16")
+        self.stripe.pagamenti["pi_x"] = "requires_capture"
+
+        def esplode(cs):
+            raise ConnectionError("rete")
+        for n, risposta in enumerate((esplode, lambda cs: None, lambda cs: "requires_capture")):
+            # una sessione per tentativo: la deduplica riconosce la sessione, non solo l'evento
+            cs = "cs_x%d" % n
+            self.stripe.sessioni[cs] = ("unpaid", "pi_x")
+            self.stripe.pagamento_della_sessione = risposta
+            with _Registro() as reg:
+                s, c = self.evento("evt_x%d" % n, "checkout.session.completed", rif, cs, "pi_x")
+            self.assertEqual((s, c.get("sottocodice")), (503, "rilettura_pagamento_fallita"),
+                             "risposta %d: %r %r" % (n, s, c))
+            self.assertNotEqual(self.stato(rif), "pagato")
+            if risposta is esplode:
+                rec = [r for r in reg.records if "rilettura del pagamento" in r.getMessage()]
+                self.assertEqual([r.levelno for r in rec], [logging.WARNING])
+                self.assertIsInstance(rec[0].exc_info, tuple, "la traccia dell'esplosione manca")
+                self.assertIs(rec[0].exc_info[0], ConnectionError)
+
+    def test_se_la_scrittura_del_blocco_esplode_non_si_conferma(self):
+        rif, _vt, tot = self.prenota("2027-04-10", "2027-04-12")
+
+        def esplode(*a):
+            raise RuntimeError("archivio bloccato")
+        self.r._segna_blocco_aperto = esplode
+        with _Registro() as reg:
+            s, c, _pi = self.paga_bloccato(rif, tot)
+        self.assertEqual((s, c.get("sottocodice")), (503, "blocco_non_segnato"),
+                         "BLOCCO NON SCRITTO E PRENOTAZIONE CONFERMATA: la conferma scrive un "
+                         "incasso che Stripe non ha fatto (%r %r)" % (s, c))
+        self.assertNotEqual(self.stato(rif), "pagato")
+        self.assertEqual(self.movimenti(rif, "incasso"), [])
+        rec = [r for r in reg.records if "scrittura esplosa" in r.getMessage()]
+        self.assertEqual(len(rec), 1)
+        self.assertIsInstance(rec[0].exc_info, tuple)
+        self.assertIs(rec[0].exc_info[0], RuntimeError)
+
+    # ── la fine della finestra ───────────────────────────────────────────────────
+    def test_segnare_il_blocco_senza_archivio_dei_pendenti_non_esplode(self):
+        self.sis.pagamenti_pendenti = None
+        self.assertIsNone(self.r._segna_blocco_aperto("RIF", "pi_x"))
+
+    def test_un_istante_del_voucher_non_valido_vuol_dire_adesso(self):
+        from unittest import mock
+        rif, _vt, _tot = self.prenota("2027-04-10", "2027-04-12")
+        for ts in (True, 0, -5):
+            prima = int(time.time())
+            with mock.patch.object(self.sis.firma, "decodifica", return_value={"prenotato_ts": ts}):
+                self.assertIs(self.r._segna_blocco_aperto(rif, "pi_x"), True)
+            fine = self.corpo(rif)["blocco_incassa_dal_ts"]
+            self.assertTrue(prima <= fine <= int(time.time()),
+                            "prenotato_ts=%r non e' un istante: la finestra finisce adesso, non a "
+                            "%r" % (ts, fine))
+        # l'altra direzione: un istante valido sposta la fine di 48 ore esatte
+        with mock.patch.object(self.sis.firma, "decodifica",
+                               return_value={"prenotato_ts": 1_900_000_000}):
+            self.r._segna_blocco_aperto(rif, "pi_x")
+        self.assertEqual(self.corpo(rif)["blocco_incassa_dal_ts"],
+                         1_900_000_000 + SECONDI_RIPENSAMENTO)
+
+    def test_un_voucher_illeggibile_lascia_la_traccia_e_si_incassa_subito(self):
+        from unittest import mock
+        rif, _vt, _tot = self.prenota("2027-04-10", "2027-04-12")
+        prima = int(time.time())
+        with mock.patch.object(self.sis.firma, "decodifica", side_effect=ValueError("rotto")), \
+                self.assertLogs("core_auto.server", level="WARNING") as reg:
+            self.assertIs(self.r._segna_blocco_aperto(rif, "pi_x"), True)
+        rec = [r for r in reg.records if "voucher illeggibile" in r.getMessage()]
+        self.assertEqual(len(rec), 1)
+        self.assertIsInstance(rec[0].exc_info, tuple)
+        self.assertIs(rec[0].exc_info[0], ValueError)
+        self.assertTrue(prima <= self.corpo(rif)["blocco_incassa_dal_ts"] <= int(time.time()))
+
+    # ── incasso e annullo ────────────────────────────────────────────────────────
+    def test_lo_stato_del_pagamento_non_prende_per_buono_un_no(self):
+        for risposta, atteso in (({"ok": False, "stato": "succeeded"}, ""), (None, ""),
+                                 ({"ok": True, "stato": "requires_capture"}, "requires_capture")):
+            self.stripe.stato_pagamento = lambda pi, r=risposta: r
+            self.assertEqual(self.r._stato_pi("pi_x"), atteso, "risposta %r" % (risposta,))
+
+    def test_un_fornitore_senza_incasso_non_incassa_niente(self):
+        rif, _vt, _tot, pi = self._bloccata()
+        self.stripe.incassa = None
+        with self.assertLogs("core_auto.server", level="ERROR") as reg:
+            self.assertEqual(self.r._incassa_blocco(rif, pi), "fallito")
+        self.assertTrue(any("incasso_fallito" in t and "fornitore senza incasso" in t
+                            for t in reg.output), reg.output)
+        self.assertEqual(self.movimenti(rif, "incasso"), [],
+                         "INCASSO SCRITTO SENZA CHE NESSUNO L'ABBIA CHIESTO A STRIPE")
+        self.assertFalse(self.corpo(rif).get("blocco_incassato_ts"))
+
+    def test_un_fornitore_senza_annullo_non_annulla_niente(self):
+        rif, _vt, _tot, pi = self._bloccata()
+        self.stripe.annulla = None
+        with self.assertLogs("core_auto.server", level="ERROR") as reg:
+            self.assertEqual(self.r._annulla_blocco(rif, pi), "fallito")
+        self.assertTrue(any("annullo_fallito" in t and "fornitore senza annullo" in t
+                            for t in reg.output), reg.output)
+        self.assertFalse(self.corpo(rif).get("blocco_annullato_ts"),
+                         "ANNULLO SCRITTO SENZA CHE STRIPE L'ABBIA FATTO: i soldi restano fermi")
+
+    def test_l_incasso_e_l_annullo_falliti_scrivono_il_motivo_di_stripe(self):
+        rif, _vt, _tot, pi = self._bloccata()
+        self.stripe.esito_incasso = {"ok": False, "id": "", "motivo": "card_declined"}
+        with self.assertLogs("core_auto.server", level="ERROR") as reg:
+            self.assertEqual(self.r._incassa_blocco(rif, pi), "fallito")
+        self.assertTrue(any("incasso_fallito" in t and "card_declined" in t for t in reg.output),
+                        "il motivo di Stripe non arriva nel registro: %r" % reg.output)
+        self.stripe.esito_annullo = {"ok": False, "id": "", "motivo": "URLError: rete"}
+        with self.assertLogs("core_auto.server", level="ERROR") as reg:
+            self.assertEqual(self.r._annulla_blocco(rif, pi), "fallito")
+        self.assertTrue(any("annullo_fallito" in t and "URLError: rete" in t for t in reg.output),
+                        "il motivo di Stripe non arriva nel registro: %r" % reg.output)
+
+    def test_l_autorizzazione_scaduta_su_una_prenotazione_pagata_grida(self):
+        """L'altra direzione del falso allarme riparato il 28/9: se la prenotazione e' DAVVERO
+        ancora pagata, l'autorizzazione finita senza incasso e' un grido."""
+        rif, _vt, _tot, pi = self._bloccata()
+        self.stripe.pagamenti[pi] = "canceled"          # Stripe l'ha lasciata scadere
+        with self.assertLogs("core_auto.server", level="ERROR") as reg:
+            self.assertEqual(self.r._incassa_blocco(rif, pi), "annullato")
+        self.assertTrue(any("autorizzazione_scaduta" in t and rif[:8] in t for t in reg.output),
+                        "SOLDI MAI ENTRATI SU UNA PRENOTAZIONE PAGATA, E NESSUNO GRIDA: %r"
+                        % reg.output)
+        self.assertTrue(self.corpo(rif).get("blocco_annullato_ts"))
+
+    def test_chiudere_il_blocco_per_ogni_suo_stato(self):
+        def rec(**corpo):
+            return {"corpo_json": json.dumps(corpo)}
+        self.assertIs(self.r._chiudi_blocco("R", rec()), False, "nessun blocco: i soldi ci sono")
+        self.assertIs(self.r._chiudi_blocco("R", rec(blocco_pi="pi_x", blocco_incassato_ts=5)),
+                      False, "blocco incassato: i soldi ci sono, si restituiscono come sempre")
+        self.assertIs(self.r._chiudi_blocco("R", rec(blocco_pi="pi_x", blocco_annullato_ts=5)),
+                      True, "blocco annullato: i soldi non sono mai entrati")
+        self.assertEqual((self.stripe.incassi, self.stripe.annulli), ([], []),
+                         "un blocco gia' chiuso non si tocca su Stripe")
+        # aperto con una penale: si INCASSA tutto, e i soldi ci sono
+        rif, _vt, _tot, pi = self._bloccata()
+        self.assertIs(self.r._chiudi_blocco(rif, self.sis.pagamenti_pendenti.info(rif), 500),
+                      False, "incassato per la penale: la parte dovuta si rimborsa come sempre")
+        self.assertEqual(self.stripe.incassi, [(pi, "incasso:" + rif)])
+
+    # ── il giro orario ───────────────────────────────────────────────────────────
+    def test_il_giro_senza_elenco_dei_blocchi_non_esplode(self):
+        import types
+        self.sis.pagamenti_pendenti = types.SimpleNamespace()
+        self.assertEqual(self.r._incassa_blocchi(),
+                         {"incassati": 0, "annullati": 0, "falliti": 0, "in_finestra": 0})
+
+    def test_il_giro_senza_istante_usa_l_orologio_vero(self):
+        self._bloccata()
+        self.assertEqual(self.r._incassa_blocchi()["in_finestra"], 1)
+        self.assertEqual(self.stripe.incassi, [])
+
+    def test_il_giro_incassa_all_istante_esatto_della_fine(self):
+        rif, _vt, _tot, pi = self._bloccata()
+        fine = self.corpo(rif)["blocco_incassa_dal_ts"]
+        self.assertEqual(self.r._incassa_blocchi(ora_ts=fine - 1)["in_finestra"], 1)
+        self.assertEqual(self.r._incassa_blocchi(ora_ts=fine)["incassati"], 1,
+                         "alla fine esatta della finestra si incassa")
+        self.assertEqual(self.stripe.incassi, [(pi, "incasso:" + rif)])
+
+    def test_il_giro_dice_cosa_ha_fatto_e_tace_se_non_ha_fatto_niente(self):
+        rif, vt, _tot, pi = self._bloccata()
+        with _Registro() as reg:
+            self.r._incassa_blocchi()                    # dentro la finestra: niente da dire
+        self.assertEqual([t for t in reg.testi() if "BLOCCHI SULLA CARTA" in t], [])
+        with _Registro() as reg:
+            self.r._incassa_blocchi(ora_ts=int(time.time()) + SECONDI_RIPENSAMENTO + 60)
+        self.assertIn("BLOCCHI SULLA CARTA | incassati=1 annullati=0 falliti=0 in_finestra=0",
+                      reg.testi("INFO"))
+        # solo un annullo (l'annullo alla cancellazione e' fallito, lo rifa' il giro)
+        rif2, vt2, tot2 = self.prenota("2027-05-10", "2027-05-12")
+        _s, _c, pi2 = self.paga_bloccato(rif2, tot2, n=2)
+        self.stripe.esito_annullo = {"ok": False, "id": "", "motivo": "URLError: rete"}
+        self.stripe.pagamenti.pop(pi2)
+        self.g("POST", "/api/concierge/cancella", {"voucher_token": vt2})
+        self.stripe.esito_annullo = None
+        self.stripe.pagamenti[pi2] = "requires_capture"
+        with _Registro() as reg:
+            self.r._incassa_blocchi()
+        self.assertIn("BLOCCHI SULLA CARTA | incassati=0 annullati=1 falliti=0 in_finestra=0",
+                      reg.testi("INFO"))
+
+    # ── il pagamento tardivo su una stanza gia' presa ────────────────────────────
+    def _stanza_rubata(self, rif, ci, co):
+        pp = self.sis.pagamenti_pendenti
+        rec = pp.info(rif)
+        pp.scadi(rif)
+        self.sis.inventario.rilascia("casa", ci, co,
+                                     idem_key=(rec.get("idem_key") or ("hold_" + rif)))
+        self.assertTrue(getattr(self.sis.inventario.blocca("casa", ci, co, idem_key="altro_" + rif),
+                                "ok", False), "PREMESSA: dopo il rilascio la stanza era libera")
+
+    def test_il_blocco_tardivo_su_una_stanza_presa_si_annulla(self):
+        rif, _vt, tot = self.prenota("2027-04-10", "2027-04-12")
+        self._stanza_rubata(rif, "2027-04-10", "2027-04-12")
+        with _Registro() as reg:
+            _s, _c, pi = self.paga_bloccato(rif, tot)
+        self.assertEqual([p for p, _k in self.stripe.annulli], [pi])
+        self.assertEqual(self.movimenti(rif, "rimborso"), [])
+        self.assertEqual([t for t in reg.testi("ERROR") if "RIMBORSARE" in t], [],
+                         "«RIMBORSARE» su soldi mai entrati: un allarme su niente da fare")
+
+    def test_il_blocco_tardivo_si_annulla_anche_se_la_rilettura_non_trova_il_record(self):
+        """`pp.info(rif) or rec`: se la rilettura dopo la marcatura non risponde, vale il record
+        della conferma, che il blocco ce l'ha gia' (D19: il ripiego si prova iniettandolo)."""
+        rif, _vt, tot = self.prenota("2027-04-10", "2027-04-12")
+        self._stanza_rubata(rif, "2027-04-10", "2027-04-12")
+        pp = self.sis.pagamenti_pendenti
+        marcata, vera_info, vera_marca = [], pp.info, pp.marca_da_rimborsare
+        pp.marca_da_rimborsare = lambda r: (marcata.append(r), vera_marca(r))[1]
+        pp.info = lambda r: None if marcata else vera_info(r)
+        _s, _c, pi = self.paga_bloccato(rif, tot)
+        self.assertEqual(marcata, [rif], "PREMESSA: la strada del pagamento tardivo e' percorsa")
+        self.assertEqual([p for p, _k in self.stripe.annulli], [pi])
+        self.assertEqual(self.movimenti(rif, "rimborso"), [])
+
+
+class _ConLeSpie(_Base):
+    """Attrezzi comuni alle guardie sui rimborsi (nessun test qui: chi eredita non li ripete)."""
+
+    def _pagata(self, ci, co, cs, pi):
+        rif, _vt, tot = self.prenota(ci, co)
+        self.stripe.sessioni[cs] = ("paid", pi)
+        self.stripe.pagamenti[pi] = "succeeded"
+        self.evento("evt_" + cs, "checkout.session.completed", rif, cs, pi)
+        self.assertEqual(self.stato(rif), "pagato", "PREMESSA: pagata")
+        return rif, tot
+
+    def _azzera_il_totale(self, rif):
+        import sqlite3
+        corpo = dict(self.corpo(rif), totale_cents=0, prezzo_guest_cents=0)
+        con = sqlite3.connect(self.dir + "/p.db")
+        with con:
+            con.execute("UPDATE pendenti SET corpo_json=? WHERE riferimento=?",
+                        (json.dumps(corpo), rif))
+        con.close()
+
+    def _spia_del_giornale(self):
+        chieste, vero = [], self.r._giornale
+        self.r._giornale = lambda *a, **k: (chieste.append(k), vero(*a, **k))[1]
+        return chieste
+
+    def rimborsa(self, rif, ci, co):
+        idem = self.sis.pagamenti_pendenti.info(rif)["idem_key"]
+        return self.g("POST", "/api/admin/rimborso", {"alloggio_id": "casa", "check_in": ci,
+                                                      "check_out": co, "idem_key": idem}, AK)
+
+
+class TestIlRimborsoDellAdminColBlocco(_ConLeSpie):
+    """Il pulsante «Rimborsa» del pannello admin (e la cancellazione dell'host) sul blocco sulla
+    carta. Nate dal Giudice sul diff del blocco (2026-09-29): quattro sopravvissuti su fase83
+    anche con gli occhi di quelle strade accesi (test_admin_rimborso_money,
+    test_rimborso_torna_da_ogni_strada, test_rimborso_arriva_al_gateway, test_cancellazione_money,
+    test_storno_penale): nessun test premeva il pulsante su un pagamento bloccato, ne' guardava
+    una riga di rimborso chiesta per zero euro."""
+
+    def test_il_rimborso_dell_admin_su_un_blocco_annulla_senza_riga(self):
+        rif, _vt, tot = self.prenota("2027-04-10", "2027-04-12")
+        _s, _c, pi = self.paga_bloccato(rif, tot)
+        s, c = self.rimborsa(rif, "2027-04-10", "2027-04-12")
+        self.assertEqual(s, 200, "%r" % (c,))
+        self.assertEqual([p for p, _k in self.stripe.annulli], [pi],
+                         "il rimborso dell'admin non annulla il blocco sulla carta")
+        self.assertEqual((self.stripe.rimborsi, self.movimenti(rif, "rimborso")), ([], []),
+                         "RIGA DI RIMBORSO PER SOLDI MAI ENTRATI: la lista dei rimborsi dovuti "
+                         "mostrerebbe un pulsante che Stripe rifiuta")
+        self.assertIn("AUTORIZZATO", c.get("rimborso_stripe", ""))
+
+    def test_un_totale_a_zero_non_chiede_una_riga_di_rimborso(self):
+        """Il chiamante non chiede una riga da zero euro: che `_giornale` la scarti da se' e' la
+        seconda difesa, non la prima (D19)."""
+        rif, _tot = self._pagata("2027-04-22", "2027-04-24", "cs_zero", "pi_zero")
+        self._azzera_il_totale(rif)
+        chieste = self._spia_del_giornale()
+        s, c = self.rimborsa(rif, "2027-04-22", "2027-04-24")
+        self.assertEqual(s, 200, "%r" % (c,))
+        self.assertEqual([k for k in chieste if k.get("tipo") == "rimborso"], [],
+                         "chiesta una riga di rimborso da zero euro")
+        self.assertIn("non determinabile", c.get("rimborso_stripe", ""))
+
+    def test_la_cancellazione_dell_host_con_totale_a_zero_non_chiede_una_riga(self):
+        """fase83 `_host_cancella`, stessa regola (sopravviveva `guest > 0` diventato `>= 0`)."""
+        rif, _tot = self._pagata("2027-05-02", "2027-05-04", "cs_host0", "pi_host0")
+        self._azzera_il_totale(rif)
+        chieste = self._spia_del_giornale()
+        s, c = self.g("POST", "/api/host/cancella", {"riferimento": rif, "host_id": "demo"}, HK)
+        self.assertEqual(s, 200, "%r" % (c,))
+        self.assertEqual([k for k in chieste if k.get("tipo") == "rimborso"], [],
+                         "chiesta una riga di rimborso da zero euro")
+
+    def test_se_un_passo_di_sicurezza_esplode_non_si_dice_annullato(self):
+        """Se il pendente non si marca, i soldi (incassati) NON partono e va detto: dire
+        «pagamento solo autorizzato, annullato» farebbe credere all'admin che non ci sia niente
+        da restituire."""
+        rif, _tot = self._pagata("2027-04-26", "2027-04-28", "cs_esplode", "pi_esplode")
+
+        def esplode(r):
+            raise RuntimeError("archivio bloccato")
+        self.sis.pagamenti_pendenti.marca_da_rimborsare = esplode
+        s, c = self.rimborsa(rif, "2027-04-26", "2027-04-28")
+        self.assertEqual(s, 200, "%r" % (c,))
+        self.assertIn("pendente_invalidato", c.get("passi_falliti", []))
+        testo = c.get("rimborso_stripe", "")
+        self.assertIn("A MANO", testo, "all'admin va detto che i soldi vanno restituiti a mano")
+        self.assertNotIn("AUTORIZZATO", testo,
+                         "«solo autorizzato, niente da restituire» su soldi INCASSATI: %r" % testo)
+        self.assertEqual(self.stripe.rimborsi, [])
+
+
+class TestLaCancellazioneDellOspiteAiMargini(_ConLeSpie):
+    """fase83, la cancellazione dell'ospite col blocco sulla carta fuori dal cammino felice. Nate
+    dal Giudice sul diff del blocco (2026-09-29): cinque sopravvissuti anche con gli occhi della
+    cancellazione accesi (test_cancellazione_money, test_rimborso_torna_da_ogni_strada,
+    test_escrow_gia_liquidato, test_fase111_endpoint, test_happy_soldi)."""
+
+    def cancella(self, vt):
+        s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
+        self.assertEqual(s, 200, "%r" % (c,))
+        return c
+
+    def _pagata_col_voucher(self, ci, co, cs, pi):
+        rif, vt, tot = self.prenota(ci, co)
+        self.stripe.sessioni[cs] = ("paid", pi)
+        self.stripe.pagamenti[pi] = "succeeded"
+        self.evento("evt_" + cs, "checkout.session.completed", rif, cs, pi)
+        self.assertEqual(self.stato(rif), "pagato", "PREMESSA: pagata")
+        return rif, vt, tot
+
+    def test_se_l_archivio_non_risponde_il_rimborso_dovuto_si_scrive_lo_stesso(self):
+        """«In dubbio vale il voucher» (pagato_davvero resta vero): il rimborso dovuto nasce."""
+        rif, vt, tot = self._pagata_col_voucher("2027-04-10", "2027-04-12", "cs_arch", "pi_arch")
+        pp, vera, prima = self.sis.pagamenti_pendenti, self.sis.pagamenti_pendenti.info, []
+
+        def info(r):
+            if not prima:
+                prima.append(r)
+                raise RuntimeError("archivio non risponde")
+            return vera(r)
+        pp.info = info
+        self.cancella(vt)
+        self.assertEqual(prima, [rif], "PREMESSA: la prima lettura e' fallita")
+        self.assertEqual([m["importo_cents"] for m in self.movimenti(rif, "rimborso")], [tot],
+                         "RIMBORSO DOVUTO SPARITO: soldi incassati, cancellazione nelle 48 ore, e "
+                         "nessuna riga che dica che vanno restituiti")
+
+    def test_una_prenotazione_non_pagata_col_blocco_non_tocca_stripe_alla_cancellazione(self):
+        rif, vt, _tot = self.prenota("2027-04-14", "2027-04-16")
+        self.stripe.pagamenti["pi_np"] = "requires_capture"
+        self.assertIs(self.sis.pagamenti_pendenti.segna_blocco(
+            rif, blocco_pi="pi_np", blocco_incassa_dal_ts=int(time.time()) + 999), True)
+        self.cancella(vt)
+        self.assertEqual((self.stripe.annulli, self.stripe.incassi), ([], []),
+                         "una prenotazione NON pagata non si chiude su Stripe alla cancellazione")
+        self.assertEqual(self.movimenti(rif, "rimborso"), [])
+
+    def test_se_la_chiusura_del_blocco_esplode_lo_si_scrive_e_si_decide_giusto(self):
+        def esplode(*a):
+            raise RuntimeError("stripe irraggiungibile")
+        # blocco APERTO: soldi mai entrati, nessuna riga di rimborso
+        rif, vt, tot = self.prenota("2027-04-10", "2027-04-12")
+        self.paga_bloccato(rif, tot)
+        self.r._chiudi_blocco = esplode
+        with _Registro() as reg:
+            self.cancella(vt)
+        rec = [r for r in reg.records if "chiusura del blocco sulla carta esplosa" in r.getMessage()]
+        self.assertEqual([r.levelname for r in rec], ["ERROR"])
+        self.assertIsInstance(rec[0].exc_info, tuple)
+        self.assertIs(rec[0].exc_info[0], RuntimeError)
+        self.assertEqual(self.movimenti(rif, "rimborso"), [],
+                         "RIGA DI RIMBORSO PER UN BLOCCO APERTO: soldi mai entrati")
+        # nessun blocco: i soldi ci sono, e la riga del rimborso dovuto nasce
+        rif2, vt2, tot2 = self._pagata_col_voucher("2027-05-10", "2027-05-12", "cs_nb", "pi_nb")
+        self.cancella(vt2)
+        self.assertEqual([m["importo_cents"] for m in self.movimenti(rif2, "rimborso")], [tot2])
+
+    def test_una_cancellazione_senza_rimborso_non_grida_e_non_chiede_righe(self):
+        """Non rimborsabile, dopo le 48 ore: rimborso zero. Chiedere una riga da zero euro fa
+        gridare «RIMBORSO DOVUTO NON REGISTRATO» su niente (ferrea 10)."""
+        from unittest import mock
+        # un annuncio SENZA tassa di soggiorno: la tassa si restituisce sempre, e qui serve
+        # un rimborso che sia davvero zero
+        self.g("POST", "/api/host/pubblica", {"host_id": "demo", "slug": "casa0", "titolo": "C0",
+               "citta": "Roma", "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
+               "servizi": [], "immagini": [], "politica_cancellazione": "non_rimborsabile"}, HK)
+        self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": "casa0", "da": "2027-04-01",
+               "a": "2027-05-31", "unita_totali": 1, "prezzo_netto_cents": 10000}, HK)
+        _, q = self.g("POST", "/api/concierge/quote", {"alloggio_id": "casa0", "check_in":
+                      "2027-04-22", "check_out": "2027-04-24", "party": 2})
+        self.assertEqual(q.get("tassa_soggiorno_cents"), 0, "PREMESSA: annuncio senza tassa")
+        _, b = self.g("POST", "/api/concierge/book", {"quote_token": q["quote_token"],
+                                                      "email": "o@x.it"})
+        rif, vt = b["riferimento"], b.get("voucher_token", "")
+        self.stripe.sessioni["cs_nr"] = ("paid", "pi_nr")
+        self.stripe.pagamenti["pi_nr"] = "succeeded"
+        self.evento("evt_cs_nr", "checkout.session.completed", rif, "cs_nr", "pi_nr")
+        self.assertEqual(self.stato(rif), "pagato", "PREMESSA: pagata")
+        chieste = self._spia_del_giornale()
+        with mock.patch("time.time", return_value=time.time() + SECONDI_RIPENSAMENTO + 3600), \
+                _Registro() as reg:
+            c = self.cancella(vt)
+        self.assertEqual(c.get("rimborso_cents"), 0, "PREMESSA: non rimborsabile, niente rimborso")
+        self.assertEqual([k for k in chieste if k.get("tipo") == "rimborso"], [])
+        self.assertEqual([t for t in reg.testi("ERROR") if "RIMBORSO DOVUTO" in t], [],
+                         "FALSO ALLARME: rimborso zero e grido «non registrato»")
+
+
+class TestIlGiroOrarioLasciaLaTraccia(unittest.TestCase):
+    """Il tick orario e' una chiusura dentro `servi()`: si legge l'albero sintattico (come
+    `test_fase202.TestIlTickDiFase83ChiamaIlGiro`). Se il giro dei blocchi esplode, il thread
+    resta vivo e la riga ERROR deve portare l'eccezione intera: sopravviveva `exc_info=False`."""
+
+    def test_il_giro_dei_blocchi_fallito_scrive_l_eccezione(self):
+        import ast
+        import os
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "fase83_server.py"),
+                  encoding="utf-8") as f:
+            albero = ast.parse(f.read())
+        tick = [n for n in ast.walk(albero)
+                if isinstance(n, ast.FunctionDef) and n.name == "_tick_garanzia"]
+        self.assertEqual(len(tick), 1, "il tick della garanzia non si trova piu'")
+        prove = [t for t in ast.walk(tick[0]) if isinstance(t, ast.Try)
+                 and any(isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute)
+                         and c.func.attr == "_incassa_blocchi"
+                         for s in t.body for c in ast.walk(s))]
+        self.assertEqual(len(prove), 1, "il giro dei blocchi non e' dentro il suo try")
+        chiamate = [c for h in prove[0].handlers for c in ast.walk(h)
+                    if isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute)
+                    and c.func.attr == "error"]
+        self.assertEqual(len(chiamate), 1)
+        exc = [k.value for k in chiamate[0].keywords if k.arg == "exc_info"]
+        self.assertTrue(len(exc) == 1 and isinstance(exc[0], ast.Constant) and exc[0].value is True,
+                        "la riga ERROR del giro fallito non porta l'eccezione (exc_info=True)")
 
 
 if __name__ == "__main__":
