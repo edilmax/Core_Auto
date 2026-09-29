@@ -728,11 +728,14 @@ class ChannelManager:
             con.close()
 
     def elenco_prenotazioni(self, *, alloggio_id: Optional[str] = None,
-                            limit: int = 50) -> List[Dict[str, Any]]:
+                            limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
         """Prenotazioni attive (blocco occupato) per la dashboard admin, con lo stato di
-        rilascio (rimborso). Read-only."""
+        rilascio (rimborso). Read-only. `offset` salta le prime righe: e' la pagina del
+        pannello admin (D16 della prova vera del 29/9: senza, dalla 101esima sparivano)."""
         limit = limit if (isinstance(limit, int) and not isinstance(limit, bool)
                           and 0 < limit <= 500) else 50
+        offset = offset if (isinstance(offset, int) and not isinstance(offset, bool)
+                            and offset > 0) else 0
         sql = ("SELECT m.idem_key, m.alloggio_id, m.check_in, m.check_out, m.origine, "
                "m.ts, (SELECT COUNT(*) FROM movimenti r WHERE r.idem_key = "
                "'rilascio:' || m.idem_key) AS rilasciato "
@@ -741,8 +744,8 @@ class ChannelManager:
         if isinstance(alloggio_id, str) and alloggio_id:
             sql += " AND m.alloggio_id=?"
             par.append(alloggio_id)
-        sql += " ORDER BY m.ts DESC, m.rowid DESC LIMIT ?"
-        par.append(limit)
+        sql += " ORDER BY m.ts DESC, m.rowid DESC LIMIT ? OFFSET ?"
+        par.extend((limit, offset))
         con = self._apri()
         try:
             righe = con.execute(sql, par).fetchall()
@@ -752,6 +755,21 @@ class ChannelManager:
                  "check_in": r["check_in"], "check_out": r["check_out"],
                  "origine": r["origine"], "ts": r["ts"],
                  "rimborsato": bool(r["rilasciato"])} for r in righe]
+
+    def conta_elenco_prenotazioni(self, *, alloggio_id: Optional[str] = None) -> int:
+        """Quante righe ha `elenco_prenotazioni` in tutto, contate dal database: e' il totale
+        delle pagine del pannello admin."""
+        sql = "SELECT COUNT(*) FROM movimenti WHERE tipo='blocco' AND esito='occupato'"
+        par: List[Any] = []
+        if isinstance(alloggio_id, str) and alloggio_id:
+            sql += " AND alloggio_id=?"
+            par.append(alloggio_id)
+        con = self._apri()
+        try:
+            r = con.execute(sql, par).fetchone()
+            return int(r[0]) if r else 0
+        finally:
+            con.close()
 
     @staticmethod
     def _dove_lista(alloggi: List[str], vista: str, escludi_idem: List[str]) -> str:

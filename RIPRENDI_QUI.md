@@ -3435,7 +3435,86 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: d8d27da
+CONSEGNE AGGIORNATE A: 6889a7a
+
+## PASSAGGIO DI CONSEGNE 23 (2026-09-29 sera) - PROVA VERA A META': L'ANNULLO NELLE 48 ORE COSTA ZERO CON SOLDI VERI; L'INCASSO AUTOMATICO SI VEDE GIOVEDI' SERA; 17 DIFETTI TROVATI, SCRITTI E NON RIPARATI; NESSUNA RIGA DI PRODUZIONE CAMBIATA:
+- STATO VERIFICATO all'inizio (18:29 ora del PC): computer, GitHub e VPS su 6889a7a (sul VPS
+  `git rev-parse`); PR #235 unita (merged=True, merge_commit 6889a7a, testa f6344b4); gate
+  success sulla testa della PR (16 controlli, zap skipped) e sul push di master (15, zap
+  skipped), browser success in tutti e due; immagine viva cefa7a55, :prec bf133ae0, contenitori
+  healthy, /api/health 200. Chiavetta `Desktop\BOOKINVIP USB 2026` su 6889a7a verificata SUL
+  CONTENUTO: `clone_progetto.tgz` contro `git show 6889a7a:<file>`, 831 file su 831 identici,
+  0 diversi, 0 mancanti (generazione d8d27da in `precedente_d8d27da\`). fase188, fase57, fase81,
+  fase98, main_casavip: solo fine riga (`git diff --ignore-cr-at-eol --quiet` uscita 0).
+  Il «RESTA 1» delle consegne 22 (suite, commit, PR, CI, unione, VPS, chiavetta) e' FATTO.
+- PERMESSI, parole testuali del fondatore all'inizio di questa sessione: «procedi al commit»
+  per tutti i punti; «autorizzato» a commit, unioni, VPS e tutto quello che serve per finire;
+  eccezione: le due mancanze e le due righe degli equivalenti -> prima si mostrano le righe.
+- CONTESTO letto dal fondatore (`/context`): 37% (373.3k su 1M) alla chiusura della sera.
+- GML: senza token («gml non a token e non puo collaoare vai avanti da solo»). Il COMPITO 5
+  (revisione in sola lettura del lavoro del 29/9) NON e' stato fatto da nessuno: resta.
+- LA PROVA VERA (punto 2). Il racconto intero, coi dati grezzi, sta FUORI dal repository in
+  `Desktop\Core_Auto_GUARDIE_PRONTE\prova_vera_20260929\prova_vera_diario.txt`. In breve:
+  il fondatore ha modificato «casa-test» (citta' Roma, 0,50 EUR a notte, 1 ospite, paese XX,
+  PUBBLICATO alle 17:07:28Z). Tre prenotazioni, tutte con la sua carta:
+  · a2c63fd8 (arrivo 9 ottobre): pagato, BLOCCO aperto, Stripe `requires_capture` 50,
+    incassato 0, livemode True, giornale 0 righe (occhio 17:49:53Z). Il fondatore ha anche
+    premuto «Segnala un problema»: CONTROVERSIA APERTA 17:55:09Z (lo stato resta «pagato»:
+    l'incasso di giovedi' guarda solo quello, fase83 `_incassa_blocchi`).
+  · 9fa7aecc (arrivo 12 ottobre): la pagina di Stripe non si e' aperta; scaduta da sola alle
+    18:43:23Z, garanzia annullata, riga payout tolta (pulizia giusta).
+  · bbb00577 (arrivo 14 ottobre): pagato 18:21:06Z, BLOCCO aperto; cancellato dal fondatore
+    alle 18:37:22Z -> «BLOCCO SULLA CARTA | ANNULLATO ... nessun incasso, nessun rimborso,
+    nessuna commissione», Stripe `canceled` (requested_by_customer), incassabile 0, incassato
+    0, giornale 0 righe; la banca del fondatore ha avvisato subito «pagamento stornato».
+    -> L'ANNULLO NELLE 48 ORE COSTA ZERO, MISURATO CON SOLDI VERI. Misurato anche che la
+    sessione di Checkout col blocco si chiude `status complete | payment_status unpaid`.
+  Il collegamento del voucher di bbb00577 (email di conferma mai arrivata: casella piena) e'
+  stato letto dal server in sola lettura e scritto in un file sul Desktop del fondatore
+  (`PRENOTAZIONE_14_OTTOBRE_link_per_cancellare.txt`), da cancellare dopo l'uso.
+- NESSUN DEPLOY E NESSUN `git pull` SUL VPS FINO ALL'INCASSO DI GIOVEDI' (la prova e' in corso).
+- I 17 DIFETTI (D1-D17): ognuno coi dati grezzi, file:riga e chi perde nel diario qui sopra.
+  Titoli, nell'ordine in cui vanno corretti:
+  soldi e stati: D13 la cancellazione lascia soldi «fermi» finti nel pannello host (la
+  scadenza invece pulisce) + D8 la riga del 16/8 · D5 (dubbio) controversia decisa o
+  «Confermo» premuto col blocco aperto · D6 il blocco vale solo sulla carta, sul conto ci sono
+  altri 7 metodi (Link, Klarna...) che incassano subito · D4 «Confermo» e «Segnala» accettati
+  prima dell'arrivo · D15 la lista prenotazioni admin conosce solo «attiva»/«rimborsato» ·
+  D17 il calendario resta bloccato 30 minuti da chi non paga: il fondatore vuole MASSIMO 5
+  («uno non puo' bloccare un calendario per 15 minuti ... massimo 5 minuti»);
+  cosa vede l'ospite: D14 la pagina di una prenotazione cancellata dice «Prenotazione
+  confermata» e «Completa il pagamento» · D12 chi non riceve l'email non ha nessuna strada ·
+  D11 due pulsanti per prenotare, uno solo funziona · D9 chi torna indietro da Stripe trova le
+  SUE date occupate · D3 «Segnala un problema» senza conferma ne' motivo · D1 «Via Paletro»
+  invece di «Via Palestro» (fase185 e fase83: guardare l'impronta del contratto);
+  pannelli: D16 elenchi admin senza pagine (prenotazioni limit 100: dalla 101esima spariscono)
+  · D7 «Pubblica» dall'admin senza Bunker rifiutato con un messaggio non capito · D2 cambiare
+  citta' non aggiorna la mappa (casa «Roma» in Oregon);
+  macchina: D10 la campagna social automatica fallisce (Facebook 400 senza codice, Nostr
+  timeout) e si segna «fatta».
+- CORRETTI SUL RAMO `correzioni-prova-vera` (NON in produzione): D15 + D16, la lista
+  prenotazioni del pannello admin a pagine (20) e con lo stato vero dal record del pagamento;
+  il pulsante Rimborsa solo dove ci sono soldi. Tre guardie viste ROSSE sul codice di prima
+  (racconto e limiti nel registro, voce «LA PROVA VERA CON LA CARTA DEL FONDATORE»).
+  Il fondatore ha poi precisato: la lista che si allunga all'infinito che intendeva e' nella
+  PAGINA HOST («io intendevo nella pagina host»): quale elenco, lo dicono le sue foto (le
+  prenotazioni host hanno gia' le pagine, host.html `caricaPrenotazioni`).
+  ⛔ CASELLE SCADUTE da queste modifiche (fase58 nel Blocco 2; fase83 nelle caselle
+  sentinella, backup, deploy): si rimisurano prima dell'unione, `python collaudi/rimisura.py`;
+  backup e deploy chiedono i dati veri del server, quindi al deploy dopo giovedi'. Lo scopo e'
+  stato dichiarato con `--nonostante` e il motivo scritto.
+- RESTA, in ordine:
+  1. giovedi' 1 ottobre dalle 19:46 ora italiana: l'occhio su a2c63fd8 -> deve risultare
+     incassata DA SOLA (Stripe succeeded 50, giornale «incasso», I2 di fase202 zitto);
+  2. SOLO DOPO: la prova della controversia dal pannellino admin (col Bunker) sulla stessa
+     prenotazione, occhio su giornale, Stripe e payout; poi casa-test di nuovo SOSPESO;
+  3. i 17 difetti, uno alla volta, ognuno con la guardia vista rossa prima (D20); il primo
+     deploy dopo l'incasso di giovedi';
+  4. il COMPITO 5 di GML quando torna disponibile; poi (dal prompt del fondatore) la pulizia
+     del codice morto e la ricerca sugli strumenti di test con la lista dei circa 70;
+  5. le due MANCANZE e le due righe degli equivalenti: aspettano, righe mostrate prima;
+  6. B4 (decisione del fondatore): chi paga la commissione Stripe sul rimborso pieno DOPO le
+     48 ore.
 
 ## PASSAGGIO DI CONSEGNE 22 (2026-09-29 pomeriggio) - CHIAVETTA SU d8d27da; BLOCCO 4 = 2/3 (LA CASELLA METAMORFICA VERDE, 11 RELAZIONI, FRASE FALSA RISCRITTA); BROWSER NEL GATE; NESSUNA RIGA DI PRODUZIONE:
 - STATO VERIFICATO all'inizio (13:02 ora del PC): computer, GitHub e VPS su d8d27da (sul VPS
@@ -4460,7 +4539,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 7040 test
+SUITE ATTUALE: Ran 7042 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

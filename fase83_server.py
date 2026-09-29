@@ -2728,12 +2728,54 @@ class RouterHTTP:
         if not self._auth_admin(headers):
             return 401, {"errore": "unauthorized"}
         alloggio = query.get("alloggio") or None
+        # A PAGINE (D16 della prova vera del 29/9): prima una chiamata sola con limit=100 fisso,
+        # e dalla 101esima le prenotazioni sparivano senza avviso. Senza `page` resta la
+        # risposta di prima (le prime 100) piu' il `totale`: chi legge sa se ne mancano.
         try:
-            el = self._sys.inventario.elenco_prenotazioni(alloggio_id=alloggio, limit=100)
+            per_pagina = max(1, min(100, int(str(query.get("limit") or 100))))
+            pagina = max(1, min(10 ** 6, int(str(query.get("page") or 1))))
+        except ValueError:
+            return 422, {"errore": "pagina_non_valida"}
+        try:
+            inv = self._sys.inventario
+            el = inv.elenco_prenotazioni(alloggio_id=alloggio, limit=per_pagina,
+                                         offset=(pagina - 1) * per_pagina)
+            totale = inv.conta_elenco_prenotazioni(alloggio_id=alloggio)
         except Exception:
             logger.error("admin prenotazioni: eccezione ISOLATA", exc_info=True)
             return 503, {"errore": "service_unavailable"}
-        return 200, {"prenotazioni": el}
+        pp = getattr(self._sys, "pagamenti_pendenti", None)
+        for p in el:
+            p["stato"] = self._stato_vero_prenotazione(pp, p)
+            p["rimborsabile"] = p["stato"] in ("pagata", "bloccata_sulla_carta", "attiva")
+        return 200, {"prenotazioni": el, "totale": totale, "pagina": pagina,
+                     "per_pagina": per_pagina}
+
+    @staticmethod
+    def _stato_vero_prenotazione(pp, p):
+        """LO STATO CHE L'ADMIN DEVE LEGGERE (D15 della prova vera del 29/9). Il calendario sa
+        solo se le notti sono state rilasciate: una prenotazione MAI pagata e ancora in attesa
+        risultava «attiva» col pulsante Rimborsa, una scaduta risultava «rimborsato». Lo stato
+        vero sta nel record del PAGAMENTO (riferimento = i primi 24 caratteri della chiave del
+        calendario, ed e' la stessa chiave: si controlla), col blocco sulla carta.
+        Senza record (nessun pagamento con noi: iCal, OTA, record ripulito) resta la lettura
+        del calendario, «attiva» o «chiusa»."""
+        idem = str(p.get("idem_key") or "")
+        rec = None
+        if pp is not None and idem:
+            try:
+                rec = pp.info(idem[len("reblock:"):] if idem.startswith("reblock:") else idem[:24])
+            except Exception:
+                rec = None
+        if not isinstance(rec, dict) or (rec.get("idem_key") or idem) != idem:
+            return "chiusa" if p.get("rimborsato") else "attiva"
+        stato = str(rec.get("stato") or "")
+        blocco = _blocco(rec)["stato"]
+        if stato == "pagato":
+            return "bloccata_sulla_carta" if blocco == "aperto" else "pagata"
+        if stato == "rimborsato":
+            return "annullata" if blocco == "annullato" else "rimborsata"
+        return stato or ("chiusa" if p.get("rimborsato") else "attiva")
 
     def _admin_alloggi(self, query, headers):
         """FIELD operativo PAGINATO + FILTRATO: annunci di ogni host/stato, 20 per pagina,
