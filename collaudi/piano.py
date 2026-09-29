@@ -417,8 +417,17 @@ BLOCCHI = (
         "attrezzi": ("oracolo", "plausibilita", "hypothesis", "mutazione", "occhio", "conti"),
         "finito_quando": (
             "ogni cifra pubblica coincide col motore (lo misura gia' `audit_millimetrico.py`)",
-            "le relazioni metamorfiche reggono: raddoppiare le notti raddoppia la parte fissa, "
-            "l'ordine degli sconti non cambia il totale",
+            # ⛔ RISCRITTA IL 2026-09-29 (decisione del fondatore, «autorizzato fai la cosa giusta»).
+            #    Diceva «l'ordine degli sconti non cambia il totale»: FALSO sul motore vero per un
+            #    centesimo (due divisioni intere), misurato da `esame_prezzi.py` il 2026-09-07. Si
+            #    riscrive la frase, non il motore: il limite di 1 centesimo e' dimostrato, e la
+            #    frase nuova dice anche COSA e' la «parte fissa» che raddoppia (il listino; la quota
+            #    fissa della carta resta una sola) e le relazioni aggiunte sulla specifica di GML.
+            "le relazioni metamorfiche reggono: raddoppiare le notti raddoppia il listino e la quota "
+            "fissa della carta resta una sola, gli sconti seguono l'ordine dichiarato e l'inverso "
+            "sposta al massimo un centesimo, la commissione tocca solo l'host, il credito viene per "
+            "ultimo e non lo paga l'host, la tassa cresce esatta con paganti e notti e un esente in "
+            "piu' non la cambia",
             "da noi costa SEMPRE meno che sulle OTA, e l'host non puo' mentire sul prezzo",
         ),
     },

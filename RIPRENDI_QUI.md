@@ -3435,7 +3435,94 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 7ad5ef1
+CONSEGNE AGGIORNATE A: d8d27da
+
+## PASSAGGIO DI CONSEGNE 22 (2026-09-29 pomeriggio) - CHIAVETTA SU d8d27da; BLOCCO 4 = 2/3 (LA CASELLA METAMORFICA VERDE, 11 RELAZIONI, FRASE FALSA RISCRITTA); BROWSER NEL GATE; NESSUNA RIGA DI PRODUZIONE:
+- STATO VERIFICATO all'inizio (13:02 ora del PC): computer, GitHub e VPS su d8d27da (sul VPS
+  `git rev-parse`); PR #234 unita (merged=True, 16 controlli sulla testa 4a02975, gate success);
+  la CI del push su master d8d27da, in corso alle 13:02, poi completata: gate success, browser
+  success. Immagine viva cefa7a55, paracadute bf133ae0, /api/health 200. fase188, fase57,
+  fase81, fase98 e main_casavip modificati solo per i fine riga (`git diff --ignore-cr-at-eol
+  --quiet` uscita 0): non si committano.
+- PERMESSI, parole testuali del fondatore in questa sessione: il testo incollato all'inizio
+  aveva la riga «Permessi: [scrivili tu, per esempio: procedi al commit per i punti 0 e 1]»
+  NON compilata; poi «una domanda avevamo fatto una ricerca aws 10 test piu tre , esiste
+  ancora , e dopo autorizzato fai la cosa giusta»; «fai quello che vuoi e tua
+  responsabilita, i mezzi ci sono sta a te le li adoperi»; «Ok»; «autorizzato a tutto commmit
+  vps e tutto quello che serve per finire»; e, chiesta la frase esatta di B1, «procedi al
+  commit».
+- CONTESTO letto dal fondatore (`/context`): 49% (492.5k su 1M), dopo la caccia alle bombe. D21:
+  niente lavoro nuovo, si chiude questo blocco e si riparte in una sessione nuova.
+- PUNTO 0, LA CHIAVETTA (`Desktop\BOOKINVIP USB 2026`, generazione 7ad5ef1 in
+  `precedente_7ad5ef1\`): dal server `deploy/impacchetta.sh` (27 db copiati, integrita' NON ok
+  0, uscita 0) + `deploy/verifica_impronte.sh` (d8d27da, 831/831 identici, 27 db integri,
+  VERIFICA_USCITA=0) + `/root/chiavetta_extra.sh` (uscita 0, certificato fino al 22/11/2026, 5
+  righe di cron, 14 salvataggi); nove sha256 del PC uguali a quelle del server; cartella
+  temporanea del server cancellata; qui 27 db integri; suite DENTRO la copia estratta
+  (PowerShell vera, openssl assente, caricatore 7039): Ran 7034 in 2398 s, OK (skipped=4),
+  CODICE_USCITA_DIRETTO=0 (`GUARDIE_PRONTE\suite_20260929_130945.log`); copia cancellata.
+  Immagine: archivio identico byte per byte alla generazione 7ad5ef1. `server_extra.tgz`
+  diverso SOLO per la data della cartella etc/letsencrypt (66 file, contenuto identico).
+- PUNTO 0, LO SCHEDARIO DELLE BOMBE A TEMPO rinnovato (`lancia.ps1 -Passo caccia`, PowerShell
+  vera, sull'albero con le modifiche di questo blocco; `GUARDIE_PRONTE\caccia_20260929_143849.log`):
+  128 minuti, CODICE_USCITA_DIRETTO=0; 160 file candidati su 432, 3700 test a orologio fermo, 0
+  rossi; 122 scarti d'orologio su 823 date cablate. `--giudizio`: OK, 6 bombe note, nessuna
+  entro 30 giorni, 1 non giudicabile (il gettone fresco del deploy, processo figlio). LE SEI
+  BOMBE, scritte e NON riparate (fuori dallo scopo di questo blocco): fra 62 giorni (fine
+  novembre) `test_calendario_bisestile.TestIlCalendarioNonHaPauraDel29.test_l_export_mostra_
+  le_notti_entro_la_sua_finestra_di_un_anno`; fra 191 giorni quattro test di
+  `test_blocco_carta` (TestLaCancellazioneDellOspiteAiMargini, due di
+  TestLaCancellazioneNelleQuarantottoOreAnnulla, TestLaRevisioneDiGML) e fra 221 giorni un
+  quinto (TestLaCancellazioneDellOspiteAiMargini). Le due bombe dello schedario del 1/9
+  (test_dac7_notti) non ci sono piu'. Il pre-volo le annuncera' quando mancheranno 30 giorni.
+- PUNTO 1, BLOCCO 4 (scelta A, «autorizzato fai la cosa giusta»): la frase della casella
+  riscritta in `collaudi/piano.py` (l'ordine dichiarato e l'inverso a 1 centesimo, limite
+  dimostrato; la «parte fissa» detta per nome) e `collaudi/esame_prezzi.py` con undici
+  relazioni: R2 nuova + R5 commissione solo all'host, R6 prezzo a notte raddoppiato, R7 credito
+  per ultimo e non a carico dell'host, R8-R10 sulla tassa VERA di fase66. Motore vero 11/11,
+  denominatore 3300, `--scrivi` fatto: `python collaudi/scheda.py --blocco 4` = 2 su 3.
+  `--con-guasto` ROSSO (R1 R2 R3 R6); autoprova 12 casi, ognuno accende esattamente le sue.
+  Guardie in `test_pipeline_ci.TestLEsameDeiPrezziNonPuoBARARE` viste ROSSE tre volte col
+  guasto dall'editor, sha256 identico dopo ogni ripristino. Il lavoro obbligatorio 4 tolto da
+  `regole_avvio.py` (restano 4). Racconto intero nel registro, voce «BLOCCO 4, LA CASELLA
+  METAMORFICA».
+- BROWSER NEL GATE (`.github/workflows/ci.yml`): condizione d'ingresso misurata dall'API, 49
+  giri `success` di fila su master dall'ultimo ritocco (19/9) a d8d27da. Guardie della CI 69
+  verdi; `TestNeedsDelGateCompleto` e `TestUnJobCheNonConsegnaNiente` viste ROSSE togliendo
+  browser dai `needs`, sha256 identico dopo. La domanda del fondatore «10 test piu' tre» erano
+  proprio questi: 10 controlli bloccanti e 3 no (browser, lint-severo, zap); adesso 11 e 2.
+- LA LISTA DI CIRCA 70 TEST INCOLLATA DAL FONDATORE (testo esterno): NON diventa un file
+  (REGOLA ZERO 3). Si usa come lista di controllo al punto 3, confrontata a macchina con cio'
+  che esiste. Primo indizio (conteggio di file che nominano il tema, NON di test che lo
+  provano): zero file per verifica host-azienda (KYB), ritenuta fiscale, test di carico.
+- DIFETTI TROVATI PER STRADA, scritti e NON riparati: il pre-volo stima «~25 minuti» la caccia
+  alle bombe (lo strumento dichiara 156 misurati); due lavori obbligatori FATTI restano in
+  lista; un «MANDATO PERMANENTE» del 21/9 su commit e unioni, in questo file, contraddice B1
+  (vale B1). Dettagli nel registro.
+- PUNTO 2 PREPARATO (solo lettura, niente in produzione): in produzione c'e' UN annuncio,
+  «casa-test», 1,00 EUR a notte, cancellazione flessibile (100% a un giorno o piu' dall'arrivo),
+  prenotazione immediata, pagamento online, stato SOSPESO; nessuna prenotazione negli ultimi 30
+  giorni. I passi e gli strumenti stanno FUORI dal repository in
+  `Desktop\Core_Auto_GUARDIE_PRONTE\prova_vera_20260929\`: `prova_vera_passi.txt` (i nove passi:
+  il fondatore ripubblica, prenota due volte a 6+ giorni, cancella subito la seconda, dopo 48
+  ore + il giro orario la prima risulta incassata, poi risospende) e `occhio_prova_vera.py`
+  (entra nel contenitore dallo standard input, legge pendenti e giornale in sola lettura col
+  lettore vero `fase162.blocco_della_carta`, GET su Stripe; non stampa chiave, email ne'
+  identificativo intero). L'occhio e' stato provato: a vuoto sul server (0 prenotazioni), su un
+  banco finto (blocco aperto e incassato, giornale), con la chiave di PROVA su un pagamento di
+  prova vero (canceled, manual, 2000, livemode False) e su uno inesistente (404
+  resource_missing).
+- CARICATORE 7039 -> 7040 (+1), misurato da fermo da PowerShell prima della caccia (S14).
+- RESTA, in ordine:
+  1. suite intera, commit, PR, CI (dove il browser adesso blocca), unione; sul VPS solo
+     `git pull` (nessun file di produzione); poi la chiavetta, se c'e' il tempo nella sessione;
+  2. la PROVA VERA con la carta del fondatore, coi passi e l'occhio della cartella qui sopra;
+     prima: la risposta di GML al COMPITO 5 (revisione in sola lettura di questo blocco, nel
+     file di coordinamento sul Desktop), verificata sul codice rilievo per rilievo;
+  3. dopo la prova vera: pulizia del codice morto (`collaudi/raggiungibilita.py`, spento non e'
+     morto), poi la ricerca sugli strumenti di test (staging e sandbox, carico su una copia),
+     con la lista dei circa 70 come lista di controllo;
+  4. le due MANCANZE e le due righe degli equivalenti: aspettano «autorizzato», righe mostrate.
 
 ## PASSAGGIO DI CONSEGNE 21 (2026-09-29) - MUTAZIONE SULLE RIGHE NUOVE DEL BLOCCO SULLA CARTA: 134 MUTANTI, 132 UCCISI, 2 EQUIVALENTI PER COSTRUZIONE; 40 GUARDIE NUOVE VISTE ROSSE; NESSUNA RIGA DI PRODUZIONE CAMBIATA:
 - STATO VERIFICATO all'inizio (09:40 ora del PC): computer, GitHub e VPS su 7ad5ef1 (sul VPS
@@ -4373,7 +4460,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 7039 test
+SUITE ATTUALE: Ran 7040 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
