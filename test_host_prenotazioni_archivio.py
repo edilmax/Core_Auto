@@ -130,6 +130,27 @@ class TestArchivioPrenotazioni(unittest.TestCase):
         self.assertEqual(len(grezze), 4, "un movimento e' SPARITO: ci sarebbe stato un DELETE")
         self.assertEqual(sum(1 for x in grezze if x["rimborsato"]), 2)
 
+    def test_una_prenotazione_MAI_PAGATA_non_e_in_arrivo_e_non_ha_il_PIN(self):
+        """D20(a) della prova vera (foto del fondatore, 29/9): 9fa7aecc, in attesa di pagamento,
+        risultava nel pannello host «In arrivo» col PIN di check-in. Il voucher dell'ospite il
+        PIN lo nasconde finche' non paga; il pannello no. Un host che vede il PIN crede che
+        l'ospite abbia pagato e puo' consegnare le chiavi a chi non ha pagato niente."""
+        from fase59_concierge import codice_prenotazione
+        pagata = self._prenota_paga()
+        _, q = self.g("POST", "/api/concierge/quote", {"alloggio_id": "hotel",
+                      "check_in": CI, "check_out": CO, "party": 2})
+        _, b = self.g("POST", "/api/concierge/book",
+                      {"quote_token": q["quote_token"], "email": "mai@collaudo.invalid"})
+        self.assertEqual(self.sis.pagamenti_pendenti.info(b["riferimento"])["stato"],
+                         "in_attesa", "premessa: la seconda non e' pagata")
+        righe = {p["codice"]: p for p in self._vista("attive")["prenotazioni"]}
+        mai = righe[codice_prenotazione(b["riferimento"])]
+        self.assertEqual(mai["pin"], "", "il pannello mostra il PIN di chi non ha pagato")
+        self.assertEqual(mai["stato"], "in_attesa_pagamento")
+        buona = righe[codice_prenotazione(pagata)]
+        self.assertEqual(buona["stato"], "futura")
+        self.assertEqual(buona["pin"], self.sis.firma.pin_checkin(pagata))
+
     def test_default_vuoto_e_contratto(self):
         d = self._vista("attive")
         self.assertEqual(d["prenotazioni"], [])

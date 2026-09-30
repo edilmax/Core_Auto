@@ -11199,6 +11199,16 @@ class RouterHTTP:
                 ref = idem[len("reblock:"):] if idem.startswith("reblock:") else idem[:24]
                 ci, co = p.get("check_in"), p.get("check_out")
                 archiviata = bool(p.get("rimborsato"))
+                # IL PIN SOLO A PAGAMENTO AVVENUTO, come sul voucher dell'ospite (D20a della
+                # prova vera: una prenotazione mai pagata usciva «In arrivo» col PIN). Senza
+                # record del pagamento (iCal, OTA) resta com'era.
+                _rp = None
+                if pp is not None and ref and not archiviata:
+                    try:
+                        _rp = pp.info(ref)
+                    except Exception:
+                        _rp = None
+                _pagata = _rp is None or _rp.get("stato") == "pagato"
                 if archiviata:
                     # distinzione fine SOLO sulle righe della pagina (<= limit lookup:
                     # mai N+1 sull'intera storia); pendente purgato (26h) -> resta
@@ -11224,12 +11234,15 @@ class RouterHTTP:
                             stato = "futura"
                         elif ci <= oggi < co:
                             stato = "attiva"
+                    if _rp is not None and _rp.get("stato") == "in_attesa":
+                        stato = "in_attesa_pagamento"
                 out.append({"alloggio": titoli.get(p.get("alloggio_id"),
                                                    p.get("alloggio_id") or ""),
                             "slug": p.get("alloggio_id"),
                             "check_in": ci, "check_out": co,
                             "codice": codice_prenotazione(ref) if ref else "",
-                            "pin": (firma.pin_checkin(ref) if (firma and ref) else ""),
+                            "pin": (firma.pin_checkin(ref) if (firma and ref and _pagata)
+                                    else ""),
                             "stato": stato, "archiviata": archiviata})
         except Exception:
             logger.error("host prenotazioni: eccezione ISOLATA", exc_info=True)

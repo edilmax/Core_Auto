@@ -3435,7 +3435,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 6889a7a
+CONSEGNE AGGIORNATE A: 6bf2b86
 
 ## PASSAGGIO DI CONSEGNE 24 (2026-09-29 notte) - SOLDI E FIDUCIA: D13, D14, D12, D1, D18 CORRETTI SUL RAMO, OGNUNO CON LA GUARDIA VISTA ROSSA; NIENTE IN PRODUZIONE FINO ALL'INCASSO DI GIOVEDI':
 - STATO VERIFICATO all'inizio (23:02 ora del PC): ramo `correzioni-prova-vera` su 45b41b4 (i 5 file
@@ -3443,7 +3443,20 @@ CONSEGNE AGGIORNATE A: 6889a7a
   GitHub e sul VPS (`git rev-parse`), contenitori healthy, /api/health 200; PR #236 aperta, NON
   unita, testa 45b41b4, 16 controlli, gate success (tabella dall'API). Il file del voucher sul
   Desktop non c'e' (`Test-Path` False).
-- CONTESTO letto dal fondatore (`/context`) alla chiusura di questo blocco: 42% (423.9k su 1M).
+- COMMIT 6bf2b86 sul ramo (18 file, 485+ 48-), push fatto: `git ls-remote` = HEAD. Suite intera
+  prima del commit, da PowerShell vera col lanciatore (`suite_20260930_011228.log`, MSYSTEM vuoto,
+  openssl assente): «Ran 7051 tests in 3838.315s · OK (skipped=4) · CODICE_USCITA_DIRETTO=0»;
+  caricatore 7056, scarto 5 = le guardie dei backup senza openssl. Il giro prima (23:57) l'avevo
+  buttato: rosso su `test_TUTTI_i_punti_che_ricavano_il_riferimento_tolgono_il_prefisso` (la
+  funzione nuova di D12 aveva `[:24]` e `reblock:` su due righe), riscritta in una.
+  Dopo le 01:00 il fondatore dorme: il lavoro prosegue da solo, «autorizzato» fino alla fine.
+- CI su 6bf2b86 (tabella dall'API): `qualita` ROSSO -- il cricchetto statico ha trovato una
+  segnalazione ruff nuova, `test_occhio_fondatore.py|F401` (un `import re` inutile, mio); tutti
+  gli altri job letti fino alle 02:40 success. Corretto nel commit dopo, insieme a D20 (a) PIN e
+  «In arrivo» solo a pagamento avvenuto nel pannello host, (b) etichetta per ogni stato degli
+  incassi; (c) gia' giusto. Prima di ogni commit: `python collaudi/cricchetto_statico.py ruff`.
+- CONTESTO letto dal fondatore (`/context`) alla chiusura di questo blocco: 42% (423.9k su 1M);
+  47% alle 00:30. Oltre il 50% si prosegue per suo via, con la misura accanto a ogni numero (D21).
   Sotto il 50%, ma il blocco dopo (la ritenuta) e' lungo: consigliato ripartire da capo prima.
 - PERMESSI, parole testuali del fondatore all'inizio di questa sessione: «procedi al commit» per
   tutti i punti; «autorizzato» a commit, unioni, VPS e tutto quello che serve per finire; eccezione:
@@ -3551,7 +3564,8 @@ CONSEGNE AGGIORNATE A: 6889a7a
      commercialista.
   2. la Questura (fase151, spenta: il check-in non raccoglie data e luogo di nascita, sesso,
      cittadinanza);
-  3. il resto dell'elenco: D19, D20, D4, D5, D6, D3, D11, D9, D17, D7, D2, D10, D21, D22, D14b;
+  3. il resto dell'elenco: D19 (con D20 d-e: pannello host lungo, non si aggiorna da solo), D4,
+     D5, D6, D3, D11, D9, D17, D7, D2, D10, D21, D22, D14b (D20 a-b-c FATTI);
   4. giovedi' sera: l'occhio sull'incasso di a2c63fd8, poi la controversia dal pannello admin,
      poi unione e deploy di tutto (coi punti «al deploy» qui sopra);
   5. le due MANCANZE e le due righe degli equivalenti: aspettano, righe mostrate prima; B4 (chi
@@ -4659,7 +4673,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 7056 test
+SUITE ATTUALE: Ran 7059 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

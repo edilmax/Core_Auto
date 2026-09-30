@@ -200,6 +200,34 @@ class TestPagineEsitoPagamento(unittest.TestCase):
                                  "%s ha di nuovo testo fisso nell'HTML" % nome)
 
 
+class TestIlPannelloHostNonMostraChiaviGrezze(unittest.TestCase):
+    """D20 della prova vera (foto del fondatore, 29/9): «I tuoi incassi» stampava la chiave
+    grezza «in_attesa» (la mappa delle etichette conosceva solo maturato, in_transito, pagato,
+    trattenuto), e «Le mie prenotazioni» non aveva un'etichetta per chi non ha ancora pagato."""
+
+    def _host(self):
+        with open(os.path.join(occhio.PAGINE, "host.html"), encoding="utf-8") as f:
+            return f.read()
+
+    def test_ogni_stato_del_payout_ha_la_sua_etichetta(self):
+        import re
+        testo = self._host()
+        mappa = re.search(r"const LBL=\{([^}]*)\}", testo)
+        self.assertIsNotNone(mappa, "misura non valida: la mappa LBL non c'e' piu'")
+        import fase131_payout_dashboard as P
+        for stato in P.STATI:
+            self.assertIn(stato + ":", mappa.group(1),
+                          "lo stato '%s' del payout uscirebbe grezzo nel pannello" % stato)
+
+    def test_le_etichette_nuove_ci_sono_in_otto_lingue(self):
+        testo = self._host()
+        self.assertIn("st==='in_attesa_pagamento'", testo)
+        for lang in ("it", "en", "es", "fr", "de", "pt", "ja", "zh"):
+            for chiave in ("st_attpag", "pren_st_attpag"):
+                self.assertRegex(testo, r"\n\s*%s:\{[^\n]*\b%s:\"" % (lang, chiave),
+                                 "host.html: manca '%s' in '%s'" % (chiave, lang))
+
+
 class TestChiNonRiceveLEmailHaUnaStrada(unittest.TestCase):
     """D12 della prova vera (29/9, bbb00577): pagata con una casella piena, l'email col voucher
     non e' mai arrivata e l'ospite non poteva cancellare, fare il check-in ne' scrivere all'host.
@@ -222,7 +250,6 @@ class TestChiNonRiceveLEmailHaUnaStrada(unittest.TestCase):
         self.assertIn("r.voucher_token", riga)
 
     def test_la_pagina_grazie_MOSTRA_il_collegamento_in_otto_lingue(self):
-        import re
         testo = self._pagina("grazie.html")
         self.assertIn("localStorage.getItem('%s')" % self.CHIAVE, testo)
         self.assertIn("'/voucher/'+encodeURIComponent(", testo)

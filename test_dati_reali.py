@@ -986,11 +986,26 @@ class TestSitoInteroSuDatiVeri(unittest.TestCase):
         self.assertEqual([p["slug"] for p in corpo["prenotazioni"]],
                          [C.SLUG_ROMA, C.SLUG_ROMA, C.SLUG_ROMA, C.SLUG_ROMA,
                           C.SLUG_SENZA_GEO])
+        # D20(a) della prova vera: chi non ha ancora pagato (C.REF_ATTESA) non e' «in arrivo»
+        # e non riceve il PIN; le altre seguono il calendario come prima. La riga si riconosce
+        # dalle DATE del suo record: nel corpus i riferimenti hanno lo stesso inizio e il codice
+        # leggibile (BVIP-XXXX-XXXX, dai primi caratteri) esce uguale per tutti.
+        rec = self.sistema.pagamenti_pendenti.info(C.REF_ATTESA)
+        self.assertEqual((rec or {}).get("stato"), "in_attesa",
+                         "premessa: il corpus ha una prenotazione non pagata")
+        date_attesa = (rec["check_in"], rec["check_out"])
+        self.assertEqual(sum(1 for p in corpo["prenotazioni"]
+                             if (p["check_in"], p["check_out"]) == date_attesa), 1,
+                         "premessa: la non pagata e' fra le attive, e una sola ha quelle date")
         for p in corpo["prenotazioni"]:
             self.assertFalse(p["archiviata"])
+            non_pagata = (p["check_in"], p["check_out"]) == date_attesa
             self.assertEqual(p["stato"],
-                             _etichetta_attesa(p["check_in"], p["check_out"]),
+                             "in_attesa_pagamento" if non_pagata
+                             else _etichetta_attesa(p["check_in"], p["check_out"]),
                              "etichetta sbagliata per %s" % p["codice"])
+            if non_pagata:
+                self.assertEqual(p["pin"], "", "PIN dato a chi non ha pagato")
         # ARCHIVIO: la cancellata dall'host si chiama 'cancellata', non 'rimborsata'
         stato, arch = self.chiama("GET", "/api/host/prenotazioni",
                                   None, self.H, {"vista": "archivio"})

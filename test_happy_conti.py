@@ -790,8 +790,12 @@ class TestContrattoJSON(_Base):
         self.assertEqual(riga["check_in"], b["check_in"], riga)
         self.assertEqual(riga["check_out"], b["check_out"], riga)
         self.assertEqual(riga["codice"], codice_prenotazione(b["riferimento"]), riga)
-        self.assertEqual(riga["pin"], self.sis.firma.pin_checkin(b["riferimento"]), riga)
-        self.assertEqual(riga["stato"], "futura", riga)
+        # D20(a) della prova vera: questa prenotazione NON e' pagata -> niente PIN e non «in
+        # arrivo» (il PIN a pagamento avvenuto lo prova test_host_prenotazioni_archivio)
+        self.assertEqual(self.sis.pagamenti_pendenti.info(b["riferimento"])["stato"],
+                         "in_attesa", "premessa: prenotazione creata e non pagata")
+        self.assertEqual(riga["pin"], "", riga)
+        self.assertEqual(riga["stato"], "in_attesa_pagamento", riga)
         self.assertIs(riga["archiviata"], False, riga)
 
     def test_host_payout_contratto(self):
