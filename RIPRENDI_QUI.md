@@ -3437,6 +3437,126 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 ```
 CONSEGNE AGGIORNATE A: 6889a7a
 
+## PASSAGGIO DI CONSEGNE 24 (2026-09-29 notte) - SOLDI E FIDUCIA: D13, D14, D12, D1, D18 CORRETTI SUL RAMO, OGNUNO CON LA GUARDIA VISTA ROSSA; NIENTE IN PRODUZIONE FINO ALL'INCASSO DI GIOVEDI':
+- STATO VERIFICATO all'inizio (23:02 ora del PC): ramo `correzioni-prova-vera` su 45b41b4 (i 5 file
+  modificati sono solo fine riga: `git diff --ignore-cr-at-eol --quiet` uscita 0); master 6889a7a su
+  GitHub e sul VPS (`git rev-parse`), contenitori healthy, /api/health 200; PR #236 aperta, NON
+  unita, testa 45b41b4, 16 controlli, gate success (tabella dall'API). Il file del voucher sul
+  Desktop non c'e' (`Test-Path` False).
+- CONTESTO letto dal fondatore (`/context`) alla chiusura di questo blocco: 42% (423.9k su 1M).
+  Sotto il 50%, ma il blocco dopo (la ritenuta) e' lungo: consigliato ripartire da capo prima.
+- PERMESSI, parole testuali del fondatore all'inizio di questa sessione: «procedi al commit» per
+  tutti i punti; «autorizzato» a commit, unioni, VPS e tutto quello che serve per finire; eccezione:
+  le due mancanze e le due righe degli equivalenti -> prima si mostrano le righe. E: niente deploy
+  e niente `git pull` sul VPS fino all'incasso automatico di a2c63fd8 (giovedi' 1 ottobre dalle
+  17:46Z, al giro orario).
+- FATTO (racconto, file e guardie nel registro, voce «SOLDI E FIDUCIA DOPO LA PROVA VERA»):
+  D13+D8 la cancellazione e il rimborso admin TOLGONO la riga del bonifico se nessun soldo si e'
+  mosso (come gia' la scadenza e l'host) · D14 il voucher di una cancellata dice «✕ Prenotazione
+  cancellata» e la pagina si ricarica dopo la cancellazione · D12 il collegamento al voucher nella
+  pagina «Grazie» (stesso browser, due ore) e per ogni prenotazione nel pannello admin, e l'email
+  di conferma fallita ora dice quale e di chi · D1 «Via Palestro» in termini, privacy e ricevuta,
+  con la versione nuova di privacy e termini (la ricevuta legge `GESTORE`, non piu' una copia) ·
+  D18 il promemoria all'arrivo invita a premere «Confermo» (paga l'host subito); le 24 ore restano.
+- AL DEPLOY, DOPO L'INCASSO (oltre al protocollo di DEPLOY.md): (1) togliere a mano, DOPO la copia,
+  le due righe del bonifico rimaste «trattenuto» su prenotazioni annullate (8a448a3a del 16/8 e
+  bbb00577), controllando prima che le loro garanzie siano «annullato»; (2) l'account di prova del
+  fondatore dovra' ri-accettare la privacy (versione nuova); (3) le caselle SCADUTE: Blocco 2
+  (fase58), Blocco 5 (fase185, fase163: tre caselle), sentinella, backup e deploy (fase83), piu'
+  quelle di fase86: `python collaudi/rimisura.py` prima dell'unione, backup e deploy coi dati veri.
+- I DIFETTI CHE STAVANO SOLO NEL DIARIO (portati qui come chiesto dal fondatore):
+  D18 (DECISO) 24 ore + il messaggio all'arrivo; 12 ore solo dopo, coi numeri (quanti ospiti
+  confermano, quante contestazioni). Il fondatore: «Mi fido di te, fai la cosa giusta».
+  `FINESTRA_ORE_DEFAULT` resta 24. -> il messaggio e' FATTO (vedi sopra).
+  D19 IL PANNELLO ADMIN E' UNA PAGINA SOLA (foto del fondatore ~21:50 ora del PC): prenotazioni,
+  annunci, verifiche host, controversie, rimborsi, campagna, Bunker uno sotto l'altro, «diventa una
+  pagina lunga chilometri». Rimedio: un menu in alto con le sezioni, una sezione alla volta, piu'
+  le pagine dentro ogni elenco (D16). Chiedere la stessa cosa per il pannello HOST.
+  D20 IL PANNELLO HOST (due foto ~21:55 ora del PC): (a) «Le mie prenotazioni» mostra una
+  prenotazione MAI PAGATA (9fa7aecc) come «In arrivo» col PIN (fase83 ~11145 `firma.pin_checkin`
+  senza guardare lo stato; il voucher dell'ospite invece lo nasconde); (b) «I tuoi incassi» stampa
+  la chiave grezza «in_attesa» (host.html:814, la mappa LBL non la conosce) e conta come soldi in
+  arrivo le prenotazioni non pagate; (c) il testo «Ricevi i pagamenti in automatico» promette «dopo
+  24 ore senza problemi»: con D18 va detto anche «o subito, se l'ospite conferma»; (d) la pagina
+  host e' lunga come quella admin: stesso rimedio di D19; (e) la pagina non si aggiorna da sola.
+  D21 (nuovo, 21:10Z) il Guardiano conta male: «3 stato/i anomalo/i» per UN errore
+  (`fase186._conta` somma anche i campi del riquadro: 1 + «24 ore» + 1 esempio); il «7» del 15/9
+  erano 34 righe.
+  D22 (nuovo) una controversia aperta (riga ERROR voluta, 17:55Z di a2c63fd8) passa per «guasto
+  ingoiato che nessuno leggerebbe»: e' un fatto giusto da segnalare col nome sbagliato. L'allarme
+  del 29/9 sera e' questo, atteso: si ripete ogni 6 ore (`REMINDER_H`) e rientra quando il
+  Guardiano ripassa con la riga oltre le 24 ore, la sera di mercoledi' 30.
+  D14b (nuovo, limite di D14) una prenotazione `scaduto` mostra ancora «Completa il pagamento».
+- RESTA, in ordine (ordine del fondatore):
+  1. LA RITENUTA DEL 21%, DA COSTRUIRE SPENTA CON L'INTERRUTTORE. Verificato nel codice: NON
+     esiste (0 occorrenze di ritenuta/cedolare nei fase*.py). Il fondatore (29/9 notte): «e
+     costruiscilo, e lo attiviamo con un tasto se serve». Fonti lette (D25): Agenzia Entrate «Le
+     regole per gli intermediari»; comunicato del 10 maggio 2024 (circolare 10/E: dal 2024 il 21%
+     e' SEMPRE a titolo d'acconto, e i non residenti non devono piu' nominare un rappresentante);
+     schede del 770/2026. Cosa dicono: la fa chi INCASSA i canoni di locazioni brevi (fino a 30
+     giorni) di persone fisiche fuori dall'attivita' d'impresa; base = l'intero importo che
+     l'ospite versa per il soggiorno, provvigione compresa, esclusi i depositi (la tassa di
+     soggiorno dentro o fuori: DA VERIFICARE sulla guida AdE prima di scrivere); versamento entro
+     il 16 del mese dopo, F24 codice tributo 1919; Certificazione Unica all'host; dati entro il 30
+     giugno (nome, codice fiscale, durata, indirizzo, CIN, importo lordo). Pezzi: (a) chi e'
+     privato: `fase88_registro_host` ha GIA' `tipo_soggetto`, `codice_fiscale`, `partita_iva`,
+     `paese` (inventario D10: riusarli, non ricostruirli); (b) al bonifico all'host, SOLO con
+     l'interruttore acceso, host privato e soggiorno di 30 notti o meno in Italia: 21% della base
+     trattenuto, riga nel giornale verso l'Erario, bonifico ridotto (la quota host resta sempre
+     sopra il 21%: commissione e tariffa tecnica insieme non arrivano al 79%, da provare con una
+     guardia); (c) nel pannello admin il totale del mese per l'F24 e l'elenco dell'anno per CU e
+     comunicazione; (d) l'interruttore nel pannello admin, di serie SPENTO, e ogni guardia provata
+     nei due stati. ⛔ Tocca il percorso dei soldi (Blocco 1): le sue caselle scadono e si
+     rimisurano. ⛔ Le DUE DOMANDE per il commercialista le porta il fondatore (gli e' stato dato il
+     testo): un forfettario e' esonerato (legge 190/2014 comma 69) o no (le fonti dicono che
+     l'esonero POTREBBE non valere, perche' la ritenuta viene da un'altra legge)? e i soldi che
+     passano per conto degli host contano nei ricavi rispetto al tetto degli 85.000 EUR? E la
+     TERZA: se il pagamento dell'ospite andasse direttamente sul conto Stripe dell'host e noi
+     prendessimo solo la commissione, la ritenuta resterebbe («interviene nel pagamento»)?
+     MISURATO DOPO (29/9 notte), e cambia COME si costruisce: (i) il giornale accetta solo un
+     elenco CHIUSO di tipi di movimento (`fase177_financial_controller.py`, la tupla dei tipi e
+     `_CONTI_MOVIMENTO`): una voce «ritenuta» tocca fase177, cioe' il Blocco 1 (15 su 15), che
+     scade tutto e va rimisurato; (ii) il rapporto DAC7 conta come «netto» i bonifici all'host
+     (`payout_host`/`payout_manuale`): con la ritenuta il bonifico cala ma il reddito dell'host
+     no, quindi anche il rapporto va rivisto; (iii) oltre al bonifico automatico
+     (`fase83._trasferisci_all_host`) c'e' quello MANUALE dalla lista `da_pagare`: la ritenuta
+     va su tutte e due le strade; (iv) `tipo_soggetto` vale `individuo` o `societa`
+     (deploy/host.html, dati fiscali): ritenuta solo per `individuo` SENZA partita IVA.
+     ⛔ QUINDI SU UN RAMO SUO, non su `correzioni-prova-vera`: se no l'unione di giovedi' resta
+     ferma finche' il Blocco 1 non e' rimisurato. Da una sessione pulita (contesto sotto il 50%).
+     INSIEME alla ritenuta:
+     D23 NESSUNO VERIFICA CHE L'ATTIVITA' DELL'HOST ESISTA (il fondatore, 29/9 notte: «come
+     facciamo a sapere se quello li' e' registrato?»). Oggi: Stripe Identity (la persona),
+     Stripe Connect, la verifica manuale dell'admin (la revoca ferma i bonifici); manca il
+     controllo che partita IVA o registrazione siano vere. Da fare dopo la ricerca D25: dove
+     c'e' un registro ufficiale online si interroga quello (per le partite IVA dell'UE il VIES
+     della Commissione), dove non c'e' si chiede il documento e lo guarda l'admin; e si tiene la
+     PROVA del controllo (numero, data, esito). Il DAC7 chiede gia' di verificare i codici
+     fiscali coi servizi ufficiali gratuiti: da rileggere sulla fonte. Lega con la ritenuta:
+     chi dichiara una partita IVA falsa la scavalca.
+     LA FRASE DEL CONTRATTO SULLA VERIDICITA' (il fondatore: «mi devi tutelare in modo che gli
+     altri dichiarano il falso»). Il contratto host ha gia' l'art. 4 (fiscalita' dell'host),
+     l'art. 8 (identita' false) e l'art. 9 (manleva, anche da pretese di autorita' fiscali);
+     manca la dichiarazione esplicita che i dati fiscali (tipo di soggetto, codice fiscale,
+     partita IVA) sono veri e che, se falsi, ritenute non operate e sanzioni sono a carico
+     dell'host. Versione nuova del contratto (il fondatore ri-accetta), avvocato prima degli
+     host veri. Detto al fondatore: il contratto tutela verso l'host, verso lo Stato tutela aver
+     fatto i controlli e averne la prova.
+     D24 LA SCHEDA PER PAESE: un paese si «apre» solo con le sue regole (ritenuta? tassa di
+     soggiorno raccolta dalla piattaforma? licenza o registrazione dell'host, come il CIN o il
+     numero minpaku del Giappone? cosa si comunica al fisco?), chieste a un professionista di
+     quel paese. Prima VERIFICARE se il motore ha gia' un elenco di paesi aperti. Il fondatore
+     ragiona anche di dove aprire la societa' (Italia o estero): detto che la ritenuta segue la
+     casa, non la societa', e del rischio di esterovestizione; e' strategia, decide lui dopo il
+     commercialista.
+  2. la Questura (fase151, spenta: il check-in non raccoglie data e luogo di nascita, sesso,
+     cittadinanza);
+  3. il resto dell'elenco: D19, D20, D4, D5, D6, D3, D11, D9, D17, D7, D2, D10, D21, D22, D14b;
+  4. giovedi' sera: l'occhio sull'incasso di a2c63fd8, poi la controversia dal pannello admin,
+     poi unione e deploy di tutto (coi punti «al deploy» qui sopra);
+  5. le due MANCANZE e le due righe degli equivalenti: aspettano, righe mostrate prima; B4 (chi
+     paga la commissione Stripe sul rimborso pieno dopo le 48 ore) e' del fondatore.
+
 ## PASSAGGIO DI CONSEGNE 23 (2026-09-29 sera) - PROVA VERA A META': L'ANNULLO NELLE 48 ORE COSTA ZERO CON SOLDI VERI; L'INCASSO AUTOMATICO SI VEDE GIOVEDI' SERA; 17 DIFETTI TROVATI, SCRITTI E NON RIPARATI; NESSUNA RIGA DI PRODUZIONE CAMBIATA:
 - STATO VERIFICATO all'inizio (18:29 ora del PC): computer, GitHub e VPS su 6889a7a (sul VPS
   `git rev-parse`); PR #235 unita (merged=True, merge_commit 6889a7a, testa f6344b4); gate
@@ -4539,7 +4659,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 7042 test
+SUITE ATTUALE: Ran 7056 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

@@ -951,6 +951,30 @@ class TestAdmin(unittest.TestCase):
         _, c3 = self.r.gestisci("GET", "/api/admin/prenotazioni", headers=self.h)
         self.assertTrue(c3["prenotazioni"][0]["rimborsato"])
 
+    def test_LA_LISTA_ADMIN_PORTA_IL_VOUCHER_DI_OGNI_PRENOTAZIONE(self):
+        """D12 della prova vera (29/9, bbb00577): l'email di conferma non e' arrivata (casella
+        dell'ospite piena) e l'ospite non aveva NESSUNA strada per cancellare, fare il check-in
+        o scrivere all'host: il collegamento esisteva solo dentro il record. L'admin lo deve
+        vedere, per mandarglielo da un altro canale. Senza pagamento con noi, niente."""
+        pp, inv = self.sys.pagamenti_pendenti, self.sys.inventario
+        giorni = [_fra(60 + i) for i in range(3)]
+        for g in giorni:
+            inv.imposta_disponibilita("casa", g, unita_totali=1, prezzo_netto_cents=10000)
+        idem = "v" * 30
+        self.assertTrue(inv.blocca("casa", giorni[0], giorni[1], idem_key=idem,
+                                   origine="concierge").ok)
+        self.assertTrue(pp.registra(idem[:24], alloggio_id="casa", check_in=giorni[0],
+                                    check_out=giorni[1], idem_key=idem,
+                                    corpo_json=json.dumps({"voucher_token": "tok.firmato-1"})))
+        self.assertTrue(inv.blocca("casa", giorni[1], giorni[2], idem_key="w" * 30,
+                                   origine="ical").ok)           # nessun pagamento con noi
+        s, c = self.r.gestisci("GET", "/api/admin/prenotazioni", headers=self.h)
+        self.assertEqual(s, 200, c)
+        per_chiave = {p["idem_key"]: p for p in c["prenotazioni"]}
+        self.assertEqual(per_chiave[idem].get("voucher_url"),
+                         "https://bookinvip.com/voucher/tok.firmato-1")
+        self.assertEqual(per_chiave["w" * 30].get("voucher_url"), "")
+
     def test_LA_LISTA_ADMIN_VA_A_PAGINE_E_DICE_LO_STATO_VERO(self):
         """D15 e D16 della prova vera del 29/9. La lista conosceva due stati soli, letti dal
         calendario: «rimborsato» se c'era il rilascio, «attiva» altrimenti. Cosi' una

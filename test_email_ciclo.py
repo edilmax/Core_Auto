@@ -101,6 +101,7 @@ class TestEmailCiclo(unittest.TestCase):
                        "versione": CONTRATTO_HOST_VERSIONE})
         self.assertEqual(s, 201, c)
         tk = {"X-Host-Token": c["token"]}
+        self._tk = c["token"]
         oggi = datetime.date.today()
         self.g("POST", "/api/host/pubblica",
                {"slug": "casa", "titolo": "Casa", "citta": "Roma",
@@ -256,6 +257,65 @@ class TestEmailCiclo(unittest.TestCase):
         self.assertEqual(s, 200, c)
         # cancellata/rimborsata: la ricevuta non attesta più un pagamento valido
         self.assertIsNone(pagina_ricevuta_html(self.sis, self.vt))
+
+    def test_se_la_conferma_NON_parte_il_registro_dice_QUALE_e_DI_CHI(self):
+        """D12 della prova vera: la conferma del pagamento partiva coi valori di serie di
+        `_email_bg`, e un invio fallito avrebbe scritto «template=ciclo riferimento=» vuoto --
+        cioe' nessuno avrebbe saputo quale ospite era rimasto senza voucher."""
+        class _DiceNo:
+            def invia(self, *a, **k):
+                return False
+        self.sis.email_provider = _DiceNo()
+        with self.assertLogs("core_auto.server", level="ERROR") as cattura:
+            self._webhook(self.rif)
+            for _ in range(40):
+                if any("EMAIL NON CONSEGNATA" in r for r in cattura.output):
+                    break
+                time.sleep(0.05)
+        righe = [r for r in cattura.output if "EMAIL NON CONSEGNATA" in r]
+        self.assertEqual(len(righe), 1, cattura.output)
+        self.assertIn("template=pagamento_confermato riferimento=" + self.rif, righe[0])
+
+    def _voucher_dice_CANCELLATA(self):
+        from fase83_server import ETICHETTE_UI
+        for lg in ("it", "en", "es", "fr", "de", "pt", "ja", "zh"):
+            with self.subTest(lingua=lg):
+                h = pagina_voucher_html(self.sis, self.vt, lg)
+                self.assertNotIn(ETICHETTE_UI["voucher_ok"][lg], h,
+                                 "il voucher di una cancellata dice ancora «confermata»")
+                self.assertNotIn(ETICHETTE_UI["v_completa_prima"][lg], h,
+                                 "il voucher di una cancellata invita a PAGARE")
+                self.assertNotIn(self.sis.firma.pin_checkin(self.rif), h)
+                self.assertNotIn("/api/garanzia/", h)
+        self.assertIn("Prenotazione cancellata", pagina_voucher_html(self.sis, self.vt, "it"))
+
+    def test_il_voucher_di_una_CANCELLATA_DALL_OSPITE_dice_cancellata(self):
+        """D14 della prova vera (29/9, bbb00577): cancellata dall'ospite a costo zero, ricaricando
+        il voucher si leggeva «✓ Prenotazione confermata» e «Completa il pagamento per attivare
+        il voucher». L'ospite crede che valga ancora, o di dover pagare di nuovo."""
+        self._webhook(self.rif)
+        s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": self.vt})
+        self.assertEqual(s, 200, c)
+        self._voucher_dice_CANCELLATA()
+
+    def test_il_voucher_di_una_CANCELLATA_DALL_HOST_dice_cancellata(self):
+        """Stessa pagina, l'altro stato di chiusura ('cancellata_host')."""
+        self._webhook(self.rif)
+        s, c = self.g("POST", "/api/host/cancella", {"riferimento": self.rif},
+                      {"X-Host-Token": self._tk})
+        self.assertEqual(s, 200, c)
+        self.assertEqual(self.sis.pagamenti_pendenti.info(self.rif)["stato"], "cancellata_host")
+        self._voucher_dice_CANCELLATA()
+
+    def test_dopo_la_cancellazione_la_pagina_SI_RICARICA(self):
+        """D14, la foto del fondatore: senza ricaricare restavano PIN, «Confermo», «Segnala» e la
+        chat su una prenotazione appena cancellata (il JavaScript nascondeva SOLO il pulsante
+        rosso). La pagina si ricarica e la disegna il server, che sa che e' cancellata."""
+        self._webhook(self.rif)
+        h = pagina_voucher_html(self.sis, self.vt, "it")
+        inizio = h.index("getElementById('btnCanc').onclick")
+        gestore = h[inizio:h.index("</script>", inizio)]
+        self.assertIn("location.reload()", gestore)
 
     # ── 6. corpi email: XSS-safe e importi al centesimo ─────────────────────────
     def test_corpi_email_xss_e_importi(self):

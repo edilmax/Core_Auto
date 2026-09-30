@@ -200,5 +200,43 @@ class TestPagineEsitoPagamento(unittest.TestCase):
                                  "%s ha di nuovo testo fisso nell'HTML" % nome)
 
 
+class TestChiNonRiceveLEmailHaUnaStrada(unittest.TestCase):
+    """D12 della prova vera (29/9, bbb00577): pagata con una casella piena, l'email col voucher
+    non e' mai arrivata e l'ospite non poteva cancellare, fare il check-in ne' scrivere all'host.
+    La pagina «Grazie» diceva solo «riceverai un'email». Due strade: la pagina «Grazie» mostra
+    il collegamento (il browser lo ricorda da quando e' partito verso Stripe), e il pannello
+    admin lo mostra per ogni prenotazione."""
+
+    CHIAVE = "bookinvip_ultima"
+
+    def _pagina(self, nome):
+        with open(os.path.join(occhio.PAGINE, nome), encoding="utf-8") as f:
+            return f.read()
+
+    def test_la_home_RICORDA_il_voucher_PRIMA_di_partire_per_Stripe(self):
+        testo = self._pagina("index.html")
+        via = testo.index("window.location.href = r.payment_url")
+        riga = testo[testo.rindex("\n", 0, via):via]
+        self.assertIn("localStorage.setItem('%s'" % self.CHIAVE, riga,
+                      "si parte per Stripe senza ricordare il collegamento al voucher")
+        self.assertIn("r.voucher_token", riga)
+
+    def test_la_pagina_grazie_MOSTRA_il_collegamento_in_otto_lingue(self):
+        import re
+        testo = self._pagina("grazie.html")
+        self.assertIn("localStorage.getItem('%s')" % self.CHIAVE, testo)
+        self.assertIn("'/voucher/'+encodeURIComponent(", testo)
+        for lang in ("it", "en", "es", "fr", "de", "pt", "ja", "zh"):
+            self.assertRegex(testo, r"%s:\{h:[^\n]*vch:'[^']+',vch_nota:'" % lang,
+                             "grazie.html: manca il collegamento al voucher in '%s'" % lang)
+
+    def test_il_pannello_admin_DISEGNA_il_voucher_di_ogni_prenotazione(self):
+        testo = self._pagina("admin.html")
+        self.assertIn("p.voucher_url", testo)
+        for lang in ("it", "en", "es", "fr", "de", "pt", "ja", "zh"):
+            self.assertRegex(testo, r"\n %s:\{[^\n]*b_voucher:\"" % lang,
+                             "admin.html: manca l'etichetta del voucher in '%s'" % lang)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

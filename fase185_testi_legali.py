@@ -42,8 +42,8 @@ LINGUA_CHE_FA_FEDE = "it"
 # caso di divergenza fa fede l'italiano — la clausola resta dentro ogni versione.
 LINGUA_RIPIEGO = "en"
 
-TERMINI_VERSIONE = "2026-09-27"   # cap. 7: cosa torna all'ospite che cancella (politica + tassa intera, 48 ore)
-PRIVACY_VERSIONE = "2026-09-12"   # dichiarato il termine delle comunicazioni (§4)
+TERMINI_VERSIONE = "2026-09-29"   # indirizzo del gestore corretto: Via Palestro (D1 della prova vera)
+PRIVACY_VERSIONE = "2026-09-29"   # indirizzo del titolare corretto: Via Palestro (D1 della prova vera)
 
 # Per quanti ANNI si tengono le comunicazioni di una prenotazione (chat e prove foto).
 # ⛔ QUESTO E' L'UNICO POSTO DOVE IL TERMINE ESISTE. `_componi` lo sostituisce in tutte e
@@ -64,7 +64,7 @@ ANNI_CONSERVAZIONE_CHAT = 2
 GESTORE = {
     "ragione_sociale": "Edil Max di Foti Massimo",
     "piva": "11795700969",
-    "indirizzo": "Via Paletro 11, 20821 Meda (MB), Italia",
+    "indirizzo": "Via Palestro 11, 20821 Meda (MB), Italia",
     "email": "info@bookinvip.com",
 }
 

@@ -179,16 +179,57 @@ class TestSplitPenalePayout(unittest.TestCase):
         self.sis.garanzia.auto_rilascia(ora_ts=int(time.time()) + 10 * 86400)
         self.assertEqual(len(self.fc.transfers), n_prima)
 
-    def test_cancellazione_rimborso_pieno_resta_trattenuto(self):
-        # NESSUNA regressione: flessibile e lontano -> ospite 100%, host 0, zero transfer
+    def test_cancellazione_rimborso_pieno_TOGLIE_la_riga_del_bonifico(self):
+        """D13 della prova vera (29/9, soldi veri): flessibile e lontano -> ospite 100%, host 0,
+        zero transfer. La riga del bonifico restava 'trattenuto' per sempre e il pannello host
+        la contava fra i soldi «Fermi (cancellazione o controversia)»: bbb00577, annullata a
+        costo zero, portava il «Fermo» a 1,16 EUR di cui solo 0,23 veri. Nessun soldo si era
+        mosso verso l'host: la riga si toglie, come fanno gia' la scadenza e l'host che cancella."""
         self._pubblica("casa-e", politica="flessibile")
         b = self._book_paga("casa-e", giorni_all_arrivo=30)
         ref = b["riferimento"]
         s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": b["voucher_token"]})
         self.assertEqual(s, 200, c)
-        self.assertEqual(self.sis.payout.stato_di(ref), "trattenuto")
+        self.assertEqual(self.sis.payout.stato_di(ref), "",
+                         "la riga del bonifico di una cancellata a rimborso pieno e' rimasta")
+        self.assertEqual(self.sis.payout.riepilogo(self.hid), {},
+                         "il pannello host conta soldi che l'host non ricevera' mai")
         self.assertEqual(self.fc.transfers, [])
         self.assertEqual(self.sis.garanzia.stato(ref)["stato"], "annullato")
+
+    def test_rimborso_dal_pannello_admin_TOGLIE_la_riga_del_bonifico(self):
+        """D8 della prova vera: la riga 8a448a3a del 16/8 (1 EUR pagato e rimborsato dal
+        pannello admin) era ancora 'trattenuto' il 29/9, e il pannello host mostrava 0,70 EUR
+        «Fermi». Stessa funzione della cancellazione dell'ospite, stessa cura."""
+        self._pubblica("casa-h", politica="flessibile")
+        b = self._book_paga("casa-h", giorni_all_arrivo=30)
+        ref = b["riferimento"]
+        s, adm = self.g("GET", "/api/admin/prenotazioni", None, AK)
+        self.assertEqual(s, 200, adm)
+        riga = [p for p in adm["prenotazioni"] if p.get("riferimento") == ref
+                or str(p.get("idem_key", "")).startswith(ref)]
+        self.assertEqual(len(riga), 1, adm)
+        s, res = self.g("POST", "/api/admin/rimborso",
+                        {"alloggio_id": "casa-h", "check_in": riga[0]["check_in"],
+                         "check_out": riga[0]["check_out"], "idem_key": riga[0]["idem_key"]}, AK)
+        self.assertEqual(s, 200, res)
+        # (il banco non ha il pi_ di Stripe: 'soldi_restituiti' fallisce per costruzione)
+        self.assertNotIn("payout_trattenuto", res.get("passi_falliti") or [], res)
+        self.assertEqual(self.sis.payout.stato_di(ref), "")
+        self.assertEqual(self.sis.payout.riepilogo(self.hid), {})
+
+    def test_un_bonifico_GIA_IN_VIAGGIO_resta_visibile_trattenuto(self):
+        """L'altra direzione: se il bonifico e' gia' partito ('in_transito') e poi la prenotazione
+        viene rimborsata, i soldi sono gia' usciti verso l'host. Quella riga NON si toglie: resta
+        'trattenuto' e visibile, perche' la deve guardare una persona."""
+        self._pubblica("casa-i", politica="flessibile")
+        b = self._book_paga("casa-i", giorni_all_arrivo=30)
+        ref = b["riferimento"]
+        self.assertTrue(self.sis.payout.aggiorna_stato(ref, "in_transito"),
+                        "premessa: la riga dev'essere 'maturato' e poter partire")
+        s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": b["voucher_token"]})
+        self.assertEqual(s, 200, c)
+        self.assertEqual(self.sis.payout.stato_di(ref), "trattenuto")
 
     def test_disputa_aperta_payout_fuori_dal_giro(self):
         # BUG #21: con la disputa APERTA il payout restava 'maturato' -> `da_pagare`

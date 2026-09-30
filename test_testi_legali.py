@@ -21,6 +21,7 @@ Le pagine `privacy.html` e `termini.html` sono nominate qui apposta: prima di og
 nessun test le citava, e una pagina che nessuno guarda puo' mentire per mesi.
 """
 
+import inspect
 import io
 import os
 import re
@@ -528,6 +529,58 @@ class TestLaProvaDelConsensoLegaLeParoleCheLaPersonaHaLETTO(unittest.TestCase):
             prima, dopo,
             "aggiunta una clausola all'informativa servita, l'impronta del consenso non e' "
             "cambiata: quella impronta non dimostra COSA e' stato accettato")
+
+
+class TestLIndirizzoDelGestoreEQuelloVero(unittest.TestCase):
+    """D1 della prova vera (29/9): la ricevuta e i testi legali dicevano «Via Paletro 11», il
+    fondatore l'ha letto sulla ricevuta vera: e' «Via Palestro 11». La ricevuta ne aveva una
+    COPIA a mano (fase83) invece di leggere `GESTORE`: due posti, e la correzione di uno solo
+    avrebbe lasciato l'altro sbagliato."""
+
+    GIUSTO, SBAGLIATO = "Via Palestro 11, 20821 Meda (MB)", "Paletro"
+
+    def test_termini_e_privacy_in_ogni_lingua(self):
+        for nome in ("termini", "privacy"):
+            for lg in L.lingue_disponibili(nome):
+                with self.subTest(documento=nome, lingua=lg):
+                    testo = L.documento(nome, lg)["testo"]
+                    self.assertIn(self.GIUSTO, testo)
+                    self.assertNotIn(self.SBAGLIATO, testo)
+
+    def test_la_ricevuta_legge_il_gestore_e_non_una_copia(self):
+        import fase83_server as S
+        sorgente = inspect.getsource(S.pagina_ricevuta_html)
+        self.assertNotIn(self.SBAGLIATO, sorgente)
+        self.assertNotIn("11795700969", sorgente,
+                         "la ricevuta tiene di nuovo una copia a mano dei dati del gestore")
+        self.assertIn("GESTORE", sorgente)
+
+
+class TestUnaVersioneFirmataNonCambiaParole(unittest.TestCase):
+    """Correggere l'indirizzo (D1) cambia le parole dell'informativa, e quindi l'impronta del
+    consenso. Se la VERSIONE resta la stessa, due testi diversi portano lo stesso nome e la
+    prova di chi ha gia' accettato non dice piu' QUALE testo ha accettato; e la
+    ri-accettazione guarda solo la versione (`fase163.ha_accettato_corrente`), quindi nessuno
+    verrebbe richiamato. Le versioni gia' accettate in produzione si inchiodano qui con la
+    loro impronta: cambiare le parole obbliga a una versione nuova."""
+
+    FIRMATE = {
+        "2026-09-12": "5a11dc068b7a15fde65ae338c014778253a006edd8a8214a4dc557e8f6e6f25b",
+        "2026-09-29": "d972fb06ca3186e32068263bf94a267e3c9a74ad497abf4d7252e1ff5fe0d0b1",
+    }
+
+    def test_la_versione_corrente_se_gia_firmata_ha_le_SUE_parole(self):
+        import fase163_accettazioni as A
+        A._privacy_cache.clear()
+        try:
+            impronta = A.privacy_sha256()
+        finally:
+            A._privacy_cache.clear()
+        if A.PRIVACY_VERSIONE in self.FIRMATE:
+            self.assertEqual(
+                impronta, self.FIRMATE[A.PRIVACY_VERSIONE],
+                "l'informativa %s e' gia' stata accettata con altre parole: il testo e' "
+                "cambiato, serve una versione nuova" % A.PRIVACY_VERSIONE)
 
 
 if __name__ == "__main__":

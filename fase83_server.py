@@ -381,6 +381,10 @@ ETICHETTE_UI: Dict[str, Dict[str, str]] = {
     "v_invia_checkin": {"it": "Invia check-in", "en": "Send check-in", "es": "Enviar check-in", "fr": "Envoyer l'enregistrement", "de": "Check-in senden", "pt": "Enviar check-in", "ja": "チェックインを送信", "zh": "提交登记"},
     "v_ricevuta": {"it": "Ricevuta di pagamento", "en": "Payment receipt", "es": "Recibo de pago", "fr": "Reçu de paiement", "de": "Zahlungsbeleg", "pt": "Recibo de pagamento", "ja": "支払い領収書", "zh": "付款收据"},
     "v_completa_prima": {"it": "Completa il pagamento per attivare il voucher", "en": "Complete the payment to activate the voucher", "es": "Completa el pago para activar el bono", "fr": "Finalisez le paiement pour activer le bon", "de": "Zahlung abschließen, um den Gutschein zu aktivieren", "pt": "Conclui o pagamento para ativar o voucher", "ja": "お支払いを完了するとバウチャーが有効になります", "zh": "完成付款以激活凭证"},
+    # D14 della prova vera: il voucher di una prenotazione CANCELLATA diceva «confermata» e
+    # invitava a pagare (stesso ramo dell'«in attesa di pagamento»)
+    "v_cancellata_titolo": {"it": "Prenotazione cancellata", "en": "Booking cancelled", "es": "Reserva anulada", "fr": "Réservation annulée", "de": "Buchung storniert", "pt": "Reserva cancelada", "ja": "予約はキャンセルされました", "zh": "预订已取消"},
+    "v_cancellata_nota": {"it": "Questa prenotazione non è più valida: non c'è niente da pagare.", "en": "This booking is no longer valid: there is nothing to pay.", "es": "Esta reserva ya no es válida: no hay nada que pagar.", "fr": "Cette réservation n'est plus valable : il n'y a rien à payer.", "de": "Diese Buchung ist nicht mehr gültig: Es ist nichts zu bezahlen.", "pt": "Esta reserva já não é válida: não há nada a pagar.", "ja": "この予約は無効になりました。お支払いの必要はありません。", "zh": "此预订已失效，无需付款。"},
     "v_pin_dopo_pagamento": {"it": "Il PIN di check-in e le opzioni di gestione si sbloccano dopo il pagamento.", "en": "The check-in PIN and the management options unlock after payment.", "es": "El PIN de entrada y las opciones de gestión se desbloquean tras el pago.", "fr": "Le PIN d'arrivée et les options de gestion se débloquent après le paiement.", "de": "Check-in-PIN und Verwaltungsoptionen werden nach der Zahlung freigeschaltet.", "pt": "O PIN de check-in e as opções de gestão desbloqueiam-se após o pagamento.", "ja": "チェックインPINと管理メニューはお支払い後に利用できます。", "zh": "入住 PIN 与管理选项将在付款后解锁。"},
     # --- messaggi che il voucher mostra DOPO un clic (finivano nel codice, in italiano) ---
     "v_js_conferma_canc": {"it": "Cancellare la prenotazione?", "en": "Cancel this booking?", "es": "¿Anular la reserva?", "fr": "Annuler la réservation ?", "de": "Buchung wirklich stornieren?", "pt": "Cancelar a reserva?", "ja": "予約をキャンセルしますか？", "zh": "确定要取消预订吗？"},
@@ -1099,6 +1103,9 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: Any = None) -> Optiona
     _pp_stato = getattr(sistema, "pagamenti_pendenti", None)
     _rec_stato = _pp_stato.info(_ref) if _pp_stato is not None else None
     _pagato = bool(_rec_stato) and _rec_stato.get("stato") == "pagato"
+    # CANCELLATA (dall'ospite o dall'host): non e' «da pagare» e non e' «confermata» (D14)
+    _cancellata = bool(_rec_stato) and _rec_stato.get("stato") in ("rimborsato",
+                                                                    "cancellata_host")
     # Codice "serratura smart" (self check-in): NASCOSTO di default. È un pass firmato utile
     # SOLO se l'host ha una serratura elettronica compatibile (hardware, che al lancio nessuno
     # ha) -> mostrarlo confonderebbe il cliente. Resta emesso nel token (riattivabile in futuro,
@@ -1131,7 +1138,8 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: Any = None) -> Optiona
         "var d=await r.json();var m=document.getElementById('cancMsg');"
         "if(d.stato==='cancellata'){m.style.color='#155724';"
         "m.textContent=BVL.cancellata+' '+(d.rimborso_cents/100).toFixed(2)+' EUR';"
-        "this.style.display='none';}else{m.style.color='#b00020';"
+        "this.style.display='none';setTimeout(function(){location.reload()},2500);"
+        "}else{m.style.color='#b00020';"
         "m.textContent=BVL.canc_ko;}};</script>")
     # Escrow di garanzia: l'ospite conferma "tutto ok" (sblocca il pagamento) o segnala un problema
     blocco_pass = blocco_pass + (
@@ -1355,7 +1363,13 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: Any = None) -> Optiona
             "<strong style='font-size:1.15rem'>%s %s</strong></div>"
         ) % (e(_ui("ps_anticipo_pagato", lng)), e(_importo(_ant_v, _val_v)), e(_val_v),
              e(_ui("ps_saldo_nota", lng)), e(_importo(_saldo_v, _val_v)), e(_val_v))
-    if not _pagato:
+    if _cancellata:
+        # CANCELLATA: niente PIN, niente azioni, e nessun invito a pagare (D14).
+        blocco_pass = ("<div style='margin-top:1.2rem;padding:1rem;background:#fdecee;"
+                       "border:1px solid #f5c2c7;border-radius:.9rem;color:#842029;"
+                       "text-align:center'><strong>"
+                       + e(_ui("v_cancellata_nota", lng)) + "</strong></div>")
+    elif not _pagato:
         # NON pagato: niente PIN, niente controversia, niente check-in — solo l'invito a pagare.
         blocco_pass = ("<div style='margin-top:1.2rem;padding:1rem;background:#fff6e6;"
                        "border:1px solid #ffd9a8;border-radius:.9rem;color:#8a5200;text-align:center'>"
@@ -1371,7 +1385,7 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: Any = None) -> Optiona
         "rgba(0,0,0,.06)}h1{color:#1e3c72}.r{display:flex;justify-content:space-between;"
         "padding:.3rem 0;border-bottom:1px solid #eef2f7}</style></head><body><div class=\"v\">"
         "<div style=\"font-weight:700;color:#1e3c72;font-size:1.3rem\">BookinVIP</div>"
-        "<h1>✓ %s</h1>"
+        "<h1>%s</h1>"
         "<div class=\"r\"><span>%s</span><strong style=\"letter-spacing:.05em\">%s</strong></div>"
         "<div class=\"r\"><span>%s</span>%s</div>"
         "<div class=\"r\"><span>%s</span><strong>%s</strong></div>"
@@ -1380,7 +1394,8 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: Any = None) -> Optiona
         "%s"
         "%s</div></body></html>"
     ) % (
-        e(lng), e(_ui("voucher_ok", lng)),
+        e(lng), ("✕ " + e(_ui("v_cancellata_titolo", lng))) if _cancellata
+        else ("✓ " + e(_ui("voucher_ok", lng))),
         e(_ui("rif", lng)), e(_codice_pren),
         e(_ui("v_pin_label", lng)),
         riga_pin_voucher(e(_pin_checkin) if _pagato else "\U0001F512"),  # PIN SOLO se pagato
@@ -1433,6 +1448,7 @@ def pagina_ricevuta_html(sistema: Any, token: Any, lingua: Any = None) -> Option
         dj = {}
     e = _h.escape
     from fase59_concierge import codice_prenotazione
+    from fase185_testi_legali import GESTORE
     valuta = dj.get("valuta") or v.get("valuta", "EUR")
 
     def soldi(c):
@@ -1470,8 +1486,7 @@ def pagina_ricevuta_html(sistema: Any, token: Any, lingua: Any = None) -> Option
         "<div class=\"r\"><span>%s</span><strong>%s</strong></div>"
         "%s"
         "<p style=\"color:#5e6f8d;font-size:.82rem;margin-top:1rem\">%s "
-        "Edil Max di Foti Massimo — P.IVA 11795700969 — "
-        "Via Paletro 11, 20821 Meda (MB) — info@bookinvip.com.<br>%s</p>"
+        "%s — P.IVA %s — %s — %s.<br>%s</p>"
         "<button class=\"noprint\" onclick=\"window.print()\" style=\"width:100%%;padding:.7rem;"
         "border:0;border-radius:.8rem;background:#0f4c3a;color:#fff;font-weight:700;"
         "cursor:pointer\">🖨️ %s</button>"
@@ -1481,7 +1496,11 @@ def pagina_ricevuta_html(sistema: Any, token: Any, lingua: Any = None) -> Option
          e(_ui("ric_alloggio", lng)), e(dj.get("titolo") or rec.get("alloggio_id", "")),
          e(_ui("dal", lng)), e(str(v.get("check_in", ""))),
          e(_ui("al", lng)), e(str(v.get("check_out", ""))), righe,
-         e(_ui("ric_nota_stripe", lng)), e(_ui("ric_nota_fattura", lng)),
+         e(_ui("ric_nota_stripe", lng)),
+         # i dati del gestore da UN posto solo (D1 della prova vera: qui ce n'era una copia
+         # a mano, con l'indirizzo sbagliato)
+         e(GESTORE["ragione_sociale"]), e(GESTORE["piva"]), e(GESTORE["indirizzo"]),
+         e(GESTORE["email"]), e(_ui("ric_nota_fattura", lng)),
          e(_ui("ric_stampa", lng)))
 
 
@@ -2748,8 +2767,25 @@ class RouterHTTP:
         for p in el:
             p["stato"] = self._stato_vero_prenotazione(pp, p)
             p["rimborsabile"] = p["stato"] in ("pagata", "bloccata_sulla_carta", "attiva")
+            p["voucher_url"] = self._voucher_per_admin(pp, p)
         return 200, {"prenotazioni": el, "totale": totale, "pagina": pagina,
                      "per_pagina": per_pagina}
+
+    def _voucher_per_admin(self, pp, p):
+        """Il collegamento al voucher, per l'admin (D12 della prova vera del 29/9): l'ospite che
+        non riceve l'email (casella piena) non ha altra strada per cancellare, fare il check-in
+        o scrivere all'host, e l'admin glielo manda da un altro canale. Stessa chiave e stesso
+        controllo di `_stato_vero_prenotazione`; vuoto se non c'e' un pagamento con noi."""
+        idem = str(p.get("idem_key") or "")
+        try:
+            rif = idem[len("reblock:"):] if idem.startswith("reblock:") else idem[:24]
+            rec = pp.info(rif) if (pp is not None and idem) else None
+            vt = (json.loads(rec.get("corpo_json") or "{}").get("voucher_token")
+                  if isinstance(rec, dict) and (rec.get("idem_key") or idem) == idem else "")
+        except Exception:
+            vt = ""
+        return ((self._base_url or "https://bookinvip.com") + "/voucher/" + vt
+                if isinstance(vt, str) and vt else "")
 
     @staticmethod
     def _stato_vero_prenotazione(pp, p):
@@ -6434,7 +6470,9 @@ class RouterHTTP:
                            corpo_pagamento_confermato_html(
                                dj.get("titolo") or rec.get("alloggio_id", ""), vurl,
                                _importo_email, dj.get("valuta", "EUR"), lingua=lang,
-                               saldo_cents=_saldo_email))
+                               saldo_cents=_saldo_email),
+                           template="pagamento_confermato",
+                           riferimento=str(rec.get("riferimento") or ""))
         except Exception:
             logger.warning("email conferma pagamento fallita (ignorata)", exc_info=True)
 
@@ -6772,12 +6810,19 @@ class RouterHTTP:
         return 200, corpo_ok
 
     def _payout_trattieni(self, rif):
-        """Prenotazione cancellata -> il payout atteso passa a 'trattenuto' (l'host non vede piu'
-        un incasso che non arrivera'). Isolato. Ritorna True se fatto (o niente da fare),
-        False se e' FALLITO: chi chiama deve poterlo DIRE invece di dichiarare 'fatto'."""
+        """Prenotazione cancellata o rimborsata, host a zero -> l'host non vede piu' un incasso
+        che non arrivera'. Se nessun soldo si e' mosso verso l'host ('in_attesa', 'maturato')
+        la riga si TOGLIE, come fanno gia' la scadenza e l'host che cancella: lasciata
+        'trattenuto', il pannello host la contava per sempre fra i soldi «Fermi» (D13 della
+        prova vera, 29/9: 0,70 + 0,23 EUR mai dovuti). Un bonifico gia' in viaggio
+        ('in_transito') resta 'trattenuto' e visibile: quello lo guarda una persona.
+        Isolato. Ritorna True se fatto (o niente da fare), False se e' FALLITO: chi chiama
+        deve poterlo DIRE invece di dichiarare 'fatto'."""
         try:
             pd = getattr(self._sys, "payout", None)
             if pd is not None and isinstance(rif, str) and rif:
+                if pd.stato_di(rif) in ("in_attesa", "maturato"):
+                    return pd.rimuovi(rif) is True
                 pd.aggiorna_stato(rif, "trattenuto")
             return True
         except Exception:

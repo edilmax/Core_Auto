@@ -591,7 +591,8 @@ class TestPercorsoDeiSoldi(_Banco):
                 self.assertEqual(c["trattenuto_cents"], 0)
                 self.assertEqual(self.sis.garanzia.stato(b["riferimento"])["stato"],
                                  "annullato")
-                self.assertEqual(self.sis.payout.stato_di(b["riferimento"]), "trattenuto")
+                # D13 della prova vera: host a zero e nessun soldo mosso -> la riga si toglie
+                self.assertEqual(self.sis.payout.stato_di(b["riferimento"]), "")
 
     def test_il_rimborso_parziale_non_regala_una_sola_unita(self):
         """Politica moderata a 2 giorni dall'arrivo = 50% del soggiorno.
