@@ -754,6 +754,11 @@ class TestGiroOstileTutteLeRotte(unittest.TestCase):
         self.chiama("POST", "/api/bunker/blocco_globale", 200, [("impostato", bool)],
                     body={"attivo": False}, headers=BK,
                     valore={"attivo": False, "impostato": True})
+        self.chiama("GET", "/api/bunker/ritenuta", 200, [("attivo", bool), ("mesi", dict)],
+                    headers=BK, valore={"attivo": False})
+        self.chiama("POST", "/api/bunker/ritenuta", 200, [("impostato", bool)],
+                    body={"attivo": False}, headers=BK,
+                    valore={"attivo": False, "impostato": True})
         self.chiama("GET", "/api/bunker/cambio_valuta", 200, [("configurato", bool)],
                     headers=BK, valore={"configurato": False})
         self.chiama("POST", "/api/bunker/cambio_valuta/aggiorna", 503, [("errore", str)],
@@ -811,7 +816,7 @@ class TestGiroOstileTutteLeRotte(unittest.TestCase):
         inesistenti = provate - dichiarate
         self.assertEqual(inesistenti, set(),
                          "provate rotte che il router non dichiara: %s" % sorted(inesistenti))
-        self.assertEqual(len(dichiarate), 137,
+        self.assertEqual(len(dichiarate), 139,
                          "il router ha %d rotte: la mappa del collaudo va aggiornata"
                          % len(dichiarate))
         # nessuna 5xx inattesa: solo le due dormienti dichiarate

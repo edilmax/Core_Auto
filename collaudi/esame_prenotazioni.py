@@ -231,8 +231,12 @@ class Banco(object):
 
     def webhook(self, rif):
         from fase87_stripe_webhook import firma_di_test
+        # ⛔ L'IDENTIFICATIVO DELLA SESSIONE (`cs_`) serve dal 27/9 (Blocco 1, casella 10: lo stato
+        # del pagamento si rilegge da Stripe con l'identificativo): senza, il webhook non conferma
+        # piu' niente e ogni prenotazione «pagata» di questo banco restava 'in_attesa'. Misurato
+        # il 30/9 sulla copia pulita di master 6889a7a: 4 rossi su 34 per questo solo motivo.
         pl = json.dumps({"type": "checkout.session.completed",
-                         "data": {"object": {"metadata": {"riferimento": rif}}}})
+                         "data": {"object": {"id": "cs_" + rif, "metadata": {"riferimento": rif}}}})
         return self.router.gestisci("POST", "/api/payments/webhook", {}, pl,
                                     {"Stripe-Signature": firma_di_test(pl, "whsec_x", int(time.time()))})
 

@@ -20,7 +20,8 @@ non porta cifre):
   COERENZA   ogni riga del mastro deve concordare con lo stato della prenotazione (fase162) e con la
              cassaforte (fase160): un hold non pagato e' 'in_attesa', una pagata e' 'maturato' con lo
              stesso importo della garanzia aperta (= netto host + tassa, `_da_versare_host`), una
-             rimborsata e' 'trattenuto' (stato voluto: «l'host non vede piu' un incasso che non arrivera'»);
+             rimborsata senza soldi mossi NON ha piu' riga (D13, 29/9: prima restava 'trattenuto' per
+             sempre e il pannello la contava fra i «Fermi»);
   FANTASMI   la voce 'maturato' e' fatta SOLO di prenotazioni pagate: nessun hold non pagato e nessuna
              rimborsata dentro;
   STIMA      `/api/host/metriche` risponde `revenue_cents`: per non essere un «saldo stimato» non deve
@@ -339,7 +340,12 @@ def misura_coerenza(b, sc):
     print("\n--- COERENZA: ogni riga del mastro concorda con lo stato (fase162) e con la cassaforte (fase160) ---")
     attesi = {"in_attesa": ("in_attesa",), "pagato": STATI_PAGATI, "rimborsato": ("trattenuto",)}
     righe = righe_del_mastro(b.db_payout, b.host_a)
-    passo("coerenza", "l'host A ha esattamente tre righe nel mastro (pagata, rimborsata, hold)", len(righe) == 3,
+    # ⛔ D13 (29/9, PR #236): la cancellazione e il rimborso TOLGONO la riga del bonifico se nessun
+    # soldo si e' mosso -- prima restava 'trattenuto' per sempre e il pannello la contava fra i
+    # «Fermi». Qui la rimborsata non ha mai pagato l'host, quindi la sua riga NON deve esserci.
+    passo("coerenza", "l'host A ha esattamente due righe nel mastro (pagata, hold): la rimborsata "
+          "senza soldi mossi non ne ha piu' (D13)",
+          len(righe) == 2 and sc["rimborsata"] not in [r["prenotazione_id"] for r in righe],
           "righe=%r" % ([(r["prenotazione_id"][:8], r["stato"]) for r in righe],))
     for r in righe:
         st = b.stato(r["prenotazione_id"])

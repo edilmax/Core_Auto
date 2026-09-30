@@ -3435,7 +3435,93 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 1463897
+CONSEGNE AGGIORNATE A: 0a70cd8
+
+## PASSAGGIO DI CONSEGNE 25 (2026-09-30) - RITENUTA COSTRUITA SPENTA, PARTITA IVA CHIESTA AL VIES, GUARDIANO CHE CONTA GIUSTO; RAMO `ritenuta-vies-guardiano` SOPRA LA PR #236; NIENTE IN PRODUZIONE:
+- STATO VERIFICATO all'inizio (08:06Z, `git rev-parse` / `git ls-remote` / ssh): master 6889a7a su
+  computer, GitHub e VPS; contenitori healthy, /api/health 200. PR #236 aperta, NON unita, testa 0a70cd8.
+- CI di 0a70cd8 (la riga che le consegne 24 non avevano potuto scrivere; tabella dall'API): 16
+  controlli, gate SUCCESS, tutti success tranne `zap` skipped (come sempre).
+- PERMESSI, parole del fondatore all'inizio di questa sessione: «procedi al commit» per tutti i punti;
+  «autorizzato» a commit, unioni, VPS e tutto quello che serve per finire. Eccezione: le due mancanze
+  e le due righe degli equivalenti -> prima si mostrano le righe. Niente deploy e niente `git pull` sul
+  VPS fino all'incasso di a2c63fd8 (giovedi' dalle 17:46Z, al giro orario).
+- RAMO `ritenuta-vies-guardiano`, nato da 0a70cd8: porta la #236 piu' questo lavoro. ⚠️ LA #236 DA SOLA
+  LASCIA ROSSA UNA CASELLA: D13 ha tolto la riga del bonifico della prenotazione rimborsata e
+  `collaudi/esame_pannello_soldi.py` (Blocco 7) la pretendeva ancora -- visto ROSSO su 0a70cd8 e VERDE
+  su master 6889a7a, in una copia pulita. La correzione dell'attrezzo sta QUI: se la #236 si unisce da
+  sola, va portata con lei (un file di collaudi, nessuna riga di produzione).
+- FATTO (racconto nel registro, voce «LA RITENUTA COSTRUITA SPENTA ...»):
+  (1) RITENUTA sulle locazioni brevi, SPENTA di serie: tasto nel bunker (card nuova in 8 lingue) con
+  i totali per mese (F24) e per host (CU); si opera al bonifico, esenta solo la partita IVA valida al
+  VIES; fail-closed a interruttore acceso. (2) D23 VIES: la partita IVA dell'host si chiede alla
+  Commissione al salvataggio, esito e numero di consultazione nel registro host, e nel bunker ✔/✖/?.
+  (3) D21-D22 Guardiano: 1 errore conta 1; la controversia aperta ha la sua categoria.
+  (4) MUTAZIONE SULLE RIGHE NUOVE, un modulo per volta (attrezzo fuori dal repository:
+  `Desktop\Core_Auto_GUARDIE_PRONTE\ritenuta_20260930\giro_ritenuta.py`, base 0a70cd8): primo giro
+  100 punti, 70 uccisi, 30 SOPRAVVISSUTI (fase83 20, fase88 6, fase100 2, fase186 2); tutti chiusi --
+  prove che mancavano (fra cui la cancellazione con penale dalla rotta vera, l'hold DAC7 che riparte
+  UNA volta ridotto, il VIES letto da un servizio vero su 127.0.0.1) e 5 righe riscritte perche'
+  ridondanti; secondo giro sulle righe dei sopravvissuti 48 su 48 uccisi.
+  (5) DUE ESAMI RIPARATI: `esame_prenotazioni.py` era ROSSO anche su master (dal 27/9 il webhook
+  vuole l'identificativo `cs_` della sessione e il banco non lo mandava: 4 rossi su 34 per questo solo
+  motivo) -> 34/34; `esame_pannello_soldi.py` aggiornato a D13 -> 20/20.
+  Prove: `test_ritenuta.py` (34), `test_vies.py` (23), `test_guardiano.py` (+8); caricatore 7127
+  (`unittest.TestLoader().discover` da fermo, prima della suite).
+- ⚠️ TROVATO DOPO LA MUTAZIONE: un mutante di `fase81` (ucciso) aveva spostato il file
+  dell'interruttore nella cartella di lavoro, e la prova che accende la ritenuta ce l'ha lasciato:
+  `ritenuta_attiva.flag` nella radice del progetto («motivo: collaudo, chi: test»), che avrebbe ACCESO
+  la ritenuta a ogni sistema costruito con un percorso relativo. Cancellato. Lezione: dopo un giro di
+  mutazione si guarda `git status` anche per i file NUOVI, non solo per quelli modificati.
+- RIMISURA sul ramo (`python collaudi/rimisura.py --salta esame_produzione`, registri in
+  `%TEMP%\bookinvip_rimisure\20260930-124653`; poi i due esami riparati e la mutazione del percorso del
+  denaro): Blocco 1 12 su 15 (mutazione: 292 punti, 291 uccisi, 1 equivalente gia' dichiarato, 0
+  sopravvissuti), Blocco 2 4 su 5, Blocco 5 3 su 4 (la quarta e' l'avvocato), Blocco 7 2 su 2; scheda
+  intera 31 su 43. Blocco 8 sentinella ROSSA: manca il monitor esterno, il conto (UptimeRobot) lo apre
+  il fondatore. RESTANO per il deploy di giovedi' (servono i dati VERI del server): esame_produzione
+  (2 caselle del Blocco 1), esame_riconciliazione (Blocco 1), esame_backup ed esame_deploy (Blocco 8);
+  e la mutazione del Blocco 2 (dichiara 600 minuti: in un albero a parte o di notte).
+- LA SUITE AL PRIMO GIRO E' USCITA ROSSA PER UNA SOLA PROVA (`suite_20260930_131332.log`: «Ran 7122 ·
+  FAILED (failures=1, skipped=4) · CODICE_USCITA_DIRETTO=1», 5419 s): l'audit millimetrico, «file di
+  test dichiarati | atteso=434 | trovato=432» -- `README.md` dichiara A MANO quanti file di test ci
+  sono, e due file nuovi lo sfasano. E' la SECONDA volta (la prima il 28/9, registro «BLOCCO 4»):
+  con un file di test nuovo si lancia `python collaudi/audit_millimetrico.py` PRIMA della suite. Il
+  pre-volo non lo controlla ancora: e' un buon candidato per l'ottavo controllo.
+- DIFETTO DELL'ATTREZZO TROVATO PER STRADA, SCRITTO E NON RIPARATO: `collaudi/esame_produzione.py`
+  controlla che il server sia su master (HEAD del VPS == origin/master) ma scrive la casella con
+  l'impronta del codice LOCALE: lanciato da un ramo dichiarerebbe «verificato in produzione» un codice
+  che in produzione non c'e'. Rimedio: pretendere anche HEAD locale == origin/master. Per questo sul
+  ramo NON l'ho lanciato.
+- CHIAVETTA rigenerata oggi a mezzogiorno coi dati veri (codice fermo su 6889a7a, pacchetto del codice
+  identico a ieri): 831/831, 27 database integri; stato di a2c63fd8 letto prima e dopo: identico
+  (`pagato` / garanzia `contestato` / bonifico `trattenuto` 23).
+- GML: il Compito 6 (revisione in sola lettura di questo lavoro) e' rimasto a meta': GML 5.3 e Flash
+  hanno finito i token. Kimi ha mandato una lista di sicurezza GENERICA (non vede i file: parla di
+  Express, React, JWT): verificata punto per punto sul codice e sul server, 14 su 17 gia' fatti; 3 veri
+  e piccoli, qui sotto.
+- RESTA, in ordine:
+  1. i rilievi di GML sul Compito 6 quando torna (verificarli sul codice, VERO/FALSO/DUBBIO);
+  2. la Questura (fase151), poi D19 (con D7 e D20 d-e), D2, D10;
+  3. giovedi' sera: occhio sull'incasso di a2c63fd8, controversia dal pannello admin, unione della
+     #236 (con la correzione di `esame_pannello_soldi.py`, o insieme a questo ramo se la CI e' verde)
+     e deploy coi punti «al deploy» delle consegne 24, piu' le 5 caselle da rimisurare col vero;
+  4. SICUREZZA (dalla lista di Kimi, verificati sul server il 30/9): il contenitore dell'app non
+     toglie le capacita' che non usa (`docker inspect`: CapDrop [], SecurityOpt []) -> `cap_drop:
+     [ALL]` e `no-new-privileges` nel compose, col deploy; il gettone dell'host dura 30 giorni
+     (`TTL_TOKEN_DEFAULT`) e non esiste un'uscita che lo annulli; fail2ban e' spento (le password SSH
+     sono gia' spente: pesa poco);
+  5. le domande al commercialista ora sono QUATTRO: (1) forfettario esonerato? (2) i soldi per conto
+     degli host contano nei ricavi? (3) col pagamento diretto all'host la ritenuta resta? (4) la tassa
+     di soggiorno sta fuori dalla base della ritenuta (la circolare 24/E non ne parla; le fonti
+     secondarie dicono fuori)?
+  6. PRIMA DI ACCENDERE LA RITENUTA (limiti dichiarati): si scrive quando il bonifico matura, anche se
+     poi resta fermo per DAC7 o verifica; un rimborso arrivato dopo non la restituisce (si recupera in
+     dichiarazione, dice la guida); il versamento F24 non ha ancora una riga nel giornale
+     (`debiti_vs_erario` cresce finche' non si registra); il DAC7 non la porta ancora nella colonna
+     delle imposte trattenute;
+  7. D23 dopo il VIES: il CODICE FISCALE non e' ancora verificato da nessuna interfaccia; per chi non
+     ha una partita IVA dell'UE resta il documento guardato dall'admin. D24 (scheda per paese) e la
+     frase del contratto sulla veridicita' dei dati fiscali restano come nelle consegne 24.
 
 ## PASSAGGIO DI CONSEGNE 24 (2026-09-29 notte) - SOLDI E FIDUCIA: D13, D14, D12, D1, D18 CORRETTI SUL RAMO, OGNUNO CON LA GUARDIA VISTA ROSSA; NIENTE IN PRODUZIONE FINO ALL'INCASSO DI GIOVEDI':
 - STATO VERIFICATO all'inizio (23:02 ora del PC): ramo `correzioni-prova-vera` su 45b41b4 (i 5 file
@@ -4678,7 +4764,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 7062 test
+SUITE ATTUALE: Ran 7127 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

@@ -134,3 +134,76 @@ class RegistroDAC7:
 
 def crea_registro_dac7(percorso: str = "", *, cfg: ConfigDAC7 = ConfigDAC7()) -> RegistroDAC7:
     return RegistroDAC7(percorso, cfg)
+
+
+# ── LA PARTITA IVA SI CHIEDE AL VIES (D23, 2026-09-30) ─────────────────────────────────
+# La DAC7 (Dir. UE 2021/514, Allegato V, dovuta diligenza) obbliga la piattaforma a
+# verificare il numero IVA con «any electronic interface made available free of charge by a
+# Member State or the Union»: per le partite IVA dell'UE e' il VIES della Commissione. Col
+# richiedente (la nostra partita IVA) risponde anche un `requestIdentifier`: il numero di
+# consultazione, la PROVA che il controllo e' stato fatto. Misurato il 30/9 in sola lettura.
+VIES_URL = "https://ec.europa.eu/taxation_customs/vies/rest-api/check-vat-number"
+# i codici del VIES (la Grecia e' EL, l'Irlanda del Nord XI), non sempre quelli ISO
+PAESI_VIES = frozenset(("AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "EL", "ES", "FI",
+                        "FR", "HR", "HU", "IE", "IT", "LT", "LU", "LV", "MT", "NL", "PL",
+                        "PT", "RO", "SE", "SI", "SK", "XI"))
+_ALIAS_PAESE = {"GR": "EL", "ITA": "IT", "ITALIA": "IT", "ITALY": "IT"}
+
+
+def scomponi_partita_iva(numero: Any, paese_host: Any = "") -> tuple:
+    """(paese VIES, numero) dal testo che l'host ha scritto: col prefisso del paese, oppure
+    col paese dei suoi dati fiscali. ('', '') se non e' un numero IVA dell'UE."""
+    import re
+    n = re.sub(r"[\s.\-/]", "", str(numero or "")).upper()
+    if not any(c.isdigit() for c in n):
+        return ("", "")                       # un numero IVA ha sempre delle cifre
+    if n[:2].isalpha():
+        p = _ALIAS_PAESE.get(n[:2], n[:2])
+        return (p, n[2:]) if p in PAESI_VIES else ("", "")
+    p = str(paese_host or "").strip().upper()
+    p = _ALIAS_PAESE.get(p, p)
+    return (p, n) if (p in PAESI_VIES and n) else ("", "")
+
+
+def _post_json(url: str, corpo: Dict[str, Any], timeout: int) -> Any:
+    import urllib.error
+    import urllib.request
+    req = urllib.request.Request(url, data=json.dumps(corpo).encode("utf-8"), method="POST",
+                                 headers={"Content-Type": "application/json",
+                                          "Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:  # nosec B310 - URL costante
+            return json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:      # il VIES spiega il rifiuto nel corpo (errorWrappers)
+        return json.loads(e.read().decode("utf-8") or "{}")
+
+
+def verifica_vies(numero: Any, paese_host: Any = "", *, richiedente: Any = "",
+                  http: Any = None, timeout: int = 10) -> Dict[str, str]:
+    """Chiede al VIES se la partita IVA esiste. Ritorna {esito, prova, nome, motivo}, con
+    esito 'valida' | 'non_valida' | 'errore' (il servizio non ha risposto: NON e' valida) |
+    'non_verificabile' (non e' un numero IVA dell'UE: si guarda il documento, a mano).
+    Mai solleva: un guasto di rete e' un 'errore' col suo motivo."""
+    paese, num = scomponi_partita_iva(numero, paese_host)
+    if not paese:
+        return {"esito": "non_verificabile", "prova": "", "nome": "", "motivo": "non_ue"}
+    corpo: Dict[str, Any] = {"countryCode": paese, "vatNumber": num}
+    rp, rn = scomponi_partita_iva(richiedente)
+    if rp:
+        corpo.update(requesterMemberStateCode=rp, requesterNumber=rn)
+    try:
+        risposta = (http or _post_json)(VIES_URL, corpo, timeout)
+    except Exception as e:
+        logger.warning("VIES | codice: errore_rete | sottocodice: %s | messaggio: %s",
+                       type(e).__name__, str(e)[:160])
+        return {"esito": "errore", "prova": "", "nome": "", "motivo": type(e).__name__}
+    if isinstance(risposta, dict) and isinstance(risposta.get("valid"), bool):
+        nome = str(risposta.get("name") or "")
+        return {"esito": "valida" if risposta["valid"] else "non_valida",
+                "prova": str(risposta.get("requestIdentifier") or "")[:64],
+                "nome": "" if nome.strip("- ") == "" else nome[:200], "motivo": ""}
+    errori = (risposta or {}).get("errorWrappers") if isinstance(risposta, dict) else None
+    codice = str((errori or [{}])[0].get("error") or "risposta_sconosciuta")[:60]
+    logger.warning("VIES | codice: rifiuto | sottocodice: %s | messaggio: il servizio non ha "
+                   "detto se la partita IVA %s%s e' valida", codice, paese, num[:2] + "***")
+    return {"esito": "errore", "prova": "", "nome": "", "motivo": codice}
