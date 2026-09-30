@@ -307,6 +307,49 @@ class TestEmailCiclo(unittest.TestCase):
         self.assertEqual(self.sis.pagamenti_pendenti.info(self.rif)["stato"], "cancellata_host")
         self._voucher_dice_CANCELLATA()
 
+    def test_il_voucher_di_una_SCADUTA_non_invita_a_pagare(self):
+        """D14b della prova vera: una prenotazione scaduta (9fa7aecc, la pagina di Stripe mai
+        aperta) mostrava «Completa il pagamento per attivare il voucher», ma la sessione di
+        pagamento era morta con lei: un invito a fare una cosa impossibile."""
+        from fase83_server import ETICHETTE_UI
+        self.assertTrue(self.sis.pagamenti_pendenti.scadi(self.rif), "premessa: scaduta")
+        for lg in ("it", "en", "es", "fr", "de", "pt", "ja", "zh"):
+            with self.subTest(lingua=lg):
+                h = pagina_voucher_html(self.sis, self.vt, lg)
+                self.assertNotIn(ETICHETTE_UI["v_completa_prima"][lg], h)
+                self.assertNotIn(ETICHETTE_UI["voucher_ok"][lg], h)
+        self.assertIn("Prenotazione scaduta", pagina_voucher_html(self.sis, self.vt, "it"))
+
+    def test_segnala_un_problema_CHIEDE_il_motivo_e_DICE_se_e_gia_segnalato(self):
+        """D3 della prova vera (29/9): «Segnala un problema» non chiedeva niente -- nessuna
+        conferma, nessun motivo (all'arbitro arrivava vuoto) -- e ricaricando la pagina un
+        secondo clic riceveva 409 e scriveva «Operazione non riuscita», come se si fosse rotto.
+        Il pulsante chiede il motivo (annullare = non segnalare) e lo manda; se la
+        segnalazione c'e' gia', lo dice."""
+        self._webhook(self.rif)
+        h = pagina_voucher_html(self.sis, self.vt, "it")
+        inizio = h.index("function call(")
+        script = h[inizio:h.index("</script>", inizio)]
+        self.assertIn("prompt(BVL.motivo_problema", script)
+        self.assertIn("motivo:", script, "il motivo non parte verso il server")
+        self.assertIn("BVL.gia_segnalato", script)
+        # e «Confermo», che fa partire SUBITO il pagamento all'host (irreversibile), chiede
+        # conferma: dopo D18 l'email invita a premerlo, e un tocco per sbaglio pagherebbe
+        self.assertIn("confirm(BVL.conferma_ok", script)
+        from fase83_server import ETICHETTE_UI
+        for chiave in ("v_js_motivo_problema", "v_js_gia_segnalato", "v_js_gia_confermato",
+                       "v_js_conferma_ok"):
+            self.assertEqual(sorted(ETICHETTE_UI.get(chiave, {})),
+                             sorted(("it", "en", "es", "fr", "de", "pt", "ja", "zh")), chiave)
+        # il server riceve e conserva il motivo che la pagina manda
+        s, c = self.g("POST", "/api/garanzia/contesta",
+                      {"voucher_token": self.vt, "motivo": "muffa in bagno"})
+        self.assertEqual(s, 200, c)
+        s, c = self.g("POST", "/api/garanzia/contesta",
+                      {"voucher_token": self.vt, "motivo": "di nuovo"})
+        self.assertEqual((s, c.get("stato")), (409, "contestato"),
+                         "la pagina riconosce il «gia' segnalato» da questa risposta")
+
     def test_dopo_la_cancellazione_la_pagina_SI_RICARICA(self):
         """D14, la foto del fondatore: senza ricaricare restavano PIN, «Confermo», «Segnala» e la
         chat su una prenotazione appena cancellata (il JavaScript nascondeva SOLO il pulsante
