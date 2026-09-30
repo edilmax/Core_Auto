@@ -200,6 +200,25 @@ class TestPagineEsitoPagamento(unittest.TestCase):
                                  "%s ha di nuovo testo fisso nell'HTML" % nome)
 
 
+class TestPrenotaNonCancellaLEmail(unittest.TestCase):
+    """D11 della prova vera (il fondatore, 29/9: «se schiacci l'email ok ti porta sulla pagina
+    di stripe e se invece clicchi sopra l'altro pulsante prenota non ti porta da nessuna parte»,
+    «si e' azzerato»). `prenota()` ridisegnava ogni volta il riquadro con un campo email NUOVO e
+    VUOTO: il secondo «Prenota» cancellava l'email scritta. Col campo gia' presente, «Prenota»
+    deve fare quello che fa «OK» -- e PRIMA di ridisegnare qualunque cosa."""
+
+    def test_col_campo_gia_presente_prenota_fa_quello_che_fa_OK(self):
+        with open(os.path.join(occhio.PAGINE, "index.html"), encoding="utf-8") as f:
+            testo = f.read()
+        inizio = testo.index("async function prenota(){")
+        corpo = testo[inizio:testo.index("async function _prenotaConEmail(", inizio)]
+        ridisegno = corpo.index("msg.innerHTML")
+        self.assertIn("getElementById('bkEmail')", corpo[:ridisegno],
+                      "prenota() ridisegna il riquadro senza guardare se l'email c'e' gia'")
+        self.assertIn(".click()", corpo[:ridisegno],
+                      "col campo presente, prenota() non invia come «OK»")
+
+
 class TestIlPannelloHostNonMostraChiaviGrezze(unittest.TestCase):
     """D20 della prova vera (foto del fondatore, 29/9): «I tuoi incassi» stampava la chiave
     grezza «in_attesa» (la mappa delle etichette conosceva solo maturato, in_transito, pagato,

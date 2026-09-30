@@ -809,6 +809,10 @@ async function apri(slug){
 
 async function prenota(){
   if(!QUOTE) return;
+  // D11 della prova vera: col campo email gia' presente, «Prenota» fa quello che fa «OK».
+  // Prima ridisegnava il riquadro con un campo NUOVO e VUOTO: cancellava l'email scritta.
+  const giaGo = document.getElementById('bkGo');
+  if(giaGo && document.getElementById('bkEmail')){ giaGo.click(); return; }
   const msg = document.getElementById('mMsg');
   // NIENTE prompt(): nei browser dentro le app (Instagram/Facebook) e' BLOCCATO ->
   // li' prenotare era impossibile. Campo email NELLA pagina + tasto OK (con scudo).

@@ -3435,7 +3435,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 1ec946a
+CONSEGNE AGGIORNATE A: 1463897
 
 ## PASSAGGIO DI CONSEGNE 24 (2026-09-29 notte) - SOLDI E FIDUCIA: D13, D14, D12, D1, D18 CORRETTI SUL RAMO, OGNUNO CON LA GUARDIA VISTA ROSSA; NIENTE IN PRODUZIONE FINO ALL'INCASSO DI GIOVEDI':
 - STATO VERIFICATO all'inizio (23:02 ora del PC): ramo `correzioni-prova-vera` su 45b41b4 (i 5 file
@@ -3564,9 +3564,13 @@ CONSEGNE AGGIORNATE A: 1ec946a
      commercialista.
   2. la Questura (fase151, spenta: il check-in non raccoglie data e luogo di nascita, sesso,
      cittadinanza);
-  3. il resto dell'elenco: D19 (con D20 d-e: pannello host lungo, non si aggiorna da solo), D4,
-     D5, D6, D11, D9, D17, D7, D2, D10, D21, D22 (FATTI sul ramo: D20 a-b-c in 1ec946a; D14b e
-     D3, piu' la conferma prima di «Confermo», nel commit dopo);
+  3. il resto dell'elenco: D19 (con D20 d-e: pannello host lungo, non si aggiorna da solo; e
+     D7, il cui messaggio giusto esiste ma finisce lontano dal pulsante), D4, D5, D6, D9, D17,
+     D2, D10, D21, D22 (FATTI sul ramo: D20 a-b-c in 1ec946a; D14b e D3, piu' la conferma prima
+     di «Confermo», in 1463897; D11 nel commit dopo). D4, D5, D6, D9, D17 toccano fase160 o
+     fase85 (Blocco 1): come la ritenuta, su un ramo loro e con la rimisura del Blocco 1.
+- CI dei commit della notte (tabella dall'API): 6bf2b86 gate FAILURE (solo `qualita`, un F401
+  mio) · 1ec946a gate SUCCESS, 16 controlli, nessun rosso.
   4. giovedi' sera: l'occhio sull'incasso di a2c63fd8, poi la controversia dal pannello admin,
      poi unione e deploy di tutto (coi punti «al deploy» qui sopra);
   5. le due MANCANZE e le due righe degli equivalenti: aspettano, righe mostrate prima; B4 (chi
@@ -4674,7 +4678,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 7061 test
+SUITE ATTUALE: Ran 7062 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
