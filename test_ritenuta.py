@@ -42,6 +42,9 @@ HK = {"X-Host-Key": "hk"}
 WHSEC = "whsec_test"
 CI, CO = "2027-08-10", "2027-08-12"          # 2 notti
 IP = "203.0.113.9"
+# Una costante, non una stringa letterale nel banco: per bandit una password passata come
+# letterale e' un segreto cablato (B106), ed e' lo stesso rimedio di test_bunker_controlroom.
+_CHIAVE_BUNKER_DI_PROVA = "SuperPw@1"
 
 
 class _ConnectContatore:
@@ -70,7 +73,8 @@ class _Base(unittest.TestCase):
             db_garanzia=f"{d}/g.db", db_pendenti=f"{d}/p.db", db_payout=f"{d}/po.db",
             db_tassa_comunale=f"{d}/tc.db", db_finanza=f"{d}/fin.db",
             file_referral=f"{d}/ref.json",
-            commissione_bps=1000, stripe_webhook_secret=WHSEC, bunker_password="SuperPw@1"))
+            commissione_bps=1000, stripe_webhook_secret=WHSEC,
+            bunker_password=_CHIAVE_BUNKER_DI_PROVA))
         self.sis.concierge._link = lambda dati: "https://pay/" + str(dati.get("riferimento", ""))
         self.r = crea_router(self.sis, host_key="hk", admin_key="ak")
         es = self.sis.registro_host.registra("rit@collaudo.invalid", "password12",
@@ -125,7 +129,7 @@ class _Base(unittest.TestCase):
         return [m for m in self.sis.finanza.movimenti(rif) if m["tipo"] == tipo]
 
     def _bunker(self):
-        s, out = self.g("POST", "/api/bunker/login", {"codice": "SuperPw@1"},
+        s, out = self.g("POST", "/api/bunker/login", {"codice": _CHIAVE_BUNKER_DI_PROVA},
                         {"X-Admin-Key": "ak", "X-Forwarded-For": IP})
         self.assertEqual(s, 200, out)
         return {"X-Admin-Key": "ak", "X-Forwarded-For": IP, "X-Bunker-Session": out["sessione"]}

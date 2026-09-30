@@ -3435,7 +3435,66 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 0a70cd8
+CONSEGNE AGGIORNATE A: 8cd9f45
+
+## PASSAGGIO DI CONSEGNE 26 (2026-09-30 sera) - BANDIT RIPARATO SULLA #237; QUI LE DECISIONI SUI PREZZI DELLE OTA E LA QUESTURA PREPARATA; NIENTE IN PRODUZIONE:
+- STATO VERIFICATO all'inizio (17:05Z, `git rev-parse` / `git ls-remote` / ssh / API): master 6889a7a su
+  computer, GitHub e VPS; contenitori healthy, /api/health 200. PR #236 aperta, testa 0a70cd8; PR #237
+  aperta, testa 8cd9f45. I tre file che `git status` dava modificati (fase188, fase57, fase98) erano
+  solo fine riga (`git diff --ignore-cr-at-eol --quiet` uscita 0): riportati com'erano (`git checkout --`).
+- PERMESSI, parole del fondatore all'inizio di questa sessione: «procedi al commit» per tutti i punti;
+  «autorizzato» a commit, unioni, VPS e tutto quello che serve per finire. Eccezione: le due mancanze
+  e le due righe degli equivalenti -> prima si mostrano le righe. Niente deploy e niente `git pull` sul
+  VPS fino all'incasso di a2c63fd8 (giovedi' dalle 17:46Z, al giro orario).
+- CI di 8cd9f45 (tabella dall'API): 16 controlli, tutti success tranne `zap` skipped e `qualita`
+  FAILURE -> gate FAILURE. Motivo di `qualita`: bandit, 2 segnalazioni NUOVE `B106 Possible hardcoded
+  password: 'SuperPw@1'` (`bunker_password="SuperPw@1"` in test_ritenuta.py e test_vies.py). Riparato
+  nel commit che porta queste righe col rimedio che esisteva gia' (`_CHIAVE_BUNKER_DI_PROVA`, come in
+  test_bunker_controlroom.py): `python -m unittest test_ritenuta test_vies` -> Ran 57, OK.
+  `python collaudi/cricchetto_statico.py tutti` sul PC: ruff, bandit, gitleaks, semgrep «nessuna
+  segnalazione nuova»; pip-audit ROSSO con 5 NUOVE che non vengono da questo lavoro: anyio
+  GHSA-5p39-cfhj-2xmp e GHSA-82r6-8w77-94w6 (4.12.1 -> 4.14.2), urllib3 GHSA-8988-9cw3-xx77,
+  GHSA-gh4c-6fx4-qh6g e GHSA-vxq7-64xx-v4gw (2.6.3 -> 2.8.0). Nessuno dei due e' fissato in
+  `requirements.txt` (arrivano di rimbalzo): se la CI li vede anche lei, il gate resta rosso per loro.
+  semgrep sul PC conta 0 contro 6 congelate: da Windows non e' una misura, il giudice e' la CI. La
+  CI del commit che ripara si scrive nel commit dopo.
+- PREZZI PIU' BASSI DELLE OTA, decisioni del 30/9 col fondatore. NO: obbligare l'host per contratto
+  (L. 124/2017 art. 1 c. 166, nulla in Italia; Reg. UE 2022/720 art. 5.1.d, anche gli obblighi
+  indiretti; vietato in FR AT BE CH, in DE dalla Corte suprema, CGUE 2024 contro Booking; negli USA non
+  regolato). NO: motore di confronto coi dati affiliati Booking/Agoda (contratti letti dal PDF: Booking
+  General Partner Terms 6.2.a.vi e 8.5, Agoda 2023 art. 4.3.2 vietano il confronto a un concorrente).
+  NO: robot sulle loro pagine (regole d'uso). SI': (a) controllo a campione fatto da una persona (il
+  sistema sceglie annunci e date, prepara i link, confronta, avvisa; la persona apre la pagina come un
+  visitatore); (b) MOTORE LEGALE AUTOMATICO tramite il channel manager dell'host (Smoobu, Beds24,
+  Lodgify...: l'host ci da' la chiave, leggiamo i prezzi che manda a ogni sito), da studiare programma
+  per programma; (c) piu' avanti: diventare noi channel manager certificato; (d) all'avvocato: «meno
+  commissione se i prezzi sono uguali» si puo' scrivere? Scartato dal fondatore: «la differenza la
+  paghiamo noi» (tre mesi gratis e commissioni basse, non ci sono i soldi). Il fondatore vuole il
+  motore che AVVISA, per poter chiamare l'host.
+- QUESTURA (fase151), preparata in sola lettura. Manuale ufficiale del portale (CREAFILE.pdf, riletto
+  oggi, p. 4-7): 168 caratteri per riga, codici dalle tabelle ufficiali, arrivo solo oggi o ieri, al
+  massimo 30 giorni, CR+LF fra le righe ma NON dopo l'ultima («Solo per l'ultima riga, ovvero per
+  l'ultimo alloggiato dell'elenco, non vanno aggiunti tali caratteri», p. 6; «Tranne l'ultimo», p. 7);
+  invio entro 24 ore, 6 se il soggiorno e' piu' breve (letto nella sessione di stamattina, NON
+  riletto oggi: CREAFILE.pdf non ne parla). DIFETTO VIVO: `fase151.genera_file` mette
+  CR+LF anche dopo l'ultima riga, e due prove lo pretendono (`test_attivo_genera_righe` conta 2 CR+LF
+  per 2 righe). `fase151` oggi non la chiama nessuno in produzione (`grep`: la importa solo la sua
+  prova). Visto per strada: `giorni` oltre 30 diventa 1 in silenzio, e `test_giorni_clamp` lo pretende.
+  Il check-in (fase127) raccoglie solo nome e documento. Le 4 tabelle ufficiali si scaricano SENZA
+  login da `https://alloggiatiweb.poliziadistato.it/portalealloggiati/ashx/Download.ashx?ID=0..3&N=
+  COMUNI|STATI|DOCUMENTI|TIPO_ALLOGGIATO` (CSV con virgole; copie in
+  `Desktop\Core_Auto_GUARDIE_PRONTE\questura_20260930\`). Serve la privacy nuova (art. 109 TULPS, 8
+  lingue, ri-accettazione).
+- SICUREZZA: resta come nelle consegne 25, punto 4 (`cap_drop`/`no-new-privileges` col deploy,
+  gettone host di 30 giorni senza revoca, fail2ban spento).
+- RESTA, in ordine (ordine del fondatore, 30/9 sera):
+  1. CI verde sulla #237;
+  2. la Questura: prima il difetto dell'a-capo (guardia rossa prima), poi tabelle ufficiali, campi del
+     check-in, file per l'host, privacy;
+  3. il motore che avvisa dei prezzi degli host sulle OTA: controllo a campione e ricerca sui channel
+     manager (Smoobu, Beds24, Lodgify);
+  4. giovedi' sera: occhio sull'incasso di a2c63fd8, controversia dal pannello admin, unione della #236
+     (+ #237 se verde) e deploy coi punti «al deploy» delle consegne 24 e 25.
 
 ## PASSAGGIO DI CONSEGNE 25 (2026-09-30) - RITENUTA COSTRUITA SPENTA, PARTITA IVA CHIESTA AL VIES, GUARDIANO CHE CONTA GIUSTO; RAMO `ritenuta-vies-guardiano` SOPRA LA PR #236; NIENTE IN PRODUZIONE:
 - STATO VERIFICATO all'inizio (08:06Z, `git rev-parse` / `git ls-remote` / ssh): master 6889a7a su

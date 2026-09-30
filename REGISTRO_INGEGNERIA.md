@@ -440,6 +440,9 @@ mount PRIMA di toccare il container vivo (il bind-mount e' per inode: serve ricr
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🔧 BANDIT FERMA LA #237 — 30 settembre sera, «procedi al commit» del fondatore (ramo `ritenuta-vies-guardiano`, sopra 8cd9f45)
+La CI di 8cd9f45 era rossa solo su `qualita`: il cricchetto aveva visto due segnalazioni bandit NUOVE, `B106` sul codice del bunker passato come letterale (`bunker_password="SuperPw@1"`) in `test_ritenuta.py` e `test_vies.py`. Prima del commit avevo lanciato il cricchetto solo per ruff. Rimedio: la costante `_CHIAVE_BUNKER_DI_PROVA`, lo stesso gia' usato in `test_bunker_controlroom.py`. Lezione: prima del commit `python collaudi/cricchetto_statico.py tutti`, non un solo strumento. Lanciandolo cosi' sul PC, pip-audit ha trovato 5 avvisi nuovi su due librerie che `requirements.txt` non fissa (anyio, urllib3): non vengono da questo lavoro, i dettagli e le decisioni del 30/9 sui prezzi delle OTA e sulla Questura stanno nelle consegne 26 di `RIPRENDI_QUI.md`.
+
 ### 🧾 LA RITENUTA COSTRUITA SPENTA, LA PARTITA IVA CHIESTA AL VIES, IL GUARDIANO CHE CONTA GIUSTO — 30 settembre, «procedi al commit» e «autorizzato» del fondatore (ramo `ritenuta-vies-guardiano`, nato da 0a70cd8)
 Ordine del fondatore: su un ramo nuovo la ritenuta del 21% SPENTA con l'interruttore, insieme a D23 (VIES, obbligo DAC7) e a D21-D22 (il Guardiano), con la rimisura del Blocco 1. Ogni pezzo con la guardia vista ROSSA prima (D20): `test_ritenuta.py` 21 rosse su 23 prima del codice (le due verdi dicevano «spenta = bonifico intero» e «la quota dell'host copre la ritenuta»), `test_vies.py` rosso all'import, le 5 del Guardiano rosse con «3 != 1» e «4 != 2».
 

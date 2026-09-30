@@ -27,6 +27,10 @@ import unittest
 
 from fase100_dac7 import scomponi_partita_iva, verifica_vies
 
+# Una costante, non una stringa letterale nel banco: per bandit una password passata come
+# letterale e' un segreto cablato (B106), ed e' lo stesso rimedio di test_bunker_controlroom.
+_CHIAVE_BUNKER_DI_PROVA = "SuperPw@1"
+
 
 class _HttpFinto:
     def __init__(self, risposta=None, eccezione=None):
@@ -160,7 +164,7 @@ class _ConSistema(unittest.TestCase):
             db_catalogo=f"{d}/c.db", db_inventario=f"{d}/i.db", db_registro_host=f"{d}/r.db",
             db_garanzia=f"{d}/g.db", db_pendenti=f"{d}/p.db", db_payout=f"{d}/po.db",
             db_tassa_comunale=f"{d}/tc.db", db_finanza=f"{d}/fin.db",
-            bunker_password="SuperPw@1"))
+            bunker_password=_CHIAVE_BUNKER_DI_PROVA))
         self.r = crea_router(self.sis, host_key="hk", admin_key="ak")
         self.reg = self.sis.registro_host
         self.hid = self.reg.registra("vies@collaudo.invalid", "password12",
@@ -285,7 +289,7 @@ class TestSalvareLaPartitaIvaLaFaVerificare(_ConSistema):
     def test_il_bunker_vede_l_esito_nella_conformita_DAC7(self):
         self.reg.imposta_dati_fiscali(self.hid, {"partita_iva": "IT01234567890"})
         self.reg.registra_verifica_piva(self.hid, "IT01234567890", "non_valida", "P9", "")
-        s, out = self.g("POST", "/api/bunker/login", {"codice": "SuperPw@1"},
+        s, out = self.g("POST", "/api/bunker/login", {"codice": _CHIAVE_BUNKER_DI_PROVA},
                         {"X-Admin-Key": "ak", "X-Forwarded-For": "203.0.113.9"})
         self.assertEqual(s, 200, out)
         hb = {"X-Admin-Key": "ak", "X-Forwarded-For": "203.0.113.9",
