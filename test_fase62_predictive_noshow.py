@@ -15,7 +15,7 @@ import unittest
 
 from fase58_channel_manager import crea_channel_manager
 from fase62_predictive_noshow import (
-    CompensazioneVoce, GestoreNoShow, PoliticaNoShow, StoricoPresenze,
+    CompensazioneVoce, GestoreNoShow, PoliticaNoShow,
     crea_gestore_noshow, crea_storico_presenze, segmento_da_data,
 )
 
@@ -178,8 +178,10 @@ class TestStress(unittest.TestCase):
         for rip in range(10):
             d = tempfile.mkdtemp()
             try:
-                st = StoricoPresenze(
-                    lambda p=os.path.join(d, f"s{rip}.db"): __import__("sqlite3").connect(p))
+                # il negozio come lo crea la PRODUZIONE (attesa del lucchetto 30 s): con un
+                # `sqlite3.connect` fatto qui (5 s di serie) la suite del 30/9 sotto carico ha
+                # dato 3 volte 'database is locked' -- il banco misurava se stesso
+                st = crea_storico_presenze(os.path.join(d, f"s{rip}.db"))
                 errori = []
 
                 def worker():

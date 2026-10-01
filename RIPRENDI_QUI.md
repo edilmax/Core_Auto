@@ -3435,7 +3435,72 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 8cd9f45
+CONSEGNE AGGIORNATE A: 0deb17f
+
+## PASSAGGIO DI CONSEGNE 27 (2026-10-01 mattina) - IL SITO SERVE SOLO LE PAGINE: SCRIPT, CONFIGURAZIONI E COPIE DI `deploy/` NON ESCONO PIU' (ramo `questura-fase151`, va col deploy); NIENTE IN PRODUZIONE:
+- STATO VERIFICATO all'inizio (05:57Z, `git rev-parse` / `git ls-remote` / ssh / API): master 6889a7a su
+  computer, GitHub e VPS; contenitori healthy, /api/health 200. Aperte: #236 testa 0a70cd8, #237 testa
+  02e7a07, #238 testa 0deb17f (`questura-fase151`). CI di 0deb17f (tabella dall'API, la riga che le
+  consegne 26 non potevano scrivere): 16 controlli, gate SUCCESS, tutti success tranne `zap` skipped;
+  uguale per 0a70cd8 e 02e7a07.
+- PERMESSI, parole del fondatore all'inizio di questa sessione: le stesse delle consegne 26 («procedi al
+  commit» per tutti i punti; «autorizzato» a commit, unioni, VPS e tutto quello che serve per finire;
+  eccezione: le due mancanze e le due righe degli equivalenti -> prima si mostrano le righe; niente
+  deploy ne' `git pull` sul VPS fino all'incasso di a2c63fd8, giovedi' dalle 17:46Z). Poi «vai» per
+  questo blocco.
+- IL CRON DEL VPS CHIAMA `deploy/` PER PERCORSO (crontab di root, letto in sola lettura nella notte):
+  `cd /var/www/bookinvip && sh deploy/watchdog.sh` ogni 10 minuti, `docker exec casavip_app python3
+  /app/deploy/cron_riconciliazione.py` alle 2:17, `docker exec casavip_app python3
+  /app/deploy/cron_sweep_eventi.py` ogni 15 minuti. Il rimedio (a) di GML (spostare script e
+  configurazioni in una sottocartella) li spegnerebbe IN SILENZIO (regola ferrea 5, il caso certbot/):
+  si fa solo insieme al crontab. E' la soluzione piena secondo OWASP (WSTG-CONF-04: «Data files, log
+  files, configuration files, etc. should be stored in directories not accessible by the web server»).
+- GML, COMPITO 9 (diagnosi del rosso di fase62): nessuna risposta, l'ultima voce del canale e' la mia
+  delle 04:20. Resta la diagnosi delle consegne 26.
+- FILE PUBBLICI, FATTO sul ramo col rimedio (b): `fase83.ESTENSIONI_DEL_SITO` e una condizione in
+  `_statico`: dalla cartella del sito escono solo .html .js .css .json .svg .png .jpg .jpeg .webp .ico
+  (anche scritte in maiuscolo), tutto il resto e' 404. Inventario prima di scegliere, sul VPS in sola
+  lettura: in `/app/deploy` del contenitore ci sono i 41 file versionati piu' `manifest.json` e
+  `index.html.bak.1783682091` (una copia di riserva, servita anche lei); nei registri di nginx dal 23/9 i
+  file serviti con 200 da quella cartella sono solo .svg .js .json .html (`/video/` lo serve nginx da
+  `/var/www/video`, `/uploads/` passa da `_serve_upload`, robots sitemap llms feed sono rotte); le sole
+  richieste .sh .py .conf con 200 sono le 4 sonde nostre del 30/9. Fonti (D25): OWASP WSTG-CONF-03 e
+  WSTG-CONF-04.
+  Guardia `test_gatekeeper.TestIlSitoServeSoloIlSito`, 3 prove sul server vero acceso su una copia di
+  `deploy/` con la copia di riserva e un file per ogni estensione ammessa: ROSSA sul codice di prima,
+  «48 richieste su 48 hanno avuto il file» (24 file per 2 percorsi), verde dopo; il codice di prima
+  rimesso dalla copia: di nuovo rossa; ripristino con sha256 identico (7415407d...). Le pagine e i file
+  che le pagine chiamano: verdi prima e dopo. `python -m unittest test_gatekeeper test_fase83_server
+  test_happy_altro test_indirizzi_di_ritorno` -> Ran 173, OK; dopo l'ultima prova `test_gatekeeper` ->
+  Ran 15, OK. Mutazione sulle righe nuove (`giro_sul_diff` base HEAD con gli occhi scelti a mano =
+  `test_gatekeeper`, attrezzo nello scratchpad: il modo `--diff` aveva scelto altri occhi e dava 0 su 3):
+  2 su 3, sopravviveva `or -> and` (il file che non esiste e il nome rifiutato non erano provati) -> una
+  prova -> 3 su 3; rinuncia del generatore dichiarata: a_cavallo 1. A mano, perche' il generatore non le
+  rompe: tolta `.css` dall'elenco -> rossa, tolto `.lower()` -> rossa, ripristino identico.
+  `python collaudi/cricchetto_statico.py tutti`: ruff, gitleaks, semgrep nessuna nuova; bandit 1 nuova
+  (B110 nella mia prova), chiusa -> 548 su 548; pip-audit i 5 avvisi del PC gia' noti (consegne 26).
+  Suite intera: lanciata dopo aver scritto queste righe, l'esito sta nel messaggio del commit.
+- VISTO PER STRADA, NON RIPARATO: (1) `manifest.json` non e' nel repository (lo esclude la riga `*.json`
+  del `.gitignore`): esiste solo sul disco del PC e del VPS, e l'immagine lo prende perche' `COPY deploy`
+  copia il disco; un VPS rifatto da un clone pulito perderebbe il manifest della PWA. (2)
+  `index.html.bak.1783682091` sta sul disco del VPS in `deploy/`, quindi nell'immagine: col deploy non
+  esce piu', ma va tolto dal disco dopo averlo guardato. (3) La classe vecchia `TestGatekeeper` accende
+  il server senza `MARCA_TEMPORALE=0` e senza `UPLOAD_DIR`: a ogni suite chiede una marca temporale VERA
+  a una TSA in rete e fa il censimento degli upload VERI del PC (visto stamattina sulla classe nuova
+  prima di isolarla: «MARCA TEMPORALE QUALIFICATA (eIDAS) ottenuta | ... tsa=http://tss.accv.es:8318/tsa»
+  e «CRITICO pulizia uploads: 1600/2460 'orfani' = censimento sospetto, ANNULLATA»). La classe nuova e'
+  isolata come `test_happy_altro`.
+- AL DEPLOY, in piu' dei punti delle consegne 24-26: dopo lo scambio `/genera_segreti.sh`
+  `/backup_casavip.sh` `/nginx.casavip.conf` `/copia_db.py` `/index.html.bak.1783682091` -> 404;
+  `/` `/index.html` `/app.js` `/manifest.json` `/icon.svg` `/privacy.html` -> 200; `/host.html` senza
+  sessione -> 302.
+- RESTA, in ordine (ordine del fondatore, 1/10 mattina):
+  1. commit, push e CI di questo lavoro sulla #238; revisione di GML 5.3 prima dell'unione;
+  2. la Questura, il resto: campi del check-in, file per l'host dal pannello, privacy (consegne 26,
+     RESTA punto 2);
+  3. giovedi' sera: occhio sull'incasso di a2c63fd8, controversia dal pannello admin, unione
+     #236 -> #237 -> #238 e deploy coi punti «al deploy» delle consegne 24, 25, 26 e 27;
+  4. il motore che avvisa dei prezzi degli host sulle OTA (consegne 26, RESTA punto 3).
 
 ## PASSAGGIO DI CONSEGNE 26 (2026-09-30 sera) - BANDIT RIPARATO SULLA #237; QUI LE DECISIONI SUI PREZZI DELLE OTA E LA QUESTURA PREPARATA; NIENTE IN PRODUZIONE:
 - STATO VERIFICATO all'inizio (17:05Z, `git rev-parse` / `git ls-remote` / ssh / API): master 6889a7a su
@@ -3486,11 +3551,69 @@ CONSEGNE AGGIORNATE A: 8cd9f45
   `Desktop\Core_Auto_GUARDIE_PRONTE\questura_20260930\`). Serve la privacy nuova (art. 109 TULPS, 8
   lingue, ri-accettazione).
 - SICUREZZA: resta come nelle consegne 25, punto 4 (`cap_drop`/`no-new-privileges` col deploy,
-  gettone host di 30 giorni senza revoca, fail2ban spento).
+  gettone host di 30 giorni senza revoca, fail2ban spento). IN PIU', trovato stasera e NON riparato:
+  il sito serve a chiunque i file in cima a `deploy/`, script e configurazioni compresi (sonde HEAD
+  sul sito vero, 30/9 sera: `/genera_segreti.sh` 200, `/backup_casavip.sh` 200,
+  `/nginx.casavip.conf` 200, `/copia_db.py` 200; un nome inesistente 404). Oggi non esce niente di
+  segreto (il repository e' pubblico), ma ogni file messo in `deploy/` diventa pubblico. Rimedio:
+  `_statico` in fase83 serve solo le estensioni del sito (html, js, css, immagini, manifest), con la
+  guardia rossa prima; va col deploy.
+- CI di 02e7a07 (tabella dall'API): 16 controlli, gate SUCCESS, tutti success tranne `zap` skipped.
+  La #237 e' VERDE (porta anche la #236). pip-audit in CI pulito: i 5 avvisi erano del PC.
+- GML 5.3 (riattivato dal fondatore stasera), COMPITO 6-BIS (revisione in sola lettura di 8cd9f45,
+  risposta delle 22:01 nel canale): «a interruttore SPENTO nessun buco sui soldi» -- confermato sul
+  codice (fase83:6653-6655 esce subito). Cinque rilievi VERIFICATI VERI sul codice di 8cd9f45, che
+  contano SOLO A RITENUTA ACCESA e si aggiungono al punto 6 delle consegne 25 («PRIMA DI ACCENDERE
+  LA RITENUTA»): (a) se il giornale non scrive e fallisce anche il ripristino del registro
+  (fase83:6701 non guarda l'esito) il bonifico resta ridotto senza riga e il ritentivo sottrae di
+  nuovo; (b) due fili sulla stessa prenotazione (tick 12835, verifica host 3237, conferma ospite
+  7182) possono ridurre due volte: nessuna serratura in `_trasferisci_all_host` e
+  `fase131.imposta_importo` (riga 323) scrive senza confrontare il valore letto; (c) l'interruttore
+  riusa il file fail-open del kill-switch: se il file sparisce la ritenuta si spegne in silenzio
+  (letto da GML, fase191 non riletto da me); (d) `fase177.ritenute_anno` conta i mesi in UTC (riga
+  509): fra mezzanotte e le 2 del primo del mese la ritenuta va nel mese prima, il 1 gennaio
+  nell'anno prima; (e) la partita IVA si riverifica al VIES solo quando l'host risalva i dati.
+  Per il commercialista (da GML): se una societa' con VIES in errore puo' essere esentata col
+  `tipo_soggetto`; la base con la commissione dentro; l'F24 per i pagamenti non in euro.
+  Poi COMPITO 7 (22:20): revisione della Questura, sola lettura.
+- QUESTURA, primo passo FATTO sul ramo `questura-fase151` (sopra 02e7a07; racconto nel registro,
+  voce «LA QUESTURA COME DICE IL MANUALE»): a-capo come dice il manuale; sei difetti vivi chiusi con
+  la guardia rossa prima (giorni oltre 30 scritti «01», a-capo dentro un campo, campi obbligatori
+  mancanti, date inesistenti, ruolo sconosciuto); `errori_schedina` dice il perche'; le 4 tabelle
+  ufficiali in `deploy/alloggiati/` e i codici controllati. Poi la revisione di GML (Compito 7,
+  22:28): tre difetti veri, verificati da me e chiusi con la guardia rossa prima (un campo troppo
+  lungo tagliato in silenzio, lettere come Ł ß Đ che sparivano, nascita dopo l'arrivo). Il giro
+  di suite delle 22:32 e' stato BUTTATO per questo (ucciso a 27 minuti, S18). Mutazione sulle
+  righe nuove 53 su 53. `test_fase151_alloggiati_web.py` da 11 a 31 prove; caricatore 7149.
+  Aperto da GML: senza `oggi` il controllo «arrivo oggi o ieri» non si fa, la rotta per l'host
+  dovra' passarlo sempre.
+- SUITE DELLE 23:27 (`suite_20260930_232741.log`, PowerShell col lanciatore): «Ran 7144 tests in
+  7414.450s · FAILED (failures=1, skipped=4) · CODICE_USCITA_DIRETTO=1». L'unico rosso non c'entra
+  col ramo: `test_fase62_predictive_noshow.TestStress.test_conteggi_concorrenti_10x`, 3 volte
+  `OperationalError('database is locked')` (nessun conteggio perso). Da sola, rilanciata 5 volte
+  durante la suite: 5 su 5 verde. Causa: la prova costruiva il negozio con un `sqlite3.connect`
+  suo (attesa del lucchetto 5 s di serie) invece che con `crea_storico_presenze` della produzione
+  (30 s, fase62:261): sotto la pressione di memoria di stasera il banco misurava se stesso.
+  Corretta la PROVA (usa la funzione della produzione), l'asserzione e' intatta (200 su 200, zero
+  errori). Diagnosi chiesta anche a GML (Compito 9) su richiesta del fondatore.
+- GML, COMPITO 8 (la #236 mai rivista + la sicurezza dei file pubblici), verificato da me sul
+  codice: la #236 PUO' ANDARE giovedi' (D13 toglie la riga solo in `in_attesa`/`maturato`,
+  0a70cd8 fase83:6851; niente XSS nuovo; il collegamento al voucher va solo al browser che ha
+  prenotato e all'admin). NOTE, non blocchi: una finestra di millisecondi fra `stato_di` e
+  `rimuovi` in D13; il gettone del voucher resta nel `localStorage` per sempre (pulirlo al primo
+  uso); `/voucher/<gettone>` finisce nei registri di accesso di nginx. FILE PUBBLICI: nessun
+  segreto dentro (cercati da me: zero in 23 file .sh .py .conf); il rimedio di GML, che prendo:
+  (a) spostare script e configurazioni in una sottocartella di `deploy/` (il server serve solo il
+  primo livello), (b) poi un elenco di estensioni ammesse in `_statico`, (c) volendo una regola
+  in nginx. `cap_drop`/`no-new-privileges` vanno in `docker-compose.casavip.yml`, che STA nel
+  repository (GML diceva di no). Il suo rimedio per il gettone host (un contatore che si alza a
+  ogni rilascio) butterebbe fuori tutti gli host a ogni deploy: DUBBIO, da discutere.
 - RESTA, in ordine (ordine del fondatore, 30/9 sera):
-  1. CI verde sulla #237;
-  2. la Questura: prima il difetto dell'a-capo (guardia rossa prima), poi tabelle ufficiali, campi del
-     check-in, file per l'host, privacy;
+  1. commit, push e CI del ramo `questura-fase151` (poi richiesta di unione sopra la #237); poi
+     i file pubblici di `deploy/` col rimedio di GML, guardia rossa prima, col deploy;
+  2. la Questura, il resto: campi del check-in (sesso, data e luogo di nascita, cittadinanza,
+     documento; i familiari dopo il capofamiglia), file per l'host dal pannello, privacy (art. 109
+     TULPS, 8 lingue, ri-accettazione); e l'ordine capofamiglia/familiari nel file;
   3. il motore che avvisa dei prezzi degli host sulle OTA: controllo a campione e ricerca sui channel
      manager (Smoobu, Beds24, Lodgify);
   4. giovedi' sera: occhio sull'incasso di a2c63fd8, controversia dal pannello admin, unione della #236
@@ -4823,7 +4946,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 7127 test
+SUITE ATTUALE: Ran 7152 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

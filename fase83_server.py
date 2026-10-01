@@ -11956,6 +11956,14 @@ def percorso_statico_sicuro(path: str, cartella: str) -> Optional[str]:
     return cand_real
 
 
+# Cosa `_statico` puo' servire dalla cartella del sito: le pagine e i file che le pagine
+# chiamano. `deploy/` contiene anche script, configurazioni e copie di riserva che il cron del
+# VPS chiama per percorso (non si possono spostare), e fino al 1/10 uscivano a chiunque.
+# Guardia: `test_gatekeeper.TestIlSitoServeSoloIlSito`, nelle due direzioni.
+ESTENSIONI_DEL_SITO = (".html", ".js", ".css", ".json", ".svg", ".png", ".jpg", ".jpeg",
+                       ".webp", ".ico")
+
+
 def corpo_json_bytes(corpo: Any) -> bytes:
     """Serializza SEMPRE una risposta JSON in byte spedibili. PURA e testabile.
 
@@ -12383,7 +12391,8 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
 
         def _statico(self, path, no_store=False):
             fpath = percorso_statico_sicuro(path, cartella_statica)
-            if fpath is None or not os.path.isfile(fpath):
+            if (fpath is None or not os.path.isfile(fpath)
+                    or os.path.splitext(fpath)[1].lower() not in ESTENSIONI_DEL_SITO):
                 self._scrivi(404, {"errore": "file_non_trovato"})
                 return
             with open(fpath, "rb") as f:
