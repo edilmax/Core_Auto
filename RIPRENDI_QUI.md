@@ -3435,7 +3435,72 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: cccfa4f
+CONSEGNE AGGIORNATE A: 8246e0f
+
+## PASSAGGIO DI CONSEGNE 30 (2026-10-01 sera) - INCASSO VERO RIUSCITO DA SOLO, CONTROVERSIA DECISA DAL PANNELLO, #236 #237 #238 UNITE E IN PRODUZIONE (master d0ade67 su PC, GitHub e VPS); TRE DIFETTI NUOVI DALLA PROVA:
+- CONTESTO: 43% letto dal fondatore alle 19:4x; chiuso oltre il 50% (stima mia, D21) subito dopo il deploy.
+  Permessi: quelli delle consegne 29, poi «vai e finisci». Script e letture di stasera, tutti in sola
+  lettura salvo i due passi dichiarati sotto: `Desktop\Core_Auto_GUARDIE_PRONTE\deploy_20261001\`.
+- INCASSO di a2c63fd8 (la prova vera del 29/9): partito DA SOLO alle 18:07:21Z (giro orario dopo le
+  17:46:14Z): Stripe succeeded, incassati 50, livemode True; giornale incasso 50 / commissione 27 /
+  costo_gateway 26; INVARIANTI ARCHIVI I1-I5 violazioni=0 alle 18:07:25Z.
+- CONTROVERSIA risolta dal fondatore dal pannello admin (Bunker) alle 18:19:27Z: 12 centesimi al
+  cliente, 11 all'host (23 dispari: l'arrotondamento da' il centesimo al cliente, admin.html:738).
+  Dopo: garanzia `risolto` 11/12, payout `trattenuto` -> `maturato` 11, giornale `rimborso 12`.
+  ⚠️ Su Stripe i rimborsi del pagamento sono 0: e' il limite DICHIARATO della strada 4 (rimborso a
+  mano). PRIMA di rimborsare a mano i 12 centesimi: verificare se il webhook `charge.refunded` scrive
+  un secondo «rimborso» nel giornale (doppio conto). Detto al fondatore di NON farlo ancora.
+- PASSI SULLA PRODUZIONE (sequenza del Compito 18, rivista da GML: «OK con due aggiunte», presa la
+  rilettura di merged=True, NON presa la rimisura prima dell'unione, col motivo nel canale):
+  copia `/root/pre_deploy_20261001` (27 database col backup di SQLite, integrity ok su ogni copia, 12
+  altri file, sha256 OK; `.watchdog_stato` e' nascosto e fuori dall'impronta); PULIZIA delle due righe
+  payout rimaste `trattenuto` con garanzia `annullato` (8a448a3a 70, bbb00577 23 centesimi): tolte,
+  una ciascuna, riletto 0; unione dall'API #236 -> 5becfb6, #237 -> 83261b2, #238 -> d0ade67, ognuna
+  con merged=True riletto; master d0ade67 == albero di 1a0326a (git diff vuoto); CI di master: 15
+  controlli, gate success; deploy col pulsante: paracadute OK (prec = viva cefa7a55...), scambio alle
+  18:43:45Z (HEAD d0ade67), verifica: healthy, money_path_pronto True, avvisi [], nessuna PAGAMENTO_;
+  sonde 17 su 17 (i quattro script e la copia .bak ora 404, il 30/9 erano 200; HEAD 404; robots e
+  sitemap 200; host e bunker 302); verifica_produzione.py 190 controlli, 0 violazioni (certificato
+  ancora 52 giorni); interruttori: nessun .flag, nessuna leva; tre posti su d0ade67.
+- IL FONDATORE dopo il deploy: verifica d'identita' Stripe fatta (KYC IDENTITY VERIFICATO 18:30:03Z);
+  contratto e privacy riaccettati (righe 2026-09-27 + privacy 2026-09-29 scritte; dopo una nuova
+  entrata non li chiede piu').
+- TRE DIFETTI NUOVI (nessuna guardia ancora, si fanno con D20):
+  (a) `/api/host/riaccetta` risponde 200 con `"ok": false` anche quando i consensi SI SONO SCRITTI
+      (fase83 `return 200, {"ok": bool(out.get("registrata")), ...}`): la pagina dice «Non e' stato
+      possibile registrare l'accettazione» e il fondatore ha premuto tre volte (tre coppie di righe).
+      Da capire perche' `_registra_consensi` dice registrata=False. Le versioni NON c'entrano (verificato:
+      fase185 e il ripiego di fase163 dicono entrambe privacy 2026-09-29).
+  (b) `_trasferisci_all_host` esce SENZA SCRIVERE NIENTE se l'host non ha il conto Stripe collegato
+      (`if not acct: return`): gli 11 centesimi sono `maturato` e il registro tace (ferrea 9).
+  (c) dopo una controversia RISOLTA il pannello admin offre ancora «Rimborsa» (restano 38 centesimi):
+      premerlo scavalca l'arbitro e (D13) toglie la riga del bonifico. Detto al fondatore di non premerlo.
+  E di chiarezza: «Dati fiscali» (con IBAN), «Verifica identita'» e «Collega Stripe» sembrano la stessa
+  cosa; il fondatore credeva di aver finito.
+- DA FARE SOLO AL FONDATORE: «Collega Stripe» fallisce perche' Stripe risponde «You must complete your
+  platform profile to use Connect and create live connected accounts» (log 18:54:24Z): il profilo
+  piattaforma di Connect in modalita' vera NON e' completo. Finche' non lo completa dal pannello di
+  Stripe, nessun host puo' ricevere bonifici automatici.
+- GML OGGI (canale `Desktop\claude&gml fhash.txt`, regola dei turni scritta alle 18:48 e fatta
+  rispettare dal mio `scrivi_al_canale.ps1`): C10 e C11 niente che blocchi; C12 piano del deploy; C13
+  stato dei difetti D1-D22 (aperti dopo la riverifica C16: D2, D4 VERO E IN PRODUZIONE, D6, D9+D17,
+  D10, D19; D20a chiuso); C13 B nomi con Ø ß Ł (univoche si traslitterano, Ä Ö Ü Å le conferma
+  l'ospite); C14 tre testi in 8 lingue (verificati); C15 progetto del file per l'host; C17 i 5 minuti
+  di D17: Stripe non lascia scadere una sessione prima di 30 minuti (expires_at, letto oggi) -> hold a
+  5 minuti + POST /expire prima di liberare + giro piu' frequente. L'elenco intero coi file:riga e i
+  miei VERO/FALSO: `deploy_20261001\da_scrivere_consegne_30.txt`.
+- DECISIONE CHIESTA AL FONDATORE, senza risposta: D6, solo la carta (annullo gratis) o tutti i metodi.
+- RESTA, in ordine:
+  1. `python collaudi/rimisura.py` su master (11 rapidi; la mutazione da 600 minuti la salta e lo dice);
+  2. i tre difetti nuovi (a)(b)(c), poi D4 (soldi, in produzione), il «false» sul freno globale
+     (fase83:4626, in produzione) e sulla ritenuta, la riga del freno (:4629-4631), D17 col /expire;
+  3. la #239 (check-in, spento: si puo' unire dopo la correzione 35/36 prove nelle sue consegne) e la
+     #240 (questo ramo); prima di ACCENDERE il check-in: consegne 28 + i testi e il progetto di GML;
+  4. i 12 centesimi: nel pannello admin «Rimborsi da eseguire» la riga di a2c63fd8 («ha pagato 0,50 ·
+     spetta 0,12», foto del fondatore delle 21:0x) ha il pulsante «Restituisci 0,12». Detto al fondatore
+     di NON premerlo finche' non e' verificato nel codice che il pulsante (e poi il webhook
+     `charge.refunded`) non scriva un SECONDO «rimborso» nel giornale, dove quello della controversia
+     c'e' gia'. La seconda riga della lista (8a448a3a, «non pronto», dal 16/8) e' una prova vecchia.
 
 ## PASSAGGIO DI CONSEGNE 29 (2026-10-01 pomeriggio) - LA RIGA DELLA RITENUTA DICE L'ESITO, NON LA RICHIESTA; RAMO `ritenuta-riga-esito` SOPRA LA #239; NIENTE IN PRODUZIONE:
 - CONTESTO: 16%, letto dal fondatore con `/context` dopo il blocco 1 di questa sessione (15:3x).
