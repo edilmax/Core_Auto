@@ -10,6 +10,8 @@ Girato contro un VERO server HTTP (il gate, i redirect, i cookie e gli header st
 nell'handler, non nel router) — http.client, redirect NON seguiti, cookie gestiti a mano.
 """
 import http.client
+import os
+import re
 import shutil
 import socket
 import tempfile
@@ -199,6 +201,125 @@ class TestGatekeeper(unittest.TestCase):
             self.assertIn("no-store", hd.get("cache-control", ""))
         finally:
             os.environ.pop("PAGE_GATE", None)
+
+
+class TestIlSitoServeSoloIlSito(unittest.TestCase):
+    """⛔ IL DIFETTO, sondato sul sito vero il 30/9 sera: `_statico` serviva a chiunque OGNI
+    file in cima a `deploy/` -- `/genera_segreti.sh`, `/backup_casavip.sh`,
+    `/nginx.casavip.conf`, `/copia_db.py` rispondevano 200 -- e il 1/10 nel contenitore c'era
+    anche una copia `index.html.bak.<numero>`. Spostarli non si puo': il cron del VPS ne chiama
+    tre per percorso. Le due direzioni, su una copia di `deploy/` servita dal server vero:
+    script, configurazioni e copie -> 404; le pagine e i file che le pagine chiamano -> serviti."""
+    WEB = (".html", ".js", ".css", ".json", ".svg", ".png", ".jpg", ".jpeg", ".webp", ".ico")
+    SONDATI = ("genera_segreti.sh", "backup_casavip.sh", "nginx.casavip.conf", "copia_db.py")
+    COPIA = "index.html.bak.1783682091"
+
+    @classmethod
+    def setUpClass(cls):
+        qui = os.path.join(os.path.dirname(os.path.abspath(__file__)), "deploy")
+        cls.dir = tempfile.mkdtemp()
+        cls.sito = os.path.join(cls.dir, "deploy")
+        os.mkdir(cls.sito)
+        for nome in os.listdir(qui):
+            if os.path.isfile(os.path.join(qui, nome)):
+                shutil.copyfile(os.path.join(qui, nome), os.path.join(cls.sito, nome))
+        shutil.copyfile(os.path.join(qui, "index.html"), os.path.join(cls.sito, cls.COPIA))
+        # un file per ogni estensione ammessa, piu' una scritta in maiuscolo: nel repository
+        # mancano css e immagini e `manifest.json` non e' versionato, e senza questi una voce
+        # tolta dall'elenco della produzione non farebbe diventare rosso niente.
+        for nome in ["banco" + e for e in cls.WEB] + ["maiuscole.PNG"]:
+            with open(os.path.join(cls.sito, nome), "w", encoding="utf-8") as f:
+                f.write("banco " + nome)
+        d = cls.dir
+        # come test_happy_altro: niente marca temporale in rete, niente pulizia degli
+        # uploads veri del computer, e il gate acceso (le pagine riservate devono dare 302).
+        cls._env_prec = {k: os.environ.get(k) for k in
+                         ("MARCA_TEMPORALE", "UPLOAD_DIR", "OUTREACH_OPTOUT_FILE", "PAGE_GATE")}
+        os.environ["MARCA_TEMPORALE"] = "0"
+        os.environ["UPLOAD_DIR"] = d + "/uploads"
+        os.environ["OUTREACH_OPTOUT_FILE"] = d + "/optout.json"
+        os.environ.pop("PAGE_GATE", None)
+        sis = crea_sistema(ConfigCasaVIP(
+            abilitato=True, segreto_hmac=b"s" * 32,
+            db_catalogo=f"{d}/c.db", db_inventario=f"{d}/i.db", db_registro_host=f"{d}/r.db",
+            db_finanza=f"{d}/fin.db"))
+        cls.porta = _porta_libera()
+        threading.Thread(
+            target=fase83_server.servi,
+            kwargs=dict(sistema=sis, host="127.0.0.1", porta=cls.porta,
+                        cartella_statica=cls.sito, host_key="hk", admin_key="ak"),
+            daemon=True).start()
+        for _ in range(200):
+            try:
+                pronto = cls._get("/robots.txt")[0] == 200
+            except (OSError, http.client.HTTPException):
+                pronto = False                      # il server non ascolta ancora
+            if pronto:
+                break
+            time.sleep(0.03)
+
+    @classmethod
+    def tearDownClass(cls):
+        for k, v in cls._env_prec.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        shutil.rmtree(cls.dir, ignore_errors=True)
+
+    @classmethod
+    def _get(cls, percorso):
+        c = http.client.HTTPConnection("127.0.0.1", cls.porta, timeout=6)
+        c.request("GET", percorso)
+        r = c.getresponse()
+        corpo = r.read().decode("utf-8", "replace")
+        c.close()
+        return r.status, corpo
+
+    def test_SCRIPT_CONFIGURAZIONI_E_COPIE_NON_ESCONO_DAL_SITO(self):
+        fuori = sorted(n for n in os.listdir(self.sito)
+                       if os.path.splitext(n)[1].lower() not in self.WEB)
+        # S1: un elenco vuoto direbbe «non esce niente» senza aver guardato niente.
+        for atteso in self.SONDATI + (self.COPIA,):
+            self.assertIn(atteso, fuori, "manca dal banco un file sondato sul sito vero")
+        usciti = []
+        for nome in fuori:
+            with open(os.path.join(self.sito, nome), "rb") as f:
+                inizio = f.read(60).decode("utf-8", "replace").strip()
+            for percorso in ("/" + nome, "/qualunque/" + nome):
+                st, corpo = self._get(percorso)
+                if st != 404 or (inizio and inizio in corpo):
+                    usciti.append("%s -> %s" % (percorso, st))
+        self.assertEqual(usciti, [], "%d richieste su %d hanno avuto il file"
+                         % (len(usciti), 2 * len(fuori)))
+
+    def test_UN_FILE_CHE_NON_C_E_O_UN_NOME_RIFIUTATO_DANNO_404(self):
+        # la condizione riscritta in `_statico` porta anche i due controlli di prima: il file
+        # che non esiste e il nome che `percorso_statico_sicuro` rifiuta (None).
+        for percorso in ("/non-esiste.html", "/.env"):
+            self.assertEqual(self._get(percorso)[0], 404, percorso)
+
+    def test_LE_PAGINE_E_I_FILE_CHE_CHIAMANO_ESCONO_ANCORA(self):
+        riservate = {"admin.html", "bunker.html", "host.html"}
+        sito = sorted(n for n in os.listdir(self.sito)
+                      if os.path.splitext(n)[1].lower() in self.WEB)
+        chiamati = set()
+        for n in sito:
+            if n.endswith((".html", ".js")):
+                with open(os.path.join(self.sito, n), encoding="utf-8") as f:
+                    chiamati |= set(re.findall(
+                        r'["\'](/[A-Za-z0-9_\-]+\.[a-z]+)(?:\?[^"\']*)?["\']', f.read()))
+        chiamati = {c for c in chiamati if os.path.isfile(os.path.join(self.sito, c[1:]))}
+        # S7: la premessa e' che le pagine chiamino davvero file che stanno in `deploy/`.
+        for atteso in ("/app.js", "/icon.svg", "/privacy.html"):
+            self.assertIn(atteso, chiamati)
+        rotti = []
+        for percorso in sorted({"/" + n for n in sito} | chiamati | {"/", "/grazie"}):
+            st, _ = self._get(percorso)
+            atteso = 302 if os.path.basename(percorso) in riservate else 200
+            if st != atteso:
+                rotti.append("%s -> %s (atteso %s)" % (percorso, st, atteso))
+        self.assertEqual(rotti, [])
 
 
 if __name__ == "__main__":
