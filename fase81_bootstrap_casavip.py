@@ -70,6 +70,8 @@ class ConfigCasaVIP:
     whatsapp_token: str = ""            # gated: avvisi prenotazione all'host via WhatsApp
     whatsapp_phone_id: str = ""         # gated: id numero mittente WhatsApp Cloud API
     oxr_app_id: str = ""                # gated: Open Exchange Rates (display indicativo valuta ospite)
+    vies_richiedente: str = ""          # gated (D23): la NOSTRA partita IVA; se c'e', la partita
+                                        # IVA dell'host si chiede al VIES (fase100) al salvataggio
     con_mcp: bool = True
     con_recensioni: bool = True
     con_smartpass: bool = True
@@ -162,6 +164,8 @@ class SistemaCasaVIP:
     tassi: Any = None       # ProviderTassi (fase99): cambio valuta indicativo; None se OXR spento
     blocco_globale: Any = None  # BloccoGlobale (fase191): kill-switch d'emergenza dei movimenti soldi
     admin_accounts: Any = None  # AdminAccounts (fase192): operatori admin con ruoli (multi-admin)
+    ritenuta: Any = None    # interruttore (fase191) della ritenuta sulle locazioni brevi: SPENTO di serie
+    vies: Any = None        # verifica partita IVA (fase100, D23): (numero, paese) -> esito; None se spenta
 
     @property
     def attivo(self) -> bool:
@@ -422,6 +426,19 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
         _os_bg.path.join(_os_bg.path.dirname(cfg.db_payout) or ".", "blocco_globale.flag")
         if cfg.db_payout not in ("", ":memory:") else "")
     blocco_globale = crea_blocco_globale(_flag_bg)
+    # LA RITENUTA SULLE LOCAZIONI BREVI (2026-09-30): lo stesso interruttore, con un file e una
+    # leva d'ambiente suoi. SPENTO di serie: si accende dal bunker o con RITENUTA_ATTIVA=1.
+    ritenuta = crea_blocco_globale(
+        _os_bg.path.join(_os_bg.path.dirname(cfg.db_payout) or ".", "ritenuta_attiva.flag")
+        if cfg.db_payout not in ("", ":memory:") else "", env_var="RITENUTA_ATTIVA")
+    # D23: la partita IVA dell'host si chiede al VIES solo se c'e' il richiedente (la nostra):
+    # nei collaudi resta spento, cosi' nessuna prova interroga la Commissione per davvero.
+    vies = None
+    if cfg.vies_richiedente:
+        from fase100_dac7 import verifica_vies as _verifica_vies
+
+        def vies(numero, paese):
+            return _verifica_vies(numero, paese, richiedente=cfg.vies_richiedente)
 
     # OPERATORI ADMIN con ruoli (fase192): additivo, la ADMIN_KEY resta il super-potere root.
     # Store DUREVOLE: se non configurato, si mette accanto agli altri DB (in /data), cosi' gli
@@ -637,4 +654,5 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
                           connect=_connect, carta=_carta, geocoder=geocoder, checkin=checkin,
                           poi_provider=poi_provider, credito_usati=credito_usati,
                           finanza=finanza, bunker=bunker, kyc=kyc, tassi=_tassi,
-                          blocco_globale=blocco_globale, admin_accounts=admin_accounts)
+                          blocco_globale=blocco_globale, admin_accounts=admin_accounts,
+                          ritenuta=ritenuta, vies=vies)

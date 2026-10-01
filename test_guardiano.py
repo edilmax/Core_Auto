@@ -430,7 +430,9 @@ class TestGuastiIsolatiNelRegistro(_Base):
                        "motivo=sessione_assente_o_manomessa ip=203.0.113.9"),
             self._riga(self.now - 1800, "CRITICAL", "BUNKER: accesso NEGATO azione=prove_legali "
                        "motivo=sessione_assente_o_manomessa ip=198.51.100.7"),
-            self._riga(self.now - 300, "ERROR", "CONTROVERSIA APERTA | riferimento: BVI***01"),
+            # un ERROR vero (fino al 29/9 qui c'era la riga di una CONTROVERSIA APERTA: da D22
+            # non e' piu' un guasto, la segnala `_controversie_aperte` col suo nome)
+            self._riga(self.now - 300, "ERROR", "RIMBORSO ADMIN INCOMPLETO rif=BVI***01"),
         ])
         gi = G.scansiona(sis, ora=lambda: self.now)["anomalie"].get("guasti_isolati") or {}
         self.assertEqual(gi.get("conta"), 3,
@@ -506,6 +508,101 @@ class TestGuastiIsolatiNelRegistro(_Base):
                          "una finestra scaduta resta nel file: si accumulano per sempre")
         with open(os.path.join(d, wd.NOME_SONDE_GIUDICE)) as f:
             self.assertEqual(len(f.read().splitlines()), 2)
+
+
+class TestContaGiustaEControversieColLoroNome(_Base):
+    """D21 e D22, trovati il 29/9 sera dall'allarme vero della prova con la carta.
+
+    D21: «3 stato/i anomalo/i» per UN errore nel registro -- il conteggio sommava ogni campo
+    del riquadro (il numero, le 24 ore, l'esempio). Il «7» del 15/9 erano 34 righe.
+    D22: la controversia aperta di a2c63fd8 (una riga ERROR voluta) arrivava come «guasto
+    ingoiato che nessuno leggerebbe»: un fatto giusto da segnalare, col nome sbagliato.
+    Scritte PRIMA della riparazione e viste ROSSE.
+    """
+    RIGA_CONTROVERSIA = ("CONTROVERSIA APERTA | riferimento: %s | messaggio: l'ospite contesta "
+                         "il servizio, il bonifico all'host e' trattenuto e serve una "
+                         "decisione dell'arbitro")
+    # gli attrezzi del banco del registro, presi in prestito senza ereditarne le prove
+    _sistema_con_registro = TestGuastiIsolatiNelRegistro._sistema_con_registro
+    _riga = TestGuastiIsolatiNelRegistro._riga
+
+    def test_UN_errore_nel_registro_e_UN_guasto_non_tre(self):
+        sis = self._sistema_con_registro([
+            self._riga(self.now - 500, "ERROR", "consumo credito single-use FALLITO")])
+        rep = G.scansiona(sis, ora=lambda: self.now)
+        self.assertEqual(rep["conta"], 1, rep["anomalie"])
+        self.assertIn("trovato 1 stato/i anomalo/i", G.riassunto_html(rep))
+
+    def test_DUE_errori_sono_due(self):
+        sis = self._sistema_con_registro([
+            self._riga(self.now - 500, "ERROR", "consumo credito single-use FALLITO"),
+            self._riga(self.now - 400, "ERROR", "RIMBORSO ADMIN INCOMPLETO rif=abc")])
+        self.assertEqual(G.scansiona(sis, ora=lambda: self.now)["conta"], 2)
+
+    def test_una_controversia_aperta_ha_il_SUO_nome_e_non_e_un_guasto(self):
+        sis = self._sistema_con_registro([
+            self._riga(self.now - 500, "ERROR", self.RIGA_CONTROVERSIA % "a2c63fd8")])
+        sis.garanzia.apri("a2c63fd8", 30000, alloggio_id="casa", ora_checkin_ts=self.now)
+        self.assertTrue(sis.garanzia.contesta("a2c63fd8", "servizio")["ok"])
+        rep = G.scansiona(sis, ora=lambda: self.now)
+        self.assertNotIn("guasti_isolati", rep["anomalie"], rep["anomalie"])
+        self.assertEqual([c["prenotazione_id"] for c in rep["anomalie"]["controversia_aperta"]],
+                         ["a2c63fd8"])
+        self.assertEqual(rep["conta"], 1)
+        self.assertIn("Controversie aperte", G.riassunto_html(rep))
+
+    def test_decisa_la_controversia_il_Guardiano_TACE(self):
+        sis = self._sistema_con_registro([
+            self._riga(self.now - 500, "ERROR", self.RIGA_CONTROVERSIA % "a2c63fd8")])
+        sis.garanzia.apri("a2c63fd8", 30000, alloggio_id="casa", ora_checkin_ts=self.now)
+        sis.garanzia.contesta("a2c63fd8", "servizio")
+        self.assertTrue(sis.garanzia.risolvi("a2c63fd8", rimborso_ospite_cents=0)["ok"])
+        rep = G.scansiona(sis, ora=lambda: self.now)
+        self.assertTrue(rep["pulito"], rep["anomalie"])
+
+    def test_un_riquadro_senza_numero_e_UNA_anomalia(self):
+        """Sopravvissuto del giro sul diff (fase186:445): il cambio valuta fermo e' un
+        riquadro di quattro campi e resta UNA anomalia (col vecchio conto erano due)."""
+        class _Tassi:
+            def stato(self, ora):
+                return {"configurato": True, "mai_riuscito": True, "eta_ore": None,
+                        "ultimo_ok_ts": None}
+        self.sys.tassi = _Tassi()
+        rep = G.scansiona(self.sys, ora=lambda: self.now)
+        self.assertIn("cambio_valuta_fermo", rep["anomalie"], rep["anomalie"])
+        self.assertEqual(rep["conta"], 1, rep["anomalie"])
+
+    def test_un_archivio_che_non_sa_elencare_le_controversie_NON_grida(self):
+        """Sopravvissuto del giro sul diff (fase186:350): come gli altri controlli del
+        Guardiano, un archivio senza quel metodo non e' un'anomalia."""
+        class _GaranziaSenzaElenco:
+            def aperte_scadute(self, **kw):
+                return []
+        self.sys.garanzia = _GaranziaSenzaElenco()
+        rep = G.scansiona(self.sys, ora=lambda: self.now)
+        self.assertTrue(rep["pulito"], rep["anomalie"])
+
+    def test_un_elenco_delle_controversie_ROTTO_e_un_controllo_CIECO(self):
+        class _GaranziaRotta:
+            def aperte_scadute(self, **kw):
+                return []
+
+            def contestate(self, **kw):
+                raise RuntimeError("archivio guasto")
+        self.sys.garanzia = _GaranziaRotta()
+        with self.assertLogs("core_auto.guardiano", level="ERROR"):
+            rep = G.scansiona(self.sys, ora=lambda: self.now)
+        self.assertIn("_controversie_aperte", rep["anomalie"].get("controllo_cieco", []))
+
+    def test_un_guasto_vero_accanto_alla_controversia_resta_un_guasto(self):
+        sis = self._sistema_con_registro([
+            self._riga(self.now - 500, "ERROR", self.RIGA_CONTROVERSIA % "a2c63fd8"),
+            self._riga(self.now - 400, "ERROR", "RIMBORSO ADMIN INCOMPLETO rif=abc")])
+        sis.garanzia.apri("a2c63fd8", 30000, alloggio_id="casa", ora_checkin_ts=self.now)
+        sis.garanzia.contesta("a2c63fd8", "servizio")
+        rep = G.scansiona(sis, ora=lambda: self.now)
+        self.assertEqual(rep["anomalie"]["guasti_isolati"]["conta"], 1, rep["anomalie"])
+        self.assertEqual(rep["conta"], 2)
 
 
 class TestEscrowBloccato(_Base):

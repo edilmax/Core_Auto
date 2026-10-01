@@ -333,10 +333,23 @@ def _guasti_isolati(sistema: Any, ora_ts: int, ore: int) -> Optional[Dict[str, A
                 continue
             if riga_di_rumore_nostro(riga, ts, finestra):
                 continue
+            # D22 (29/9): una controversia aperta non e' un guasto ingoiato. La segnala
+            # `_controversie_aperte`, col suo nome e finche' resta aperta, dall'archivio.
+            if "CONTROVERSIA APERTA |" in riga:
+                continue
             conta += 1
             if len(esempi) < MAX_GUASTI_MOSTRATI:
                 esempi.append(riga.strip()[:180])
     return {"conta": conta, "ore": int(ore), "esempi": esempi} if conta else None
+
+
+def _controversie_aperte(sistema: Any) -> List[Dict[str, Any]]:
+    """Le controversie che aspettano l'arbitro: il bonifico all'host e' fermo finche' qualcuno
+    non decide dal pannello admin. Non sono un guasto, ma senza una persona non si chiudono."""
+    gar = getattr(sistema, "garanzia", None)
+    if gar is None or not hasattr(gar, "contestate"):
+        return []
+    return gar.contestate(limit=500)          # errore -> `_prova` lo registra come CIECO
 
 
 def scansiona(sistema: Any, *, ora: Any = None,
@@ -414,17 +427,28 @@ def scansiona(sistema: Any, *, ora: Any = None,
     if gi:
         anomalie["guasti_isolati"] = gi
 
+    ca = _prova(_controversie_aperte, sistema)
+    if ca:
+        anomalie["controversia_aperta"] = ca
+
     if ciechi:
         anomalie["controllo_cieco"] = ciechi
 
+    # ⛔ D21 (29/9): sommava OGNI campo di un riquadro -- UN errore nel registro diventava «3»
+    # (il numero, le 24 ore, l'esempio), e il «7» del 15/9 erano 34 righe. Ora: un elenco
+    # conta i suoi elementi; un riquadro col SUO numero (`conta`) usa quello; un riquadro fatto
+    # di elenchi somma quelli; un riquadro senza elenchi e' UNA anomalia.
     def _conta(v: Any) -> int:
         if isinstance(v, list):
             return len(v)
         if isinstance(v, dict):
-            return sum(_conta(x) for x in v.values())
+            if isinstance(v.get("conta"), int) and not isinstance(v.get("conta"), bool):
+                return v["conta"]
+            figli = [x for x in v.values() if isinstance(x, (list, dict))]
+            return sum(_conta(x) for x in figli) if figli else 1
         return 1 if v else 0
 
-    conta = sum(_conta(v) for v in anomalie.values())
+    conta = sum(max(1, _conta(v)) for v in anomalie.values())
     # `non_eseguiti` sta FUORI da `anomalie` di proposito: non entra in `conta` e non tocca
     # `pulito`, cosi' una macchina sana senza Stripe non manda un allarme ogni giorno. Ma
     # adesso il rapporto lo PORTA, e chi lo legge sa su cosa non abbiamo guardato.
@@ -446,6 +470,8 @@ _TITOLI = {
     "marca_temporale_ferma": "Marca temporale ferma: contratti e giornale NON sono piu' datati da un terzo",
     "controllo_cieco": "Un controllo del Guardiano NON ha potuto girare: su quel fronte siamo CIECHI",
     "guasti_isolati": "Errori nel registro nelle ultime 24h: guasti ingoiati che nessuno leggerebbe",
+    "controversia_aperta": "Controversie aperte (non un guasto): il bonifico all'host resta fermo "
+                           "finche' l'arbitro non decide dal pannello admin",
 }
 
 

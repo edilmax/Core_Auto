@@ -127,7 +127,12 @@ class RegistroHost:
                             "verifica_stato", "verifica_note", "verifica_ts", "verifica_da",
                             # SCATTO ③ (fase183): carta host off-session per i debiti scoperti.
                             # SOLO identificativi opachi Stripe (nessuna PII carta da noi).
-                            "stripe_customer_id", "stripe_payment_method"):
+                            "stripe_customer_id", "stripe_payment_method",
+                            # D23 (2026-09-30): la partita IVA chiesta al VIES -- esito
+                            # ('valida'/'non_valida'/'errore'/'non_verificabile'), quando, il
+                            # numero di consultazione (la PROVA) e il nome che risponde lo Stato
+                            "piva_vies_esito", "piva_vies_ts", "piva_vies_prova",
+                            "piva_vies_nome"):
                     try:
                         con.execute("ALTER TABLE host ADD COLUMN %s TEXT NOT NULL DEFAULT ''" % col)
                     except sqlite3.OperationalError:
@@ -447,7 +452,8 @@ class RegistroHost:
                             "codice_fiscale, partita_iva, indirizzo_fiscale, paese, iban, "
                             "tipo_soggetto, data_nascita, "
                             "verifica_stato, verifica_note, verifica_ts, verifica_da, "
-                            "stripe_customer_id, stripe_payment_method "
+                            "stripe_customer_id, stripe_payment_method, "
+                            "piva_vies_esito, piva_vies_ts, piva_vies_prova, piva_vies_nome "
                             "FROM host WHERE host_id=?",
                             (host_id,)).fetchone()
         finally:
@@ -468,7 +474,33 @@ class RegistroHost:
                 "verifica_stato": g("verifica_stato"), "verifica_note": g("verifica_note"),
                 "verifica_ts": g("verifica_ts"), "verifica_da": g("verifica_da"),
                 "stripe_customer_id": g("stripe_customer_id"),
-                "stripe_payment_method": g("stripe_payment_method")}
+                "stripe_payment_method": g("stripe_payment_method"),
+                "piva_vies_esito": g("piva_vies_esito"), "piva_vies_ts": g("piva_vies_ts"),
+                "piva_vies_prova": g("piva_vies_prova"), "piva_vies_nome": g("piva_vies_nome")}
+
+    def registra_verifica_piva(self, host_id: Any, partita_iva: Any, esito: Any,
+                               prova: Any = "", nome: Any = "") -> bool:
+        """Scrive l'esito del VIES (D23) SOLO se la partita IVA verificata e' ancora quella
+        dell'host: una risposta arrivata dopo un cambio di numero non vale per il nuovo."""
+        # l'host si cerca nell'UPDATE (host e numero devono coincidere): qui solo cio' che
+        # l'UPDATE non puo' controllare da se'
+        if esito not in ("valida", "non_valida", "errore", "non_verificabile") \
+                or not isinstance(partita_iva, str) or not partita_iva.strip():
+            return False
+        con = self._apri()
+        try:
+            with con:
+                cur = con.execute(
+                    "UPDATE host SET piva_vies_esito=?, piva_vies_ts=?, piva_vies_prova=?, "
+                    "piva_vies_nome=? WHERE host_id=? AND partita_iva=?",
+                    (esito, str(int(self._now())), str(prova or "")[:64],
+                     str(nome or "")[:200], host_id, partita_iva.strip()[:200]))
+            return bool(cur.rowcount)
+        except Exception:
+            logger.warning("registra_verifica_piva fallita (ISOLATA)", exc_info=True)
+            return False
+        finally:
+            con.close()
 
     # ── DATI FISCALI (DAC7): raccolta + audit di conformita' ────────────────
     CAMPI_FISCALI = ("codice_fiscale", "partita_iva", "indirizzo_fiscale", "paese",
@@ -487,6 +519,13 @@ class RegistroHost:
                 par.append(v.strip()[:200])
         if not set_cols:
             return False
+        if "partita_iva=?" in set_cols:
+            # D23: un numero NUOVO non eredita la verifica del vecchio (SQLite valuta ogni
+            # espressione sulla riga di PRIMA dell'aggiornamento: il confronto e' col vecchio)
+            nuova = par[set_cols.index("partita_iva=?")]
+            for c in ("piva_vies_esito", "piva_vies_ts", "piva_vies_prova", "piva_vies_nome"):
+                set_cols.append("%s=CASE WHEN partita_iva=? THEN %s ELSE '' END" % (c, c))
+                par.append(nuova)
         par.append(host_id)
         con = self._apri()
         try:
@@ -509,7 +548,7 @@ class RegistroHost:
             righe = con.execute(
                 "SELECT host_id, email, ragione_sociale, stato, codice_fiscale, "
                 "partita_iva, indirizzo_fiscale, paese, iban, tipo_soggetto, "
-                "stripe_account_id, verifica_stato "
+                "stripe_account_id, verifica_stato, piva_vies_esito, piva_vies_prova "
                 "FROM host ORDER BY creato_ts LIMIT ?", (lim,)).fetchall()
         finally:
             con.close()
@@ -522,7 +561,9 @@ class RegistroHost:
                         "indirizzo_fiscale": g("indirizzo_fiscale"), "paese": g("paese"),
                         "iban": g("iban"), "tipo_soggetto": g("tipo_soggetto"),
                         "stripe_account_id": g("stripe_account_id"),
-                        "verifica_stato": g("verifica_stato")})
+                        "verifica_stato": g("verifica_stato"),
+                        "piva_vies_esito": g("piva_vies_esito"),
+                        "piva_vies_prova": g("piva_vies_prova")})
         return out
 
     def imposta_verifica(self, host_id: Any, stato: Any, *, note: str = "",

@@ -55,7 +55,10 @@ TIPI_GIORNALE = ("nota_debito", "nota_credito", "penale_offset", "penale_incassa
                  # formalmente giusta e sostanzialmente falsa. Mancavano tre fatti:
                  "costo_gateway",       # la fetta che il gestore trattiene: NON torna mai
                  "debito_all_ospite",   # cancellazione: cio' che dovevamo all'host ora e' dell'ospite
-                 "storno_commissione")  # rimborso totale: la commissione non e' piu' dovuta
+                 "storno_commissione",  # rimborso totale: la commissione non e' piu' dovuta
+                 # 2026-09-30: la ritenuta sulle locazioni brevi (art. 4 c. 5 DL 50/2017),
+                 # operata al bonifico SOLO con l'interruttore acceso (fase83 `_opera_ritenuta`)
+                 "ritenuta")
 
 # mappatura tipo -> (conto_dare, conto_avere) per i movimenti ordinari: partita doppia
 # leggibile a colpo d'occhio nell'audit (cassa piattaforma vs debiti verso host/ospite/comune).
@@ -104,6 +107,10 @@ _CONTI_MOVIMENTO = {
     # questa riga restava un RICAVO su una prenotazione annullata -- su 200 EUR sarebbero
     # 10,25 EUR di guadagno mai avvenuto, dichiarati al commercialista.
     "storno_commissione": ("ricavi_commissioni", "debiti_vs_ospite"),
+    # `ritenuta`: una parte di cio' che dovevamo all'host la dobbiamo ora allo STATO, per lui
+    # (sostituto d'imposta). Resta in cassa finche' non si versa con l'F24: il bonifico
+    # all'host cala, la cassa no -- e il saldo del gestore lo conferma.
+    "ritenuta":           ("debiti_vs_host", "debiti_vs_erario"),
 }
 
 
@@ -433,7 +440,9 @@ class FinancialController:
                     d["host"] = sog[5:]
             elif tipo == "tassa_incassata":
                 d["tassa"] += imp
-            elif tipo in ("payout_host", "payout_manuale"):
+            elif tipo in ("payout_host", "payout_manuale", "ritenuta"):
+                # la ritenuta e' reddito dell'host versato allo Stato per lui, non una nostra
+                # commissione: nel ramo storico (netto dai bonifici) conta nel suo netto
                 d["netto"] += imp
                 if sog.startswith("host:") and not d["host"]:
                     d["host"] = sog[5:]
@@ -478,6 +487,44 @@ class FinancialController:
             h["trim"][q] += lordo
             h["trim_n"][q] += 1
         return agg
+
+    def ritenute_anno(self, anno: int) -> Dict[str, Any]:
+        """Le ritenute operate nell'ANNO, per chi le versa e le certifica: il totale di ogni
+        MESE (l'F24 si paga entro il 16 del mese dopo) e, per host, base e ritenuta (la
+        Certificazione Unica). La base e' quella scritta nella causale al momento del
+        bonifico (`base=<centesimi>`): si legge, non si ricalcola, perche' un rimborso
+        arrivato dopo non cambia cio' che e' stato trattenuto allora.
+        Ritorna {mesi: {'AAAA-MM': {valuta: cents}}, host: {host_id: {n, base, ritenuta}},
+        righe: [{ts, riferimento, host_id, base, ritenuta, valuta}]}."""
+        import datetime as _dt
+        import re as _re
+        out: Dict[str, Any] = {"mesi": {}, "host": {}, "righe": []}
+        try:
+            anno = int(anno)
+        except Exception:
+            return out
+        for r in self.stream_giornale():
+            if r["tipo"] != "ritenuta":
+                continue
+            dt = _dt.datetime.utcfromtimestamp(int(r["ts"]))
+            if dt.year != anno:
+                continue
+            imp = int(r["importo_cents"])
+            m = _re.search(r"\bbase=(\d+)", r["causale"] or "")
+            base = int(m.group(1)) if m else 0
+            sog = r["soggetto"] or ""
+            hid = sog[5:] if sog.startswith("host:") else sog
+            mese = dt.strftime("%Y-%m")
+            per_valuta = out["mesi"].setdefault(mese, {})
+            per_valuta[r["valuta"]] = per_valuta.get(r["valuta"], 0) + imp
+            h = out["host"].setdefault(hid, {"n": 0, "base": 0, "ritenuta": 0})
+            h["n"] += 1
+            h["base"] += base
+            h["ritenuta"] += imp
+            out["righe"].append({"ts": int(r["ts"]), "riferimento": r["riferimento"],
+                                 "host_id": hid, "base": base, "ritenuta": imp,
+                                 "valuta": r["valuta"]})
+        return out
 
     def conta_movimenti(self) -> int:
         con = self._apri()

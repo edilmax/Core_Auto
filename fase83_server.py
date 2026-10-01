@@ -1060,6 +1060,15 @@ MOSTRA_PASS_SERRATURA = False
 # 15% del valore. Il cliente è comunque rimborsato al 100%.
 PENALE_HOST_BPS = 1500
 
+# LA RITENUTA SULLE LOCAZIONI BREVI (art. 4 comma 5 DL 50/2017; AdE circolare 24/E del 2017):
+# chi INCASSA i canoni di una locazione breve di una persona fisica fuori dall'attivita'
+# d'impresa la opera «all'atto del pagamento al beneficiario». SPENTA di serie: la accende
+# l'interruttore `ritenuta` (fase81), dal bunker o con RITENUTA_ATTIVA=1.
+RITENUTA_LOCAZIONI_BREVI_BPS = 2100
+RITENUTA_NOTTI_MAX = 30          # la «locazione breve» per legge: oltre, la ritenuta non c'e'
+# i modi in cui un host scrive «Italia» nel campo paese dell'annuncio (anche l'obbligo del CIN)
+PAESI_ITALIA = ("IT", "ITA", "ITALIA", "ITALY")
+
 # Su-richiesta APPROVATA: quanto tempo ha il cliente per pagare (dall'email). ~24h come i
 # colossi (Airbnb request-to-book), dentro il massimo Stripe (sessione <= 24h): 23h55m.
 # L'hold stanza e la sessione Stripe scadono INSIEME (niente "link vivo, stanza persa").
@@ -2357,6 +2366,10 @@ class RouterHTTP:
             return self._bunker_blocco_globale_stato(headers)
         if metodo == "POST" and path == "/api/bunker/blocco_globale":
             return self._bunker_blocco_globale_imposta(body, headers)
+        if metodo == "GET" and path == "/api/bunker/ritenuta":
+            return self._bunker_ritenuta(query, headers)
+        if metodo == "POST" and path == "/api/bunker/ritenuta":
+            return self._bunker_ritenuta_imposta(body, headers)
         if metodo == "GET" and path == "/api/bunker/cambio_valuta":
             return self._bunker_cambio_valuta(headers)
         if metodo == "POST" and path == "/api/bunker/cambio_valuta/aggiorna":
@@ -3410,6 +3423,9 @@ class RouterHTTP:
         if dati is None:
             return 400, {"errore": "json_non_valido"}
         ok = reg.imposta_dati_fiscali(hid, dati)
+        # D23: una partita IVA appena scritta si chiede SUBITO al VIES (esito e prova nel registro)
+        piva = self._verifica_partita_iva(hid) if (
+            isinstance(dati.get("partita_iva"), str) and dati["partita_iva"].strip()) else ""
         info = reg.info_host(hid) or {}
         manca = self._dac7_mancanti(info)
         # SBLOCCO AUTOMATICO (Incremento 6): dati ora completi -> i payout rimasti in hold
@@ -3431,7 +3447,29 @@ class RouterHTTP:
                     logger.warning("sblocco payout post-dati-fiscali fallito (ISOLATO: "
                                    "restano 'maturato', nulla perso)", exc_info=True)
         return (200 if ok else 422), {"salvato": bool(ok), "mancanti": manca,
-                                      "payout_riprovati": riprovati}
+                                      "payout_riprovati": riprovati,
+                                      "partita_iva_verifica": piva}
+
+    def _verifica_partita_iva(self, hid):
+        """D23 -- la partita IVA dell'host chiesta al VIES (fase100), con la prova (numero di
+        consultazione) scritta nel registro. Ritorna l'esito, '' se il VIES e' spento. Mai
+        solleva: un guasto e' un esito 'errore', e la partita IVA resta NON verificata."""
+        vies = getattr(self._sys, "vies", None)
+        reg = getattr(self._sys, "registro_host", None)
+        info = (reg.info_host(hid) if reg is not None else None) or {}
+        numero = info.get("partita_iva", "")
+        if vies is None or not numero:
+            return ""
+        try:
+            r = vies(numero, info.get("paese", ""))
+        except Exception:
+            logger.error("VIES: verifica esplosa (ISOLATA) per l'host %s", hid, exc_info=True)
+            r = {"esito": "errore", "prova": "", "nome": "", "motivo": "eccezione"}
+        reg.registra_verifica_piva(hid, numero, r.get("esito"), r.get("prova", ""),
+                                   r.get("nome", ""))
+        logger.warning("PARTITA IVA AL VIES | HOST_ID: %s | ESITO: %s | PROVA: %s | MOTIVO: %s",
+                       hid, r.get("esito"), r.get("prova") or "-", r.get("motivo") or "-")
+        return r.get("esito", "")
 
     def _host_dac7_stato(self, query, headers):
         """AVVISO nel pannello host (Incremento 6): l'host DEVE sapere perche' i bonifici
@@ -3504,7 +3542,10 @@ class RouterHTTP:
                 out.append({"host_id": h["host_id"], "ragione_sociale": h["ragione_sociale"],
                             "email": h["email"], "completo": completo, "mancanti": manca,
                             "prenotazioni": n, "ricavi_cents": lordo, "reportabile": rep,
-                            "urgente": urgente, "payout_fermi_cents": fermi})
+                            "urgente": urgente, "payout_fermi_cents": fermi,
+                            # D23: cosa ha risposto il VIES, e il numero di consultazione
+                            "partita_iva_vies": h.get("piva_vies_esito", ""),
+                            "partita_iva_vies_prova": h.get("piva_vies_prova", "")})
             out.sort(key=lambda x: (not x["urgente"], x["completo"], -x["ricavi_cents"]))
         except Exception:
             logger.error("dac7 conformita: eccezione ISOLATA", exc_info=True)
@@ -4447,6 +4488,47 @@ class RouterHTTP:
                         _testo_per_registro(motivo or "-"))
         st = bg.stato()
         return (200 if ok else 500), {**st, "impostato": ok}
+
+    def _bunker_ritenuta(self, query, headers):
+        """LA RITENUTA SULLE LOCAZIONI BREVI -- stato dell'interruttore e totali dell'anno
+        (`anno`, di serie quello in corso): per MESE (l'F24) e per HOST col codice fiscale
+        (la Certificazione Unica). READ-ONLY, solo super-admin."""
+        if not self._bunker_auth(headers, azione="ritenuta"):
+            return 403, {"errore": "bunker_richiesto"}
+        import datetime as _dt
+        try:
+            anno = int(query.get("anno") or _dt.datetime.utcnow().year)
+        except (TypeError, ValueError):
+            return 422, {"errore": "anno_non_valido"}
+        rit = getattr(self._sys, "ritenuta", None)
+        fc = getattr(self._sys, "finanza", None)
+        reg = getattr(self._sys, "registro_host", None)
+        tot = fc.ritenute_anno(anno) if fc is not None else {"mesi": {}, "host": {}, "righe": []}
+        host = []
+        for hid, v in sorted(tot["host"].items()):
+            info = (reg.info_host(hid) if reg is not None else None) or {}
+            host.append({"host_id": hid, "ragione_sociale": info.get("ragione_sociale", ""),
+                         "codice_fiscale": info.get("codice_fiscale", ""), **v})
+        return 200, {**(rit.stato() if rit is not None else {"attivo": False, "assente": True}),
+                     "aliquota_bps": RITENUTA_LOCAZIONI_BREVI_BPS, "notti_max": RITENUTA_NOTTI_MAX,
+                     "anno": anno, "mesi": tot["mesi"], "host": host,
+                     "money_unit": "cents_integer"}
+
+    def _bunker_ritenuta_imposta(self, body, headers):
+        """Accende/spegne la ritenuta (solo super-admin). Body {attivo: bool, motivo: str}.
+        Chi, quando e perche' restano nel file dell'interruttore; la riga va nel registro."""
+        if not self._bunker_auth(headers, azione="ritenuta"):
+            return 403, {"errore": "bunker_richiesto"}
+        rit = getattr(self._sys, "ritenuta", None)
+        if rit is None:
+            return 503, {"errore": "ritenuta_assente"}
+        dati = self._json(body) or {}
+        attivo = bool(dati.get("attivo"))
+        motivo = str(dati.get("motivo", ""))[:200]
+        ok = rit.imposta(attivo, motivo=motivo, chi="super-admin")
+        logger.warning("RITENUTA LOCAZIONI BREVI %s | motivo=%s",
+                       "ACCESA" if attivo else "spenta", _testo_per_registro(motivo or "-"))
+        return (200 if ok else 500), {**rit.stato(), "impostato": ok}
 
     def _bunker_admin_accounts(self, headers):
         """GESTIONE PERMESSI (fase192) — elenco operatori admin. Solo super-admin. Mai salt/hash."""
@@ -6548,7 +6630,87 @@ class RouterHTTP:
         except Exception:
             logger.warning("email esito controversia fallita (ignorata)", exc_info=True)
 
-    def _trasferisci_all_host(self, rif, importo_cents):
+    def _opera_ritenuta(self, rif, rec, host_id, info, penale):
+        """LA RITENUTA SULLE LOCAZIONI BREVI, al momento del bonifico -- SOLO a interruttore
+        acceso. Ritorna True se il bonifico puo' proseguire, False se deve FERMARSI.
+
+        Spenta (di serie) non tocca niente. Accesa, trattiene `RITENUTA_LOCAZIONI_BREVI_BPS`
+        della base dal bonifico (registro dei bonifici ridotto: vale anche per chi paga a
+        mano da `da_pagare`) e scrive la riga `ritenuta` nel giornale, verso l'Erario. UNA
+        volta sola per prenotazione: la chiave e' l'evento `ritenuta:<rif>` del giornale.
+
+        NON si opera (e il bonifico prosegue intero) su: penale di una cancellazione (la
+        guida AdE esclude le somme «a titolo di deposito cauzionale o penale»), «paga in
+        struttura» (il canone non passa da noi), host con una partita IVA che il VIES ha detto
+        valida (D23), soggiorno oltre `RITENUTA_NOTTI_MAX`, casa fuori Italia (`PAESI_ITALIA`,
+        o un CIN).
+        Base: il prezzo del soggiorno pagato dall'ospite (commissione compresa, tassa di
+        soggiorno esclusa) meno cio' che l'arbitro gli ha restituito.
+
+        ⛔ FAIL-CLOSED a interruttore acceso: se non si riesce a operarla il bonifico NON parte
+        (riga ERROR per il Guardiano, il pagamento resta 'maturato'). Una ritenuta non
+        trattenuta la dobbiamo allo Stato noi: pagata all'host, non torna."""
+        interruttore = getattr(self._sys, "ritenuta", None)
+        if interruttore is None or not interruttore.attivo():
+            return True
+        try:
+            import json as _jr
+            fc = getattr(self._sys, "finanza", None)
+            pd = getattr(self._sys, "payout", None)
+            if fc is None or pd is None:
+                raise RuntimeError("giornale o registro dei bonifici assente")
+            if fc.esiste_evento("ritenuta:" + str(rif)):
+                return True                           # gia' operata: i ritentativi non la rifanno
+            corpo = _jr.loads(rec.get("corpo_json") or "{}")
+            if penale or corpo.get("modo_pagamento") == "in_struttura":
+                return True
+            # D23: esenta SOLO una partita IVA che il VIES ha detto valida -- dichiararla (o
+            # dichiararsi «societa'») non basta: chi scrive un numero falso non scavalca la ritenuta
+            if (info or {}).get("partita_iva") and (info or {}).get("piva_vies_esito") == "valida":
+                return True
+            notti = _notti_count(rec.get("check_in", ""), rec.get("check_out", ""))
+            if notti > RITENUTA_NOTTI_MAX:
+                return True
+            casa = self._sys.catalogo.dettaglio_owner(rec.get("alloggio_id", ""))
+            if not isinstance(casa, dict):
+                raise RuntimeError("annuncio non trovato: non si sa dove sia la casa")
+            if not ((casa.get("paese") or "").strip().upper() in PAESI_ITALIA or casa.get("cin")):
+                return True
+            base = int(corpo.get("prezzo_guest_cents") or 0)
+            gz = getattr(self._sys, "garanzia", None)
+            st = gz.stato(str(rif)) if gz is not None else None
+            if isinstance(st, dict):
+                base = max(0, base - int(st.get("ospite_rimborso_cents") or 0))
+            ritenuta = (base * RITENUTA_LOCAZIONI_BREVI_BPS + 5000) // 10000
+            if ritenuta <= 0:
+                return True
+            riga = pd.info(str(rif))
+            if riga is None:
+                raise RuntimeError("nessun bonifico nel registro")
+            minori = int(riga["minori"])
+            if ritenuta >= minori:
+                raise RuntimeError("la ritenuta (%d) non sta nel bonifico (%d)" % (ritenuta, minori))
+            if not pd.imposta_importo(str(rif), minori - ritenuta):
+                raise RuntimeError("registro dei bonifici non aggiornato")
+            fatto = fc.movimento(tipo="ritenuta", riferimento=str(rif),
+                                 soggetto="host:" + str(host_id), importo_cents=ritenuta,
+                                 valuta=corpo.get("valuta") or "EUR",
+                                 causale="ritenuta locazione breve | base=%d | notti=%d"
+                                 % (base, notti))
+            if not fatto:
+                pd.imposta_importo(str(rif), minori)  # senza la riga nel giornale non si trattiene
+                raise RuntimeError("giornale non scritto")
+            logger.warning("RITENUTA OPERATA | RIF: %s | HOST_ID: %s | BASE: %d | RITENUTA: %d "
+                           "| BONIFICO: %d -> %d", _rif_per_registro(rif), host_id, base,
+                           ritenuta, minori, minori - ritenuta)
+            return True
+        except Exception:
+            logger.error("RITENUTA NON OPERATA su %s (interruttore acceso): il bonifico resta "
+                         "FERMO finche' una persona non guarda", _rif_per_registro(rif),
+                         exc_info=True)
+            return False
+
+    def _trasferisci_all_host(self, rif, importo_cents, penale=False):
         """SOLDI ALL'HOST IN AUTOMATICO (strategia fondatore): allo sblocco dell'escrow
         (ok cliente / 24h di silenzio / esito controversia), se l'host ha Stripe collegato
         e la prenotazione era PAGATA online, il netto parte da solo verso il suo conto.
@@ -6556,7 +6718,9 @@ class RouterHTTP:
         per riferimento + guardia stato payout), ISOLATO (mai blocca il rilascio).
         ENFORCEMENT DAC7: host reportabile senza dati fiscali -> il transfer NON parte, il
         payout resta 'maturato' (tracciato, mai perso) e si sblocca da solo quando l'host
-        completa i dati (retry in _host_dati_fiscali)."""
+        completa i dati (retry in _host_dati_fiscali).
+        LA RITENUTA (interruttore acceso) si opera PRIMA di guardare se l'host ha Stripe: cosi'
+        vale anche per il bonifico manuale. `penale=True` dalla cancellazione con penale."""
         try:
             if self._transazioni_bloccate():          # kill-switch globale: nessun bonifico
                 return                                # (payout resta 'maturato', mai perso; riparte a freeze off)
@@ -6584,6 +6748,8 @@ class RouterHTTP:
                 return
             host_id = rec.get("host_id") or ""
             info = reg.info_host(host_id) if host_id else None
+            if not self._opera_ritenuta(rif, rec, host_id, info, penale):
+                return                                # ritenuta non operata: il bonifico aspetta
             acct = (info or {}).get("stripe_account_id", "")
             if not acct:
                 return                                # host non collegato -> bonifico manuale
@@ -7274,7 +7440,7 @@ class RouterHTTP:
                     pd.imposta_importo(rif, host_tiene)
             except Exception:
                 logger.warning("riallineo payout su penale fallito (ignorato)", exc_info=True)
-            self._trasferisci_all_host(rif, host_tiene)
+            self._trasferisci_all_host(rif, host_tiene, penale=True)   # una penale non e' canone
         else:
             self._payout_trattieni(rif)        # nessuna quota host -> niente payout
         # STORNA SEMPRE (non solo se pagato_davvero): il tombstone del ledger tassa deve
@@ -10163,7 +10329,7 @@ class RouterHTTP:
         # multe 500-5.000EUR per annuncio senza). Policy del marketplace, il motore fase57
         # resta neutro. Vale solo per stato 'pubblicato': la bozza si puo' salvare.
         if (scheda.stato == "pubblicato" and not scheda.cin
-                and scheda.paese.strip().upper() in ("IT", "ITA", "ITALIA", "ITALY")):
+                and scheda.paese.strip().upper() in PAESI_ITALIA):
             return 422, {"errore": "cin_obbligatorio_italia"}
         # SOLO una vera lista: `get("immagini", [])` difende dalla chiave MANCANTE ma non
         # da un valore avvelenato (None/numero/bool -> enumerate esplodeva in 500; una

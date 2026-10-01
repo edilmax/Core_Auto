@@ -833,7 +833,11 @@ class TestContrattoRegistroHostFase88(BaseContratto, unittest.TestCase):
             "data_nascita TEXT NOT NULL", "verifica_stato TEXT NOT NULL",
             "verifica_note TEXT NOT NULL", "verifica_ts TEXT NOT NULL",
             "verifica_da TEXT NOT NULL", "stripe_customer_id TEXT NOT NULL",
-            "stripe_payment_method TEXT NOT NULL"),
+            "stripe_payment_method TEXT NOT NULL",
+            # D23 (2026-09-30): la partita IVA chiesta al VIES -- esito, quando, il numero di
+            # consultazione (la prova del controllo) e il nome che risponde lo Stato
+            "piva_vies_esito TEXT NOT NULL", "piva_vies_ts TEXT NOT NULL",
+            "piva_vies_prova TEXT NOT NULL", "piva_vies_nome TEXT NOT NULL"),
         # ANTI-RICICLO DELLA PROMOZIONE (aggiunta il 2026-07-31, dopo che questo contratto
         # era stato scritto): impronte IRREVERSIBILI di email, telefono, codice fiscale e CIN,
         # per impedire che un host si cancelli e si ri-iscriva ripartendo dal 0% dei primi 90

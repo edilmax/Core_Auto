@@ -17,6 +17,7 @@ import os
 
 from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import servi
+from fase185_testi_legali import GESTORE
 
 
 # Segnaposto di `.env.casavip.example`. Quel file sta su GitHub: usarli sul serio
@@ -169,6 +170,9 @@ def main() -> None:  # pragma: no cover
         whatsapp_token=os.environ.get("WHATSAPP_TOKEN", ""),
         whatsapp_phone_id=os.environ.get("WHATSAPP_PHONE_ID", ""),
         oxr_app_id=os.environ.get("OXR_APP_ID", ""),
+        # D23: la partita IVA degli host si chiede al VIES col NOSTRO numero come richiedente
+        # (il numero di consultazione che torna e' la prova). VIES_RICHIEDENTE vuota lo spegne.
+        vies_richiedente=os.environ.get("VIES_RICHIEDENTE", "IT" + GESTORE["piva"]),
         con_mcp=True,
         con_sentinel=os.environ.get("SENTINEL", "").lower() in ("1", "true", "yes"),
         cartella_sentinel=os.environ.get("SENTINEL_DIR") or ".",
