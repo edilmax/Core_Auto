@@ -3435,7 +3435,97 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 0deb17f
+CONSEGNE AGGIORNATE A: 1a0326a
+
+## PASSAGGIO DI CONSEGNE 28 (2026-10-01 pomeriggio) - IL CHECK-IN ONLINE COSTRUITO E SPENTO COL SUO PULSANTE: IN ITALIA RACCOGLIE LA SCHEDINA, I DATI SI CANCELLANO DA SOLI, L'INFORMATIVA LO DICE; RAMO NUOVO `questura-checkin`, NON SI UNISCE STASERA:
+- ⚠️ CONTESTO: 66%, letto dal fondatore con `/context` dopo le 12:32 (l'ultima ora letta dal computer
+  prima). La soglia del 50% (D21) era gia'
+  passata e non l'ho fermata io: da quel momento niente lavoro nuovo, solo la chiusura di questo blocco.
+- DECISIONE DEL FONDATORE (1/10, dopo che avevo scritto la nota per l'avvocato): «se raccogliamo i
+  dati per conto dell'host ... ci infognamo; come fanno tutti, il check-in lo fai quando arrivi li'»;
+  poi: «tu mettila e mettiamo un pulsante per accendere e spegnere ... un domani l'attiviamo dal
+  pulsante». Quindi: il check-in online resta nel codice ma SPENTO DI SERIE (`fase81.checkin_online`,
+  lo stesso interruttore della ritenuta: file `checkin_online_attivo.flag` accanto all'archivio del
+  check-in, leva `CHECKIN_ONLINE_ATTIVO=1`); spento, il voucher non mostra nessun modulo e la rotta
+  risponde 409 `checkin_online_spento`; si accende dal bunker (scheda «Check-in online degli ospiti»,
+  8 lingue; rotte `/api/bunker/checkin_online`, solo super-admin). L'informativa dice «se e' acceso».
+  E il fondatore: «fai le prove se funziona, mettili a caso i dati» -> fatto (sotto, PROVE).
+- CI di 1a0326a (blocco 2, tabella dall'API): 16 controlli, gate SUCCESS, tutti success tranne `zap`
+  skipped. La #238 col blocco 2 e' verde.
+- PERMESSI: quelli delle consegne 27; poi il fondatore, fuori casa: «Tu intanto vai avanti piu' che puoi»
+  e «Verifiche browser». Scelta tecnica mia: il blocco 3 sta sul ramo `questura-checkin` (nato da 1a0326a,
+  richiesta di unione da aprire) e NON entra nel deploy di stasera, cosi' #236 -> #237 -> #238 restano
+  come deciso. ⚠️ La dichiarazione `--nonostante` del pre-volo la scrivo io, non il fondatore, anche se
+  l'attrezzo la stampa come «motivo del fondatore».
+- FONTI (D25): Garante privacy, comunicato del 29/4/2026 (docweb 10244195): trasmessi alla Questura, le
+  copie dei documenti «devono essere immediatamente cancellate o distrutte», si conserva solo la ricevuta
+  del portale (5 anni, la tiene l'host); art. 109 TULPS esteso alle locazioni brevi (DL 113/2018 art.
+  19-bis), entro 24 ore dall'arrivo; TAR Lazio n. 10210 del 27/5/2025 ha annullato la circolare che vietava
+  il self check-in; il manuale CREAFILE.pdf: il portale accetta solo arrivi di oggi o di ieri.
+- TRE DIFETTI VIVI, guardia vista ROSSA prima (`test_checkin_questura.py`, 16 prove: 9 fallite e 5 in
+  errore sul codice di prima, per esempio «200 != 422 : {'ok': True, 'ospiti': 1}»): (1) in Italia il
+  check-in raccoglieva solo nome e numero di documento, con cui la schedina non si scrive; (2) i dati degli
+  ospiti restavano per sempre; (3) l'informativa non nominava i dati del check-in e diceva «NON conserviamo
+  documenti d'identita'». In produzione oggi: 3 righe nell'archivio del check-in, 1 con dati (la prova del
+  fondatore del 30/9), 2 revocate (letto in sola lettura, nessun dato stampato).
+- COSA C'E' ORA (sul ramo): in Italia (paese o CIN, `fase83._in_italia`) la rotta del check-in vuole i
+  campi della schedina e li controlla con `fase151.errori_schedina` sulle tabelle ufficiali; il ruolo lo da'
+  la posizione (uno = singolo; altrimenti capofamiglia + familiari, o capogruppo + membri con `gruppo`);
+  un rifiuto dice quale ospite e perche'. Fuori dall'Italia niente cambia. `fase127` salva la data di
+  arrivo e `cancella_dati_scaduti` svuota i dati (resta `completato`, la porta si apre); il giro orario
+  `checkin_conservazione_una_passata` (fase83, avviato da `servi`) legge il termine dall'informativa:
+  `fase185.GIORNI_CONSERVAZIONE_CHECKIN`; le righe senza data (scritte prima) si svuotano al primo giro.
+  Informativa nelle 8 lingue: i dati del check-in, l'art. 109, il termine; versione privacy 2026-10-01
+  (anche il ripiego in `fase163`), quindi gli host la riaccettano (in produzione solo l'account di prova).
+  Pagina del voucher: in Italia il modulo nuovo (cognome, nome, sesso, nascita, stato e comune di nascita,
+  cittadinanza; documento, numero e luogo di rilascio per chi guida; «siamo un gruppo»; la riga
+  d'informativa col termine); rotte di sola lettura `/api/alloggiati/tabelle` e `/api/alloggiati/comuni`.
+- PROVE: `test_checkin_questura.py` 28 prove; quelle della pagina viste rosse togliendo il modulo (2 su 2),
+  ripristino sha256 identico. Prove vecchie riportate ai dati veri (in Italia mandavano nome e documento):
+  test_happy_soldi, test_profondo_idempotenza, test_rotte_ostile; test_testi_legali col meccanismo della
+  promessa nuova. Vicine: 229 prove OK. Mutazione sulle righe nuove (occhi scelti a mano, attrezzo nello
+  scratchpad): primo giro 10 su 22 -> sette prove in piu' (fra cui una che accende il server vero e vede il
+  giro partire e sopravvivere a un errore) -> 21 su 22; 1 NON DETERMINABILE: `daemon=True` -> `False`
+  tiene vivo il processo e la prova va oltre il tempo (un guasto vero, visto come blocco); rinunce del
+  generatore: a_cavallo 2. Browser vero: `collaudi/checkin_questura_browser.js` (nuovo, nel job `browser`
+  della CI sul banco 3): VERDE sul PC; ROSSO (uscita 2) con l'indirizzo delle tabelle rotto, ripristino
+  identico. I 7 percorsi del browser gia' esistenti, rifatti sul PC su questo ramo con l'ambiente della
+  CI: 7 su 7 verdi (un primo rosso dei pannelli veniva dal mio lanciatore con la marca temporale spenta:
+  503 sulle due rotte delle marche nel bunker). ruff, bandit, gitleaks: nessuna nuova. Caricatore 7180.
+- DOPO LA DECISIONE (interruttore e dati a caso): guardie dell'interruttore viste ROSSE prima (4 su 4:
+  rotte del bunker 404, modulo mostrato e dati presi a interruttore spento); le 8 prove vecchie del
+  check-in lo accendono con `setUpModule` (descrivono quello acceso). DATI A CASO: `TestDatiMessiACaso`,
+  60 famiglie e gruppi inventati coi codici delle tabelle ufficiali, tutti accettati con schedine da
+  168 caratteri, e 60 dati rotti a caso, tutti rifiutati nominando l'ospite giusto; il percorso col
+  browser preme «Accendi» nel bunker, compila con dati a caso (seme stampato, `SEME=` per rifarlo) e
+  preme «Spegni»: verde con 5 semi (43708, 1, 777, 31415, 99991). `test_checkin_questura.py` 36 prove.
+  TROVATI PER STRADA dai dati a caso e dal browser: (1) un nome con Ø (Søren), ß o Ł viene rifiutato
+  (regola del 30/9) e il modulo dice solo «Nome»: serve la traslitterazione del documento (ICAO 9303)
+  o un messaggio che spieghi -- APERTO, prima di accendere; (2) il banco del browser teneva il check-in
+  in memoria (`avvia_server_visivo.py`: ora su file, come la produzione); (3) DIFETTO VIVO: il registro
+  scriveva «CHECK-IN ONLINE ACCESO» anche quando l'interruttore non si scriveva (risposta 500): guardia
+  rossa prima, ora scrive l'esito; LA STESSA RIGA DELLA RITENUTA (#237, `_bunker_ritenuta_imposta`) HA
+  LO STESSO DIFETTO, APERTO; (4) il mio generatore a caso dava sempre lo stesso primo cognome
+  (16807 = 7^5), corretto. Giro delle rotte: 143 rotte (4 nuove), README 435 file di prova.
+  Browser con l'ambiente della CI: pannelli verdi con i 2 pulsanti nuovi (26 visibili, 24 cliccati).
+- LIMITI DICHIARATI: i nomi di stati e documenti sono quelli ufficiali, in italiano; oltre 30 notti la
+  persona si controlla come per 30 (il file dira' che serve una schedina nuova); se l'annuncio non si
+  legge la rotta usa il modulo di sempre (come prima); dopo un rifiuto l'ospite reinserisce tutti; nessun
+  esame del «cancellami» guarda l'archivio del check-in (`collaudi/esame_oblio.py` non lo nomina).
+  PER L'AVVOCATO: raccogliamo i dati per conto dell'host (titolare, obbligato dall'art. 109): serve la
+  nomina a responsabile del trattamento (art. 28 GDPR) nel contratto host.
+- RESTA, in ordine:
+  1. suite intera, commit, push, richiesta di unione del ramo `questura-checkin` (base master), CI;
+     revisione di GML 5.3 (il Compito 10 sul blocco 2 e' ancora senza risposta); poi `/clear`;
+  2. il ramo si puo' unire DOPO la #238 anche cosi': spento di serie non mostra e non raccoglie niente
+     (e l'informativa nuova va riaccettata dagli host). ⛔ PRIMA DI ACCENDERLO: il file per l'host dal
+     pannello (arrivi di oggi e di ieri, `fase151.genera_file` con `oggi`, tasto «ho inviato» che
+     cancella subito i dati); i nomi con Ø ß Ł; la nomina a responsabile del trattamento (avvocato);
+  3. giovedi' sera: incasso di a2c63fd8, controversia dal pannello admin, unione #236 -> #237 -> #238 e
+     deploy coi punti «al deploy» delle consegne 24-27;
+  4. il motore che avvisa dei prezzi delle OTA (consegne 26): prima leggere fase189 e fase190.
+- AL DEPLOY DI QUESTO RAMO (non stasera): gli host riaccettano la privacy; al primo giro orario la riga
+  di prova con dati in produzione si svuota (e' senza data di arrivo).
 
 ## PASSAGGIO DI CONSEGNE 27 (2026-10-01 mattina) - IL SITO SERVE SOLO LE PAGINE: SCRIPT, CONFIGURAZIONI E COPIE DI `deploy/` NON ESCONO PIU' (ramo `questura-fase151`, va col deploy); NIENTE IN PRODUZIONE:
 - STATO VERIFICATO all'inizio (05:57Z, `git rev-parse` / `git ls-remote` / ssh / API): master 6889a7a su
@@ -4946,7 +5036,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 7152 test
+SUITE ATTUALE: Ran 7187 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

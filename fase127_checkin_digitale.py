@@ -9,6 +9,7 @@ dello sblocco. Store DUREVOLE SQLite. Orologio iniettabile. BLINDATO: errore →
 from __future__ import annotations
 
 import contextlib
+import datetime
 import json
 import logging
 import re
@@ -20,6 +21,11 @@ from typing import Any, Callable, Dict, List, Optional
 logger = logging.getLogger("core_auto.checkin_digitale")
 
 _DOC = re.compile(r"^[A-Za-z0-9]{5,20}$")
+# Per gli alloggi in Italia: i campi della schedina di Alloggiati Web. Li controlla chi chiama
+# (fase83, con `fase151.errori_schedina` e le tabelle ufficiali); qui si conservano e basta.
+CAMPI_QUESTURA = ("ruolo", "cognome", "nome", "sesso", "data_nascita", "comune_nascita",
+                  "prov_nascita", "stato_nascita", "cittadinanza", "tipo_doc", "num_doc",
+                  "luogo_doc")
 
 
 class _ConnCondivisa:
@@ -39,8 +45,10 @@ class _ConnCondivisa:
         return getattr(self._con, n)
 
 
-def valida_ospiti(ospiti: Any, capacita: int) -> Optional[List[Dict[str, str]]]:
-    """Lista ospiti valida (nome + documento formattato) entro capacità. None se invalida."""
+def valida_ospiti(ospiti: Any, capacita: int, *,
+                  questura: bool = False) -> Optional[List[Dict[str, str]]]:
+    """Lista ospiti valida (nome + documento formattato) entro capacità. None se invalida.
+    Con `questura` ogni ospite porta i `CAMPI_QUESTURA`, gia' controllati da chi chiama."""
     if not isinstance(ospiti, (list, tuple)) or not ospiti:
         return None
     cap = capacita if isinstance(capacita, int) and not isinstance(capacita, bool) else 0
@@ -50,6 +58,9 @@ def valida_ospiti(ospiti: Any, capacita: int) -> Optional[List[Dict[str, str]]]:
     for o in ospiti:
         if not isinstance(o, dict):
             return None
+        if questura:
+            out.append({k: str(o.get(k) or "").strip() for k in CAMPI_QUESTURA})
+            continue
         nome = str(o.get("nome", "")).strip()
         doc = str(o.get("documento", "")).strip()
         if not (2 <= len(nome) <= 80 and _DOC.match(doc)):
@@ -94,14 +105,20 @@ class CheckinDigitale:
                         con.execute("ALTER TABLE checkin ADD COLUMN revocato INTEGER NOT NULL DEFAULT 0")
                     except sqlite3.OperationalError:
                         pass
+                    # la data di arrivo: decide quando i dati degli ospiti si cancellano
+                    try:
+                        con.execute("ALTER TABLE checkin ADD COLUMN arrivo TEXT NOT NULL DEFAULT ''")
+                    except sqlite3.OperationalError:
+                        pass
             finally:
                 con.close()
 
     def pre_registra(self, prenotazione_id: str, alloggio_id: str, ospiti: Any,
-                     capacita: int) -> Dict[str, Any]:
+                     capacita: int, *, arrivo: str = "",
+                     questura: bool = False) -> Dict[str, Any]:
         if not (prenotazione_id and alloggio_id):
             return {"ok": False, "errore": "id_mancante"}
-        val = valida_ospiti(ospiti, capacita)
+        val = valida_ospiti(ospiti, capacita, questura=questura)
         if val is None:
             return {"ok": False, "errore": "ospiti_non_validi"}
         with self._lock:
@@ -118,9 +135,10 @@ class CheckinDigitale:
                     if r is not None and int(r[0] if not hasattr(r, "keys") else r["revocato"]):
                         return {"ok": False, "errore": "prenotazione_cancellata"}
                     con.execute("INSERT OR REPLACE INTO checkin (prenotazione_id, alloggio_id, "
-                                "ospiti_json, ts, completato, revocato) VALUES (?,?,?,?,1,0)",
+                                "ospiti_json, ts, completato, revocato, arrivo) "
+                                "VALUES (?,?,?,?,1,0,?)",
                                 (str(prenotazione_id), str(alloggio_id),
-                                 json.dumps(val), self._now()))
+                                 json.dumps(val), self._now(), str(arrivo or "")))
                 return {"ok": True, "ospiti": len(val)}
             except Exception:
                 logger.warning("pre_registra fallita (ISOLATA)", exc_info=True)
@@ -169,6 +187,26 @@ class CheckinDigitale:
             except Exception:
                 logger.warning("revoca check-in fallita (ISOLATA)", exc_info=True)
                 return False
+            finally:
+                con.close()
+
+    def cancella_dati_scaduti(self, oggi: datetime.date, giorni: int) -> int:
+        """Svuota i dati degli ospiti quando sono passati `giorni` dalla data di arrivo, e
+        subito se la data non c'e' (righe scritte prima che la si salvasse: non si sa fino a
+        quando servono). `completato` resta: la porta si apre ancora. Quante righe ha
+        svuotato; -1 se non e' riuscito (e lo scrive nel registro)."""
+        limite = (oggi - datetime.timedelta(days=int(giorni))).isoformat()
+        with self._lock:
+            con = self._apri()
+            try:
+                with con:
+                    cur = con.execute(
+                        "UPDATE checkin SET ospiti_json='[]' WHERE ospiti_json != '[]' "
+                        "AND (arrivo = '' OR arrivo <= ?)", (limite,))
+                return cur.rowcount
+            except Exception:
+                logger.error("cancellazione dei dati del check-in fallita", exc_info=True)
+                return -1
             finally:
                 con.close()
 

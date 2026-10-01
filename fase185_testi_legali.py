@@ -43,7 +43,7 @@ LINGUA_CHE_FA_FEDE = "it"
 LINGUA_RIPIEGO = "en"
 
 TERMINI_VERSIONE = "2026-09-29"   # indirizzo del gestore corretto: Via Palestro (D1 della prova vera)
-PRIVACY_VERSIONE = "2026-09-29"   # indirizzo del titolare corretto: Via Palestro (D1 della prova vera)
+PRIVACY_VERSIONE = "2026-10-01"   # i dati del check-in per la Questura (art. 109 TULPS)
 
 # Per quanti ANNI si tengono le comunicazioni di una prenotazione (chat e prove foto).
 # ⛔ QUESTO E' L'UNICO POSTO DOVE IL TERMINE ESISTE. `_componi` lo sostituisce in tutte e
@@ -58,6 +58,13 @@ PRIVACY_VERSIONE = "2026-09-29"   # indirizzo del titolare corretto: Via Palestr
 # Deciso dal fondatore il 2026-09-11 («va bene una regola sola»): una regola sola per tutte
 # le comunicazioni. I SOLDI seguono il loro termine, piu' lungo, imposto dalla legge.
 ANNI_CONSERVAZIONE_CHAT = 2
+
+# Dopo quanti GIORNI dalla data di arrivo si cancellano i dati degli ospiti del check-in.
+# Stessa regola del termine qui sopra: esiste solo qui, `_componi` lo scrive nelle otto
+# lingue e il giro che cancella (`fase83.checkin_conservazione_una_passata`) lo legge da qui.
+# Perche' cosi' pochi: il portale Alloggiati Web accetta solo arrivi di oggi o di ieri, e il
+# Garante (comunicato del 29/4/2026) vuole che i dati trasmessi alla Questura non si tengano.
+GIORNI_CONSERVAZIONE_CHECKIN = 2
 
 # Dati del titolare: UNA sola volta, riusati in tutte le lingue. Se cambiano, cambiano
 # ovunque insieme — impossibile che una traduzione resti con l'indirizzo vecchio.
@@ -686,7 +693,7 @@ def _componi(modello: str, versione: str) -> str:
         PROMO=p["promo"], GG=p["giorni_promo"], FASE1=p["fase1"],
         REGIME=p["regime"], DIRETTO=p["diretto"], TECNICA=p["tecnica"],
         TECNICA_EST=p["tecnica_estera"], FISSO=p["fisso"],
-        ANNI_CHAT=ANNI_CONSERVAZIONE_CHAT,
+        ANNI_CHAT=ANNI_CONSERVAZIONE_CHAT, GIORNI_CHECKIN=GIORNI_CONSERVAZIONE_CHECKIN,
         PENALE=_penale())
 
 
@@ -763,8 +770,16 @@ erhoben, wenn das Gesetz es verlangt (EU-Richtlinie 2021/514, DAC7).
 Technische Daten: IP-Adresse, Geraetetyp, Datum und Uhrzeit relevanter Vorgaenge.
 Wir verarbeiten KEINE Kartendaten: die Zahlung erfolgt beim zugelassenen Anbieter
 (Stripe), der sie unmittelbar verwahrt.
-Wir speichern KEINE Ausweisdokumente: die Identitaetspruefung, sofern sie stattfindet,
-wird von einem Dritten durchgefuehrt, der uns nur das Ergebnis zurueckmeldet.
+Online-Check-in-Daten, wenn er eingeschaltet ist und die Unterkunft in Italien liegt:
+von jedem Gast Nachname, Vorname,
+Geschlecht, Geburtsdatum und -ort, Staatsangehoerigkeit; von der Person, die die Familie
+oder die Gruppe anfuehrt, auch Art, Nummer und Ausstellungsort des Ausweises. Sie verlangt
+Art. 109 des italienischen Gesetzes ueber die oeffentliche Sicherheit (TULPS): der
+Gastgeber muss sie innerhalb von 24 Stunden nach der Ankunft der Questura (Polizei)
+melden. Ausserhalb Italiens: Name und Ausweisnummer.
+Wir speichern KEINE Kopien oder Fotos von Ausweisdokumenten: die Identitaetspruefung,
+sofern sie stattfindet, wird von einem Dritten durchgefuehrt, der uns nur das Ergebnis
+zurueckmeldet.
 
 2. WARUM UND AUF WELCHER RECHTSGRUNDLAGE
 Zur Vertragserfuellung (Art. 6.1.b): Konto anlegen, Buchungen und Zahlungen abwickeln.
@@ -790,6 +805,9 @@ geloescht.
 Buchhaltungs- und Steuerdaten: 10 Jahre, wie gesetzlich vorgeschrieben.
 Zustimmungsnachweise: fuer die Dauer der Beziehung und die Verjaehrungsfrist.
 Technische Sicherheitsdaten: 12 Monate.
+Check-in-Daten: sie werden {GIORNI_CHECKIN} Tage nach dem Ankunftsdatum automatisch geloescht
+(das Portal der italienischen Staatspolizei nimmt nur Ankuenfte von heute oder gestern an);
+es bleibt nur die Angabe, dass der Check-in erfolgt ist.
 
 5. AN WEN WIR SIE WEITERGEBEN
 An den Zahlungsdienstleister (Stripe), den E-Mail-Anbieter, den Anbieter der
@@ -848,8 +866,15 @@ solicitados apenas quando a lei o exige (Diretiva UE 2021/514, DAC7).
 Dados tecnicos: endereco IP, tipo de dispositivo, data e hora das acoes relevantes.
 NAO tratamos os dados do seu cartao: o pagamento ocorre no prestador autorizado (Stripe),
 que os guarda diretamente.
-NAO conservamos documentos de identidade: a verificacao de identidade, quando ocorre, e
-realizada por um prestador terceiro que apenas nos devolve o resultado.
+Dados do check-in online, quando esta ativado e o alojamento fica em Italia: de cada
+hospede apelido, nome, sexo,
+data e local de nascimento, nacionalidade; de quem lidera a familia ou o grupo tambem o
+tipo, o numero e o local de emissao do documento. Sao exigidos pelo art. 109 da lei
+italiana de seguranca publica (TULPS): o anfitriao deve comunica-los a Questura (policia)
+nas 24 horas seguintes a chegada. Fora de Italia: nome e numero do documento.
+NAO conservamos copias nem fotografias de documentos de identidade: a verificacao de
+identidade, quando ocorre, e realizada por um prestador terceiro que apenas nos devolve o
+resultado.
 
 2. PORQUE OS TRATAMOS E COM QUE FUNDAMENTO
 Para execucao do contrato (art. 6.1.b): criar a conta, gerir reservas e pagamentos.
@@ -874,6 +899,9 @@ directamente para {EMAIL} seguem o mesmo prazo e sao eliminados a mao.
 Dados contabilisticos e fiscais: 10 anos, conforme a lei exige.
 Provas de aceitacao: durante toda a relacao e o prazo de prescricao.
 Dados tecnicos de seguranca: 12 meses.
+Dados do check-in: sao apagados automaticamente {GIORNI_CHECKIN} dias depois da data de
+chegada (o portal da Policia de Estado italiana so aceita chegadas de hoje ou de ontem);
+fica apenas a indicacao de que o check-in foi feito.
 
 5. A QUEM OS COMUNICAMOS
 Ao prestador de pagamentos (Stripe), ao prestador de correio eletronico, ao prestador de
@@ -929,8 +957,12 @@ versao ITALIANA.
 技術情報：IPアドレス、端末の種類、重要な操作の日時。
 カード情報は取り扱いません：決済は認可された決済事業者（Stripe）で行われ、同社が直接保管し
 ます。
-本人確認書類は保存しません：本人確認を行う場合、第三者事業者が実施し、当社には結果のみが返
-されます。
+オンラインチェックイン情報（オンになっていて宿泊施設がイタリアにある場合）：各宿泊者の姓、名、性別、生年月日、出生地、
+国籍。家族またはグループの代表者については、身分証明書の種類、番号、発行地も含みます。これは
+イタリア公安統一法（TULPS）第109条が求めるもので、ホストは到着から24時間以内に警察署
+（Questura）へ届け出なければなりません。イタリア国外の場合：氏名と身分証明書の番号。
+本人確認書類のコピーや写真は保存しません：本人確認を行う場合、第三者事業者が実施し、当社には
+結果のみが返されます。
 
 2. 利用目的と法的根拠
 契約の履行のため（第6条1項b）：アカウント作成、予約および決済の処理。
@@ -949,6 +981,9 @@ versao ITALIANA.
 会計・税務情報：法律の定めにより10年。
 同意の証拠：関係の継続期間および時効期間。
 技術的な安全性の情報：12か月。
+チェックイン情報：到着日から{GIORNI_CHECKIN}日後に自動的に削除されます（イタリア国家警察の
+ポータルは本日または前日の到着しか受け付けません）。チェックインが完了したという記録のみが
+残ります。
 
 5. 提供先
 決済事業者（Stripe）、メール送信事業者、本人確認事業者（利用する場合）、法律が求める場合の
@@ -995,7 +1030,10 @@ versao ITALIANA.
 房东税务数据：税号或增值税号、地址、IBAN — 仅在法律要求时收集（欧盟指令2021/514，DAC7）。
 技术数据：IP地址、设备类型、重要操作的日期和时间。
 我们不处理您的银行卡数据：付款在获授权的支付服务商（Stripe）完成，由其直接保管。
-我们不保存身份证件：如需身份验证，由第三方服务商执行，仅将结果返回给我们。
+在线入住登记数据（已开启且房源位于意大利时）：每位住客的姓、名、性别、出生日期和出生地、国籍；带领家庭或
+团体的人还包括证件的类型、号码和签发地。这是意大利《公共安全法统一文本》（TULPS）第109条的
+要求：房东须在住客抵达后24小时内向警察局（Questura）申报。意大利境外：姓名和证件号码。
+我们不保存身份证件的复印件或照片：如需身份验证，由第三方服务商执行，仅将结果返回给我们。
 
 2. 处理目的与法律依据
 为履行合同（第6.1.b条）：创建账户、处理预订与付款。
@@ -1013,6 +1051,8 @@ versao ITALIANA.
 会计与税务数据：依法保存10年。
 同意证据：关系存续期间及诉讼时效期间。
 技术安全数据：12个月。
+入住登记数据：在抵达日期后{GIORNI_CHECKIN}天自动删除（意大利国家警察的门户网站只接受当天或
+前一天的抵达）；仅保留"已完成入住登记"的记录。
 
 5. 我们向谁提供
 支付服务商（Stripe）、邮件服务商、使用时的身份验证服务商、法律要求时的主管机关，以及预订
@@ -1059,8 +1099,14 @@ quando la legge lo impone (Direttiva UE 2021/514, DAC7).
 Dati tecnici: indirizzo IP, tipo di dispositivo, data e ora delle azioni rilevanti.
 NON trattiamo i dati della tua carta: il pagamento avviene presso il gestore autorizzato
 (Stripe), che li custodisce direttamente.
-NON conserviamo documenti d'identita': la verifica dell'identita', quando avviene, e'
-eseguita da un fornitore terzo che ci restituisce solo l'esito.
+Dati del check-in online, se e' acceso e l'alloggio e' in Italia: di ogni ospite
+cognome, nome, sesso,
+data e luogo di nascita, cittadinanza; di chi guida la famiglia o il gruppo anche tipo,
+numero e luogo di rilascio del documento. Li chiede l'art. 109 del Testo unico delle leggi
+di pubblica sicurezza (TULPS): l'Host deve comunicarli alla Questura entro 24 ore
+dall'arrivo. Fuori dall'Italia: nome e numero del documento.
+NON conserviamo copie o foto dei documenti d'identita': la verifica dell'identita', quando
+avviene, e' eseguita da un fornitore terzo che ci restituisce solo l'esito.
 
 2. PERCHE' LI TRATTIAMO E CON QUALE BASE GIURIDICA
 Per eseguire il contratto che ci lega (art. 6.1.b): creare l'account, gestire prenotazioni
@@ -1086,6 +1132,9 @@ a {EMAIL} seguono lo stesso termine e si cancellano a mano.
 Dati contabili e fiscali: 10 anni, come impone la legge.
 Prove di accettazione: per tutta la durata del rapporto e per il periodo di prescrizione.
 Dati tecnici di sicurezza: 12 mesi.
+Dati del check-in: si cancellano da soli {GIORNI_CHECKIN} giorni dopo la data di arrivo (il
+portale della Polizia di Stato accetta solo arrivi di oggi o di ieri); resta soltanto
+l'indicazione che il check-in e' stato fatto.
 
 5. A CHI LI COMUNICHIAMO
 Al gestore dei pagamenti (Stripe), al fornitore di posta elettronica, al fornitore di
@@ -1140,8 +1189,15 @@ requires it (EU Directive 2021/514, DAC7).
 Technical data: IP address, device type, date and time of relevant actions.
 We do NOT process your card details: payment takes place with the authorised provider
 (Stripe), which holds them directly.
-We do NOT store identity documents: identity verification, where it occurs, is performed
-by a third-party provider that returns only the outcome to us.
+Online check-in data, when it is switched on and the accommodation is in Italy: for each
+guest surname, first name, sex,
+date and place of birth, citizenship; for the person leading the family or the group also
+the type, number and place of issue of the identity document. They are required by Art.
+109 of the Italian Consolidated Law on Public Security (TULPS): the Host must report them
+to the Questura (police) within 24 hours of arrival. Outside Italy: name and document
+number.
+We do NOT store copies or photos of identity documents: identity verification, where it
+occurs, is performed by a third-party provider that returns only the outcome to us.
 
 2. WHY WE PROCESS THEM AND ON WHAT LEGAL BASIS
 To perform our contract (Art. 6.1.b): creating the account, handling bookings and payments.
@@ -1166,6 +1222,9 @@ follow the same period and are deleted manually.
 Accounting and tax data: 10 years, as required by law.
 Evidence of acceptance: for the duration of the relationship and the limitation period.
 Technical security data: 12 months.
+Check-in data: deleted automatically {GIORNI_CHECKIN} days after the arrival date (the
+Italian State Police portal only accepts arrivals of today or yesterday); only the record
+that the check-in was done remains.
 
 5. WHO WE SHARE THEM WITH
 The payment provider (Stripe), the email provider, the identity verification provider when
@@ -1221,8 +1280,15 @@ cuando la ley lo exige (Directiva UE 2021/514, DAC7).
 Datos tecnicos: direccion IP, tipo de dispositivo, fecha y hora de las acciones relevantes.
 NO tratamos los datos de tu tarjeta: el pago se realiza en el proveedor autorizado
 (Stripe), que los custodia directamente.
-NO conservamos documentos de identidad: la verificacion de identidad, cuando se produce,
-la realiza un proveedor externo que solo nos devuelve el resultado.
+Datos del check-in online, si esta activado y el alojamiento esta en Italia: de cada
+huesped apellidos,
+nombre, sexo, fecha y lugar de nacimiento, ciudadania; de quien encabeza la familia o el
+grupo tambien el tipo, el numero y el lugar de expedicion del documento. Los exige el art.
+109 de la ley italiana de seguridad publica (TULPS): el anfitrion debe comunicarlos a la
+Questura (policia) en las 24 horas siguientes a la llegada. Fuera de Italia: nombre y
+numero del documento.
+NO conservamos copias ni fotos de documentos de identidad: la verificacion de identidad,
+cuando se produce, la realiza un proveedor externo que solo nos devuelve el resultado.
 
 2. POR QUE LOS TRATAMOS Y CON QUE BASE JURIDICA
 Para ejecutar el contrato (art. 6.1.b): crear la cuenta, gestionar reservas y pagos.
@@ -1247,6 +1313,9 @@ directamente a {EMAIL} siguen el mismo plazo y se borran manualmente.
 Datos contables y fiscales: 10 anos, como exige la ley.
 Pruebas de aceptacion: durante toda la relacion y el plazo de prescripcion.
 Datos tecnicos de seguridad: 12 meses.
+Datos del check-in: se borran solos {GIORNI_CHECKIN} dias despues de la fecha de llegada (el
+portal de la Policia del Estado italiana solo acepta llegadas de hoy o de ayer); queda
+solo la indicacion de que el check-in se hizo.
 
 5. A QUIEN LOS COMUNICAMOS
 Al proveedor de pagos (Stripe), al proveedor de correo, al proveedor de verificacion de
@@ -1303,8 +1372,16 @@ lorsque la loi l'exige (Directive UE 2021/514, DAC7).
 Donnees techniques : adresse IP, type d'appareil, date et heure des actions pertinentes.
 Nous ne traitons PAS les donnees de votre carte : le paiement a lieu chez le prestataire
 agree (Stripe), qui les conserve directement.
-Nous ne conservons PAS de pieces d'identite : la verification d'identite, lorsqu'elle a
-lieu, est effectuee par un prestataire tiers qui ne nous renvoie que le resultat.
+Donnees du check-in en ligne, lorsqu'il est active et que le logement se trouve en
+Italie : pour chaque voyageur nom,
+prenom, sexe, date et lieu de naissance, nationalite ; pour la personne qui conduit la
+famille ou le groupe aussi le type, le numero et le lieu de delivrance de la piece
+d'identite. Elles sont exigees par l'art. 109 de la loi italienne sur la securite publique
+(TULPS) : l'hote doit les declarer a la Questura (police) dans les 24 heures suivant
+l'arrivee. Hors d'Italie : nom et numero de la piece d'identite.
+Nous ne conservons PAS de copies ni de photos de pieces d'identite : la verification
+d'identite, lorsqu'elle a lieu, est effectuee par un prestataire tiers qui ne nous renvoie
+que le resultat.
 
 2. POURQUOI ET SUR QUELLE BASE LEGALE
 Pour executer le contrat (art. 6.1.b) : creer le compte, gerer reservations et paiements.
@@ -1329,6 +1406,9 @@ vous nous envoyez directement a {EMAIL} suivent le meme delai et sont supprimes 
 Donnees comptables et fiscales : 10 ans, comme l'impose la loi.
 Preuves d'acceptation : pendant toute la relation et le delai de prescription.
 Donnees techniques de securite : 12 mois.
+Donnees du check-in : effacees automatiquement {GIORNI_CHECKIN} jours apres la date
+d'arrivee (le portail de la Police d'Etat italienne n'accepte que les arrivees du jour ou
+de la veille) ; seule reste l'indication que le check-in a ete fait.
 
 5. A QUI NOUS LES COMMUNIQUONS
 Au prestataire de paiement (Stripe), au prestataire de messagerie, au prestataire de

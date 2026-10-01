@@ -165,6 +165,7 @@ class SistemaCasaVIP:
     blocco_globale: Any = None  # BloccoGlobale (fase191): kill-switch d'emergenza dei movimenti soldi
     admin_accounts: Any = None  # AdminAccounts (fase192): operatori admin con ruoli (multi-admin)
     ritenuta: Any = None    # interruttore (fase191) della ritenuta sulle locazioni brevi: SPENTO di serie
+    checkin_online: Any = None  # interruttore (fase191) del check-in online: SPENTO di serie
     vies: Any = None        # verifica partita IVA (fase100, D23): (numero, paese) -> esito; None se spenta
 
     @property
@@ -431,6 +432,12 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
     ritenuta = crea_blocco_globale(
         _os_bg.path.join(_os_bg.path.dirname(cfg.db_payout) or ".", "ritenuta_attiva.flag")
         if cfg.db_payout not in ("", ":memory:") else "", env_var="RITENUTA_ATTIVA")
+    # IL CHECK-IN ONLINE (2026-10-01, decisione del fondatore): il check-in lo fa l'host
+    # all'arrivo; quello online resta, SPENTO di serie, e si accende dal bunker o con
+    # CHECKIN_ONLINE_ATTIVO=1. Spento: il voucher non lo mostra e la rotta non prende dati.
+    checkin_online = crea_blocco_globale(
+        _os_bg.path.join(_os_bg.path.dirname(cfg.db_checkin) or ".", "checkin_online_attivo.flag")
+        if cfg.db_checkin not in ("", ":memory:") else "", env_var="CHECKIN_ONLINE_ATTIVO")
     # D23: la partita IVA dell'host si chiede al VIES solo se c'e' il richiedente (la nostra):
     # nei collaudi resta spento, cosi' nessuna prova interroga la Commissione per davvero.
     vies = None
@@ -655,4 +662,4 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
                           poi_provider=poi_provider, credito_usati=credito_usati,
                           finanza=finanza, bunker=bunker, kyc=kyc, tassi=_tassi,
                           blocco_globale=blocco_globale, admin_accounts=admin_accounts,
-                          ritenuta=ritenuta, vies=vies)
+                          ritenuta=ritenuta, checkin_online=checkin_online, vies=vies)

@@ -409,6 +409,7 @@ class TestOgniPromessaDiConservazioneHaIlSuoMeccanismo(unittest.TestCase):
         "Dati tecnici di sicurezza": (
             "", "indirizzo IP e dispositivo vivono dentro le prove di accettazione e nei "
                 "registri: nessun giro li cancella dopo il termine promesso"),
+        "Dati del check-in": ("fase83_server.checkin_conservazione_una_passata", ""),
     }
 
     def _categorie(self):

@@ -377,6 +377,25 @@ ETICHETTE_UI: Dict[str, Dict[str, str]] = {
     "v_checkin_online": {"it": "Check-in online (prima dell'arrivo): registra gli ospiti", "en": "Online check-in (before arrival): register the guests", "es": "Check-in online (antes de llegar): registra a los huéspedes", "fr": "Enregistrement en ligne (avant l'arrivée) : enregistrez les voyageurs", "de": "Online-Check-in (vor der Anreise): Gäste registrieren", "pt": "Check-in online (antes da chegada): regista os hóspedes", "ja": "オンラインチェックイン（到着前）：宿泊者を登録", "zh": "在线登记（抵达前）：登记入住人"},
     "v_nome_ph": {"it": "Nome e cognome", "en": "First and last name", "es": "Nombre y apellidos", "fr": "Nom et prénom", "de": "Vor- und Nachname", "pt": "Nome e apelido", "ja": "氏名", "zh": "姓名"},
     "v_doc_ph": {"it": "Numero documento", "en": "ID document number", "es": "Número de documento", "fr": "Numéro de pièce d'identité", "de": "Ausweisnummer", "pt": "Número do documento", "ja": "身分証番号", "zh": "证件号码"},
+    # il check-in per la Questura (alloggi in Italia, art. 109 TULPS)
+    "v_q_cognome": {"it": "Cognome", "en": "Surname", "es": "Apellidos", "fr": "Nom", "de": "Nachname", "pt": "Apelido", "ja": "姓", "zh": "姓"},
+    "v_q_nome": {"it": "Nome", "en": "First name", "es": "Nombre", "fr": "Prénom", "de": "Vorname", "pt": "Nome próprio", "ja": "名", "zh": "名"},
+    "v_q_sesso": {"it": "Sesso", "en": "Sex", "es": "Sexo", "fr": "Sexe", "de": "Geschlecht", "pt": "Sexo", "ja": "性別", "zh": "性别"},
+    "v_q_uomo": {"it": "Uomo", "en": "Male", "es": "Hombre", "fr": "Homme", "de": "Männlich", "pt": "Masculino", "ja": "男性", "zh": "男"},
+    "v_q_donna": {"it": "Donna", "en": "Female", "es": "Mujer", "fr": "Femme", "de": "Weiblich", "pt": "Feminino", "ja": "女性", "zh": "女"},
+    "v_q_nascita": {"it": "Data di nascita", "en": "Date of birth", "es": "Fecha de nacimiento", "fr": "Date de naissance", "de": "Geburtsdatum", "pt": "Data de nascimento", "ja": "生年月日", "zh": "出生日期"},
+    "v_q_stato_nascita": {"it": "Stato di nascita", "en": "Country of birth", "es": "País de nacimiento", "fr": "Pays de naissance", "de": "Geburtsland", "pt": "País de nascimento", "ja": "出生国", "zh": "出生国家"},
+    "v_q_comune_nascita": {"it": "Comune di nascita (scrivi le prime lettere)", "en": "Italian town of birth (type the first letters)", "es": "Municipio italiano de nacimiento (escribe las primeras letras)", "fr": "Commune italienne de naissance (tapez les premières lettres)", "de": "Italienischer Geburtsort (erste Buchstaben eingeben)", "pt": "Município italiano de nascimento (escreve as primeiras letras)", "ja": "イタリアの出生地（最初の文字を入力）", "zh": "意大利出生市镇（输入前几个字母）"},
+    "v_q_cittadinanza": {"it": "Cittadinanza", "en": "Citizenship", "es": "Ciudadanía", "fr": "Nationalité", "de": "Staatsangehörigkeit", "pt": "Nacionalidade", "ja": "国籍", "zh": "国籍"},
+    "v_q_doc_nota": {"it": "Documento di chi guida la famiglia o il gruppo:", "en": "Identity document of the person leading the family or group:", "es": "Documento de quien encabeza la familia o el grupo:", "fr": "Pièce d'identité de la personne qui conduit la famille ou le groupe :", "de": "Ausweis der Person, die die Familie oder Gruppe anführt:", "pt": "Documento de quem lidera a família ou o grupo:", "ja": "家族またはグループの代表者の身分証明書：", "zh": "带领家庭或团体者的证件："},
+    "v_q_tipo_doc": {"it": "Tipo di documento", "en": "Document type", "es": "Tipo de documento", "fr": "Type de pièce", "de": "Ausweisart", "pt": "Tipo de documento", "ja": "身分証明書の種類", "zh": "证件类型"},
+    "v_q_rilasciato_in": {"it": "Documento rilasciato in (Stato)", "en": "Document issued in (country)", "es": "Documento expedido en (país)", "fr": "Pièce délivrée en (pays)", "de": "Ausweis ausgestellt in (Land)", "pt": "Documento emitido em (país)", "ja": "身分証明書の発行国", "zh": "证件签发国家"},
+    "v_q_comune_rilascio": {"it": "Comune che ha rilasciato il documento", "en": "Italian town that issued the document", "es": "Municipio italiano que expidió el documento", "fr": "Commune italienne qui a délivré la pièce", "de": "Italienische Gemeinde, die den Ausweis ausgestellt hat", "pt": "Município italiano que emitiu o documento", "ja": "身分証明書を発行したイタリアの市町村", "zh": "签发证件的意大利市镇"},
+    "v_q_gruppo": {"it": "Siamo un gruppo, non una famiglia", "en": "We are a group, not a family", "es": "Somos un grupo, no una familia", "fr": "Nous sommes un groupe, pas une famille", "de": "Wir sind eine Gruppe, keine Familie", "pt": "Somos um grupo, não uma família", "ja": "家族ではなくグループです", "zh": "我们是团体，不是家庭"},
+    "v_q_privacy": {"it": "Questi dati servono alla comunicazione alla Questura (art. 109 TULPS) e si cancellano da soli %d giorni dopo l'arrivo.", "en": "These details are needed for the report to the Italian police (Art. 109 TULPS) and are deleted automatically %d days after arrival.", "es": "Estos datos sirven para la comunicación a la policía italiana (art. 109 TULPS) y se borran solos %d días después de la llegada.", "fr": "Ces données servent à la déclaration à la police italienne (art. 109 TULPS) et sont effacées automatiquement %d jours après l'arrivée.", "de": "Diese Daten dienen der Meldung an die italienische Polizei (Art. 109 TULPS) und werden %d Tage nach der Ankunft automatisch gelöscht.", "pt": "Estes dados servem para a comunicação à polícia italiana (art. 109 TULPS) e são apagados automaticamente %d dias depois da chegada.", "ja": "この情報はイタリア警察への届出（TULPS第109条）に必要で、到着から%d日後に自動的に削除されます。", "zh": "这些信息用于向意大利警方申报（TULPS第109条），并在抵达后%d天自动删除。"},
+    "v_q_informativa": {"it": "Informativa privacy", "en": "Privacy notice", "es": "Aviso de privacidad", "fr": "Politique de confidentialité", "de": "Datenschutzerklärung", "pt": "Aviso de privacidade", "ja": "プライバシーポリシー", "zh": "隐私政策"},
+    "v_js_q_ospite": {"it": "Ospite", "en": "Guest", "es": "Huésped", "fr": "Voyageur", "de": "Gast", "pt": "Hóspede", "ja": "宿泊者", "zh": "住客"},
+    "v_js_q_da_controllare": {"it": "un dato da controllare", "en": "a detail to check", "es": "un dato que revisar", "fr": "une donnée à vérifier", "de": "eine Angabe prüfen", "pt": "um dado a verificar", "ja": "確認が必要な項目", "zh": "需核对的信息"},
     "v_aggiungi": {"it": "+ Aggiungi", "en": "+ Add", "es": "+ Añadir", "fr": "+ Ajouter", "de": "+ Hinzufügen", "pt": "+ Adicionar", "ja": "＋ 追加", "zh": "＋ 添加"},
     "v_invia_checkin": {"it": "Invia check-in", "en": "Send check-in", "es": "Enviar check-in", "fr": "Envoyer l'enregistrement", "de": "Check-in senden", "pt": "Enviar check-in", "ja": "チェックインを送信", "zh": "提交登记"},
     "v_ricevuta": {"it": "Ricevuta di pagamento", "en": "Payment receipt", "es": "Recibo de pago", "fr": "Reçu de paiement", "de": "Zahlungsbeleg", "pt": "Recibo de pagamento", "ja": "支払い領収書", "zh": "付款收据"},
@@ -1091,6 +1110,120 @@ def riga_pin_voucher(valore: Any) -> str:
     return "<strong style=\"font-size:1.15rem;color:#1e3c72\">%s</strong>" % valore
 
 
+def _checkin_online_acceso(sistema: Any) -> bool:
+    """L'interruttore del check-in online (fase81, fase191): SPENTO di serie per decisione del
+    fondatore (1/10: il check-in lo fa l'host all'arrivo). Senza interruttore = spento."""
+    sw = getattr(sistema, "checkin_online", None)
+    return sw is not None and bool(sw.attivo())
+
+
+def _in_italia(d: Any) -> bool:
+    """Un annuncio e' in Italia se lo dice il paese o se ha il CIN, che esiste solo in Italia
+    (la stessa regola della ritenuta). Lo usano il modulo del check-in e la sua rotta."""
+    return isinstance(d, dict) and (
+        str(d.get("paese") or "").strip().upper() in PAESI_ITALIA or bool(d.get("cin")))
+
+
+_JS_CHECKIN_QUESTURA = r"""(function(){
+var tk=decodeURIComponent((location.pathname.split('/voucher/')[1]||''));
+var IT='100000100',os=[],comuni={};
+function el(i){return document.getElementById(i);}
+function opt(s,v,t){var o=document.createElement('option');o.value=v;o.textContent=t;s.appendChild(o);}
+fetch('/api/checkin/stato?voucher_token='+encodeURIComponent(tk)).then(function(r){return r.json();})
+.then(function(d){if(d&&d.completato){var b=el('qBox');b.textContent='';var x=document.createElement('div');
+x.style.color='#155724';x.style.fontWeight='700';x.textContent='✓ '+BVL.ck_completato;b.appendChild(x);}});
+fetch('/api/alloggiati/tabelle').then(function(r){return r.json();}).then(function(t){
+(t.stati||[]).forEach(function(s){opt(el('qStato'),s[0],s[1]);if(s[2]){opt(el('qCitt'),s[0],s[1]);opt(el('qLstato'),s[0],s[1]);}});
+(t.documenti||[]).forEach(function(d){opt(el('qTdoc'),d[0],d[1]);});});
+function cerca(inp,dl){var q=inp.value.trim();if(q.length<2||comuni[q]){return;}
+fetch('/api/alloggiati/comuni?q='+encodeURIComponent(q)).then(function(r){return r.json();}).then(function(d){
+dl.textContent='';(d.comuni||[]).forEach(function(c){var t=c[1]+' ('+c[2]+')'+(c[3]?' '+c[3]:'');comuni[t]=c;opt(dl,t,'');});});}
+el('qComune').oninput=function(){cerca(this,el('qComuni'));};
+el('qLcomune').oninput=function(){cerca(this,el('qComuni2'));};
+el('qStato').onchange=function(){el('qComune').hidden=this.value!==IT;};
+el('qLstato').onchange=function(){el('qLcomune').hidden=this.value!==IT;};
+function leggi(){var o={cognome:el('qCog').value.trim(),nome:el('qNom').value.trim(),sesso:el('qSex').value,
+data_nascita:el('qNas').value,stato_nascita:el('qStato').value,cittadinanza:el('qCitt').value};
+if(o.stato_nascita===IT){var c=comuni[el('qComune').value];if(c){o.comune_nascita=c[0];o.prov_nascita=c[2];}}
+if(!os.length){o.tipo_doc=el('qTdoc').value;o.num_doc=el('qNdoc').value.trim();
+if(el('qLstato').value===IT){var l=comuni[el('qLcomune').value];if(l){o.luogo_doc=l[0];}}else{o.luogo_doc=el('qLstato').value;}}
+return o;}
+function pulisci(){['qCog','qNom','qNas','qComune','qSex','qStato','qCitt'].forEach(function(i){el(i).value='';});
+el('qComune').hidden=true;el('qDoc').hidden=os.length>0;}
+function rend(){el('qList').textContent=os.map(function(o){return o.cognome+' '+o.nome;}).join(', ');}
+var CAMPI={cognome:'qCog',nome:'qNom',sesso:'qSex',data_nascita:'qNasL',stato_nascita:'qStato',
+comune_nascita:'qComune',prov_nascita:'qComune',cittadinanza:'qCitt',tipo_doc:'qTdoc',num_doc:'qNdoc',luogo_doc:'qLstato'};
+function nomeCampo(err){var k=Object.keys(CAMPI).filter(function(c){return err.indexOf(c)===0;})
+.sort(function(a,b){return b.length-a.length;})[0];if(!k){return BVL.q_da_controllare;}
+var n=el(CAMPI[k]);return (n.placeholder||(n.options&&n.options[0].textContent)||n.firstChild.textContent||'').trim();}
+el('qAdd').onclick=function(){var o=leggi();if(!o.cognome||!o.nome){return;}os.push(o);pulisci();rend();};
+el('qSend').onclick=async function(){var o=leggi();if(o.cognome&&o.nome){os.push(o);pulisci();rend();}
+var m=el('qMsg');if(!os.length){m.textContent=BVL.ck_almeno_uno;return;}
+var r=await fetch('/api/checkin/pre_registra',{method:'POST',headers:{'Content-Type':'application/json'},
+body:JSON.stringify({voucher_token:tk,ospiti:os,gruppo:el('qGruppo').checked})});
+var d=await r.json();if(d&&d.ok){m.style.color='#155724';m.textContent='✓ '+BVL.ck_ok;return;}
+m.style.color='#b00020';var righe=((d&&d.dettagli)||[]).map(function(x){return BVL.q_ospite+' '+x.ospite+': '+
+(x.errori||[]).map(nomeCampo).filter(function(v,i,a){return a.indexOf(v)===i;}).join(', ');});
+m.textContent=righe.length?righe.join(' · '):BVL.ck_ko;os=[];rend();el('qDoc').hidden=false;};
+})();"""
+
+
+def _blocco_checkin_questura(sistema: Any, dati: Dict[str, Any], lng: str) -> str:
+    """Il modulo del check-in per un alloggio in Italia: i campi della schedina di Alloggiati
+    Web (art. 109 TULPS), con stati, documenti e comuni dalle tabelle ufficiali (rotte
+    /api/alloggiati/*). '' se l'alloggio non e' in Italia o non si legge: resta il modulo di
+    sempre, e il server decide comunque da se' (`_checkin_pre_registra`)."""
+    import html
+    try:
+        d = sistema.catalogo.dettaglio(str(dati.get("alloggio_id", "")))
+    except Exception:
+        return ""
+    if not _in_italia(d):
+        return ""
+    from fase185_testi_legali import GIORNI_CONSERVAZIONE_CHECKIN
+    e = html.escape
+    st = ("width:100%;padding:.55rem;border:1px solid #dce1ed;border-radius:.6rem;"
+          "margin-bottom:.35rem;box-sizing:border-box")
+
+    def inp(i, k, extra=""):
+        return "<input id='%s' placeholder=\"%s\" style='%s'%s>" % (i, e(_ui(k, lng)), st, extra)
+
+    def sel(i, k, opzioni=""):
+        return ("<select id='%s' style='%s'><option value=''>%s</option>%s</select>"
+                % (i, st, e(_ui(k, lng)), opzioni))
+    tasto = ("width:49%;padding:.6rem;border:0;border-radius:.7rem;font-weight:700;"
+             "cursor:pointer;")
+    return (
+        "<div id='qBox' style='margin-top:1rem;padding-top:1rem;border-top:1px solid #eef2f7'>"
+        "<div style='font-size:.82rem;color:#5e6f8d;margin-bottom:.5rem'>"
+        + e(_ui("v_checkin_online", lng)) + "</div>"
+        "<div id='qList' style='font-size:.85rem;margin-bottom:.4rem'></div>"
+        + inp("qCog", "v_q_cognome") + inp("qNom", "v_q_nome")
+        + sel("qSex", "v_q_sesso", "<option value='m'>%s</option><option value='f'>%s</option>"
+              % (e(_ui("v_q_uomo", lng)), e(_ui("v_q_donna", lng))))
+        + "<label id='qNasL' style='display:block;font-size:.8rem;color:#5e6f8d'>"
+        + e(_ui("v_q_nascita", lng)) + "<input id='qNas' type='date' style='" + st + "'></label>"
+        + sel("qStato", "v_q_stato_nascita")
+        + inp("qComune", "v_q_comune_nascita", " list='qComuni' autocomplete='off' hidden")
+        + "<datalist id='qComuni'></datalist>" + sel("qCitt", "v_q_cittadinanza")
+        + "<div id='qDoc'><div style='font-size:.8rem;color:#5e6f8d;margin:.3rem 0'>"
+        + e(_ui("v_q_doc_nota", lng)) + "</div>"
+        + sel("qTdoc", "v_q_tipo_doc") + inp("qNdoc", "v_doc_ph") + sel("qLstato", "v_q_rilasciato_in")
+        + inp("qLcomune", "v_q_comune_rilascio", " list='qComuni2' autocomplete='off' hidden")
+        + "<datalist id='qComuni2'></datalist></div>"
+        "<label style='display:block;font-size:.85rem;margin:.3rem 0'><input id='qGruppo' "
+        "type='checkbox'> " + e(_ui("v_q_gruppo", lng)) + "</label>"
+        "<button id='qAdd' style='" + tasto + "background:#eef2f7;color:#1e3c72'>"
+        + e(_ui("v_aggiungi", lng)) + "</button> "
+        "<button id='qSend' style='" + tasto + "background:#1e3c72;color:#fff'>"
+        + e(_ui("v_invia_checkin", lng)) + "</button>"
+        "<div id='qMsg' style='margin-top:.5rem;font-size:.85rem'></div>"
+        "<div style='margin-top:.5rem;font-size:.75rem;color:#5e6f8d'>"
+        + e(_ui("v_q_privacy", lng) % GIORNI_CONSERVAZIONE_CHECKIN)
+        + " <a href='/privacy.html?lang=" + e(lng) + "'>" + e(_ui("v_q_informativa", lng))
+        + "</a></div></div><script>" + _JS_CHECKIN_QUESTURA + "</script>")
+
+
 def pagina_voucher_html(sistema: Any, token: Any, lingua: Any = None) -> Optional[str]:
     """Voucher di conferma (server-rendered, stampabile, multilingua). Verifica la firma
     del token (non falsificabile). None se assente/manomesso/non un voucher.
@@ -1236,8 +1369,10 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: Any = None) -> Optiona
         "else if(r.status>=500)em=BVL.riprova;"
         "m.style.color='#b00020';m.textContent=em;}};"
         "rd.readAsDataURL(f);};carica();})();</script>")
-    # CHECK-IN DIGITALE (fase127): pre-registrazione ospiti prima dell'arrivo -> sblocco ok
-    blocco_pass = blocco_pass + (
+    # CHECK-IN DIGITALE (fase127): pre-registrazione ospiti prima dell'arrivo -> sblocco ok.
+    # In Italia il modulo raccoglie la schedina della Questura (`_blocco_checkin_questura`).
+    blocco_pass = blocco_pass + ("" if not _checkin_online_acceso(sistema) else
+                                 _blocco_checkin_questura(sistema, dati, lng) or (
         "<div id='ckBox' style='margin-top:1rem;padding-top:1rem;border-top:1px solid #eef2f7'>"
         "<div style='font-size:.82rem;color:#5e6f8d;margin-bottom:.5rem'>"
         + e(_ui("v_checkin_online", lng)) + "</div>"
@@ -1273,7 +1408,7 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: Any = None) -> Optiona
         "var m=document.getElementById('ckMsg');if(d&&d.ok){m.style.color='#155724';"
         "m.textContent='\\u2713 '+BVL.ck_ok;}"
         "else{m.style.color='#b00020';m.textContent=BVL.ck_ko;}};"
-        "})();</script>")
+        "})();</script>"))
     # RECENSIONE POST-SOGGIORNO stile Booking/Agoda (fase63, 2026-07-20): voto generale +
     # sotto-voti (pulizia, comfort, ...). Il form appare SOLO dopo il check-out e solo se la
     # prenotazione non e' cancellata; il diritto firmato (nbf=check-out) e' emesso QUI dal
@@ -2170,6 +2305,10 @@ class RouterHTTP:
             return self._admin_messaggi(query, headers)
         if metodo == "POST" and path == "/api/checkin/pre_registra":
             return self._checkin_pre_registra(body)
+        if metodo == "GET" and path == "/api/alloggiati/tabelle":
+            return self._alloggiati_tabelle()
+        if metodo == "GET" and path == "/api/alloggiati/comuni":
+            return self._alloggiati_comuni(query)
         if metodo == "GET" and path == "/api/checkin/stato":
             return self._checkin_stato(query)
         if metodo == "POST" and path == "/api/garanzia/conferma":
@@ -2366,6 +2505,10 @@ class RouterHTTP:
             return self._bunker_blocco_globale_stato(headers)
         if metodo == "POST" and path == "/api/bunker/blocco_globale":
             return self._bunker_blocco_globale_imposta(body, headers)
+        if metodo == "GET" and path == "/api/bunker/checkin_online":
+            return self._bunker_checkin_online(headers)
+        if metodo == "POST" and path == "/api/bunker/checkin_online":
+            return self._bunker_checkin_online_imposta(body, headers)
         if metodo == "GET" and path == "/api/bunker/ritenuta":
             return self._bunker_ritenuta(query, headers)
         if metodo == "POST" and path == "/api/bunker/ritenuta":
@@ -4513,6 +4656,34 @@ class RouterHTTP:
                      "aliquota_bps": RITENUTA_LOCAZIONI_BREVI_BPS, "notti_max": RITENUTA_NOTTI_MAX,
                      "anno": anno, "mesi": tot["mesi"], "host": host,
                      "money_unit": "cents_integer"}
+
+    def _bunker_checkin_online(self, headers):
+        """Lo stato dell'interruttore del check-in online (solo super-admin)."""
+        if not self._bunker_auth(headers, azione="checkin_online"):
+            return 403, {"errore": "bunker_richiesto"}
+        sw = getattr(self._sys, "checkin_online", None)
+        return 200, (sw.stato() if sw is not None else {"attivo": False, "assente": True})
+
+    def _bunker_checkin_online_imposta(self, body, headers):
+        """Accende/spegne il check-in online (solo super-admin). Body {attivo: bool, motivo}.
+        Spento di serie: il check-in lo fa l'host all'arrivo (decisione del fondatore, 1/10)."""
+        if not self._bunker_auth(headers, azione="checkin_online"):
+            return 403, {"errore": "bunker_richiesto"}
+        sw = getattr(self._sys, "checkin_online", None)
+        if sw is None:
+            return 503, {"errore": "checkin_online_assente"}
+        dati = self._json(body) or {}
+        attivo = dati.get("attivo") is True
+        motivo = str(dati.get("motivo", ""))[:200]
+        ok = sw.imposta(attivo, motivo=motivo, chi="super-admin")
+        if ok:
+            logger.warning("CHECK-IN ONLINE %s | motivo=%s",
+                           "ACCESO" if attivo else "spento", _testo_per_registro(motivo or "-"))
+        else:
+            # il registro dice l'esito, non la richiesta: l'interruttore non si e' scritto
+            logger.error("CHECK-IN ONLINE NON %s: l'interruttore non si e' scritto | motivo=%s",
+                         "acceso" if attivo else "spento", _testo_per_registro(motivo or "-"))
+        return (200 if ok else 500), {**sw.stato(), "impostato": ok}
 
     def _bunker_ritenuta_imposta(self, body, headers):
         """Accende/spegne la ritenuta (solo super-admin). Body {attivo: bool, motivo: str}.
@@ -7116,6 +7287,8 @@ class RouterHTTP:
         ck = getattr(self._sys, "checkin", None)
         if ck is None:
             return 503, {"errore": "checkin_non_attivo"}
+        if not _checkin_online_acceso(self._sys):
+            return 409, {"errore": "checkin_online_spento"}
         dati = self._json(body)
         if dati is None:
             return 400, {"errore": "json_non_valido"}
@@ -7143,7 +7316,7 @@ class RouterHTTP:
                 return 409, {"errore": "pagamento_non_confermato", "stato": _st}
         except Exception:
             logger.warning("guardia pagamento su check-in fallita (ignorata)", exc_info=True)
-        cap = 1
+        cap, d = 1, None
         try:
             d = self._sys.catalogo.dettaglio(allog)
             cap = int(d.get("capacita", 1)) if isinstance(d, dict) else 1
@@ -7155,8 +7328,43 @@ class RouterHTTP:
         _pagati = v.get("party")
         if isinstance(_pagati, int) and not isinstance(_pagati, bool) and 0 < _pagati < cap:
             cap = _pagati
-        out = ck.pre_registra(rif, allog, dati.get("ospiti"), cap)
+        # IN ITALIA il check-in raccoglie la schedina della Questura (art. 109 TULPS): con
+        # nome e numero di documento soltanto, l'host non potrebbe trasmetterla.
+        ospiti = dati.get("ospiti")
+        in_italia = _in_italia(d)
+        if in_italia:
+            ospiti, errori = ospiti_per_la_questura(ospiti, dati.get("gruppo") is True,
+                                                    v.get("check_in"), v.get("check_out"))
+            if errori:
+                return 422, {"ok": False, "errore": "dati_questura", "dettagli": errori}
+        out = ck.pre_registra(rif, allog, ospiti, cap, arrivo=str(v.get("check_in") or ""),
+                              questura=in_italia)
         return (200 if out.get("ok") else 422), out
+
+    def _alloggiati_tabelle(self):
+        """Stati e documenti delle tabelle ufficiali di Alloggiati Web, per il modulo del
+        check-in. Pubblici come sul portale (si scaricano senza login); qui si leggono soltanto.
+        Ogni stato porta se vale ancora oggi: la cittadinanza si sceglie fra quelli."""
+        t = _tabelle_questura()
+        stati = sorted(([c, v["descrizione"], v["fine"] is None]
+                        for c, v in (t.get("STATI") or {}).items()), key=lambda r: r[1])
+        documenti = sorted(([c, v["descrizione"]]
+                            for c, v in (t.get("DOCUMENTI") or {}).items()), key=lambda r: r[1])
+        return 200, {"stati": stati, "documenti": documenti}
+
+    def _alloggiati_comuni(self, query):
+        """I comuni il cui nome comincia con `q` (almeno 2 lettere, al massimo 20), compresi
+        quelli che non esistono piu' (chi e' nato prima di una fusione cerca quello), dopo
+        quelli di oggi; la data di fine accanto. Si scrive come nel file: ASCII maiuscolo."""
+        from fase151_alloggiati_web import _testo
+        q = _testo(query.get("q") or "")
+        if len(q) < 2:
+            return 200, {"comuni": []}
+        righe = [[c, v["descrizione"], v["provincia"], v["fine"].isoformat() if v["fine"] else ""]
+                 for c, v in (_tabelle_questura().get("COMUNI") or {}).items()
+                 if v["descrizione"].startswith(q)]
+        righe.sort(key=lambda r: (r[3] != "", r[1]))
+        return 200, {"comuni": righe[:20]}
 
     def _checkin_stato(self, query):
         """Stato del check-in (completato?) dal voucher: per mostrare all'ospite se è a posto."""
@@ -13039,6 +13247,23 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                 __import__("time").sleep(3600)     # ogni ora
         _th3.Thread(target=_tick_invito_recensione, daemon=True).start()
 
+    # ── CHECK-IN: I DATI DEGLI OSPITI NON RESTANO ───────────────────────────────
+    # Ogni ora, e indipendente da tutto il resto come la marca temporale qui sotto: i dati
+    # per la Questura si cancellano al termine che l'informativa promette (Garante, 29/4/2026).
+    if getattr(sistema, "checkin", None) is not None:
+        import threading as _thc
+
+        def _tick_checkin_conservazione():
+            while True:
+                try:
+                    checkin_conservazione_una_passata(sistema)
+                except Exception:
+                    logger.error("check-in: giro di cancellazione fallito (thread TENUTO VIVO)",
+                                 exc_info=True)
+                __import__("time").sleep(3600)     # ogni ora
+        _thc.Thread(target=_tick_checkin_conservazione, name="checkin-conservazione",
+                    daemon=True).start()
+
     # ── MARCA TEMPORALE (fase184) — indipendente da tutto il resto ──────────────
     # DIFETTO CHIUSO 2026-07-21, trovato avviando main_casavip.py per davvero: questo
     # giro stava dentro il blocco `if pp is not None and email_prov is not None`, cioe'
@@ -13188,6 +13413,79 @@ def _indietro_di_anni(giorno: Any, anni: int) -> Any:
         return giorno.replace(year=giorno.year - anni)
     except ValueError:
         return giorno.replace(year=giorno.year - anni, day=28)
+
+
+_TABELLE_QUESTURA: List[Any] = []
+
+
+def _tabelle_questura() -> Dict[str, Any]:
+    """Le tabelle ufficiali di Alloggiati Web, lette una volta sola. Se una manca il vuoto
+    NON si tiene in memoria: la si ricerca al check-in dopo, e intanto `errori_schedina`
+    rifiuta la schedina («i codici non si possono verificare»)."""
+    if _TABELLE_QUESTURA:
+        return _TABELLE_QUESTURA[0]
+    from fase151_alloggiati_web import carica_tabelle
+    tabelle = carica_tabelle()
+    if all(tabelle.values()):
+        _TABELLE_QUESTURA.append(tabelle)
+    return tabelle
+
+
+def ospiti_per_la_questura(ospiti: Any, gruppo: bool, check_in: Any,
+                           check_out: Any) -> Tuple[Optional[List[Dict[str, Any]]],
+                                                    List[Dict[str, Any]]]:
+    """Gli ospiti di un check-in in Italia come li vuole la schedina di Alloggiati Web (art.
+    109 TULPS). Il ruolo lo da' la posizione: uno solo e' «ospite singolo»; altrimenti il
+    primo guida la famiglia (o il gruppo, con `gruppo`) e gli altri ne fanno parte, subito
+    dopo di lui come chiede il manuale. Ognuno si controlla con `fase151.errori_schedina`
+    sulle tabelle ufficiali. Ritorna (ospiti, errori): per ogni ospite che non passa, il suo
+    numero (da 1) e i motivi."""
+    from fase127_checkin_digitale import CAMPI_QUESTURA
+    from fase151_alloggiati_web import errori_schedina
+    if not (isinstance(ospiti, list) and ospiti and all(isinstance(o, dict) for o in ospiti)):
+        return None, [{"ospite": 0, "errori": ["ospiti mancanti"]}]
+    guida, membro = ("capogruppo", "membro_gruppo") if gruppo else ("capofamiglia", "familiare")
+    ruoli = ["singolo"] if len(ospiti) == 1 else [guida] + [membro] * (len(ospiti) - 1)
+    # qui si controllano i dati della PERSONA: i giorni li da' la prenotazione, e oltre 30 il
+    # portale vuole una schedina nuova (lo dice `genera_file` quando si scrive il file)
+    giorni = max(1, min(_notti_count(check_in, check_out), 30))
+    tabelle = _tabelle_questura()
+    pronti, errori = [], []
+    for i, (o, ruolo) in enumerate(zip(ospiti, ruoli), start=1):
+        scheda = {k: o.get(k) for k in CAMPI_QUESTURA}
+        scheda["ruolo"] = ruolo
+        motivi = errori_schedina(dict(scheda, data_arrivo=check_in, giorni=giorni), tabelle)
+        if motivi:
+            errori.append({"ospite": i, "errori": motivi})
+        pronti.append(scheda)
+    return pronti, errori
+
+
+def checkin_conservazione_una_passata(sistema: Any, *, ora_ts: Any = None) -> Dict[str, Any]:
+    """UNA passata della cancellazione dei dati degli ospiti del check-in, con l'orologio
+    iniettabile come le altre passate. Il Garante (comunicato del 29/4/2026): trasmessi alla
+    Questura, i dati e le copie dei documenti si cancellano subito; e il portale accetta solo
+    arrivi di oggi o di ieri, quindi dopo non servono piu'. Il termine si legge
+    dall'informativa che lo promette (`fase185`), come in `conservazione_una_passata`."""
+    ck = getattr(sistema, "checkin", None)
+    if ck is None:
+        return {"saltata": "senza_checkin"}
+    try:
+        from fase185_testi_legali import GIORNI_CONSERVAZIONE_CHECKIN as _giorni
+    except Exception:
+        logger.error("CHECK-IN: il termine promesso dall'informativa non e' leggibile, "
+                     "nessun dato cancellato", exc_info=True)
+        return {"saltata": "senza_termine_promesso"}
+    import datetime as _dt
+    import time as _t
+    ora = ora_ts if (isinstance(ora_ts, (int, float))
+                     and not isinstance(ora_ts, bool)) else _t.time()
+    oggi = _dt.datetime.fromtimestamp(ora, tz=_dt.timezone.utc).date()
+    n = ck.cancella_dati_scaduti(oggi, int(_giorni))
+    if n > 0:
+        logger.info("CHECK-IN: dati degli ospiti cancellati | righe=%d | termine=%d giorni "
+                    "dall'arrivo", n, int(_giorni))
+    return {"cancellate": n}
 
 
 def conservazione_una_passata(sistema: Any, *, ora_ts: Any = None,

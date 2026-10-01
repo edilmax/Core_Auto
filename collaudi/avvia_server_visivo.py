@@ -79,6 +79,10 @@ def _prepara(porta):
         # da nessuna parte. E' il modo di rompersi n. 1 (dati effimeri) dentro lo strumento
         # che esiste per scoprirlo.
         db_finanza=f"{d}/finanza.db",
+        # ⛔ ANCHE IL CHECK-IN ERA `:memory:` PER OMISSIONE (visto il 1/10): l'interruttore del
+        # check-in online vive in un file accanto al suo archivio, e in memoria non ha dove
+        # scriversi. In produzione e' su file (DB_CHECKIN=/data/checkin.db).
+        db_checkin=f"{d}/checkin.db",
         db_garanzia=f"{d}/g.db", db_tassa_comunale=f"{d}/t.db",
         # la password del super-admin viene dall'ambiente, cosi' chi giudica il banco puo'
         # usare LA STESSA senza ricopiarla in un secondo posto (una copia resta indietro il

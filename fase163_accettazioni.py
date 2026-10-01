@@ -347,7 +347,7 @@ DOCUMENTO_PRIVACY = "privacy_gdpr"
 # nessuno dei due era rotto -- erano d'accordo con se stessi e in disaccordo fra loro
 # (famiglia 20.2 del METODO). Il ripiego qui sotto esiste solo perche' un'informativa
 # illeggibile non deve impedire una registrazione, e una guardia pretende che combaci.
-_PRIVACY_VERSIONE_RIPIEGO = "2026-09-29"
+_PRIVACY_VERSIONE_RIPIEGO = "2026-10-01"
 try:
     from fase185_testi_legali import PRIVACY_VERSIONE
 except Exception:          # pragma: no cover - il motore dei testi non si importa

@@ -23,6 +23,18 @@ from fase87_stripe_webhook import firma_di_test
 from fase163_accettazioni import doc_sha256, CONTRATTO_HOST_VERSIONE
 
 
+def setUpModule():
+    # il check-in online e' SPENTO di serie (decisione del fondatore, 1/10): queste prove
+    # descrivono quello acceso, quindi lo accendono con la sua leva d'ambiente
+    import os
+    os.environ["CHECKIN_ONLINE_ATTIVO"] = "1"
+
+
+def tearDownModule():
+    import os
+    os.environ.pop("CHECKIN_ONLINE_ATTIVO", None)
+
+
 class TestCheckinRamo(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

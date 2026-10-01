@@ -977,6 +977,14 @@ jobs:
           BASE_VISIVO: http://127.0.0.1:8095
         run: node collaudi/voucher_pin_checkin.js
 
+      # IL CHECK-IN DELLA QUESTURA COME LO COMPILA UN OSPITE (1/10): stesso banco, l'annuncio
+      # e' a Roma. Tendine dalle tabelle ufficiali, comune cercato per lettere, rifiuto che
+      # nomina ospite e campo, check-in completato.
+      - name: Il check-in della Questura compilato da un ospite
+        env:
+          BASE_VISIVO: http://127.0.0.1:8095
+        run: node collaudi/checkin_questura_browser.js
+
       - name: Spegni il terzo banco
         if: always()
         run: kill "$(cat server_pin.pid)" 2>/dev/null || true
