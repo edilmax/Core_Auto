@@ -465,6 +465,26 @@ class TestIlPannelloNeiCasiDiBordo(_Base):
         self.assertTrue(any("ACCESA | motivo=prova F24" in x for x in righe), righe)
         self.assertTrue(any("spenta | motivo=-" in x for x in righe), righe)
 
+    def test_SE_L_INTERRUTTORE_NON_SI_SCRIVE_IL_REGISTRO_NON_MENTE(self):
+        # la gemella del check-in (1/10): la risposta era 500 e il registro scriveva lo stesso
+        # «ACCESA»; senza archivio dei bonifici l'interruttore non ha un file in cui scriversi
+        sis = crea_sistema(ConfigCasaVIP(
+            abilitato=True, segreto_hmac=SEG, db_catalogo=f"{self.dir}/c2.db",
+            db_inventario=f"{self.dir}/i2.db", bunker_password=_CHIAVE_BUNKER_DI_PROVA))
+        self.r = crea_router(sis, host_key="hk", admin_key="ak")
+        hb = self._bunker()
+        for attivo, detto in ((True, "ACCESA"), (False, "spenta")):
+            with self.subTest(attivo=attivo):
+                with self.assertLogs("core_auto.server", level="WARNING") as visti:
+                    s, d = self.g("POST", "/api/bunker/ritenuta", {"attivo": attivo}, hb)
+                self.assertEqual((s, d.get("attivo"), d.get("impostato")), (500, False, False), d)
+                righe = [x for x in visti.output if "RITENUTA LOCAZIONI BREVI" in x]
+                self.assertFalse([x for x in righe if "LOCAZIONI BREVI " + detto in x],
+                                 "il registro dice %s e non lo e': %s" % (detto, righe))
+                atteso = ("RITENUTA LOCAZIONI BREVI NON %s: l'interruttore non si e' scritto | "
+                          "motivo=-" % detto.lower())
+                self.assertTrue([x for x in righe if x.endswith(atteso)], righe)
+
 
 class TestSeNonSiPuoOperareIlBonificoNonParte(_Base):
     def test_giornale_che_non_scrive_bonifico_fermo_e_registro_intatto(self):

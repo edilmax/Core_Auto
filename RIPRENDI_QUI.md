@@ -3435,7 +3435,47 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 1a0326a
+CONSEGNE AGGIORNATE A: cccfa4f
+
+## PASSAGGIO DI CONSEGNE 29 (2026-10-01 pomeriggio) - LA RIGA DELLA RITENUTA DICE L'ESITO, NON LA RICHIESTA; RAMO `ritenuta-riga-esito` SOPRA LA #239; NIENTE IN PRODUZIONE:
+- CONTESTO: 16%, letto dal fondatore con `/context` dopo il blocco 1 di questa sessione (15:3x).
+- STATO VERIFICATO all'inizio (12:19Z, `git rev-parse` / `git ls-remote` / ssh / API): master 6889a7a su
+  computer, GitHub e VPS; contenitori healthy, `https://bookinvip.com/api/health` 200; aperte #236 0a70cd8,
+  #237 02e7a07, #238 1a0326a, tutte con gate success (16 controlli, `zap` skipped).
+- PERMESSI, parole del fondatore all'inizio di questa sessione: «procedi al commit» per tutti i punti;
+  «autorizzato» a commit, unioni, VPS e tutto quello che serve per finire; niente deploy ne' `git pull` sul
+  VPS fino all'incasso di a2c63fd8 (dalle 17:46Z); `questura-checkin` NON va in produzione stasera; ogni
+  difetto con la guardia vista rossa prima. Dopo il blocco 1: «16 vai avanti».
+- BLOCCO 1 FATTO: suite intera del ramo `questura-checkin` (partita 13:06, PowerShell) -> Ran 7182 tests in
+  6642.562s, OK (skipped=4), uscita 0; caricatore 7187 (scarto 5 = openssl). Commit cccfa4f, PR #239 (base
+  master), CI: 16 controlli, gate success, `zap` skipped. Durante quel giro `fase160` `fase162` `fase167`
+  `fase59` hanno cambiato data ma non contenuto (`git diff --quiet HEAD` -> 0): li riscrive il Giudice vero
+  lanciato da `test_pipeline_ci.py:6147`. GML: Compito 11 (revisione della #239) nel canale alle 14:59; ai
+  Compiti 9 e 10 nessuna risposta.
+- DIFETTO VIVO (il punto 3 del fondatore, trovato nelle consegne 28): `_bunker_ritenuta_imposta` scriveva
+  «RITENUTA LOCAZIONI BREVI ACCESA» (o «spenta») anche quando l'interruttore non si scriveva e la risposta
+  era 500. Guardia `test_ritenuta.TestIlPannelloNeiCasiDiBordo.test_SE_L_INTERRUTTORE_NON_SI_SCRIVE_IL_REGISTRO_NON_MENTE`
+  (un sistema senza archivio dei bonifici: l'interruttore non ha file), vista ROSSA prima:
+  «['WARNING:core_auto.server:RITENUTA LOCAZIONI BREVI ACCESA | motivo=-'] is not false», e uguale con
+  «spenta». Riparata come la gemella del check-in: riuscito -> la riga di sempre; non riuscito -> un errore
+  «RITENUTA LOCAZIONI BREVI NON accesa|spenta: l'interruttore non si e' scritto». Verde; di nuovo rossa col
+  file di prima; ripristino sha256 identico; rifatto sull'albero sopra cccfa4f. `test_ritenuta` Ran 35, OK.
+  Mutazione sulle righe nuove (occhi scelti a mano = quella classe, attrezzo nello scratchpad): 1 su 2 ->
+  la prova pretende la riga intera -> 2 su 2, rinunce del generatore 0. A mano, perche' il generatore non le
+  rompe: `if ok` rovesciato -> rossa (3 prove), accesa/spenta scambiate -> rossa (2); ripristino identico.
+- SCELTA TECNICA MIA: il ramo nasce da cccfa4f (#239) e non da 1a0326a: tutt'e due aggiungono consegne qui e
+  cambiano la riga `SUITE ATTUALE`, quindi separati si sarebbero scontrati all'unione. Si unisce DOPO la #239.
+- CONTROLLI STATICI: `python collaudi/cricchetto_statico.py tutti` FERMATO a meta' (dentro semgrep) da Claude
+  Code per memoria del PC quasi finita; nessun processo rimasto, `git status` pulito. Esito: NON ESEGUITO.
+- VISTO PER STRADA, NON RIPARATO: nella stessa rotta `attivo = bool(dati.get("attivo"))`, quindi la parola
+  "false" scritta come testo ACCENDE la ritenuta; la pagina del bunker manda il valore vero
+  (`deploy/bunker.html:631`), serve una richiesta scritta a mano da un super-admin. La gemella del check-in
+  usa `is True`.
+- RESTA, in ordine:
+  1. stasera: occhio sull'incasso di a2c63fd8, controversia dal pannello admin, unione #236 -> #237 -> #238
+     e deploy coi punti «al deploy» delle consegne 24-27 (la #239 e questo ramo NON stasera);
+  2. la #239 dopo la revisione di GML, poi questo ramo; la parola "false" qui sopra;
+  3. come nelle consegne 28 (prima di accendere il check-in) e 26 (il motore dei prezzi delle OTA).
 
 ## PASSAGGIO DI CONSEGNE 28 (2026-10-01 pomeriggio) - IL CHECK-IN ONLINE COSTRUITO E SPENTO COL SUO PULSANTE: IN ITALIA RACCOGLIE LA SCHEDINA, I DATI SI CANCELLANO DA SOLI, L'INFORMATIVA LO DICE; RAMO NUOVO `questura-checkin`, NON SI UNISCE STASERA:
 - ⚠️ CONTESTO: 66%, letto dal fondatore con `/context` dopo le 12:32 (l'ultima ora letta dal computer
@@ -5036,7 +5076,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 7187 test
+SUITE ATTUALE: Ran 7188 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

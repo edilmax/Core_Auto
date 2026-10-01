@@ -4697,8 +4697,14 @@ class RouterHTTP:
         attivo = bool(dati.get("attivo"))
         motivo = str(dati.get("motivo", ""))[:200]
         ok = rit.imposta(attivo, motivo=motivo, chi="super-admin")
-        logger.warning("RITENUTA LOCAZIONI BREVI %s | motivo=%s",
-                       "ACCESA" if attivo else "spenta", _testo_per_registro(motivo or "-"))
+        if ok:
+            logger.warning("RITENUTA LOCAZIONI BREVI %s | motivo=%s",
+                           "ACCESA" if attivo else "spenta", _testo_per_registro(motivo or "-"))
+        else:
+            # il registro dice l'esito, non la richiesta: l'interruttore non si e' scritto
+            logger.error("RITENUTA LOCAZIONI BREVI NON %s: l'interruttore non si e' scritto | "
+                         "motivo=%s", "accesa" if attivo else "spenta",
+                         _testo_per_registro(motivo or "-"))
         return (200 if ok else 500), {**rit.stato(), "impostato": ok}
 
     def _bunker_admin_accounts(self, headers):
