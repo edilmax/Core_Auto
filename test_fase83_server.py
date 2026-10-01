@@ -951,6 +951,109 @@ class TestAdmin(unittest.TestCase):
         _, c3 = self.r.gestisci("GET", "/api/admin/prenotazioni", headers=self.h)
         self.assertTrue(c3["prenotazioni"][0]["rimborsato"])
 
+    def test_LA_LISTA_ADMIN_PORTA_IL_VOUCHER_DI_OGNI_PRENOTAZIONE(self):
+        """D12 della prova vera (29/9, bbb00577): l'email di conferma non e' arrivata (casella
+        dell'ospite piena) e l'ospite non aveva NESSUNA strada per cancellare, fare il check-in
+        o scrivere all'host: il collegamento esisteva solo dentro il record. L'admin lo deve
+        vedere, per mandarglielo da un altro canale. Senza pagamento con noi, niente."""
+        pp, inv = self.sys.pagamenti_pendenti, self.sys.inventario
+        giorni = [_fra(60 + i) for i in range(3)]
+        for g in giorni:
+            inv.imposta_disponibilita("casa", g, unita_totali=1, prezzo_netto_cents=10000)
+        idem = "v" * 30
+        self.assertTrue(inv.blocca("casa", giorni[0], giorni[1], idem_key=idem,
+                                   origine="concierge").ok)
+        self.assertTrue(pp.registra(idem[:24], alloggio_id="casa", check_in=giorni[0],
+                                    check_out=giorni[1], idem_key=idem,
+                                    corpo_json=json.dumps({"voucher_token": "tok.firmato-1"})))
+        self.assertTrue(inv.blocca("casa", giorni[1], giorni[2], idem_key="w" * 30,
+                                   origine="ical").ok)           # nessun pagamento con noi
+        s, c = self.r.gestisci("GET", "/api/admin/prenotazioni", headers=self.h)
+        self.assertEqual(s, 200, c)
+        per_chiave = {p["idem_key"]: p for p in c["prenotazioni"]}
+        self.assertEqual(per_chiave[idem].get("voucher_url"),
+                         "https://bookinvip.com/voucher/tok.firmato-1")
+        self.assertEqual(per_chiave["w" * 30].get("voucher_url"), "")
+
+    def test_LA_LISTA_ADMIN_VA_A_PAGINE_E_DICE_LO_STATO_VERO(self):
+        """D15 e D16 della prova vera del 29/9. La lista conosceva due stati soli, letti dal
+        calendario: «rimborsato» se c'era il rilascio, «attiva» altrimenti. Cosi' una
+        prenotazione MAI pagata e in attesa usciva «attiva» col pulsante Rimborsa, e una
+        scaduta senza pagamento usciva «rimborsato». E arrivava tutta in una volta (limit
+        100 fisso): «diventa un pannello lungo chilometri». Qui ogni stato vero del
+        pagamento, le pagine, il totale, e il pulsante SOLO dove ci sono soldi da rendere."""
+        import time as _t
+        pp, inv = self.sys.pagamenti_pendenti, self.sys.inventario
+        self.assertIsNotNone(pp)
+        giorni = [_fra(40 + i) for i in range(11)]
+        for g in giorni:
+            inv.imposta_disponibilita("casa", g, unita_totali=1, prezzo_netto_cents=10000)
+        attesi = {}
+
+        def prenota(i, lettera, stato_atteso, pendente=True):
+            idem = lettera * 30
+            self.assertTrue(inv.blocca("casa", giorni[i], giorni[i + 1], idem_key=idem,
+                                       origine="concierge").ok)
+            if pendente:
+                self.assertTrue(pp.registra(idem[:24], alloggio_id="casa",
+                                            check_in=giorni[i], check_out=giorni[i + 1],
+                                            idem_key=idem))
+            attesi[idem] = stato_atteso
+            return idem[:24]
+
+        prenota(0, "a", "in_attesa")
+        self.assertTrue(pp.scadi(prenota(1, "b", "scaduto")))
+        pp.conferma(prenota(2, "c", "pagata"))
+        rif = prenota(3, "d", "bloccata_sulla_carta")
+        pp.conferma(rif)
+        self.assertTrue(pp.segna_blocco(rif, blocco_pi="pi_prova_d",
+                                        blocco_incassa_dal_ts=int(_t.time()) + 172800))
+        rif = prenota(4, "e", "annullata")
+        pp.conferma(rif)
+        self.assertTrue(pp.segna_blocco(rif, blocco_pi="pi_prova_e",
+                                        blocco_annullato_ts=int(_t.time())))
+        self.assertTrue(pp.marca_da_rimborsare(rif))
+        rif = prenota(5, "f", "rimborsata")
+        pp.conferma(rif)
+        self.assertTrue(pp.marca_da_rimborsare(rif))
+        prenota(6, "g", "attiva", pendente=False)            # nessun pagamento con noi
+        prenota(7, "h", "chiusa", pendente=False)
+        inv.rilascia("casa", giorni[7], giorni[8], idem_key="h" * 30)
+        # PAGATA DOPO UN RI-BLOCCO (pagamento tardivo): la chiave del calendario diventa
+        # «reblock:<riferimento>», e il riferimento NON sono i suoi primi 24 caratteri. La
+        # suite intera del 29/9 sera l'ha preso (test_host_metriche_isolamento) prima di me.
+        rif_r, idem_r = "i" * 24, "reblock:" + "i" * 24
+        self.assertTrue(inv.blocca("casa", giorni[9], giorni[10], idem_key=idem_r,
+                                   origine="concierge").ok)
+        self.assertTrue(pp.registra(rif_r, alloggio_id="casa", check_in=giorni[9],
+                                    check_out=giorni[10], idem_key=idem_r))
+        pp.conferma(rif_r)
+        attesi[idem_r] = "pagata"
+
+        s, c = self.r.gestisci("GET", "/api/admin/prenotazioni", headers=self.h)
+        self.assertEqual(s, 200)
+        visti = {p["idem_key"]: p for p in c["prenotazioni"]}
+        self.assertEqual({k: p["stato"] for k, p in visti.items()}, attesi)
+        rimborsabili = {k for k, p in visti.items() if p["rimborsabile"] is True}
+        self.assertEqual(rimborsabili, {"c" * 30, "d" * 30, "g" * 30, idem_r},
+                         "il pulsante Rimborsa va SOLO dove i soldi ci sono (o non passano "
+                         "da noi): mai su una in attesa, scaduta, annullata o gia' chiusa")
+        self.assertIn("rimborsato", visti["a" * 30])         # il campo di prima resta
+        self.assertEqual(c["totale"], 9)
+
+        pagine = []
+        for n in (1, 2, 3):
+            s, c = self.r.gestisci("GET", "/api/admin/prenotazioni",
+                                   {"page": str(n), "limit": "4"}, headers=self.h)
+            self.assertEqual(s, 200)
+            self.assertEqual((c["pagina"], c["per_pagina"], c["totale"]), (n, 4, 9))
+            pagine.append([p["idem_key"] for p in c["prenotazioni"]])
+        self.assertEqual([len(p) for p in pagine], [4, 4, 1])
+        self.assertEqual(sorted(sum(pagine, [])), sorted(attesi))
+        _, c = self.r.gestisci("GET", "/api/admin/prenotazioni", {"limit": "100000"},
+                               headers=self.h)
+        self.assertEqual(c["per_pagina"], 100, "una pagina non puo' scaricare il mondo")
+
     def test_auth_mancante(self):
         s, _ = self.r.gestisci("GET", "/api/admin/prenotazioni")
         self.assertEqual(s, 401)

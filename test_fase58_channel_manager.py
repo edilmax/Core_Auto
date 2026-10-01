@@ -223,6 +223,31 @@ class TestElencoPrenotazioni(unittest.TestCase):
         self.cm.blocca("a", "2026-07-01", "2026-07-02", idem_key="k3")  # pieno -> rifiutato
         self.assertEqual(len(self.cm.elenco_prenotazioni()), 2)
 
+    def test_LA_LISTA_ADMIN_VA_A_PAGINE_E_DICE_QUANTE_SONO_IN_TUTTO(self):
+        """D16 della prova vera del 29/9 («diventa un pannello lungo chilometri»): la lista
+        del pannello admin era UNA chiamata con limit=100 fisso, e dalla 101esima le
+        prenotazioni sparivano senza avviso. Serve saltare le prime N (`offset`) e sapere
+        quante sono in tutto, contate dal database. Tre pagine da uno: tutte e tre diverse,
+        nessuna persa, nessuna doppia, e il conto le vede tutte (i rifiuti no)."""
+        for i, (ci, co) in enumerate((("2026-07-01", "2026-07-02"),
+                                      ("2026-07-02", "2026-07-03"),
+                                      ("2026-07-03", "2026-07-04"))):
+            self.assertTrue(self.cm.blocca("a", ci, co, idem_key="p%d" % i).ok)
+        self.cm.imposta_disponibilita("b", "2026-07-01", unita_totali=1,
+                                      prezzo_netto_cents=100)
+        self.assertTrue(self.cm.blocca("b", "2026-07-01", "2026-07-02", idem_key="pb").ok)
+        self.assertFalse(self.cm.blocca("b", "2026-07-01", "2026-07-02", idem_key="rif").ok)
+        pagine = [self.cm.elenco_prenotazioni(alloggio_id="a", limit=1, offset=n)
+                  for n in range(4)]
+        self.assertEqual([len(p) for p in pagine], [1, 1, 1, 0])
+        chiavi = [p[0]["idem_key"] for p in pagine if p]
+        self.assertEqual(sorted(chiavi), ["p0", "p1", "p2"])
+        self.assertEqual(self.cm.conta_elenco_prenotazioni(alloggio_id="a"), 3)
+        self.assertEqual(self.cm.conta_elenco_prenotazioni(), 4)
+        self.assertEqual(self.cm.conta_elenco_prenotazioni(alloggio_id="b"), 1)
+        # senza offset la lista resta quella di sempre: chi la chiamava non si accorge di niente
+        self.assertEqual(len(self.cm.elenco_prenotazioni()), 4)
+
 
 class TestMetriche(unittest.TestCase):
     def test_revenue_e_occupazione(self):

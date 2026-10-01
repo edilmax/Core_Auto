@@ -457,6 +457,8 @@ PAGINA_SOLA = "pagina"
 
 BOTTONI = {
     "#btnCarica": "/api/admin/prenotazioni",          # ricarica: verifiche + annunci + prenotazioni
+    "#pr_prec": "/api/admin/prenotazioni",            # le pagine delle prenotazioni (D16, 29/9)
+    "#pr_succ": "/api/admin/prenotazioni",
     "#btnLogout": "/api/gate/logout",                 # chiude anche la sessione bunker
     "#btnSearch": "/api/admin/search",
     "#sr_prec": "/api/admin/search",

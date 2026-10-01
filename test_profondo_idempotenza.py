@@ -389,7 +389,10 @@ class TestDoppioClicDenaro(_Base):
                                       "WHERE riferimento=? AND tipo='rimborso'", (rif,))
         self.assertEqual(rimborsi, [(TOTALE, "rimborso:" + rif)])
         self.assertEqual(self.stato_pendente(rif), "rimborsato")
-        self.assertEqual(self.sis.payout.stato_di(rif), "trattenuto")
+        # D13 della prova vera: host a zero e nessun soldo mosso -> la riga del bonifico si
+        # toglie (e il secondo clic non la fa rinascere)
+        self.assertEqual(self.sis.payout.stato_di(rif), "")
+        self.assertEqual(self.conta("po.db", "payout"), 0)
 
     def test_garanzia_conferma_doppia_un_solo_rilascio(self):
         """POST /api/garanzia/conferma ×2: il 2o e' 409, l'host non incassa due volte."""

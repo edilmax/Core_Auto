@@ -101,6 +101,7 @@ class TestEmailCiclo(unittest.TestCase):
                        "versione": CONTRATTO_HOST_VERSIONE})
         self.assertEqual(s, 201, c)
         tk = {"X-Host-Token": c["token"]}
+        self._tk = c["token"]
         oggi = datetime.date.today()
         self.g("POST", "/api/host/pubblica",
                {"slug": "casa", "titolo": "Casa", "citta": "Roma",
@@ -256,6 +257,108 @@ class TestEmailCiclo(unittest.TestCase):
         self.assertEqual(s, 200, c)
         # cancellata/rimborsata: la ricevuta non attesta più un pagamento valido
         self.assertIsNone(pagina_ricevuta_html(self.sis, self.vt))
+
+    def test_se_la_conferma_NON_parte_il_registro_dice_QUALE_e_DI_CHI(self):
+        """D12 della prova vera: la conferma del pagamento partiva coi valori di serie di
+        `_email_bg`, e un invio fallito avrebbe scritto «template=ciclo riferimento=» vuoto --
+        cioe' nessuno avrebbe saputo quale ospite era rimasto senza voucher."""
+        class _DiceNo:
+            def invia(self, *a, **k):
+                return False
+        self.sis.email_provider = _DiceNo()
+        with self.assertLogs("core_auto.server", level="ERROR") as cattura:
+            self._webhook(self.rif)
+            for _ in range(40):
+                if any("EMAIL NON CONSEGNATA" in r for r in cattura.output):
+                    break
+                time.sleep(0.05)
+        righe = [r for r in cattura.output if "EMAIL NON CONSEGNATA" in r]
+        self.assertEqual(len(righe), 1, cattura.output)
+        self.assertIn("template=pagamento_confermato riferimento=" + self.rif, righe[0])
+
+    def _voucher_dice_CANCELLATA(self):
+        from fase83_server import ETICHETTE_UI
+        for lg in ("it", "en", "es", "fr", "de", "pt", "ja", "zh"):
+            with self.subTest(lingua=lg):
+                h = pagina_voucher_html(self.sis, self.vt, lg)
+                self.assertNotIn(ETICHETTE_UI["voucher_ok"][lg], h,
+                                 "il voucher di una cancellata dice ancora «confermata»")
+                self.assertNotIn(ETICHETTE_UI["v_completa_prima"][lg], h,
+                                 "il voucher di una cancellata invita a PAGARE")
+                self.assertNotIn(self.sis.firma.pin_checkin(self.rif), h)
+                self.assertNotIn("/api/garanzia/", h)
+        self.assertIn("Prenotazione cancellata", pagina_voucher_html(self.sis, self.vt, "it"))
+
+    def test_il_voucher_di_una_CANCELLATA_DALL_OSPITE_dice_cancellata(self):
+        """D14 della prova vera (29/9, bbb00577): cancellata dall'ospite a costo zero, ricaricando
+        il voucher si leggeva «✓ Prenotazione confermata» e «Completa il pagamento per attivare
+        il voucher». L'ospite crede che valga ancora, o di dover pagare di nuovo."""
+        self._webhook(self.rif)
+        s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": self.vt})
+        self.assertEqual(s, 200, c)
+        self._voucher_dice_CANCELLATA()
+
+    def test_il_voucher_di_una_CANCELLATA_DALL_HOST_dice_cancellata(self):
+        """Stessa pagina, l'altro stato di chiusura ('cancellata_host')."""
+        self._webhook(self.rif)
+        s, c = self.g("POST", "/api/host/cancella", {"riferimento": self.rif},
+                      {"X-Host-Token": self._tk})
+        self.assertEqual(s, 200, c)
+        self.assertEqual(self.sis.pagamenti_pendenti.info(self.rif)["stato"], "cancellata_host")
+        self._voucher_dice_CANCELLATA()
+
+    def test_il_voucher_di_una_SCADUTA_non_invita_a_pagare(self):
+        """D14b della prova vera: una prenotazione scaduta (9fa7aecc, la pagina di Stripe mai
+        aperta) mostrava «Completa il pagamento per attivare il voucher», ma la sessione di
+        pagamento era morta con lei: un invito a fare una cosa impossibile."""
+        from fase83_server import ETICHETTE_UI
+        self.assertTrue(self.sis.pagamenti_pendenti.scadi(self.rif), "premessa: scaduta")
+        for lg in ("it", "en", "es", "fr", "de", "pt", "ja", "zh"):
+            with self.subTest(lingua=lg):
+                h = pagina_voucher_html(self.sis, self.vt, lg)
+                self.assertNotIn(ETICHETTE_UI["v_completa_prima"][lg], h)
+                self.assertNotIn(ETICHETTE_UI["voucher_ok"][lg], h)
+        self.assertIn("Prenotazione scaduta", pagina_voucher_html(self.sis, self.vt, "it"))
+
+    def test_segnala_un_problema_CHIEDE_il_motivo_e_DICE_se_e_gia_segnalato(self):
+        """D3 della prova vera (29/9): «Segnala un problema» non chiedeva niente -- nessuna
+        conferma, nessun motivo (all'arbitro arrivava vuoto) -- e ricaricando la pagina un
+        secondo clic riceveva 409 e scriveva «Operazione non riuscita», come se si fosse rotto.
+        Il pulsante chiede il motivo (annullare = non segnalare) e lo manda; se la
+        segnalazione c'e' gia', lo dice."""
+        self._webhook(self.rif)
+        h = pagina_voucher_html(self.sis, self.vt, "it")
+        inizio = h.index("function call(")
+        script = h[inizio:h.index("</script>", inizio)]
+        self.assertIn("prompt(BVL.motivo_problema", script)
+        self.assertIn("motivo:", script, "il motivo non parte verso il server")
+        self.assertIn("BVL.gia_segnalato", script)
+        # e «Confermo», che fa partire SUBITO il pagamento all'host (irreversibile), chiede
+        # conferma: dopo D18 l'email invita a premerlo, e un tocco per sbaglio pagherebbe
+        self.assertIn("confirm(BVL.conferma_ok", script)
+        from fase83_server import ETICHETTE_UI
+        for chiave in ("v_js_motivo_problema", "v_js_gia_segnalato", "v_js_gia_confermato",
+                       "v_js_conferma_ok"):
+            self.assertEqual(sorted(ETICHETTE_UI.get(chiave, {})),
+                             sorted(("it", "en", "es", "fr", "de", "pt", "ja", "zh")), chiave)
+        # il server riceve e conserva il motivo che la pagina manda
+        s, c = self.g("POST", "/api/garanzia/contesta",
+                      {"voucher_token": self.vt, "motivo": "muffa in bagno"})
+        self.assertEqual(s, 200, c)
+        s, c = self.g("POST", "/api/garanzia/contesta",
+                      {"voucher_token": self.vt, "motivo": "di nuovo"})
+        self.assertEqual((s, c.get("stato")), (409, "contestato"),
+                         "la pagina riconosce il «gia' segnalato» da questa risposta")
+
+    def test_dopo_la_cancellazione_la_pagina_SI_RICARICA(self):
+        """D14, la foto del fondatore: senza ricaricare restavano PIN, «Confermo», «Segnala» e la
+        chat su una prenotazione appena cancellata (il JavaScript nascondeva SOLO il pulsante
+        rosso). La pagina si ricarica e la disegna il server, che sa che e' cancellata."""
+        self._webhook(self.rif)
+        h = pagina_voucher_html(self.sis, self.vt, "it")
+        inizio = h.index("getElementById('btnCanc').onclick")
+        gestore = h[inizio:h.index("</script>", inizio)]
+        self.assertIn("location.reload()", gestore)
 
     # ── 6. corpi email: XSS-safe e importi al centesimo ─────────────────────────
     def test_corpi_email_xss_e_importi(self):

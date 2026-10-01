@@ -60,6 +60,23 @@ class TestPromemoria(unittest.TestCase):
         h2 = corpo_promemoria_checkin_html("<script>x</script>", "")
         self.assertNotIn("<script>x", h2)
 
+    def test_il_promemoria_INVITA_a_premere_Confermo_col_nome_del_pulsante_vero(self):
+        """D18 della prova vera, deciso dal fondatore il 29/9: il bonifico all'host resta a 24
+        ore dall'arrivo, e il giorno dell'arrivo l'ospite riceve «e' tutto come descritto? premi
+        Confermo», che paga l'host subito. L'email c'era gia', ma diceva il contrario: «se e'
+        tutto come descritto, non devi fare nulla». Il pulsante si nomina con le parole ESATTE
+        del voucher (`fase83.ETICHETTE_UI["v_tutto_ok"]`), in ogni lingua: cosi' l'email non
+        puo' mandare l'ospite a cercare un pulsante che non trova."""
+        from fase83_server import ETICHETTE_UI
+        for lg in ("it", "en", "es", "fr", "de", "pt", "ja", "zh"):
+            with self.subTest(lingua=lg):
+                html = corpo_promemoria_checkin_html("Casa Bella", "https://x/v", lingua=lg)
+                self.assertIn(ETICHETTE_UI["v_tutto_ok"][lg], html,
+                              "l'email non nomina il pulsante che paga l'host")
+                self.assertIn(ETICHETTE_UI["v_segnala_problema"][lg], html)
+        self.assertNotIn("non devi fare nulla",
+                         corpo_promemoria_checkin_html("Casa Bella", "https://x/v", lingua="it"))
+
 
 class TestIlPromemoriaArrivaDopoLArrivoENonSiPerde(unittest.TestCase):
     """⛔ D20, DUE DIFETTI VIVI sul giro che scrive al cliente «tutto ok? / segnala un problema

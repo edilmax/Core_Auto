@@ -200,5 +200,89 @@ class TestPagineEsitoPagamento(unittest.TestCase):
                                  "%s ha di nuovo testo fisso nell'HTML" % nome)
 
 
+class TestPrenotaNonCancellaLEmail(unittest.TestCase):
+    """D11 della prova vera (il fondatore, 29/9: «se schiacci l'email ok ti porta sulla pagina
+    di stripe e se invece clicchi sopra l'altro pulsante prenota non ti porta da nessuna parte»,
+    «si e' azzerato»). `prenota()` ridisegnava ogni volta il riquadro con un campo email NUOVO e
+    VUOTO: il secondo «Prenota» cancellava l'email scritta. Col campo gia' presente, «Prenota»
+    deve fare quello che fa «OK» -- e PRIMA di ridisegnare qualunque cosa."""
+
+    def test_col_campo_gia_presente_prenota_fa_quello_che_fa_OK(self):
+        with open(os.path.join(occhio.PAGINE, "index.html"), encoding="utf-8") as f:
+            testo = f.read()
+        inizio = testo.index("async function prenota(){")
+        corpo = testo[inizio:testo.index("async function _prenotaConEmail(", inizio)]
+        ridisegno = corpo.index("msg.innerHTML")
+        self.assertIn("getElementById('bkEmail')", corpo[:ridisegno],
+                      "prenota() ridisegna il riquadro senza guardare se l'email c'e' gia'")
+        self.assertIn(".click()", corpo[:ridisegno],
+                      "col campo presente, prenota() non invia come «OK»")
+
+
+class TestIlPannelloHostNonMostraChiaviGrezze(unittest.TestCase):
+    """D20 della prova vera (foto del fondatore, 29/9): «I tuoi incassi» stampava la chiave
+    grezza «in_attesa» (la mappa delle etichette conosceva solo maturato, in_transito, pagato,
+    trattenuto), e «Le mie prenotazioni» non aveva un'etichetta per chi non ha ancora pagato."""
+
+    def _host(self):
+        with open(os.path.join(occhio.PAGINE, "host.html"), encoding="utf-8") as f:
+            return f.read()
+
+    def test_ogni_stato_del_payout_ha_la_sua_etichetta(self):
+        import re
+        testo = self._host()
+        mappa = re.search(r"const LBL=\{([^}]*)\}", testo)
+        self.assertIsNotNone(mappa, "misura non valida: la mappa LBL non c'e' piu'")
+        import fase131_payout_dashboard as P
+        for stato in P.STATI:
+            self.assertIn(stato + ":", mappa.group(1),
+                          "lo stato '%s' del payout uscirebbe grezzo nel pannello" % stato)
+
+    def test_le_etichette_nuove_ci_sono_in_otto_lingue(self):
+        testo = self._host()
+        self.assertIn("st==='in_attesa_pagamento'", testo)
+        for lang in ("it", "en", "es", "fr", "de", "pt", "ja", "zh"):
+            for chiave in ("st_attpag", "pren_st_attpag"):
+                self.assertRegex(testo, r"\n\s*%s:\{[^\n]*\b%s:\"" % (lang, chiave),
+                                 "host.html: manca '%s' in '%s'" % (chiave, lang))
+
+
+class TestChiNonRiceveLEmailHaUnaStrada(unittest.TestCase):
+    """D12 della prova vera (29/9, bbb00577): pagata con una casella piena, l'email col voucher
+    non e' mai arrivata e l'ospite non poteva cancellare, fare il check-in ne' scrivere all'host.
+    La pagina «Grazie» diceva solo «riceverai un'email». Due strade: la pagina «Grazie» mostra
+    il collegamento (il browser lo ricorda da quando e' partito verso Stripe), e il pannello
+    admin lo mostra per ogni prenotazione."""
+
+    CHIAVE = "bookinvip_ultima"
+
+    def _pagina(self, nome):
+        with open(os.path.join(occhio.PAGINE, nome), encoding="utf-8") as f:
+            return f.read()
+
+    def test_la_home_RICORDA_il_voucher_PRIMA_di_partire_per_Stripe(self):
+        testo = self._pagina("index.html")
+        via = testo.index("window.location.href = r.payment_url")
+        riga = testo[testo.rindex("\n", 0, via):via]
+        self.assertIn("localStorage.setItem('%s'" % self.CHIAVE, riga,
+                      "si parte per Stripe senza ricordare il collegamento al voucher")
+        self.assertIn("r.voucher_token", riga)
+
+    def test_la_pagina_grazie_MOSTRA_il_collegamento_in_otto_lingue(self):
+        testo = self._pagina("grazie.html")
+        self.assertIn("localStorage.getItem('%s')" % self.CHIAVE, testo)
+        self.assertIn("'/voucher/'+encodeURIComponent(", testo)
+        for lang in ("it", "en", "es", "fr", "de", "pt", "ja", "zh"):
+            self.assertRegex(testo, r"%s:\{h:[^\n]*vch:'[^']+',vch_nota:'" % lang,
+                             "grazie.html: manca il collegamento al voucher in '%s'" % lang)
+
+    def test_il_pannello_admin_DISEGNA_il_voucher_di_ogni_prenotazione(self):
+        testo = self._pagina("admin.html")
+        self.assertIn("p.voucher_url", testo)
+        for lang in ("it", "en", "es", "fr", "de", "pt", "ja", "zh"):
+            self.assertRegex(testo, r"\n %s:\{[^\n]*b_voucher:\"" % lang,
+                             "admin.html: manca l'etichetta del voucher in '%s'" % lang)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

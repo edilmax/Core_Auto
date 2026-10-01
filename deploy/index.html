@@ -809,6 +809,10 @@ async function apri(slug){
 
 async function prenota(){
   if(!QUOTE) return;
+  // D11 della prova vera: col campo email gia' presente, «Prenota» fa quello che fa «OK».
+  // Prima ridisegnava il riquadro con un campo NUOVO e VUOTO: cancellava l'email scritta.
+  const giaGo = document.getElementById('bkGo');
+  if(giaGo && document.getElementById('bkEmail')){ giaGo.click(); return; }
   const msg = document.getElementById('mMsg');
   // NIENTE prompt(): nei browser dentro le app (Instagram/Facebook) e' BLOCCATO ->
   // li' prenotare era impossibile. Campo email NELLA pagina + tasto OK (con scudo).
@@ -829,7 +833,9 @@ async function _prenotaConEmail(){
     const r = await api('/api/concierge/book', {method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({quote_token:QUOTE, email:email, lang:LANG, modo_pagamento:(window.__modoPag||'')})});
     // 1) se c'è un link di pagamento -> vai al checkout Stripe (stato 'in_attesa_pagamento')
-    if(r.payment_url){ window.location.href = r.payment_url; return; }
+    //    D12 della prova vera: prima si RICORDA il voucher, cosi' la pagina «Grazie» lo mostra
+    //    anche a chi l'email non la ricevera' mai (casella piena, indirizzo sbagliato)
+    if(r.payment_url){ try{ if(r.voucher_token) localStorage.setItem('bookinvip_ultima', JSON.stringify({vt:r.voucher_token, ts:Date.now()})); }catch(e){ console.warn('bookinvip-ospite', e); } window.location.href = r.payment_url; return; }
     // 2) alloggio 'su richiesta' -> l'host deve approvare (24h): NON è un errore
     if(r.stato==='in_attesa_host'){ msg.innerHTML=`<div class="msg ok">⏳ ${t('richiesta_inviata')} (${esc(r.riferimento||'')})</div>`; document.getElementById('btnPrenota').style.display='none'; return; }
     // 3) confermata (senza pagamento online) -> mostra voucher

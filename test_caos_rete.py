@@ -309,6 +309,30 @@ async function __main(){
   check('admin: controversie in timeout = frase lenta, NON "nessuna controversia"',
         cl.indexOf(BV.ERR_FRASI.it.lenta)>=0 && cl.indexOf(T('ctr_nessuna'))===-1, cl.slice(0,200));
   check('admin: timeout presto', (Date.now()-t0)<3000, (Date.now()-t0)+'ms');
+
+  // D15-D16 della prova vera del 29/9: la lista va a PAGINE, e lo stato e il pulsante
+  // Rimborsa li decide il SERVER. Una in attesa e una scaduta NON hanno il pulsante.
+  let chiesto='';
+  const riga=function(k,rimb,stato,rimborsabile){ return {idem_key:k, alloggio_id:'casa',
+    check_in:'x', check_out:'y', origine:'concierge', rimborsato:rimb, stato:stato,
+    rimborsabile:rimborsabile}; };
+  FETCH = function(u){ if(u.indexOf('/api/admin/prenotazioni')===0) chiesto=u;
+    return jsonRes(200,{totale:45, pagina:1, per_pagina:20, prenotazioni:[
+      riga('a',false,'in_attesa',false), riga('b',true,'scaduto',false),
+      riga('c',false,'pagata',true)]}); };
+  await carica();
+  const tbh=document.getElementById('tbody').innerHTML;
+  check('admin: la lista chiede UNA pagina (page e limit)',
+        chiesto.indexOf('/api/admin/prenotazioni?page=1&limit=20')===0, chiesto);
+  check('admin: Rimborsa SOLO dove il server dice rimborsabile (1 su 3)',
+        tbh.split('class="danger btn-riga"').length-1===1 && tbh.indexOf('data-k="c"')>=0, tbh.slice(0,300));
+  check('admin: lo stato vero in parole, non «attiva»/«rimborsato»',
+        tbh.indexOf(T('st_in_attesa'))>=0 && tbh.indexOf(T('st_scaduto'))>=0
+        && tbh.indexOf('>'+T('t_att')+'<')===-1, tbh.slice(0,300));
+  check('admin: le pagine si vedono e dicono «1 di 3»',
+        document.getElementById('pr_pager').style.display==='flex'
+        && document.getElementById('pr_pag_txt').textContent.indexOf('1 '+T('p_di')+' 3')===0,
+        document.getElementById('pr_pag_txt').textContent);
 }
 """
 
@@ -419,7 +443,8 @@ class TestCaosRete(unittest.TestCase):
         self._esegui('host.html', SCENARI_HOST, 21)
 
     def test_caos_admin(self):
-        self._esegui('admin.html', SCENARI_ADMIN, 6)
+        # 10 e non 6 dal 2026-09-29: i quattro check della lista a pagine (D15-D16).
+        self._esegui('admin.html', SCENARI_ADMIN, 10)
 
 
 if __name__ == '__main__':
