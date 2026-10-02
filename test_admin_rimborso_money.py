@@ -751,6 +751,131 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
             else:
                 os.environ["PAGA_STRUTTURA_ATTIVO"] = prec
 
+    # 🔴 DIFETTO VIVO (consegne 30, punto c), visto in produzione il 1/10 su a2c63fd8:
+    # controversia decisa dal fondatore (12 centesimi al cliente, 11 all'host), e nell'elenco
+    # delle prenotazioni il pannello admin offriva ancora «Rimborsa». Il server diceva
+    # `rimborsabile` guardando solo il PAGAMENTO, e `_admin_rimborso` non guarda la garanzia:
+    # premerlo libera le date, trattiene la quota gia' decisa per l'host, scrive nel giornale un
+    # SECONDO «rimborso» dell'intero importo e lo restituisce intero su Stripe. Cioe' scavalca
+    # l'arbitro: l'host perde la sua quota e il giornale conta piu' di quanto e' entrato. La
+    # gemella c'e' gia' (la cancellazione dell'host risponde 409 `escrow_gia_liquidato` su una
+    # garanzia 'risolto'). Due prove: il pannello non lo offre, la rotta non lo esegue.
+    def _arbitro_ha_deciso(self, ci, co, pi_id):
+        rif, vt = self._prenota_e_paga(ci, co, pi_id)
+        s, c = self.g("POST", "/api/garanzia/contesta", {"voucher_token": vt})
+        self.assertEqual(s, 200, "setup: la contestazione deve riuscire: %r" % (c,))
+        s, out = self.g("POST", "/api/admin/controversia/risolvi",
+                        {"riferimento": rif, "percentuale_ospite": 50}, {"X-Admin-Key": "ak"})
+        self.assertEqual(s, 200, "setup: l'arbitrato deve riuscire: %r" % (out,))
+        self.assertGreater(int(out.get("va_all_host_cents") or 0), 0,
+                           "setup: all'host deve spettare una quota: %r" % (out,))
+        return rif
+
+    def _riga_admin(self, rif):
+        s, adm = self.g("GET", "/api/admin/prenotazioni", None, {"X-Admin-Key": "ak"})
+        self.assertEqual(s, 200, adm)
+        righe = [p for p in adm["prenotazioni"] if str(p.get("idem_key", ""))[:24] == rif]
+        self.assertEqual(len(righe), 1, "setup: la prenotazione non e' nell'elenco: %r" % (adm,))
+        return righe[0]
+
+    def test_DOPO_LA_DECISIONE_DELL_ARBITRO_IL_PANNELLO_NON_OFFRE_RIMBORSA(self):
+        rif = self._arbitro_ha_deciso("2026-09-24", "2026-09-26", "pi_arbitro_offerta")
+        riga = self._riga_admin(rif)
+        self.assertEqual(riga.get("stato"), "pagata", "setup: %r" % (riga,))
+        self.assertIs(riga.get("rimborsabile"), False,
+                      "dopo la decisione dell'arbitro il pannello offre ancora «Rimborsa»: %r"
+                      % (riga,))
+
+    def test_DOPO_LA_DECISIONE_DELL_ARBITRO_IL_RIMBORSO_ADMIN_NON_TOCCA_NIENTE(self):
+        ci, co = "2026-09-24", "2026-09-26"
+        rif = self._arbitro_ha_deciso(ci, co, "pi_arbitro_rotta")
+
+        def rimborsi_nel_giornale():
+            return [(m["tipo"], m["importo_cents"]) for m in self.sys.finanza.movimenti(rif)
+                    if m["tipo"] == "rimborso"]
+
+        giornale_prima = rimborsi_nel_giornale()
+        self.assertEqual(len(giornale_prima), 1, "setup: il giornale deve avere il rimborso "
+                         "deciso dall'arbitro, uno solo: %r" % (giornale_prima,))
+        payout_prima = dict(self.sys.payout.info(rif) or {})
+        self.assertEqual(payout_prima.get("stato"), "maturato", "setup: %r" % (payout_prima,))
+        idem = self._riga_admin(rif)["idem_key"]
+        del CHIAMATE_LISTA[:]
+        s, res = self.g("POST", "/api/admin/rimborso",
+                        {"alloggio_id": "casa", "check_in": ci, "check_out": co,
+                         "idem_key": idem}, {"X-Admin-Key": "ak"})
+        self.assertEqual((s, res.get("errore")), (409, "escrow_gia_liquidato"),
+                         "il rimborso dal pannello scavalca la decisione dell'arbitro: %r" % (res,))
+        self.assertEqual([c["url"] for c in CHIAMATE_LISTA
+                          if "/refunds" in c["url"] and c["body"]], [],
+                         "a Stripe e' partita una richiesta di rimborso")
+        self.assertEqual(rimborsi_nel_giornale(), giornale_prima,
+                         "il giornale ha un rimborso in piu' rispetto alla decisione")
+        self.assertEqual(dict(self.sys.payout.info(rif) or {}), payout_prima,
+                         "la quota dell'host decisa dall'arbitro e' stata toccata")
+        self.assertEqual((self.sys.garanzia.stato(rif) or {}).get("stato"), "risolto")
+        self.assertIs(self._riga_admin(rif).get("rimborsato"), False, "le date sono state liberate")
+
+    def test_CON_LA_GARANZIA_ILLEGGIBILE_NIENTE_PULSANTE_E_NIENTE_RIMBORSO(self):
+        """D19: il ramo di difesa costruito a mano. Se l'archivio della garanzia non si legge
+        non si sa se l'arbitro ha deciso: l'elenco risponde lo stesso, senza «Rimborsa» e con
+        la riga ERROR, e la rotta finisce in 500 senza liberare date ne' chiamare Stripe."""
+        ci, co = "2026-09-20", "2026-09-22"
+        rif, _vt = self._prenota_e_paga(ci, co, "pi_garanzia_rotta")
+
+        class _GaranziaRotta:
+            def stato(self, *a, **k):
+                raise RuntimeError("archivio garanzia guasto")
+
+        vera = self.sys.garanzia
+        self.sys.garanzia = _GaranziaRotta()
+        try:
+            with self.assertLogs("core_auto.server", level="ERROR") as reg:
+                riga = self._riga_admin(rif)
+            self.assertEqual(riga.get("stato"), "pagata", "setup: %r" % (riga,))
+            self.assertIs(riga.get("rimborsabile"), False,
+                          "con la garanzia illeggibile il pannello offre «Rimborsa»: %r" % (riga,))
+            righe = [r for r in reg.records if "garanzia illeggibile" in r.getMessage()]
+            self.assertTrue(righe, "nessuna riga ERROR dice perche' manca il pulsante: %r"
+                            % reg.output)
+            # la riga porta LA traccia del guasto, del tipo giusto (non un «non e' nullo»)
+            self.assertIsInstance(righe[0].exc_info, tuple, "la riga ERROR non porta la traccia")
+            self.assertIsInstance(righe[0].exc_info[1], RuntimeError)
+            self.assertEqual(str(righe[0].exc_info[1]), "archivio garanzia guasto")
+            del CHIAMATE_LISTA[:]
+            s, res = self.g("POST", "/api/admin/rimborso",
+                            {"alloggio_id": "casa", "check_in": ci, "check_out": co,
+                             "idem_key": riga["idem_key"]}, {"X-Admin-Key": "ak"})
+            self.assertEqual(s, 500, res)
+            self.assertEqual([c["url"] for c in CHIAMATE_LISTA
+                              if "/refunds" in c["url"] and c["body"]], [],
+                             "a Stripe e' partita una richiesta di rimborso")
+        finally:
+            self.sys.garanzia = vera
+        self.assertIs(self._riga_admin(rif).get("rimborsato"), False, "le date sono state liberate")
+
+    def test_LA_GARANZIA_SI_CERCA_COL_RIFERIMENTO_VERO_ANCHE_DOPO_UN_RIBLOCCO(self):
+        """La chiave del calendario non e' sempre il riferimento: dopo un pagamento tardivo e'
+        «reblock:<rif>» (lo prova la lista admin in test_fase83_server). Il freno deve chiedere
+        alla garanzia il riferimento VERO, come fa `_admin_rimborso`: altrimenti su una
+        prenotazione ribloccata e gia' decisa dall'arbitro «Rimborsa» tornerebbe."""
+        chiesti = []
+
+        class _Garanzia:
+            def stato(self, rif):
+                chiesti.append(rif)
+                return {"stato": "risolto"}
+
+        vera = self.sys.garanzia
+        self.sys.garanzia = _Garanzia()
+        try:
+            rif = "r" * 24
+            self.assertIs(self.r._garanzia_gia_divisa("reblock:" + rif), True)
+            self.assertIs(self.r._garanzia_gia_divisa(rif + "f" * 40), True)
+        finally:
+            self.sys.garanzia = vera
+        self.assertEqual(chiesti, [rif, rif])
+
     def test_STRADA_4_CONTROVERSIA_RISOLTA_FINISCE_NELLA_LISTA(self):
         """⛔ LA QUARTA STRADA, e l'unica diversa dalle altre tre: qui il soggiorno C'E' STATO.
         L'arbitro decide che all'ospite spetta indietro una parte della somma in garanzia, la

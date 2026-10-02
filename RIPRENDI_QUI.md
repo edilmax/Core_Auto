@@ -3435,7 +3435,200 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 1a0326a
+CONSEGNE AGGIORNATE A: 38e561b
+
+## PASSAGGIO DI CONSEGNE 31 (2026-10-02 notte) - IL SALDO STRIPE -0,27 SPIEGATO; I TRE DIFETTI DELLA PROVA VERA RIPARATI, OGNUNO CON LA GUARDIA VISTA ROSSA PRIMA; SUL RAMO `ritenuta-riga-esito` (#240), NON COMMITTATO, NIENTE IN PRODUZIONE:
+- CONTESTO: 47%, letto dal fondatore con `/context` mentre girava la prima suite (08:0x del 2/10); da li' niente
+  lavoro nuovo, solo la chiusura di questo blocco (D21).
+- STATO VERIFICATO all'inizio (21:24Z del 1/10, `git rev-parse` / `git ls-remote` / ssh / API): master d0ade67 su
+  computer, GitHub e VPS; contenitori healthy, /api/health 200. #239 testa cccfa4f e #240 testa 38e561b aperte, 16
+  controlli ciascuna, gate success (`zap` skipped).
+- PERMESSI, parole del fondatore in questa sessione: «auorizzato fino alla fine» (cosi', col refuso) per le tre
+  riparazioni. NON c'e' «procedi al commit»: niente commit, niente push, niente deploy.
+- GML: il Compito 19 e' rimasto senza risposta (gettoni finiti; canale fermo alle 21:59:59 del 1/10, ultima riga
+  «TURNO: GML»). Le due domande le ho verificate io sul codice: (1) vedi difetto (a) qui sotto; (2) «Restituisci» ->
+  `POST /api/admin/rimborsa_dovuto` -> `_admin_rimborsa_dovuto` chiama Stripe e NON scrive nel giornale; il webhook
+  `charge.refunded` non ha gestore (i soli rami per tipo d'evento sono `checkout.session.*` e
+  `identity.verification_session.*`). Quindi premere «Restituisci 0,12» non conta due volte; se Stripe rifiuta (saldo
+  negativo) risponde 502, non parte niente e il motivo va nel registro. Decide il fondatore (soldi veri).
+- SALDO STRIPE DELLA PIATTAFORMA, sola lettura alle 21:25Z (livemode True): available -27, pending 24 (EUR, centesimi).
+  Tre voci in tutto: 16/8 charge 100, commissione Stripe 27, netto 73 · 16/8 refund -100, commissione 0 · 1/10 charge 50,
+  commissione 26, netto 24, disponibile dal 6 ottobre. 73 - 100 = -27: la commissione del primo euro di prova
+  (prenotazione 8a448a3a; giornale incasso 100, commissione 30, rimborso 100, agli stessi secondi di Stripe) che Stripe
+  non restituisce sui rimborsi; era gia' nel REGISTRO (voce del 17/8, «il libro contabile diceva il falso»). La terza voce
+  e' a2c63fd8 (il suo pi in `pendenti.db`). VISTI PER STRADA, non riparati: il giornale di 8a448a3a non ha la riga
+  `costo_gateway` 27 (nata il giorno dopo); il giornale di a2c63fd8 dice «rimborso 12» e su Stripe i rimborsi sono 0.
+- DIFETTO (a), la causa NON era quella delle consegne 30: il server ha risposto bene. Misurato sul VPS: tre `POST
+  /api/host/riaccetta 200` in nginx (18:55:00, 18:55:13, 18:56:02Z), sei righe di prova (contratto 2026-09-27 con le
+  clausole + privacy 2026-09-29), nessuna riga «PROVA consensi INCOMPLETA». Sbagliava la pagina: `host.html:939` leggeva
+  `r.ok` sulla busta che `post()` restituisce (`{status, data}`): sempre falso, sempre «Non e' stato possibile
+  registrare». Gli altri pulsanti della stessa pagina leggono `r.status`. GUARDIA: `collaudi/riaccetta_browser.js` (nuovo,
+  nel job `browser` della CI sul terzo banco) + un host senza prove dei consensi nel banco (`avvia_server_visivo.py`,
+  `riaccetta@visivo.it`). Vista ROSSA prima: «la pagina dice "Non e' stato possibile registrare l'accettazione..." invece
+  di "✅ Grazie..." (il testo dell'ERRORE)», col server che riletto dice `deve_riaccettare=false`. Riparata (una riga:
+  `r.status===200 && r.data.ok===true`); verde; rossa di nuovo col file di prima, ripristino sha256 identico. La guardia
+  prova anche l'altro verso con due risposte finte del browser (200 `ok:false`, 500): tre guasti a mano sulla riga
+  (sempre ok, senza lo stato, senza `ok`) tutti rossi, ripristino identico.
+- DIFETTO (b): `_trasferisci_all_host` usciva muto con l'host senza conto Stripe. GUARDIA
+  `test_stripe_connect_escrow.test_host_senza_stripe_IL_REGISTRO_LO_DICE` (strada di produzione: contestazione, decisione
+  al 50%), vista ROSSA prima: «0 != 1 ... Righe viste: ['ADMIN_ACTION ... Controversia risolta ...']». Riparata: riga
+  WARNING `PAYOUT_HOLD_TRIGGERED | HOST_ID | RIF | IMPORTO | MOTIVO: CONTO_STRIPE_NON_COLLEGATO`, con l'importo del
+  registro dei bonifici (gia' al netto della ritenuta), non quello del chiamante: lo pretende la prova allargata
+  `test_ritenuta.TestAccesa.test_host_senza_stripe_da_pagare_a_mano_e_gia_al_netto` (vista rossa col file di prima:
+  «BONIFICO: 18000 -> 13800», la riga deve dire 13800).
+- DIFETTO (c), piu' grave di come scritto: misurato sul banco (1000 EUR, arbitro 450 all'ospite e 450 all'host), «Rimborsa»
+  rispondeva 200, chiedeva a Stripe `amount=100000`, toglieva la riga del bonifico all'host (payout None), liberava le date
+  e scriveva un secondo `rimborso 100000` nel giornale (piu' `debito_all_ospite`, `storno_commissione`). GUARDIE in
+  `test_admin_rimborso_money.TestLaListaDeiRimborsiDovuti`: `..._IL_PANNELLO_NON_OFFRE_RIMBORSA` e
+  `..._IL_RIMBORSO_ADMIN_NON_TOCCA_NIENTE`, viste ROSSE prima («True is not False» e «(200, None) != (409,
+  'escrow_gia_liquidato')»). Riparata in `fase83_server.py`: `_garanzia_gia_divisa` (garanzia `risolto`: la decisione
+  dell'arbitro E la cancellazione con penale, `fase160.chiudi_proporzionale`; riferimento ricavato dalla chiave come in
+  `_admin_rimborso`), usata dall'elenco admin (`rimborsabile`) e dalla rotta, che risponde
+  409 `escrow_gia_liquidato` PRIMA di toccare date e soldi (la gemella della cancellazione dell'host). Due prove in piu':
+  la garanzia illeggibile (D19: elenco senza pulsante con la riga ERROR e la sua traccia, rotta 500 senza effetti) e il
+  riferimento dopo un riblocco.
+- SECONDO ROSSO E MUTAZIONE: col `fase83_server.py` di prima le 5 prove (b)(c) rosse, ripristino sha256 identico.
+  Mutazione sulle 33 righe nuove con gli occhi scelti a mano (attrezzo nello scratchpad che usa le funzioni del Giudice;
+  `--diff` sceglie 8 test in ordine alfabetico e i killer veri ne restano fuori): primo giro 7 su 8, sopravvissuto
+  `exc_info=True -> False` nella riga ERROR del ramo di difesa -> la prova pretende la tupla col RuntimeError -> 8 su 8;
+  rinunce del generatore: a_cavallo 1. A mano, perche' il generatore non li fa: `warning -> info` in (b) e il riblocco
+  ignorato in (c), rossi. Sempre sha256 identico e 0 biglietti aperti. Registri:
+  `Core_Auto_GUARDIE_PRONTE\mutazione_righe_nuove_20261002*.log`.
+- ALTRI CONTROLLI: 102 prove in quattro file (`test_admin_rimborso_money`, `test_ritenuta`, `test_stripe_connect_escrow`,
+  `test_dac7_blocco_payout`) OK; il job `browser` della CI rifatto sul PC coi tre banchi: 9 percorsi su 9 verdi; ruff 11 e
+  bandit 39 segnalazioni, le stesse di HEAD (nessuna nuova). Caricatore 7193 (5 prove nuove).
+- PRE-VOLO: le caselle sono scadute dopo l'unione del 1/10 e lo scopo tocca la produzione: dichiarato con `--nonostante`
+  e il motivo nella traccia (la rimisura va fatta su master d0ade67, non su questo ramo che contiene anche #239 e #240).
+- SUITE INTERA, PRIMO GIRO (PowerShell vera, partito alle 01:36 del 2/10, `suite_20261002_013635.log`): «Ran 7188
+  tests in 2303.222s · FAILED (failures=1, skipped=4) · CODICE_USCITA_DIRETTO=1» (caricatore 7193, scarto 5 =
+  openssl). Il rosso: `test_rimborso_coppie_stessa_chiave.test_ospite_poi_admin_e_FRENATA_e_il_movimento_si_MISURA`,
+  «409 != 200 ... {'errore': 'escrow_gia_liquidato'}». Diagnosi: la cancellazione dell'ospite con penale porta ANCHE
+  LEI la garanzia a `risolto`, e il freno nuovo ferma «Rimborsa» li' (prima rispondeva 200 senza muovere denaro):
+  giusto, e piu' forte. Aggiornata la premessa di quella prova (409), i suoi controlli sul denaro restano; la funzione,
+  che si chiamava `_arbitro_ha_deciso`, ora si chiama per quello che guarda. Misurato a macchina (attrezzo nello
+  scratchpad che avvolge `_admin_rimborso` su 451 prove in 30 file che chiamano la rotta): il freno nuovo scatta in 2
+  prove soltanto (la mia guardia e questa), quindi nessun'altra prova passa ora per il motivo sbagliato.
+- SUITE INTERA, SECONDO GIRO: lanciato dopo questi documenti; l'esito va nel messaggio del commit.
+- FILE: `fase83_server.py`, `deploy/host.html`, `test_admin_rimborso_money.py`, `test_ritenuta.py`,
+  `test_rimborso_coppie_stessa_chiave.py`,
+  `test_stripe_connect_escrow.py`, `collaudi/avvia_server_visivo.py`, `collaudi/riaccetta_browser.js` (nuovo),
+  `.github/workflows/ci.yml`, questo file, `REGISTRO_INGEGNERIA.md`.
+- RESTA, in ordine:
+  1. «procedi al commit» -> commit su `ritenuta-riga-esito`, push (aggiorna la #240), CI dall'API; poi unione #239 ->
+     #240 e deploy col protocollo (produzione: serve la parola del fondatore);
+  2. `python collaudi/rimisura.py` su master d0ade67 (il punto 1 delle consegne 30, scavalcato e dichiarato);
+  3. i 12 centesimi: «Restituisci» non conta due volte (sopra); premerlo lo decide il fondatore. Il saldo disponibile
+     resta negativo anche dopo il 6 ottobre (-3, conto fatto, non misurato);
+  4. VISTO PER STRADA, da misurare: «Rimborsa» su una garanzia `rilasciato` (host gia' pagato) scrive la riga
+     `rimborso` nel giornale PRIMA di accorgersi che il payout non si trattiene; il freno nuovo guarda solo `risolto`;
+  5. il resto delle consegne 30, punto 2: D4, il «false» sul freno globale e sulla ritenuta, la riga del freno, D17; e
+     la CI instabile (SIGBUS, consegne 30 punto 16) da capire;
+  6. Connect: il profilo della piattaforma aspetta l'approvazione di Stripe (solo il fondatore).
+
+## PASSAGGIO DI CONSEGNE 30 (2026-10-01 sera) - INCASSO VERO RIUSCITO DA SOLO, CONTROVERSIA DECISA DAL PANNELLO, #236 #237 #238 UNITE E IN PRODUZIONE (master d0ade67 su PC, GitHub e VPS); TRE DIFETTI NUOVI DALLA PROVA:
+- CONTESTO: 43% letto dal fondatore alle 19:4x; chiuso oltre il 50% (stima mia, D21) subito dopo il deploy.
+  Permessi: quelli delle consegne 29, poi «vai e finisci». Script e letture di stasera, tutti in sola
+  lettura salvo i due passi dichiarati sotto: `Desktop\Core_Auto_GUARDIE_PRONTE\deploy_20261001\`.
+- INCASSO di a2c63fd8 (la prova vera del 29/9): partito DA SOLO alle 18:07:21Z (giro orario dopo le
+  17:46:14Z): Stripe succeeded, incassati 50, livemode True; giornale incasso 50 / commissione 27 /
+  costo_gateway 26; INVARIANTI ARCHIVI I1-I5 violazioni=0 alle 18:07:25Z.
+- CONTROVERSIA risolta dal fondatore dal pannello admin (Bunker) alle 18:19:27Z: 12 centesimi al
+  cliente, 11 all'host (23 dispari: l'arrotondamento da' il centesimo al cliente, admin.html:738).
+  Dopo: garanzia `risolto` 11/12, payout `trattenuto` -> `maturato` 11, giornale `rimborso 12`.
+  ⚠️ Su Stripe i rimborsi del pagamento sono 0: e' il limite DICHIARATO della strada 4 (rimborso a
+  mano). PRIMA di rimborsare a mano i 12 centesimi: verificare se il webhook `charge.refunded` scrive
+  un secondo «rimborso» nel giornale (doppio conto). Detto al fondatore di NON farlo ancora.
+- PASSI SULLA PRODUZIONE (sequenza del Compito 18, rivista da GML: «OK con due aggiunte», presa la
+  rilettura di merged=True, NON presa la rimisura prima dell'unione, col motivo nel canale):
+  copia `/root/pre_deploy_20261001` (27 database col backup di SQLite, integrity ok su ogni copia, 12
+  altri file, sha256 OK; `.watchdog_stato` e' nascosto e fuori dall'impronta); PULIZIA delle due righe
+  payout rimaste `trattenuto` con garanzia `annullato` (8a448a3a 70, bbb00577 23 centesimi): tolte,
+  una ciascuna, riletto 0; unione dall'API #236 -> 5becfb6, #237 -> 83261b2, #238 -> d0ade67, ognuna
+  con merged=True riletto; master d0ade67 == albero di 1a0326a (git diff vuoto); CI di master: 15
+  controlli, gate success; deploy col pulsante: paracadute OK (prec = viva cefa7a55...), scambio alle
+  18:43:45Z (HEAD d0ade67), verifica: healthy, money_path_pronto True, avvisi [], nessuna PAGAMENTO_;
+  sonde 17 su 17 (i quattro script e la copia .bak ora 404, il 30/9 erano 200; HEAD 404; robots e
+  sitemap 200; host e bunker 302); verifica_produzione.py 190 controlli, 0 violazioni (certificato
+  ancora 52 giorni); interruttori: nessun .flag, nessuna leva; tre posti su d0ade67.
+- IL FONDATORE dopo il deploy: verifica d'identita' Stripe fatta (KYC IDENTITY VERIFICATO 18:30:03Z);
+  contratto e privacy riaccettati (righe 2026-09-27 + privacy 2026-09-29 scritte; dopo una nuova
+  entrata non li chiede piu').
+- TRE DIFETTI NUOVI (nessuna guardia ancora, si fanno con D20):
+  (a) `/api/host/riaccetta` risponde 200 con `"ok": false` anche quando i consensi SI SONO SCRITTI
+      (fase83 `return 200, {"ok": bool(out.get("registrata")), ...}`): la pagina dice «Non e' stato
+      possibile registrare l'accettazione» e il fondatore ha premuto tre volte (tre coppie di righe).
+      Da capire perche' `_registra_consensi` dice registrata=False. Le versioni NON c'entrano (verificato:
+      fase185 e il ripiego di fase163 dicono entrambe privacy 2026-09-29).
+  (b) `_trasferisci_all_host` esce SENZA SCRIVERE NIENTE se l'host non ha il conto Stripe collegato
+      (`if not acct: return`): gli 11 centesimi sono `maturato` e il registro tace (ferrea 9).
+  (c) dopo una controversia RISOLTA il pannello admin offre ancora «Rimborsa» (restano 38 centesimi):
+      premerlo scavalca l'arbitro e (D13) toglie la riga del bonifico. Detto al fondatore di non premerlo.
+  E di chiarezza: «Dati fiscali» (con IBAN), «Verifica identita'» e «Collega Stripe» sembrano la stessa
+  cosa; il fondatore credeva di aver finito.
+- DA FARE SOLO AL FONDATORE: «Collega Stripe» fallisce perche' Stripe risponde «You must complete your
+  platform profile to use Connect and create live connected accounts» (log 18:54:24Z): il profilo
+  piattaforma di Connect in modalita' vera NON e' completo. Finche' non lo completa dal pannello di
+  Stripe, nessun host puo' ricevere bonifici automatici.
+- GML OGGI (canale `Desktop\claude&gml fhash.txt`, regola dei turni scritta alle 18:48 e fatta
+  rispettare dal mio `scrivi_al_canale.ps1`): C10 e C11 niente che blocchi; C12 piano del deploy; C13
+  stato dei difetti D1-D22 (aperti dopo la riverifica C16: D2, D4 VERO E IN PRODUZIONE, D6, D9+D17,
+  D10, D19; D20a chiuso); C13 B nomi con Ø ß Ł (univoche si traslitterano, Ä Ö Ü Å le conferma
+  l'ospite); C14 tre testi in 8 lingue (verificati); C15 progetto del file per l'host; C17 i 5 minuti
+  di D17: Stripe non lascia scadere una sessione prima di 30 minuti (expires_at, letto oggi) -> hold a
+  5 minuti + POST /expire prima di liberare + giro piu' frequente. L'elenco intero coi file:riga e i
+  miei VERO/FALSO: `deploy_20261001\da_scrivere_consegne_30.txt`.
+- DECISIONE CHIESTA AL FONDATORE, senza risposta: D6, solo la carta (annullo gratis) o tutti i metodi.
+- RESTA, in ordine:
+  1. `python collaudi/rimisura.py` su master (11 rapidi; la mutazione da 600 minuti la salta e lo dice);
+  2. i tre difetti nuovi (a)(b)(c), poi D4 (soldi, in produzione), il «false» sul freno globale
+     (fase83:4626, in produzione) e sulla ritenuta, la riga del freno (:4629-4631), D17 col /expire;
+  3. la #239 (check-in, spento: si puo' unire dopo la correzione 35/36 prove nelle sue consegne) e la
+     #240 (questo ramo); prima di ACCENDERE il check-in: consegne 28 + i testi e il progetto di GML;
+  4. i 12 centesimi: nel pannello admin «Rimborsi da eseguire» la riga di a2c63fd8 («ha pagato 0,50 ·
+     spetta 0,12», foto del fondatore delle 21:0x) ha il pulsante «Restituisci 0,12». Detto al fondatore
+     di NON premerlo finche' non e' verificato nel codice che il pulsante (e poi il webhook
+     `charge.refunded`) non scriva un SECONDO «rimborso» nel giornale, dove quello della controversia
+     c'e' gia'. La seconda riga della lista (8a448a3a, «non pronto», dal 16/8) e' una prova vecchia.
+
+## PASSAGGIO DI CONSEGNE 29 (2026-10-01 pomeriggio) - LA RIGA DELLA RITENUTA DICE L'ESITO, NON LA RICHIESTA; RAMO `ritenuta-riga-esito` SOPRA LA #239; NIENTE IN PRODUZIONE:
+- CONTESTO: 16%, letto dal fondatore con `/context` dopo il blocco 1 di questa sessione (15:3x).
+- STATO VERIFICATO all'inizio (12:19Z, `git rev-parse` / `git ls-remote` / ssh / API): master 6889a7a su
+  computer, GitHub e VPS; contenitori healthy, `https://bookinvip.com/api/health` 200; aperte #236 0a70cd8,
+  #237 02e7a07, #238 1a0326a, tutte con gate success (16 controlli, `zap` skipped).
+- PERMESSI, parole del fondatore all'inizio di questa sessione: «procedi al commit» per tutti i punti;
+  «autorizzato» a commit, unioni, VPS e tutto quello che serve per finire; niente deploy ne' `git pull` sul
+  VPS fino all'incasso di a2c63fd8 (dalle 17:46Z); `questura-checkin` NON va in produzione stasera; ogni
+  difetto con la guardia vista rossa prima. Dopo il blocco 1: «16 vai avanti».
+- BLOCCO 1 FATTO: suite intera del ramo `questura-checkin` (partita 13:06, PowerShell) -> Ran 7182 tests in
+  6642.562s, OK (skipped=4), uscita 0; caricatore 7187 (scarto 5 = openssl). Commit cccfa4f, PR #239 (base
+  master), CI: 16 controlli, gate success, `zap` skipped. Durante quel giro `fase160` `fase162` `fase167`
+  `fase59` hanno cambiato data ma non contenuto (`git diff --quiet HEAD` -> 0): li riscrive il Giudice vero
+  lanciato da `test_pipeline_ci.py:6147`. GML: Compito 11 (revisione della #239) nel canale alle 14:59; ai
+  Compiti 9 e 10 nessuna risposta.
+- DIFETTO VIVO (il punto 3 del fondatore, trovato nelle consegne 28): `_bunker_ritenuta_imposta` scriveva
+  «RITENUTA LOCAZIONI BREVI ACCESA» (o «spenta») anche quando l'interruttore non si scriveva e la risposta
+  era 500. Guardia `test_ritenuta.TestIlPannelloNeiCasiDiBordo.test_SE_L_INTERRUTTORE_NON_SI_SCRIVE_IL_REGISTRO_NON_MENTE`
+  (un sistema senza archivio dei bonifici: l'interruttore non ha file), vista ROSSA prima:
+  «['WARNING:core_auto.server:RITENUTA LOCAZIONI BREVI ACCESA | motivo=-'] is not false», e uguale con
+  «spenta». Riparata come la gemella del check-in: riuscito -> la riga di sempre; non riuscito -> un errore
+  «RITENUTA LOCAZIONI BREVI NON accesa|spenta: l'interruttore non si e' scritto». Verde; di nuovo rossa col
+  file di prima; ripristino sha256 identico; rifatto sull'albero sopra cccfa4f. `test_ritenuta` Ran 35, OK.
+  Mutazione sulle righe nuove (occhi scelti a mano = quella classe, attrezzo nello scratchpad): 1 su 2 ->
+  la prova pretende la riga intera -> 2 su 2, rinunce del generatore 0. A mano, perche' il generatore non le
+  rompe: `if ok` rovesciato -> rossa (3 prove), accesa/spenta scambiate -> rossa (2); ripristino identico.
+- SCELTA TECNICA MIA: il ramo nasce da cccfa4f (#239) e non da 1a0326a: tutt'e due aggiungono consegne qui e
+  cambiano la riga `SUITE ATTUALE`, quindi separati si sarebbero scontrati all'unione. Si unisce DOPO la #239.
+- CONTROLLI STATICI: `python collaudi/cricchetto_statico.py tutti` FERMATO a meta' (dentro semgrep) da Claude
+  Code per memoria del PC quasi finita; nessun processo rimasto, `git status` pulito. Esito: NON ESEGUITO.
+- VISTO PER STRADA, NON RIPARATO: nella stessa rotta `attivo = bool(dati.get("attivo"))`, quindi la parola
+  "false" scritta come testo ACCENDE la ritenuta; la pagina del bunker manda il valore vero
+  (`deploy/bunker.html:631`), serve una richiesta scritta a mano da un super-admin. La gemella del check-in
+  usa `is True`.
+- RESTA, in ordine:
+  1. stasera: occhio sull'incasso di a2c63fd8, controversia dal pannello admin, unione #236 -> #237 -> #238
+     e deploy coi punti «al deploy» delle consegne 24-27 (la #239 e questo ramo NON stasera);
+  2. la #239 dopo la revisione di GML, poi questo ramo; la parola "false" qui sopra;
+  3. come nelle consegne 28 (prima di accendere il check-in) e 26 (il motore dei prezzi delle OTA).
 
 ## PASSAGGIO DI CONSEGNE 28 (2026-10-01 pomeriggio) - IL CHECK-IN ONLINE COSTRUITO E SPENTO COL SUO PULSANTE: IN ITALIA RACCOGLIE LA SCHEDINA, I DATI SI CANCELLANO DA SOLI, L'INFORMATIVA LO DICE; RAMO NUOVO `questura-checkin`, NON SI UNISCE STASERA:
 - ⚠️ CONTESTO: 66%, letto dal fondatore con `/context` dopo le 12:32 (l'ultima ora letta dal computer
@@ -5036,7 +5229,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 7187 test
+SUITE ATTUALE: Ran 7193 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

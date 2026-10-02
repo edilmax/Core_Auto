@@ -936,7 +936,7 @@ async function controllaConsensi(){
     b.disabled=true;
     var r=await post('/api/host/riaccetta', {accetta_termini:true, accetta_clausole:true,
       accetta_privacy:true, doc_sha256:(st.doc_sha256||''), lang:LANG});
-    if(r && r.ok){ m.style.color='var(--brand)'; m.textContent=T('ra_ok');
+    if(r.status===200 && r.data.ok===true){ m.style.color='var(--brand)'; m.textContent=T('ra_ok');
       setTimeout(function(){ document.getElementById('cardRiaccetta').style.display='none'; }, 2500); }
     else { m.style.color='var(--rosso)'; m.textContent=T('ra_err'); b.disabled=false; }
   };

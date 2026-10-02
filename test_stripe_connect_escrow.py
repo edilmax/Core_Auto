@@ -11,6 +11,7 @@ fallito -> payout resta 'maturato' tracciato, nessun crash), niente transfer su 
 non pagate online.
 """
 import json
+import logging
 import shutil
 import tempfile
 import time
@@ -219,6 +220,38 @@ class TestConnectEscrow(unittest.TestCase):
         self.assertEqual(len(self.rete.transfers()), 0, "transfer senza conto collegato!")
         rie = self.sys.payout.riepilogo(self.hid)["EUR"]
         self.assertEqual(rie.get("maturato", 0), netto)        # resta tracciato per il manuale
+
+    def test_host_senza_stripe_IL_REGISTRO_LO_DICE(self):
+        """🔴 DIFETTO VIVO (consegne 30, punto b), visto in produzione il 1/10 su a2c63fd8: la
+        controversia decisa dal fondatore ha reso pagabili all'host 11 centesimi, l'host non
+        ha il conto Stripe collegato, e `_trasferisci_all_host` e' uscito con un `return` muto.
+        I soldi restano «maturato» (giusto: il gemello qui sopra lo prova), ma nessuna riga del
+        registro dice che aspettano un bonifico A MANO: lo sapeva solo chi apriva l'archivio
+        (regola ferrea 9, l'osservabile debole e' un difetto). Questa pretende la riga, nella
+        stessa famiglia delle altre trattenute del bonifico, con chi, cosa, quanto e perche'.
+        Si percorre la strada di produzione: contestazione, decisione dell'arbitro, bonifico."""
+        b = self._prenota_e_paga("2026-11-05", "2026-11-07")   # NESSUN collegamento Stripe
+        rif = b["riferimento"]
+        s, _ = self.g("POST", "/api/garanzia/contesta", {"voucher_token": b["voucher_token"]})
+        self.assertEqual(s, 200, "setup: la contestazione deve riuscire")
+        with self.assertLogs("core_auto.server", level="WARNING") as reg:
+            s, out = self.g("POST", "/api/admin/controversia/risolvi",
+                            {"riferimento": rif, "percentuale_ospite": 50},
+                            {"X-Admin-Key": "ak"})
+        self.assertEqual(s, 200, out)
+        quota = out["va_all_host_cents"]
+        self.assertGreater(quota, 0, "setup: all'host deve spettare qualcosa: %r" % (out,))
+        self.assertEqual(len(self.rete.transfers()), 0, "transfer senza conto collegato!")
+        self.assertEqual(self.sys.payout.stato_di(rif), "maturato")
+        attese = ("PAYOUT_HOLD_TRIGGERED", "HOST_ID: %s" % self.hid, "RIF: %s" % rif,
+                  "IMPORTO: %d" % quota, "MOTIVO: CONTO_STRIPE_NON_COLLEGATO")
+        righe = [r for r in reg.records if all(a in r.getMessage() for a in attese)]
+        self.assertEqual(len(righe), 1,
+                         "il bonifico all'host e' fermo perche' manca il conto Stripe, e il "
+                         "registro non lo dice (servono %r). Righe viste: %r"
+                         % (attese, [r.getMessage() for r in reg.records]))
+        self.assertEqual(righe[0].levelno, logging.WARNING,
+                         "la riga c'e' ma col livello sbagliato: %s" % righe[0].levelname)
 
     def test_transfer_fallito_isolato_payout_resta(self):
         self._collega_stripe()
