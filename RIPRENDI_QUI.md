@@ -3437,7 +3437,69 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 ```
 CONSEGNE AGGIORNATE A: 38e561b
 
-## PASSAGGIO DI CONSEGNE 31 (2026-10-02 notte) - IL SALDO STRIPE -0,27 SPIEGATO; I TRE DIFETTI DELLA PROVA VERA RIPARATI, OGNUNO CON LA GUARDIA VISTA ROSSA PRIMA; SUL RAMO `ritenuta-riga-esito` (#240), NON COMMITTATO, NIENTE IN PRODUZIONE:
+## PASSAGGIO DI CONSEGNE 32 (2026-10-02 mattina) - #239 E #240 UNITE E IN PRODUZIONE (master 160c2e3 su PC, GitHub e VPS); RIMISURA PRIMA E DOPO L'UNIONE; IL GUARDIANO RESTA ANOMALO PER DUE CAUSE NOTE, TUTTE E DUE DEL FONDATORE:
+- STATO VERIFICATO all'inizio (08:28Z, `git rev-parse` / `git ls-remote` / ssh / API): master d0ade67 su computer, GitHub
+  e VPS; contenitori healthy, /api/health 200; #239 cccfa4f e #240 44a5765 aperte, 16 controlli ciascuna, gate success
+  (`zap` skipped); cccfa4f antenato di 44a5765.
+- PERMESSI, parole del fondatore in questa sessione: «Autorizzato», poi «Procedi al commit  autorizzato fino alla fine».
+- RIMISURA SU MASTER d0ade67, prima dell'unione (punto 2 delle consegne 31; 08:29Z, `python collaudi/rimisura.py`, uscita
+  1, registri `%TEMP%\bookinvip_rimisure\20261002-102956`): 6 eseguiti, 4 verdi (ogni ora, spunte, lingue, oblio).
+  ROSSO `esame_produzione.py --scrivi` (blocco 1, casella 6; era verde a 74584b0): il giro intero del Guardiano del 1/10
+  18:43:42Z dice `riconciliazione_stripe` con `delta_totali {'rimborsi': {'EUR': -12}}` (giornale 12, Stripe 0: i 12
+  centesimi di a2c63fd8) e `guasti_isolati` (Connect `POST /v1/accounts` 400, «You must complete your platform profile»).
+  ROSSO `esame_sentinella.py --scrivi` (blocco 8; era gia' rosso a 0a70cd8): primo giro `IncompleteRead`, secondo l'API di
+  GitHub ha chiuso la connessione (limite anonimo letto: 58 su 60, non era quello), terzo misurato: 4 rossi su 10 -- nessun
+  monitor esterno nelle letture, e GitHub 4 giri nelle 24 ore (ultimo 373 minuti prima).
+- VISTO PER STRADA, non riparato (attrezzo): la casella della sentinella NON puo' tornare verde dalla rimisura. Il comando
+  scritto nella scheda e' `esame_sentinella.py --scrivi` senza `--monitor uptimerobot`, e senza quell'argomento l'esame
+  non legge il monitor (`esame_sentinella.py:441`) anche se `UPTIMEROBOT_API_KEY` c'e' (misurato: presente nel processo).
+- UNIONE E DEPLOY (la sequenza del Compito 18 del 1/10, senza la pulizia, script in
+  `Core_Auto_GUARDIE_PRONTE\deploy_20261001\` e sul server `/root/deploy_20261002/`):
+  copia `/root/pre_deploy_20261002` alle 09:03Z (27 database col backup di SQLite, `integrity ok` su ognuno, 12 altri
+  file, sha256 OK; 39 file, `.watchdog_stato` nascosto e fuori dall'impronta); FOTOGRAFIA DEI SOLDI prima (righe e somme
+  `*_cents` di otto archivi, `foto_soldi.py` dentro il contenitore): impronta a703586f; unione dall'API #239 -> 09aa6ae,
+  #240 -> 160c2e3, merged=True riletto per tutte e due; albero di 160c2e3 == albero di 44a5765 (git diff vuoto); CI di
+  master 160c2e3: 15 controlli, gate success alle 09:26:34Z; paracadute OK (prec = viva a34effe0), scambio staccato dalle
+  09:27:10Z, `SCAMBIO FATTO alle 09:27:55Z` (pull d0ade67..160c2e3 fast-forward); verifica: healthy,
+  `money_path_pronto: True`, `avvisi: []`, nessuna PAGAMENTO_, immagine viva diversa da prec; sonde 17 su 17;
+  `verifica_produzione.py` 190 controlli, 0 violazioni (certificato ancora 51 giorni); a mano `/api/admin/diagnosi` 401,
+  `/api/bunker/invarianti` 403; fotografia dei soldi DOPO identica (stessa impronta); interruttori: nessun .flag, nessuna
+  leva (`CHECKIN_ONLINE_ATTIVO` assente: il check-in online e' SPENTO); tre posti su 160c2e3, VPS senza file tracciati
+  modificati.
+- IL GUARDIANO alla riaccensione (09:27:51Z): `INVARIANTI ARCHIVI` I1-I5, violazioni=0, non_eseguiti=0, ciechi=0; poi
+  «GUARDIANO: 3 stato/i anomalo/i»: le stesse due cause (il conto e' 1 + 2, `fase186` somma le voci: il secondo guasto e'
+  il secondo «Collega Stripe» fallito, 1/10 18:54:24Z, nato dopo il giro di ieri). Il watchdog ripete `guardiano_anomalo`
+  ogni 10 minuti dalla sera del 1/10 e continuera' finche' il Guardiano non torna pulito: servono il rimborso dei 12
+  centesimi su Stripe E i guasti Connect fuori dalla finestra di 24 ore, letti dal giro intero successivo.
+- RIMISURA DOPO L'UNIONE, su 160c2e3 (09:31Z, uscita 1, registri `%TEMP%\bookinvip_rimisure\20261002-113122`): 9
+  eseguiti, 7 verdi: le tre caselle del blocco 3 che bussano al sito vero (`esame_accessi` scrive, matrice, sonde), il
+  giro dei ruoli, spunte, lingue, oblio. ROSSI gia' rossi prima, stessi motivi: `esame_catene_admin` (19 rotte del
+  pannello su 21 senza catena percorsa, debito dichiarato, tetto 19) e `esame_sentinella`. ⚠️ `esame_accessi` NON
+  dichiara da se' la finestra delle sue sonde: l'ho dichiarata io con lo stesso scrittore del giudice
+  (`verifica_produzione._dichiara_le_sonde`, involucro nello scratchpad che legge l'ora del server prima e dichiara dopo):
+  [1790933482, 1790933659], True. Limite: la finestra copre l'intera rimisura (178 s), non le sole sonde. Il watchdog
+  delle 09:40:03Z, il primo dopo le sonde, ha scritto solo `guardiano_anomalo` (3 stati): nessun allarme nuovo.
+  Conto della macchina dopo (`python collaudi/scheda.py --blocco N`): 1: 13 su 15 · 2: 4 su 5 · 3: 4 su 5 · 4: 2 su 3 ·
+  5: 3 su 4 · 6: 1 su 2 · 7: 2 su 2 · 8: 0 su 3 · 9: 2 su 2 · 10: 1 su 2. Saltato: il giro di mutazione del blocco 2 (600
+  minuti). A mano: riconciliazione, backup, deploy.
+- SUITE INTERA: lanciata dopo questi documenti; l'esito va nel messaggio del commit.
+- FILE: `collaudi/scheda.json` (le due rimisure), questo file, `REGISTRO_INGEGNERIA.md`.
+- RESTA, in ordine:
+  1. IL FONDATORE: riaccettare la privacy (versione nuova del 1/10) dal pannello host. E' anche la prova dal vivo del
+     pulsante riparato in (a): dopo, nell'archivio dei consensi una riga privacy della versione nuova, nel registro nessuna
+     «PROVA consensi INCOMPLETA», e la pagina dice «Grazie».
+  2. IL FONDATORE (soldi veri): «Restituisci 0,12» per a2c63fd8 (nessun doppio conto: consegne 31) e il profilo Connect
+     della piattaforma su Stripe. Poi, al giro intero del Guardiano successivo, `python collaudi/esame_produzione.py
+     --scrivi` per la casella 6 del blocco 1.
+  3. il giro di mutazione del blocco 2 (600 minuti, staccato: `rimisura.py --anche-mutazione`) e i tre «a mano»
+     (riconciliazione, backup, deploy) con le letture prese sul server.
+  4. la sentinella: il comando della scheda passa `--monitor uptimerobot`, oppure l'esame legge il monitor da se' quando la
+     chiave c'e' (attrezzo, `collaudi/`).
+  5. `esame_accessi` che dichiara da se' la finestra delle sue sonde, come `verifica_produzione`.
+  6. dalle consegne 31: punto 4 («Rimborsa» su una garanzia `rilasciato`) e punto 5 (D4, i «false» sul freno globale e
+     sulla ritenuta, la riga del freno, D17, la CI instabile).
+
+## PASSAGGIO DI CONSEGNE 31 (2026-10-02 notte) - IL SALDO STRIPE -0,27 SPIEGATO; I TRE DIFETTI DELLA PROVA VERA RIPARATI, OGNUNO CON LA GUARDIA VISTA ROSSA PRIMA; SUL RAMO `ritenuta-riga-esito` (#240), NON COMMITTATO, NIENTE IN PRODUZIONE (POI: commit 44a5765, #240 unita e in produzione con 160c2e3 il 2/10 mattina: consegne 32):
 - CONTESTO: 47%, letto dal fondatore con `/context` mentre girava la prima suite (08:0x del 2/10); da li' niente
   lavoro nuovo, solo la chiusura di questo blocco (D21).
 - STATO VERIFICATO all'inizio (21:24Z del 1/10, `git rev-parse` / `git ls-remote` / ssh / API): master d0ade67 su

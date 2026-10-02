@@ -2,14 +2,14 @@
  "0d33183e3804": {
   "blocco": 3,
   "comando": "python collaudi/esame_accessi.py --casella sonde --scrivi",
-  "commit": "65a1759",
+  "commit": "160c2e3",
   "condizione": "ogni sonda negativa interroga un indirizzo che risponde diverso da 404",
-  "denominatore": 89,
+  "denominatore": 93,
   "esito": true,
-  "impronta": "bd8e4e6661ff",
+  "impronta": "9ff724b36144",
   "impronte_moduli": {
    "fase105_identity_gate": "a3ab7f1e6819",
-   "fase127_checkin_digitale": "e1d23d1a333b",
+   "fase127_checkin_digitale": "c8afe04f623b",
    "fase143_kyc_host": "9024eed56447",
    "fase179_rate_limit": "d676ae5e7797",
    "fase180_bunker": "12b50f910968",
@@ -19,7 +19,7 @@
    "fase80_sentinel": "ebc8a451110f"
   },
   "motivo": "",
-  "quando": "2026-09-16T17:07:26"
+  "quando": "2026-10-02T11:33:43"
  },
  "0d485cbbe89e": {
   "blocco": 8,
@@ -90,11 +90,11 @@
  "159ad2c8ab8f": {
   "blocco": 1,
   "comando": "python collaudi/esame_produzione.py --casella ogni-ora --scrivi",
-  "commit": "d5e5eae",
+  "commit": "d0ade67",
   "condizione": "gli invarianti sui dati veri girano in produzione almeno OGNI ORA, non una volta al giorno, e l'ultimo giro si legge dal registro del server con la sua ora",
   "denominatore": 13,
   "esito": true,
-  "impronta": "df5bab3a836a",
+  "impronta": "338c84cab04f",
   "impronte_moduli": {
    "fase101_stripe_connect": "30d6d6acc8ee",
    "fase102_motore_autonomo": "5f821fcc906f",
@@ -106,12 +106,12 @@
    "fase160_escrow_garanzia": "dbf2a26f8a0a",
    "fase162_pagamenti_pendenti": "b1b4cf2675ad",
    "fase167_credito_single_use": "84db76bef110",
-   "fase177_financial_controller": "c49d832d573c",
+   "fase177_financial_controller": "652287d1f8cd",
    "fase17_money": "4f56d5c69a04",
    "fase181_audit_console": "a18e05eee348",
    "fase182_riconciliazione": "2bc38973d2df",
    "fase183_carta_offsession": "cad1b678abff",
-   "fase186_guardiano": "0dc20d8aae10",
+   "fase186_guardiano": "e1011bb3ed81",
    "fase188_paga_struttura": "b06f26f76cda",
    "fase191_blocco_globale": "0e25d2e0ab6f",
    "fase199_invarianti": "00192bca45b2",
@@ -124,7 +124,7 @@
    "fase99_multicurrency": "61a3b5a0c820"
   },
   "motivo": "",
-  "quando": "2026-09-28T23:06:15"
+  "quando": "2026-10-02T10:30:03"
  },
  "16d2c823889f": {
   "blocco": 1,
@@ -465,25 +465,25 @@
  "5c447a0ee514": {
   "blocco": 5,
   "comando": "python collaudi/esame_legale.py --casella spunte --scrivi",
-  "commit": "0a70cd8",
+  "commit": "160c2e3",
   "condizione": "le 3 spunte obbligatorie sono bloccate lato browser E rifiutate 422 lato server",
   "denominatore": 36,
   "esito": true,
-  "impronta": "ea638ee9da43",
+  "impronta": "2ae550fa65e6",
   "impronte_moduli": {
    "fase100_dac7": "f587e642ee3b",
    "fase103_reverse_charge": "5ca652e5af5a",
    "fase145_contratto_pdf": "070792042938",
-   "fase151_alloggiati_web": "32eaf4440a62",
+   "fase151_alloggiati_web": "5b6eafbb9654",
    "fase154_giurisdizioni_marketing": "7edab3faacdd",
    "fase156_erasure": "d20180c27f1c",
-   "fase163_accettazioni": "df6f0907270a",
+   "fase163_accettazioni": "ba071e346f60",
    "fase184_marca_temporale": "dd31eb53f86c",
-   "fase185_testi_legali": "aad3894d9aeb",
+   "fase185_testi_legali": "909b923c9887",
    "fase79_dichiarazione": "fdafb04a19ea"
   },
   "motivo": "",
-  "quando": "2026-09-30T12:52:42"
+  "quando": "2026-10-02T11:33:46"
  },
  "63e1e98393ea": {
   "blocco": 10,
@@ -499,14 +499,14 @@
  "6bb68f1abf5b": {
   "blocco": 3,
   "comando": "python collaudi/esame_accessi.py --casella matrice --scrivi",
-  "commit": "65a1759",
+  "commit": "160c2e3",
   "condizione": "la matrice dei permessi e' verde su ogni rotta riservata, provata SUL SITO VERO",
-  "denominatore": 169,
+  "denominatore": 177,
   "esito": true,
-  "impronta": "bd8e4e6661ff",
+  "impronta": "9ff724b36144",
   "impronte_moduli": {
    "fase105_identity_gate": "a3ab7f1e6819",
-   "fase127_checkin_digitale": "e1d23d1a333b",
+   "fase127_checkin_digitale": "c8afe04f623b",
    "fase143_kyc_host": "9024eed56447",
    "fase179_rate_limit": "d676ae5e7797",
    "fase180_bunker": "12b50f910968",
@@ -516,7 +516,7 @@
    "fase80_sentinel": "ebc8a451110f"
   },
   "motivo": "",
-  "quando": "2026-09-16T17:07:26"
+  "quando": "2026-10-02T11:32:52"
  },
  "6ede8f323461": {
   "blocco": 1,
@@ -560,25 +560,25 @@
  "7d0c5b891c14": {
   "blocco": 5,
   "comando": "python collaudi/esame_legale.py --casella lingue --scrivi",
-  "commit": "0a70cd8",
+  "commit": "160c2e3",
   "condizione": "termini e privacy sono leggibili in tutte le lingue dichiarate",
   "denominatore": 43,
   "esito": true,
-  "impronta": "ea638ee9da43",
+  "impronta": "2ae550fa65e6",
   "impronte_moduli": {
    "fase100_dac7": "f587e642ee3b",
    "fase103_reverse_charge": "5ca652e5af5a",
    "fase145_contratto_pdf": "070792042938",
-   "fase151_alloggiati_web": "32eaf4440a62",
+   "fase151_alloggiati_web": "5b6eafbb9654",
    "fase154_giurisdizioni_marketing": "7edab3faacdd",
    "fase156_erasure": "d20180c27f1c",
-   "fase163_accettazioni": "df6f0907270a",
+   "fase163_accettazioni": "ba071e346f60",
    "fase184_marca_temporale": "dd31eb53f86c",
-   "fase185_testi_legali": "aad3894d9aeb",
+   "fase185_testi_legali": "909b923c9887",
    "fase79_dichiarazione": "fdafb04a19ea"
   },
   "motivo": "",
-  "quando": "2026-09-30T12:52:43"
+  "quando": "2026-10-02T11:33:46"
  },
  "7d18024afbe0": {
   "blocco": 1,
@@ -622,11 +622,11 @@
  "813b9082642c": {
   "blocco": 1,
   "comando": "python collaudi/esame_produzione.py --scrivi",
-  "commit": "74584b0",
+  "commit": "d0ade67",
   "condizione": "gli invarianti sono verificati in PRODUZIONE, non solo nei test",
   "denominatore": 14,
-  "esito": true,
-  "impronta": "df5bab3a836a",
+  "esito": false,
+  "impronta": "338c84cab04f",
   "impronte_moduli": {
    "fase101_stripe_connect": "30d6d6acc8ee",
    "fase102_motore_autonomo": "5f821fcc906f",
@@ -638,12 +638,12 @@
    "fase160_escrow_garanzia": "dbf2a26f8a0a",
    "fase162_pagamenti_pendenti": "b1b4cf2675ad",
    "fase167_credito_single_use": "84db76bef110",
-   "fase177_financial_controller": "c49d832d573c",
+   "fase177_financial_controller": "652287d1f8cd",
    "fase17_money": "4f56d5c69a04",
    "fase181_audit_console": "a18e05eee348",
    "fase182_riconciliazione": "2bc38973d2df",
    "fase183_carta_offsession": "cad1b678abff",
-   "fase186_guardiano": "0dc20d8aae10",
+   "fase186_guardiano": "e1011bb3ed81",
    "fase188_paga_struttura": "b06f26f76cda",
    "fase191_blocco_globale": "0e25d2e0ab6f",
    "fase199_invarianti": "00192bca45b2",
@@ -655,8 +655,8 @@
    "fase87_stripe_webhook": "d597430f8f64",
    "fase99_multicurrency": "61a3b5a0c820"
   },
-  "motivo": "",
-  "quando": "2026-09-28T22:08:11"
+  "motivo": "l'ULTIMO giro INTERO del Guardiano e' finito pulito (GUARDIANO: nessuno stato anomalo), ha meno di 25 h e ha verificato gli invarianti (la sua riga INVARIANTI ARCHIVI lo precede) (GUARDIANO: 2 stato/i anomalo/i -> {'riconciliazione_stripe': · eta 13.8 h · riga INVARIANTI ARCHIVI subito prima: si')",
+  "quando": "2026-10-02T10:30:00"
  },
  "8267c64a367a": {
   "blocco": 4,
@@ -736,11 +736,11 @@
  "a36e3373da1d": {
   "blocco": 8,
   "comando": "python collaudi/esame_sentinella.py --scrivi",
-  "commit": "0a70cd8",
+  "commit": "160c2e3",
   "condizione": "una sentinella ESTERNA (non nostra) si accorge se il sito muore",
-  "denominatore": 10,
+  "denominatore": 2,
   "esito": false,
-  "impronta": "b44b18839e25",
+  "impronta": "a077fdf71328",
   "impronte_moduli": {
    "fase13_protocollo_finale": "2dce22f058cc",
    "fase16_outbox": "a47de5874653",
@@ -753,35 +753,35 @@
    "fase39_whatsapp": "e5c341ed59c6",
    "fase42_observability": "a557645447a7",
    "fase60_mcp_server": "56ffc4364819",
-   "fase81_bootstrap_casavip": "c8e979e31e8b",
-   "fase83_server": "ed10fff62007",
+   "fase81_bootstrap_casavip": "2817a7a7da80",
+   "fase83_server": "4caa9b245b9d",
    "fase86_email": "12848db384ba"
   },
-  "motivo": "[esiste] un monitor ESTERNO (non GitHub) esiste e guarda bookinvip.com/api/health (nessun monitor esterno nelle letture: serve un conto (UptimeRobot o Better Stack, gratuito), lo apre il fondatore); [sveglia] il monitor esterno controlla almeno ogni 5 minuti e non e' in pausa (nessun monitor esterno); [sveglia] nelle ultime 24 ore i controlli del monitor non hanno buchi > 15 minuti e l'ultimo ha meno di 15 minuti (controlli nelle 24 ore: 0, buco massimo -, ultimo -); [sveglia] GitHub (seconda linea): ultimo giro entro 60 minuti e buco massimo nelle 24 ore sotto i 60 minuti — DECIDE, perche' il",
-  "quando": "2026-09-30T12:52:53"
+  "motivo": "[esiste] le letture o la misura sono ESPLOSE (IncompleteRead: IncompleteRead(1146880 bytes read)); situazione «sveglia» NON misurata; situazione «grida» NON misurata; situazione «non_scade» NON misurata",
+  "quando": "2026-10-02T11:34:17"
  },
  "a5c77ac6c76a": {
   "blocco": 5,
   "comando": "python collaudi/esame_oblio.py --scrivi",
-  "commit": "0a70cd8",
+  "commit": "160c2e3",
   "condizione": "il giro del CANCELLAMI e' percorso intero: ogni archivio che conteneva il dato e' pulito oppure DICHIARATO trattenuto per legge col suo perche', e il dato non si rilegge dai byte di quelli da pulire",
   "denominatore": 7,
   "esito": true,
-  "impronta": "ea638ee9da43",
+  "impronta": "2ae550fa65e6",
   "impronte_moduli": {
    "fase100_dac7": "f587e642ee3b",
    "fase103_reverse_charge": "5ca652e5af5a",
    "fase145_contratto_pdf": "070792042938",
-   "fase151_alloggiati_web": "32eaf4440a62",
+   "fase151_alloggiati_web": "5b6eafbb9654",
    "fase154_giurisdizioni_marketing": "7edab3faacdd",
    "fase156_erasure": "d20180c27f1c",
-   "fase163_accettazioni": "df6f0907270a",
+   "fase163_accettazioni": "ba071e346f60",
    "fase184_marca_temporale": "dd31eb53f86c",
-   "fase185_testi_legali": "aad3894d9aeb",
+   "fase185_testi_legali": "909b923c9887",
    "fase79_dichiarazione": "fdafb04a19ea"
   },
   "motivo": "",
-  "quando": "2026-09-30T12:52:44"
+  "quando": "2026-10-02T11:33:49"
  },
  "a6c9694a48f1": {
   "blocco": 2,
@@ -950,14 +950,14 @@
  "d22022c687dd": {
   "blocco": 3,
   "comando": "python collaudi/esame_catene_admin.py --scrivi",
-  "commit": "eeea05f",
+  "commit": "160c2e3",
   "condizione": "ogni gesto del pannello admin -- rotte, bottoni e campi CONTATI dalla pagina a ogni giro, non da un elenco scritto a mano -- ha le sue tre colonne dichiarate (cosa deve succedere e dove finisce il dato · quali importi si muovono e cosa deve coincidere al centesimo · in quale archivio si scrive, se ci resta, se si cancella e per quale legge) e la catena PERCORSA anello per anello, dove ogni anello e' una differenza fra prima e dopo; una voce nuova senza catena e' rossa lo stesso giorno",
-  "denominatore": 81,
+  "denominatore": 83,
   "esito": false,
-  "impronta": "bd8e4e6661ff",
+  "impronta": "9ff724b36144",
   "impronte_moduli": {
    "fase105_identity_gate": "a3ab7f1e6819",
-   "fase127_checkin_digitale": "e1d23d1a333b",
+   "fase127_checkin_digitale": "c8afe04f623b",
    "fase143_kyc_host": "9024eed56447",
    "fase179_rate_limit": "d676ae5e7797",
    "fase180_bunker": "12b50f910968",
@@ -967,7 +967,7 @@
    "fase80_sentinel": "ebc8a451110f"
   },
   "motivo": "19 rotte del pannello su 21 non hanno ancora una catena percorsa (debito dichiarato, tetto 19): /api/admin/audit, /api/admin/cancella_attivita, /api/admin/controversia/risolvi, /api/admin/controversie, /api/admin/messaggi, /api/admin/prenotazioni, /api/admin/rimborsa_dovuto, /api/admin/rimborsi_dovuti, /api/admin/rimborso, /api/admin/search, /api/admin/storno_penale, /api/admin/verifica_stato, /api/admin/verifiche, /api/admin/verifiche/dettaglio, /api/admin/verifiche/fascicolo, /api/bunker/login, /api/bunker/logout, /api/gate/logout, /api/marketing/campagna",
-  "quando": "2026-09-16T13:07:46"
+  "quando": "2026-10-02T11:33:45"
  },
  "d4e612aafcd1": {
   "blocco": 9,
@@ -1145,14 +1145,14 @@
  "eec63adbaf5b": {
   "blocco": 3,
   "comando": "python collaudi/esame_accessi.py --casella scrive --scrivi",
-  "commit": "65a1759",
+  "commit": "160c2e3",
   "condizione": "nessuna rotta pubblica SCRIVE senza identita': l'elenco delle rotte che scrivono viene letto dal codice, e ognuna senza credenziali risponde 401/403/422, mai 200",
-  "denominatore": 59,
+  "denominatore": 62,
   "esito": true,
-  "impronta": "bd8e4e6661ff",
+  "impronta": "9ff724b36144",
   "impronte_moduli": {
    "fase105_identity_gate": "a3ab7f1e6819",
-   "fase127_checkin_digitale": "e1d23d1a333b",
+   "fase127_checkin_digitale": "c8afe04f623b",
    "fase143_kyc_host": "9024eed56447",
    "fase179_rate_limit": "d676ae5e7797",
    "fase180_bunker": "12b50f910968",
@@ -1162,7 +1162,7 @@
    "fase80_sentinel": "ebc8a451110f"
   },
   "motivo": "",
-  "quando": "2026-09-16T17:07:25"
+  "quando": "2026-10-02T11:32:06"
  },
  "f10f35b6a7b3": {
   "blocco": 2,
@@ -1230,14 +1230,14 @@
  "fb42414c3b6b": {
   "blocco": 3,
   "comando": "python collaudi/esame_percorso_ruoli.py --casella giro --scrivi",
-  "commit": "eeea05f",
+  "commit": "160c2e3",
   "condizione": "l'admin e il super admin portano a termine il loro giro INTERO, non solo l'accesso: l'admin legge le prenotazioni, risolve una controversia, rimborsa il dovuto e rilegge i conti; il super admin crea un admin, cambia uno scaglione e rilegge gli invarianti. Ogni anello lascia una traccia, e il verde misura la DIFFERENZA fra prima e dopo, mai la presenza di una pagina che mostra sempre qualcosa",
   "denominatore": 12,
   "esito": true,
-  "impronta": "bd8e4e6661ff",
+  "impronta": "9ff724b36144",
   "impronte_moduli": {
    "fase105_identity_gate": "a3ab7f1e6819",
-   "fase127_checkin_digitale": "e1d23d1a333b",
+   "fase127_checkin_digitale": "c8afe04f623b",
    "fase143_kyc_host": "9024eed56447",
    "fase179_rate_limit": "d676ae5e7797",
    "fase180_bunker": "12b50f910968",
@@ -1247,6 +1247,6 @@
    "fase80_sentinel": "ebc8a451110f"
   },
   "motivo": "",
-  "quando": "2026-09-16T13:07:45"
+  "quando": "2026-10-02T11:33:44"
  }
 }
