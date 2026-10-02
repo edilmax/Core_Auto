@@ -12,6 +12,18 @@ from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import crea_router
 
 
+def setUpModule():
+    # il check-in online e' SPENTO di serie (decisione del fondatore, 1/10): queste prove
+    # descrivono quello acceso, quindi lo accendono con la sua leva d'ambiente
+    import os
+    os.environ["CHECKIN_ONLINE_ATTIVO"] = "1"
+
+
+def tearDownModule():
+    import os
+    os.environ.pop("CHECKIN_ONLINE_ATTIVO", None)
+
+
 class TestCheckinDigitale(unittest.TestCase):
     def setUp(self):
         self.d = tempfile.mkdtemp()

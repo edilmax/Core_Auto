@@ -93,6 +93,16 @@ def _fake_stripe(url, body, headers):
     return {"url": "https://stripe.finto/x", "id": "cs_" + secrets.token_hex(8)}
 
 
+def setUpModule():
+    # il check-in online e' SPENTO di serie (decisione del fondatore, 1/10): queste prove
+    # descrivono quello acceso, quindi lo accendono con la sua leva d'ambiente
+    os.environ["CHECKIN_ONLINE_ATTIVO"] = "1"
+
+
+def tearDownModule():
+    os.environ.pop("CHECKIN_ONLINE_ATTIVO", None)
+
+
 class _Email:
     def __init__(self):
         self.inviate = []
@@ -429,12 +439,21 @@ class TestGiroOstileTutteLeRotte(unittest.TestCase):
         self.assertEqual(len(thr2["messaggi"]), 3, thr2)
         self.chiama("POST", "/api/checkin/pre_registra", 200, [("ospiti", int)],
                     body={"voucher_token": vt, "ospiti": [
-                        {"nome": "Mario", "cognome": "Rossi",
-                         "data_nascita": "1980-01-01", "documento": "AB123",
-                         "tipo_documento": "carta_identita", "cittadinanza": "IT"}]},
+                        {"nome": "Mario", "cognome": "Rossi", "sesso": "m",
+                         "data_nascita": "1980-01-01", "stato_nascita": "100000100",
+                         "comune_nascita": "412058091", "prov_nascita": "RM",
+                         "cittadinanza": "100000100", "tipo_doc": "IDENT",
+                         "num_doc": "AB123", "luogo_doc": "412058091"}]},
                     valore={"ok": True, "ospiti": 1})
         self.chiama("GET", "/api/checkin/stato", 200, [("completato", bool)],
                     query={"voucher_token": vt}, valore={"completato": True})
+        # le tabelle ufficiali che riempiono il modulo del check-in in Italia (1/10)
+        tab = self.chiama("GET", "/api/alloggiati/tabelle", 200,
+                          [("stati", list), ("documenti", list)])
+        self.assertTrue(tab["stati"] and tab["documenti"], tab)
+        com = self.chiama("GET", "/api/alloggiati/comuni", 200, [("comuni", list)],
+                          query={"q": "rom"})
+        self.assertIn("ROMA", [c[1] for c in com["comuni"]], com)
         gs = self.chiama("GET", "/api/garanzia/stato", 200,
                          [("stato", str), ("importo_host_cents", int)],
                          query={"ref": rif}, headers=ADM, valore={"stato": "in_garanzia"})
@@ -707,6 +726,11 @@ class TestGiroOstileTutteLeRotte(unittest.TestCase):
         # ── BUNKER: sala di controllo ────────────────────────────────────────────────
         self.chiama("GET", "/api/bunker/stato", 200, [("bunker", bool), ("diagnosi", dict)],
                     headers=BK, valore={"bunker": True})
+        # l'interruttore del check-in online (spento di serie; qui la leva del modulo lo accende)
+        self.chiama("GET", "/api/bunker/checkin_online", 200, [("attivo", bool)], headers=BK)
+        self.chiama("POST", "/api/bunker/checkin_online", 200, [("attivo", bool)],
+                    body={"attivo": True, "motivo": "giro ostile"}, headers=BK,
+                    valore={"attivo": True, "impostato": True})
         el = self.chiama("GET", "/api/bunker/export_legale", 200, [("contenuto", str)],
                          headers=BK)
         self.assertIn("BookinVIP", el["contenuto"])
@@ -816,7 +840,7 @@ class TestGiroOstileTutteLeRotte(unittest.TestCase):
         inesistenti = provate - dichiarate
         self.assertEqual(inesistenti, set(),
                          "provate rotte che il router non dichiara: %s" % sorted(inesistenti))
-        self.assertEqual(len(dichiarate), 139,
+        self.assertEqual(len(dichiarate), 143,
                          "il router ha %d rotte: la mappa del collaudo va aggiornata"
                          % len(dichiarate))
         # nessuna 5xx inattesa: solo le due dormienti dichiarate

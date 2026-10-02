@@ -142,6 +142,16 @@ def _fake_carta_fetch(metodo, url, body, headers):
     return {}
 
 
+def setUpModule():
+    # il check-in online e' SPENTO di serie (decisione del fondatore, 1/10): queste prove
+    # descrivono quello acceso, quindi lo accendono con la sua leva d'ambiente
+    os.environ["CHECKIN_ONLINE_ATTIVO"] = "1"
+
+
+def tearDownModule():
+    os.environ.pop("CHECKIN_ONLINE_ATTIVO", None)
+
+
 class _Posta:
     """Provider email finto: registra, non spedisce."""
 
@@ -398,10 +408,18 @@ class TestCamminoSoldi(_BaseSoldi):
         rif, vt = self.prenotazione_pagata()
         s, prima = self.g("GET", "/api/checkin/stato", None, None, {"voucher_token": vt})
         self.assertEqual((s, prima), (200, {"completato": False}))
+        # l'alloggio e' in Italia: il check-in vuole la schedina della Questura (1/10)
         s, out = self.g("POST", "/api/checkin/pre_registra", {
             "voucher_token": vt,
-            "ospiti": [{"nome": "Mario Rossi", "documento": "AB12345"},
-                       {"nome": "Lucia Bianchi", "documento": "CD67890"}]})
+            "ospiti": [{"cognome": "Rossi", "nome": "Mario", "sesso": "m",
+                        "data_nascita": "1980-05-17", "stato_nascita": "100000100",
+                        "comune_nascita": "412058091", "prov_nascita": "RM",
+                        "cittadinanza": "100000100", "tipo_doc": "IDENT",
+                        "num_doc": "AB12345", "luogo_doc": "412058091"},
+                       {"cognome": "Bianchi", "nome": "Lucia", "sesso": "f",
+                        "data_nascita": "1982-03-04", "stato_nascita": "100000100",
+                        "comune_nascita": "412058091", "prov_nascita": "RM",
+                        "cittadinanza": "100000100"}]})
         self.assertEqual((s, out), (200, {"ok": True, "ospiti": 2}))
         s, dopo = self.g("GET", "/api/checkin/stato", None, None, {"voucher_token": vt})
         self.assertEqual((s, dopo), (200, {"completato": True}))

@@ -125,6 +125,16 @@ def _fake_stripe_fetch(url, body, headers):
             "id": "cs_" + secrets.token_hex(8)}
 
 
+def setUpModule():
+    # il check-in online e' SPENTO di serie (decisione del fondatore, 1/10): queste prove
+    # descrivono quello acceso, quindi lo accendono con la sua leva d'ambiente
+    os.environ["CHECKIN_ONLINE_ATTIVO"] = "1"
+
+
+def tearDownModule():
+    os.environ.pop("CHECKIN_ONLINE_ATTIVO", None)
+
+
 class _Posta:
     """Provider email finto: registra, non spedisce. Le email partono da thread daemon."""
 
@@ -746,9 +756,17 @@ class TestDoppioClicCatalogo(_Base):
     def test_checkin_doppio_stessi_ospiti(self):
         """POST /api/checkin/pre_registra ×2: una sola pre-registrazione, ospiti non doppi."""
         b = self.prenotazione_pagata()
+        # l'alloggio e' in Italia: il check-in vuole la schedina della Questura (1/10)
         corpo = {"voucher_token": b["voucher_token"],
-                 "ospiti": [{"nome": "Mario Rossi", "documento": "AB12345"},
-                            {"nome": "Lucia Bianchi", "documento": "CD67890"}]}
+                 "ospiti": [{"cognome": "Rossi", "nome": "Mario", "sesso": "m",
+                             "data_nascita": "1980-05-17", "stato_nascita": "100000100",
+                             "comune_nascita": "412058091", "prov_nascita": "RM",
+                             "cittadinanza": "100000100", "tipo_doc": "IDENT",
+                             "num_doc": "AB12345", "luogo_doc": "412058091"},
+                            {"cognome": "Bianchi", "nome": "Lucia", "sesso": "f",
+                             "data_nascita": "1982-03-04", "stato_nascita": "100000100",
+                             "comune_nascita": "412058091", "prov_nascita": "RM",
+                             "cittadinanza": "100000100"}]}
         (s1, o1), (s2, o2) = self.due_volte("POST", "/api/checkin/pre_registra", corpo)
         self.assertEqual((s1, o1), (200, {"ok": True, "ospiti": 2}))
         self.assertEqual((s2, o2), (200, {"ok": True, "ospiti": 2}))

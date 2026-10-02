@@ -112,7 +112,7 @@ CONTRATTO_VERSIONE_VECCHIA = "2026-01-11"     # una versione DAVVERO vecchia, ma
 # accettata» una versione che non esisteva piu'. Il rimedio non e' togliere la copia (che
 # romperebbe l'indipendenza) ma SORVEGLIARLA: `test_pipeline_ci.
 # TestIlBancoDeiDatiRealisticiNonRestaINDIETRO` pretende che combaci col prodotto.
-PRIVACY_VERSIONE_CORRENTE = "2026-09-29"
+PRIVACY_VERSIONE_CORRENTE = "2026-10-01"
 
 TITOLO_ROMA = "Attico «da sogno» a Trastevere \U0001f3db️ — l’affaccio sulle cupole"
 DESCRIZIONE_LUNGA = ("Loft su due livelli nel cuore di Shoreditch. " * 200)[:8000]

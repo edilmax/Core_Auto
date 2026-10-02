@@ -25,6 +25,18 @@ from fase83_server import crea_router
 from fase57_vetrina import SchedaAlloggio
 
 
+def setUpModule():
+    # il check-in online e' SPENTO di serie (decisione del fondatore, 1/10): queste prove
+    # descrivono quello acceso, quindi lo accendono con la sua leva d'ambiente
+    import os
+    os.environ["CHECKIN_ONLINE_ATTIVO"] = "1"
+
+
+def tearDownModule():
+    import os
+    os.environ.pop("CHECKIN_ONLINE_ATTIVO", None)
+
+
 class TestCheckinPassSoloSePagato(unittest.TestCase):
     def setUp(self):
         d = self.d = tempfile.mkdtemp()
