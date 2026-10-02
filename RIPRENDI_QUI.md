@@ -3435,7 +3435,56 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 38e561b
+CONSEGNE AGGIORNATE A: 15c4758
+
+## PASSAGGIO DI CONSEGNE 33 (2026-10-02 sera) - IL CONTRATTO HOST DICE IL MANDATO CON RAPPRESENTANZA; RICERCA «CHI TIENE I SOLDI» (R5 nel REGISTRO); 12 CENTESIMI RESTITUITI; CONNECT IN MODALITA' VERA LASCIATO A META' APPOSTA:
+- CONTESTO: 63%, letto dal fondatore con `/context` alle 21:4x. ⛔ D21 VIOLATA: superato il 50% senza fermarsi.
+  Da li' solo chiusura: suite, commit sul ramo `ricerca-chi-tiene-i-soldi`, richiesta di unione. NON fatti in questa
+  sessione: unione, deploy del contratto, la rilettura di GML (Compito 21, nel canale) da applicare se trova refusi.
+- PERMESSI: le parole delle consegne 32 («Procedi al commit  autorizzato fino alla fine»), poi per il contratto
+  «mettilo subito sul contratto ricontrolla tutto bene rimetti tutto nel contratto».
+- FATTI DEL FONDATORE, misurati sul VPS: privacy riaccettata alle 11:58:26Z (UN solo `POST /api/host/riaccetta 200`,
+  il 1/10 erano tre; righe 147 contratto e 148 privacy della versione nuova, firmate; nessun WARNING attorno): il
+  pulsante riparato in (a) funziona dal vivo. «Restituisci 0,12» alle 18:03:24Z dopo aver aperto il Bunker (due
+  pressioni prima senza Bunker = 403 `sessione_assente`, la serratura giusta): `RIMBORSO DOVUTO ESEGUITO
+  rif=a2c63fd8 importo=12`, su Stripe status succeeded, commissione 0, tipo «refund» (non storno: arriva sulla carta
+  in giorni). Gli 11 centesimi dell'host restano `maturato` (Connect non collegato).
+- CONNECT IN MODALITA' VERA (dal pannello Stripe, il fondatore guidato a foto): modello «Riscuoti i pagamenti e paga
+  i destinatari», gestione «Dashboard Express» (l'unica offerta per il nostro flusso). La conferma delle
+  RESPONSABILITA' (perdite, rimborsi, Radar) NON e' stata data, su mio consiglio dopo la ricerca: per le prove non
+  serve. «Collega Stripe» alle 17:27:01Z ha di nuovo fallito (profilo piattaforma incompleto): il Guardiano tiene
+  `guasti_isolati` fino al giro intero di sabato mattina, la riconciliazione dei 12 centesimi si chiude a quello di
+  domani mattina; poi `python collaudi/esame_produzione.py --scrivi` per la casella 6 del blocco 1.
+- IL CONTRATTO HOST (`fase163_accettazioni.py`, versione 2026-10-02, testo di GML 5.3 verificato riga per riga):
+  premessa, definizione di Payout, art. 2 col mandato con rappresentanza (artt. 1703-1704 c.c.) e il «Prestatore
+  Autorizzato», art. 4 con la ritenuta del 21% esplicita, art. 6 «Custodia e proprieta' delle somme» (non sono
+  ricavi di BookinVIP), art. 10 «Commissioni effettivamente trattenute»; IT ed EN. Il 6-BIS NOMINA ANCORA Stripe:
+  GML proponeva di toglierlo, ma `test_trasparenza_costi.TestContratto` (6bis it/en) pretende il nome del gestore
+  per trasparenza verso l'host, e la prima suite intera delle 22:03 e' stata ROSSA proprio li' (2 su 7189): rimesso.
+  GUARDIA `test_fase163_accettazioni.TestDocumento.test_il_MANDATO_CON_RAPPRESENTANZA_e_scritto_in_OGNI_lingua`,
+  vista ROSSA sul contratto di prima («it: manca "in nome e per conto dell'Host"»), ripristino sha256 identico;
+  49 prove dei consensi verdi. Chiude il B12 dal lato del contratto. Dopo il deploy ogni host (oggi solo il
+  fondatore) deve riaccettare.
+- RICERCA (fonti per esteso: REGISTRO, appendice, R5): Stripe NON offre escrow e tiene fermi i soldi al massimo 90
+  giorni in Italia, anche sul saldo della piattaforma; Revolut vieta per contratto di incassare per conto terzi;
+  Mangopay e Lemonway nascono per tenere i soldi di terzi senza quel limite (preventivo da chiedere); la ritenuta
+  del 21% resta con QUALUNQUE fornitore (circolare 24/E: anche con l'incasso delegato a terzi).
+- VISTO PER STRADA, non riparato: (1) la vetrina accetta prenotazioni fino a un anno prima (`fase57_vetrina.py`,
+  `orizzonte_giorni`) e l'incasso e' immediato: oltre i 90 giorni di Stripe; (2) `fase101` crea gli account
+  `type=standard`, Connect e' configurato Express; (3) i termini ospite (`fase185`, 8 lingue) dicono ancora
+  «BookinVIP fornisce gli strumenti (... pagamento ...)» senza il mandato: non contraddice, da allineare; (4) la
+  ricevuta (`fase83_server.py`, «Gestore della piattaforma: BookinVIP») non nomina l'host per conto del quale
+  incassiamo; (5) la certificazione delle ritenute all'host non ha ancora una pagina: va costruita PRIMA di
+  accendere la ritenuta; (6) `esame_accessi` non dichiara la finestra delle sue sonde (consegne 32).
+- SUITE INTERA: lanciata dopo questi documenti; l'esito va nel messaggio del commit.
+- RESTA, in ordine:
+  1. deploy del contratto nuovo e riaccettazione del fondatore;
+  2. dal commercialista, col testo in mano: il mandato basta perche' i ricavi siano solo la commissione? la
+     ritenuta col modello «soldi presso il Prestatore Autorizzato»?
+  3. la decisione del fondatore, a macchina finita: Stripe (limite 90 giorni, addebito vicino alla data) o
+     Mangopay/Lemonway (preventivi scritti);
+  4. i punti visti per strada qui sopra, a partire dall'(1);
+  5. il resto delle consegne 32 e 31.
 
 ## PASSAGGIO DI CONSEGNE 32 (2026-10-02 mattina) - #239 E #240 UNITE E IN PRODUZIONE (master 160c2e3 su PC, GitHub e VPS); RIMISURA PRIMA E DOPO L'UNIONE; IL GUARDIANO RESTA ANOMALO PER DUE CAUSE NOTE, TUTTE E DUE DEL FONDATORE:
 - STATO VERIFICATO all'inizio (08:28Z, `git rev-parse` / `git ls-remote` / ssh / API): master d0ade67 su computer, GitHub
@@ -5291,7 +5340,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 7193 test
+SUITE ATTUALE: Ran 7194 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

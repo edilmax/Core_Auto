@@ -440,6 +440,15 @@ mount PRIMA di toccare il container vivo (il bind-mount e' per inode: serve ricr
 > sapesse quale credere. **Cosa manca sta solo in `RIPRENDI_QUI.md`** (REGOLA ZERO 3).
 > Qui sotto resta il **racconto**: cosa abbiamo trovato, quando, e perché contava.
 
+### 🖊️ IL CONTRATTO HOST DICE IL MANDATO CON RAPPRESENTANZA — 2 ottobre sera, per ordine del fondatore
+Il B12 aperto dal 24 agosto (la contabilita' tratta i soldi dell'Host come non nostri, il contratto non lo diceva) e'
+chiuso dal lato del contratto: `fase163_accettazioni.py` versione 2026-10-02, IT ed EN, testo scritto da GML 5.3 e
+verificato qui riga per riga. L'Host conferisce a BookinVIP mandato con rappresentanza all'incasso; le somme restano
+sue, custodite presso un prestatore di servizi di pagamento autorizzato, e non sono ricavi di BookinVIP; la ritenuta
+del 21% sulle locazioni brevi e' scritta per esteso. Guardia vista rossa prima. Nasce da una ricerca fatta in giornata
+(appendice, R5): Stripe non fa escrow e tiene fermi i soldi al massimo 90 giorni, Revolut non puo' incassare per conto
+terzi, Mangopay e Lemonway si', e la ritenuta resta con qualunque fornitore. Dettagli: RIPRENDI_QUI, consegne 33.
+
 ### 🚀 #239 E #240 IN PRODUZIONE (160c2e3) — 2 ottobre mattina, «autorizzato fino alla fine» del fondatore
 Il check-in online (spento: nessuna leva, nessun file d'interruttore) e i tre freni della prova vera sono sul server vero: unione dall'API #239 poi #240, albero di master identico a quello gia' collaudato della #240, CI di master verde, poi il pulsante a tappe (copia dei 27 archivi verificata, paracadute riagganciato, scambio, 17 sonde, 190 controlli di produzione). Novita' di metodo: una FOTOGRAFIA DEI SOLDI (righe e somme in centesimi di otto archivi) presa prima e dopo lo scambio, identica. La rimisura e' stata fatta prima e dopo l'unione: due rossi gia' noti (la sentinella, le catene del pannello) e uno nuovo che non e' un difetto del codice: il Guardiano del server vede i 12 centesimi che il giornale dice restituiti e Stripe no, piu' il collegamento Connect rifiutato perche' il profilo della piattaforma non e' completo -- tutte e due le cose le chiude il fondatore. Visto per strada: la casella della sentinella non puo' tornare verde dalla rimisura (il comando della scheda non chiede di leggere il monitor), e `esame_accessi` non dichiara da se' la finestra delle sue sonde (l'ho dichiarata da fuori con lo scrittore del giudice). Numeri e passi: RIPRENDI_QUI, consegne 32.
 
@@ -14455,6 +14464,80 @@ esce mai dall'ambiente (ferrea 14, errori di rete ripuliti).
   ranking sono un'estensione futura, dichiarata nei limiti (D18 punto 3) e non promessa.
 - Giri multipli per invocazione: il costo token moltiplicato senza bisogno — la cadenza la fa il cron
   quotidiano (T3), che e' il metodo delle fonti stesse (stesso set, giri ripetuti nel tempo).
+
+### R5 — 2026-10-02 · Chi tiene i soldi: Stripe Connect, i 90 giorni, Revolut, Mangopay/Lemonway, il mandato e la ritenuta
+
+**La domanda.** Il fondatore, configurando Connect in modalita' vera: «un ente che tutti conoscono tiene i soldi; a
+soggiorno andato bene noi la nostra percentuale, l'host la sua, o tutto torna al cliente; io pago le tasse solo sulla
+mia percentuale». Prima ancora: perche' Stripe, se si puo' incassare sul nostro conto (Revolut) e distribuire noi?
+
+**Le fonti lette** (2026-10-02; primarie salvo dove detto):
+- Stripe, *Create a charge* (tipi di addebito Connect), https://docs.stripe.com/connect/charges
+- Stripe, *Using manual payouts*, https://docs.stripe.com/connect/manual-payouts
+- Stripe, *Understanding Connect account balances* (trattenuta dei fondi), https://docs.stripe.com/connect/account-balances
+- Stripe, *Manage payout schedule*, https://docs.stripe.com/connect/manage-payout-schedule
+- Stripe, *Risk and liability management with Connect*, https://docs.stripe.com/connect/risk-management
+- Stripe, *Delete an account*, https://docs.stripe.com/api/accounts/delete
+- Stripe, *Rimborsare e annullare pagamenti*, https://docs.stripe.com/refunds
+- Stripe, *Prezzi di Stripe Connect - Italia*, https://stripe.com/it/connect/pricing
+- Stripe, *FAQ su Stripe Connect e PSD2*, https://stripe.com/guides/frequently-asked-questions-about-stripe-connect-and-psd2
+- Central Bank of Ireland, registro, Stripe Technology Europe Ltd C187865 (dal risultato di ricerca)
+- Revolut Bank UAB, *Payment Processing Terms*, in vigore dal 3/3/2025 (PDF ufficiale, testo estratto)
+- Mangopay, *E-wallet system*, https://docs.mangopay.com/guides/e-wallet-system; prezzi e «escrow illimitato» solo
+  da fonti secondarie (Sharetribe, OMR)
+- Lemonway, *Collecting funds on behalf of third parties* (blog ufficiale) e fonti secondarie
+- Agenzia delle Entrate, Circolare 24/E del 12/10/2017, par. 2.2.2 (testo estratto dal PDF ufficiale)
+- Agenzia delle Entrate, *Locazioni brevi: la disciplina fiscale e le regole per gli intermediari*, agosto 2024 (PDF)
+- Corte di giustizia UE, C-83/21 Airbnb Ireland, 22/12/2022 (dal riassunto della ricerca)
+- Mandato con rappresentanza e art. 2 c.3 lett. a / art. 15 DPR 633/72: FISCOeTASSE, marcochilla.com (secondarie);
+  Agenzia, Risposta n. 68/2026 sul forfettario (letta da lavoripubblici.it, secondaria)
+
+**Cosa dicono.**
+1. Con l'addebito sul conto dell'host (diretto, o destination charge con `on_behalf_of`) l'host e' il «business of
+   record», con descrittore e tariffe del suo paese; la piattaforma prende una application fee. Stripe sconsiglia
+   l'addebito diretto con gli account Express/Custom v1. Con gli addebiti indiretti rimborsi e contestazioni colpiscono
+   SEMPRE il saldo della piattaforma.
+2. Con i bonifici manuali i fondi restano sul saldo dell'host, ma vanno pagati entro **90 giorni** (USA 2 anni,
+   Thailandia 10); lo stesso vale per i fondi tenuti sul saldo della piattaforma. Testuale: «Escrow has a precise
+   legal definition, and Stripe doesn't provide escrow services or support escrow accounts». Gli affitti sono citati
+   come uso legittimo della trattenuta.
+3. Responsabili delle perdite: saldi negativi degli host, riserve possibili sul nostro saldo, rischio degli host a
+   carico nostro, KYC di Stripe con la Dashboard Express, nessuna tariffa aggiuntiva. Caso citato: alloggi falliti col
+   COVID, chargeback dei soggiorni prepagati pagati dalle piattaforme.
+4. Costi Connect (Italia): «tu gestisci le tariffe» = 2 EUR per account attivo al mese + 0,25% + 0,10 EUR per
+   bonifico; rimborso senza commissione (misurato sul nostro conto il 16/8 e il 2/10), la commissione del pagamento
+   non torna; rimborso entro pochi minuti = storno, dopo = accredito in circa 5-10 giorni.
+5. Account Express in modalita' vera: la piattaforma lo cancella a saldi zero; uno Standard mai.
+6. Stripe Technology Europe e' istituto di moneta elettronica (Central Bank of Ireland); con Connect «i fondi dovuti
+   dai clienti finali all'utente non sono mai in possesso o sotto il controllo della piattaforma», che da' solo
+   «istruzioni preconcordate»: per questo la piattaforma non ha bisogno di licenza PSD2 propria.
+7. Revolut vieta «to accept or process payments on behalf of anyone else» e il «pass-through agent». ⚠️ I Merchant
+   Terms e il listino trovati sul cdn con «service bureau» sono la versione AUSTRALIANA: non valgono per l'Europa.
+8. Mangopay (wallet per utente, fee prelevate su pay-in/transfer/payout; la doc ufficiale non dichiara limiti di
+   tempo) e Lemonway (istituto di pagamento francese, incasso per conto terzi) nascono per tenere i soldi di terzi
+   fino a fine servizio; prezzi non pubblici (secondarie: ~1,4-1,8% + ~0,20 EUR carta, payout da 0,20, per Mangopay
+   un canone «da 249 EUR/mese»).
+9. Ritenuta: chi «incassa o interviene nel pagamento» trattiene il 21% a titolo d'acconto sul lordo, versa e
+   certifica (dal 2024 sempre 21%). Formulazione «volutamente ampia», e va fatta **«anche qualora l'intermediario
+   abbia delegato soggetti terzi all'incasso del canone e all'accredito del relativo importo al locatore»**; esente
+   solo chi non ha la «materiale disponibilita' delle risorse finanziarie». CGUE C-83/21: ritenuta compatibile col
+   diritto UE, sproporzionato solo il rappresentante fiscale.
+10. Mandato CON rappresentanza (art. 1704 c.c.): le somme incassate in nome e per conto dell'Host sono fuori campo IVA
+   e non sono ricavi del mandatario; per il forfettario contano solo i compensi spettanti.
+
+**Cosa abbiamo deciso.** Il contratto host dice il mandato con rappresentanza e la ritenuta (versione 2026-10-02,
+guardia `test_il_MANDATO_CON_RAPPRESENTANZA_e_scritto_in_OGNI_lingua`). La scelta del fornitore (Stripe col limite
+dei 90 giorni e l'addebito vicino alla data, oppure Mangopay/Lemonway) la prende il fondatore a macchina finita, coi
+preventivi e col commercialista. La conferma delle responsabilita' Connect in modalita' vera resta in sospeso.
+
+**Cosa NON abbiamo adottato, e perche'.**
+- Incassare su un conto nostro e distribuire: Revolut lo vieta; tenere e girare soldi di altri e' un servizio di
+  pagamento regolato. Connect (o Mangopay/Lemonway) esiste per non averne bisogno.
+- La parola «escrow» nei testi: Stripe dichiara di non offrirlo; si dice «custodite presso il Prestatore Autorizzato».
+- Il nome del fornitore negli articoli del mandato (2 e 6): domani puo' cambiare, quindi «Prestatore Autorizzato».
+  ⚠️ Resta invece nell'art. 6-BIS (chi addebita i costi all'Host): lo pretende `test_trasparenza_costi`, e la suite
+  intera del 2/10 e' stata rossa quando lo si era tolto.
+- L'addebito diretto puro: sconsigliato da Stripe con gli account Express/Custom v1.
 
 
 ### Ricerca: Errori delle IA sul codice altrui + storia del repo — 23 regole sopravvissute

@@ -116,6 +116,25 @@ class TestDocumento(unittest.TestCase):
                        "MANLEVA", "LIMITAZIONE DI RESPONSABILITA'", "1341-1342"):
             self.assertIn(atteso, it, atteso)
 
+    def test_il_MANDATO_CON_RAPPRESENTANZA_e_scritto_in_OGNI_lingua(self):
+        """B12 (RIPRENDI_QUI, 2026-08-24): la contabilita' tratta i soldi dell'Host come NON
+        nostri, ma il contratto diceva solo «incassare tramite gli strumenti di BookinVIP».
+        Senza mandato CON rappresentanza (artt. 1703-1704 c.c.) quelle somme non sono
+        «in nome e per conto» dell'Host. Le somme stanno presso un prestatore di servizi di
+        pagamento autorizzato, mai «escrow» (Stripe dichiara di non offrirlo), e la ritenuta
+        dell'intermediario dev'essere scritta, non lasciata a «salvo dove una legge imponga»."""
+        attese = {
+            "it": ("in nome e per conto dell'Host", "1704", "prestatore di servizi di pagamento "
+                   "autorizzato", "non costituiscono ricavi di BookinVIP", "ritenuta"),
+            "en": ("in the name and on behalf of the Host", "1704", "authorised payment service "
+                   "provider", "do not constitute revenue of BookinVIP", "withholding"),
+        }
+        for lang, frasi in attese.items():
+            testo = " ".join(CONTRATTO_HOST[lang].split())   # l'a capo del testo non e' contenuto
+            for frase in frasi:
+                self.assertIn(frase, testo, "%s: manca %r" % (lang, frase))
+            self.assertNotIn("escrow", testo.lower(), "%s: «escrow» promette cio' che non c'e'" % lang)
+
 
 class TestIntegrazioneHTTP(unittest.TestCase):
     def setUp(self):
