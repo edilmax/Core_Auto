@@ -27,7 +27,7 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 # Bump questa versione a OGNI modifica sostanziale del testo -> gli host dovranno ri-accettare.
-CONTRATTO_HOST_VERSIONE = "2026-09-27"   # art. 6-TER: chi paga cosa nella cancellazione dell'Ospite
+CONTRATTO_HOST_VERSIONE = "2026-10-02"   # art. 2: mandato con rappresentanza all'incasso (B12)
 
 # ── TESTO DEL CONTRATTO (it = lingua che fa fede) ─────────────────────────────
 _IT = """CONTRATTO HOST BOOKINVIP — Versione {VER}
@@ -37,17 +37,25 @@ BookinVIP e' una piattaforma tecnologica di intermediazione che mette in contatt
 offre un alloggio ("Host") con chi lo prenota ("Ospite"). BookinVIP NON e' proprietaria,
 gestore, locatore ne' fornitrice degli alloggi, NON e' parte del contratto di ospitalita'
 tra Host e Ospite e non presta servizi di alloggio. L'Host offre e gestisce il proprio
-alloggio in piena autonomia e sotto la propria esclusiva responsabilita'.
+alloggio in piena autonomia e sotto la propria esclusiva responsabilita'. Per la riscossione dei
+corrispettivi BookinVIP agisce come mandataria con rappresentanza dell'Host (art. 2).
 
 ART. 1 — DEFINIZIONI.
 "Piattaforma": il sito, le app e le API di BookinVIP. "Annuncio": la scheda dell'alloggio
 pubblicata dall'Host. "Commissione": il corrispettivo dovuto a BookinVIP per il servizio
-di intermediazione. "Payout": la somma spettante all'Host per un soggiorno.
+di intermediazione. "Payout": la somma spettante all'Host per un soggiorno, incassata da
+BookinVIP in nome e per conto dell'Host.
 
-ART. 2 — OGGETTO.
+ART. 2 — OGGETTO E MANDATO CON RAPPRESENTANZA.
 Il presente contratto disciplina l'uso della Piattaforma da parte dell'Host per pubblicare
-annunci, ricevere prenotazioni e incassare i relativi importi tramite gli strumenti di
-BookinVIP. L'accettazione e' condizione necessaria per usare la Piattaforma come Host.
+annunci e ricevere prenotazioni. L'Host conferisce a BookinVIP mandato con rappresentanza
+(artt. 1703-1704 c.c.) di incassare in nome e per conto dell'Host i corrispettivi dei soggiorni
+prenotati tramite la Piattaforma, comprese, ove previste, la tassa di soggiorno e le somme a
+titolo di penale o rimborso secondo le politiche applicate. I pagamenti sono eseguiti tramite un
+prestatore di servizi di pagamento autorizzato (il «Prestatore Autorizzato»), in nome e per conto
+dell'Host. L'incasso in nome e per conto dell'Host non rende BookinVIP fornitrice degli alloggi
+ne' parte del contratto di ospitalita'. L'accettazione e' condizione necessaria per usare la
+Piattaforma come Host.
 
 ART. 3 — REQUISITI E GARANZIE DELL'HOST (LEGALITA' NEL PROPRIO PAESE).
 L'Host dichiara e garantisce, sotto la propria esclusiva responsabilita', che:
@@ -64,13 +72,20 @@ L'Host dichiara e garantisce, sotto la propria esclusiva responsabilita', che:
  (d) manterra' validi nel tempo i suddetti titoli, licenze e requisiti per tutta la durata.
 L'Host esibira' a BookinVIP, su richiesta, la documentazione comprovante quanto sopra.
 
-ART. 4 — FISCALITA' (RESPONSABILITA' ESCLUSIVA DELL'HOST).
+ART. 4 — FISCALITA'.
 L'Host e' l'unico responsabile di tutti gli obblighi fiscali derivanti dalla propria attivita':
 imposte sui redditi, IVA ove dovuta, eventuale cedolare secca, e in particolare la RACCOLTA e
-il VERSAMENTO della tassa/imposta di soggiorno al Comune competente. BookinVIP non e' sostituto
-d'imposta ne' responsabile delle imposte dell'Host, salvo dove una legge imperativa imponga alla
-piattaforma specifici obblighi di ritenuta o comunicazione (es. DAC7 UE), che BookinVIP adempira'
-richiedendo all'Host i dati necessari; la mancata fornitura di tali dati e' a rischio dell'Host.
+il VERSAMENTO della tassa/imposta di soggiorno al Comune competente. RITENUTA SULLE LOCAZIONI
+BREVI. Ove una legge imperativa lo imponga — in Italia, per gli alloggi di Host privati con
+soggiorni fino a 30 (trenta) notti, ai sensi dell'art. 4, comma 5, D.L. 50/2017 — BookinVIP, in
+qualita' di soggetto che incassa o interviene nel pagamento in nome e per conto dell'Host,
+trattiene a titolo d'acconto il 21% (ventun per cento) del corrispettivo lordo incassato per
+conto dell'Host, lo versa all'Erario nelle forme e nei tempi di legge e rilascia all'Host la
+certificazione delle somme trattenute. La ritenuta non si applica dove l'Host fornisca la prova
+d'esenzione prevista dalla legge (tra cui la partita IVA della societa' validata presso il
+sistema comunitario); in mancanza, si applica. Restano fermi gli adempimenti di comunicazione
+richiesti dalla legge (es. DAC7 UE), che BookinVIP adempira' richiedendo all'Host i dati
+necessari; la mancata fornitura di tali dati e' a rischio dell'Host.
 
 ART. 5 — OBBLIGHI OPERATIVI.
 L'Host si impegna a: mantenere il calendario aggiornato ed evitare l'overbooking; onorare ogni
@@ -84,6 +99,12 @@ dell'Host. Il Payout matura a soggiorno regolarmente avvenuto. BookinVIP ha diri
 TRATTENERE, COMPENSARE o RECUPERARE dai Payout presenti o futuri dell'Host ogni importo a
 qualunque titolo dovuto dall'Host (penali, rimborsi all'Ospite, storni/chargeback, costi,
 sanzioni), anche senza preventivo consenso ulteriore.
+Custodia e proprieta' delle somme. Le somme incassate in nome e per conto dell'Host restano di
+proprieta' dell'Host e non costituiscono ricavi di BookinVIP. BookinVIP trattiene soltanto la
+Commissione, la tariffa tecnica di cui all'art. 6-BIS e, quando una legge imperativa lo impone,
+la ritenuta d'acconto da versare all'Erario di cui all'art. 4. Le somme restano custodite presso
+il Prestatore Autorizzato fino al Payout, che matura a soggiorno regolarmente avvenuto, a
+rimborso all'Ospite o alla divisione successiva alla controversia (artt. 6 e 6-TER).
 
 ART. 6-BIS — TARIFFA TECNICA DI ELABORAZIONE DEI PAGAMENTI (SEMPRE DOVUTA).
 Oltre alla Commissione, resta a carico esclusivo dell'Host una TARIFFA TECNICA pari al
@@ -138,7 +159,7 @@ ART. 10 — LIMITAZIONE DI RESPONSABILITA' DI BOOKINVIP.
 BookinVIP fornisce un servizio di sola intermediazione e non garantisce l'idoneita', la
 sicurezza o la legalita' degli alloggi ne' la condotta di Host e Ospiti. Nei limiti massimi
 consentiti dalla legge, la responsabilita' complessiva di BookinVIP verso l'Host per qualsiasi
-titolo e' limitata all'importo delle Commissioni effettivamente incassate da BookinVIP per la
+titolo e' limitata all'importo delle Commissioni effettivamente trattenute da BookinVIP per la
 prenotazione da cui deriva la pretesa; e' esclusa ogni responsabilita' per danni indiretti,
 consequenziali o da lucro cessante. Nulla esclude responsabilita' non escludibili per legge.
 
@@ -187,14 +208,23 @@ BookinVIP is a technology intermediation platform connecting those who offer acc
 ("Host") with those who book it ("Guest"). BookinVIP is NOT the owner, manager, landlord or
 provider of the accommodations, is NOT a party to the hospitality contract between Host and
 Guest, and does not provide accommodation services. The Host offers and manages the
-accommodation independently and under its sole responsibility.
+accommodation independently and under its sole responsibility. For the collection of the amounts
+BookinVIP acts as the Host's representative mandate holder (Art. 2).
 
 ART. 1 — DEFINITIONS. "Platform": BookinVIP's site, apps and APIs. "Listing": the Host's
 published accommodation. "Commission": the fee due to BookinVIP for intermediation.
-"Payout": the amount due to the Host for a stay.
+"Payout": the amount due to the Host for a stay, collected by BookinVIP in the name and on
+behalf of the Host.
 
-ART. 2 — SUBJECT. This agreement governs the Host's use of the Platform to publish listings,
-receive bookings and collect the related amounts. Acceptance is required to use the Platform as a Host.
+ART. 2 — SUBJECT AND REPRESENTATIVE COLLECTION MANDATE.
+This agreement governs the Host's use of the Platform to publish listings and receive bookings.
+The Host grants BookinVIP a mandate with power of representation (Italian Civil Code arts.
+1703-1704) to collect in the name and on behalf of the Host the amounts due for stays booked
+through the Platform, including, where applicable, the tourist tax and any amounts due as
+penalties or refunds under the applicable policies. Payments are processed by an authorised
+payment service provider (the «Authorised Provider»), in the name and on behalf of the Host.
+Collecting in the Host's name and on its behalf does not make BookinVIP an accommodation provider
+or a party to the hospitality contract. Acceptance is required to use the Platform as a Host.
 
 ART. 3 — HOST REQUIREMENTS AND WARRANTIES (LEGAL COMPLIANCE IN ITS COUNTRY).
 The Host represents and warrants, under its sole responsibility, that: (a) it has full right and
@@ -209,12 +239,19 @@ accommodation, actually available amenities, correct capacity, location and pric
 keep such titles, licenses and requirements valid throughout. The Host shall provide supporting
 documentation upon request.
 
-ART. 4 — TAXES (SOLE RESPONSIBILITY OF THE HOST). The Host is solely responsible for all tax
-obligations arising from its activity: income taxes, VAT where due, and in particular the
-COLLECTION and PAYMENT of the tourist tax to the competent municipality. BookinVIP is not a
-withholding agent nor responsible for the Host's taxes, save where a mandatory law imposes
-specific obligations on the platform (e.g. EU DAC7), which BookinVIP will fulfil by requesting
-the necessary data from the Host; failure to provide such data is at the Host's risk.
+ART. 4 — TAXES.
+The Host is solely responsible for all tax obligations arising from its activity: income taxes,
+VAT where due, and in particular the COLLECTION and PAYMENT of the tourist tax to the competent
+municipality. SHORT-TERM RENTAL WITHHOLDING. Where mandatory law so provides — in Italy, for
+accommodations of private Hosts with stays of up to 30 (thirty) nights, under Art. 4(5)
+Legislative Decree 50/2017 — BookinVIP, as the party collecting or intervening in the payment in
+the name and on behalf of the Host, withholds on account 21% (twenty-one per cent) of the gross
+consideration collected on the Host's behalf, pays it to the tax authorities as prescribed by
+law, and issues the Host a certificate of the amounts withheld. The withholding does not apply
+where the Host provides the exemption proof required by law (including a company VAT number
+validated through the EU system); failing that, it applies. Reporting duties required by law
+(e.g. EU DAC7) are unaffected: BookinVIP will fulfil them by requesting the necessary data from
+the Host, whose failure to provide them is at the Host's risk.
 
 ART. 5 — OPERATIONAL OBLIGATIONS. The Host shall: keep the calendar up to date and avoid
 overbooking; honour every confirmed booking; fairly apply the declared cancellation policy;
@@ -224,7 +261,12 @@ ART. 6 — COMMISSIONS AND PAYMENTS. The Commission is due per the published fee
 BookinVIP applies a zero-cost model for the Guest: the Commission is withheld from the Host's
 Payout. Payout accrues once the stay has duly taken place. BookinVIP may WITHHOLD, SET OFF or
 RECOVER from present or future Payouts any amount owed by the Host on any basis (penalties,
-Guest refunds, chargebacks, costs, sanctions).
+Guest refunds, chargebacks, costs, sanctions). Custody and ownership of funds. Amounts collected
+in the name and on behalf of the Host remain the Host's property and do not constitute revenue
+of BookinVIP. BookinVIP withholds only the Commission, the technical fee under Art. 6-BIS and,
+where mandatory law so requires, the withholding tax payable to the tax authorities under Art. 4.
+The funds are held with the Authorised Provider until the Payout, which accrues once the stay has
+duly taken place, upon a Guest refund or upon the division following a dispute (Arts. 6 and 6-TER).
 
 ART. 6-BIS — PAYMENT PROCESSING TECHNICAL FEE (ALWAYS DUE). In addition to the Commission, a
 TECHNICAL FEE of 5% (five per cent) of the transaction amount PLUS EUR 0.25 (twenty-five cents)
@@ -269,7 +311,7 @@ relating to the Host; (iv) infringement of third-party rights.
 ART. 10 — LIMITATION OF BOOKINVIP'S LIABILITY. BookinVIP provides intermediation only and does not
 warrant the suitability, safety or legality of accommodations nor the conduct of Hosts and Guests.
 To the maximum extent permitted by law, BookinVIP's total liability to the Host is limited to the
-Commissions actually collected for the booking giving rise to the claim; indirect, consequential
+Commissions actually withheld by BookinVIP for the booking giving rise to the claim; indirect, consequential
 or lost-profit damages are excluded. Liabilities that cannot be excluded by law are unaffected.
 
 ART. 11 — SUSPENSION AND TERMINATION. BookinVIP may suspend or remove a Listing and suspend or
