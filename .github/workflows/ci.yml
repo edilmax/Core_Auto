@@ -985,6 +985,14 @@ jobs:
           BASE_VISIVO: http://127.0.0.1:8095
         run: node collaudi/checkin_questura_browser.js
 
+      # LA RI-ACCETTAZIONE DEL CONTRATTO DAL PANNELLO HOST (consegne 30, punto a): il banco
+      # iscrive un host senza prove dei consensi; il browser preme «Accetto» e pretende che la
+      # pagina dica il successo E che il server, riletto, non chieda piu' di riaccettare.
+      - name: La ri-accettazione del contratto dal pannello host
+        env:
+          BASE_VISIVO: http://127.0.0.1:8095
+        run: node collaudi/riaccetta_browser.js
+
       - name: Spegni il terzo banco
         if: always()
         run: kill "$(cat server_pin.pid)" 2>/dev/null || true

@@ -179,10 +179,16 @@ class TestAccesa(_Base):
         self.sis.registro_host.imposta_stripe_account(self.hid, "")
         rif, _q = self._prenota_paga()
         pieno = self._maturato(rif)
-        self.r._trasferisci_all_host(rif, pieno)
+        with self.assertLogs("core_auto.server", level="WARNING") as reg:
+            self.r._trasferisci_all_host(rif, pieno)
         self.assertEqual(self.connect.chiamate, [])
         self.assertEqual(self.sis.payout.da_pagare(self.hid, "EUR"), pieno - 4200)
         self.assertEqual(len(self._righe(rif, "ritenuta")), 1)
+        # la riga del bonifico a mano (consegne 30, punto b) dice quanto pagare DAVVERO: il netto
+        # della ritenuta, non l'importo che il chiamante aveva in mano prima di trattenerla
+        righe = [r.getMessage() for r in reg.records if "CONTO_STRIPE_NON_COLLEGATO" in r.getMessage()]
+        self.assertEqual(len(righe), 1, reg.output)
+        self.assertIn("IMPORTO: %d |" % (pieno - 4200), righe[0])
 
     def test_UNA_volta_sola_per_quanti_ritentativi(self):
         self._accendi()

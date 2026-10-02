@@ -2949,10 +2949,30 @@ class RouterHTTP:
         pp = getattr(self._sys, "pagamenti_pendenti", None)
         for p in el:
             p["stato"] = self._stato_vero_prenotazione(pp, p)
-            p["rimborsabile"] = p["stato"] in ("pagata", "bloccata_sulla_carta", "attiva")
+            try:
+                deciso = self._garanzia_gia_divisa(p.get("idem_key"))
+            except Exception:
+                deciso = True        # garanzia illeggibile: niente pulsante, decide una persona
+                logger.error("admin prenotazioni: garanzia illeggibile, «Rimborsa» non offerto",
+                             exc_info=True)
+            p["rimborsabile"] = (p["stato"] in ("pagata", "bloccata_sulla_carta", "attiva")
+                                 and not deciso)
             p["voucher_url"] = self._voucher_per_admin(pp, p)
         return 200, {"prenotazioni": el, "totale": totale, "pagina": pagina,
                      "per_pagina": per_pagina}
+
+    def _garanzia_gia_divisa(self, idem):
+        """La garanzia di questa prenotazione e' gia' stata divisa ('risolto')? Succede con la
+        decisione dell'arbitro e con la cancellazione con penale (`chiudi_proporzionale`).
+        Consegne 30, punto c: dopo la decisione «Rimborsa» restituiva TUTTO all'ospite e
+        toglieva all'host la quota decisa; il rimborso deciso passa da «Rimborsi da eseguire».
+        Il riferimento si ricava dalla chiave del calendario come in `_admin_rimborso`. Una
+        garanzia illeggibile SOLLEVA: decide chi chiama, e nel dubbio non si rimborsa."""
+        idem = str(idem or "")
+        rif = idem[len("reblock:"):] if idem.startswith("reblock:") else idem[:24]
+        gz = getattr(self._sys, "garanzia", None)
+        st = gz.stato(rif) if gz is not None else None
+        return isinstance(st, dict) and st.get("stato") == "risolto"
 
     def _voucher_per_admin(self, pp, p):
         """Il collegamento al voucher, per l'admin (D12 della prova vera del 29/9): l'ospite che
@@ -4934,6 +4954,11 @@ class RouterHTTP:
         idem = dati.get("idem_key")
         if not all(isinstance(x, str) and x for x in (alloggio, ci, co, idem)):
             return 422, {"errore": "campi_non_validi"}
+        # ⛔ GARANZIA GIA' DIVISA (arbitro o penale; consegne 30, punto c), PRIMA di toccare date
+        # e soldi: lo stesso freno della cancellazione dell'host. Una garanzia illeggibile
+        # solleva qui e la richiesta finisce in 500 senza effetti: nel dubbio non si rimborsa.
+        if self._garanzia_gia_divisa(idem):
+            return 409, {"errore": "escrow_gia_liquidato"}
         try:
             e = self._sys.inventario.rilascia(alloggio, ci, co, idem_key=idem)
         except Exception:
@@ -6929,7 +6954,14 @@ class RouterHTTP:
                 return                                # ritenuta non operata: il bonifico aspetta
             acct = (info or {}).get("stripe_account_id", "")
             if not acct:
-                return                                # host non collegato -> bonifico manuale
+                # host non collegato -> bonifico MANUALE: resta 'maturato' (mai perso) e il registro
+                # lo dice. Prima usciva muto e lo sapeva solo l'archivio (consegne 30, punto b).
+                # L'importo e' quello del registro dei bonifici, cioe' quello da pagare a mano
+                # (gia' al netto della ritenuta, se accesa), non quello del chiamante.
+                logger.warning("PAYOUT_HOLD_TRIGGERED | HOST_ID: %s | RIF: %s | IMPORTO: %s | "
+                               "MOTIVO: CONTO_STRIPE_NON_COLLEGATO", host_id,
+                               _rif_per_registro(rif), (pd.info(rif) or {}).get("minori"))
+                return
             if pd is not None and pd.stato_di(rif) in ("in_transito", "pagato"):
                 return                                # gia' partito (guardia anti-doppio)
             # SCATTO ② (Debt Status): PRIMA di pagare, i debiti 'aperto' dell'host si

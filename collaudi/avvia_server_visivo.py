@@ -114,6 +114,10 @@ def _prepara(porta):
               "accetta_clausole": True, "accetta_privacy": True, "doc_sha256": doc_sha256(),
               "versione": CONTRATTO_HOST_VERSIONE})
     tok = c["token"]
+    # UN HOST CHE DEVE RIACCETTARE (consegne 30, punto a): iscritto SENZA le prove firmate dei
+    # consensi, come chi si e' registrato prima di una versione nuova del contratto. Il suo
+    # pannello mostra la scheda della ri-accettazione: `collaudi/riaccetta_browser.js` la preme.
+    sistema.registro_host.registra("riaccetta@visivo.it", "password1", accetta_termini=True)
     # annuncio a Roma con coordinate (per la ricerca) + accetta paga in struttura (default ON)
     g("POST", "/api/host/pubblica",
       {"slug": "attico-roma-visivo", "titolo": "Attico Vista Colosseo", "citta": "Roma",

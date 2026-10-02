@@ -280,10 +280,13 @@ class TestLeCoppieCheOggiNonFannoDanno(_BancoRimborsi):
         Cosa succede davvero, misurato:
         · l'ospite cancella -> il libro registra il DOVUTO (al netto della penale) e la
           prenotazione entra nella lista dei rimborsi da fare;
-        · `/api/admin/rimborso` su quella prenotazione risponde 200 `idempotente`, con
-          «nessun incasso da restituire»: **non chiama il gateway e non scrive in giornale**.
-          Non e' una collisione di chiavi -- il record e' gia' marcato 'rimborsato' e il ramo
-          contabile non viene nemmeno attraversato (`fase83`, `_admin_rimborso`).
+        · `/api/admin/rimborso` su quella prenotazione risponde 409 `escrow_gia_liquidato`:
+          la cancellazione con penale ha gia' diviso la garanzia (`risolto`), e dal 2/10
+          (consegne 31) la rotta si ferma li', PRIMA di toccare date e soldi
+          (`fase83._garanzia_gia_divisa`). Fino ad allora rispondeva 200 `idempotente` con
+          «nessun incasso da restituire», perche' il record era gia' 'rimborsato': in tutti e
+          due i casi **non chiama il gateway e non scrive in giornale**, ed e' questo che si
+          sorveglia qui sotto.
         · i soldi partono dall'ALTRA rotta, `/api/admin/rimborsa_dovuto` (`fase83:4891`), che
           manda `dovuto_cents`: **lo stesso importo che il libro dichiara.**
 
@@ -323,8 +326,9 @@ class TestLeCoppieCheOggiNonFannoDanno(_BancoRimborsi):
             s2, o2 = self.g("POST", "/api/admin/rimborso",
                             {"alloggio_id": "casa", "check_in": ci, "check_out": co,
                              "idem_key": idem}, {"X-Admin-Key": "ak"})
-            self.assertEqual(s2, 200, "PREMESSA NON VALIDA: la rotta admin non risponde "
-                                      "200 (%s): %r" % (s2, o2))
+            self.assertEqual((s2, o2.get("errore")), (409, "escrow_gia_liquidato"),
+                             "la rotta admin non si ferma alla garanzia gia' divisa dalla "
+                             "penale (%s): %r" % (s2, o2))
             self.assertEqual(
                 mossi, [],
                 "IL FRENO E' CADUTO. `/api/admin/rimborso` ha mosso %s al gateway su una "
