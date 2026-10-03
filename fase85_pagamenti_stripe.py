@@ -47,6 +47,17 @@ logger = logging.getLogger("core_auto.pagamenti_stripe")
 # method, transazioni avviate dal cliente): l'incasso a fine finestra (48 ore) ci sta dentro.
 GIORNI_MINIMI_BLOCCO = 6
 
+# I METODI CHE REGGONO IL BLOCCO (consegne 35, 2026-10-03, «autorizzato» del fondatore). Il 3/10
+# il fondatore ha pagato con Link un arrivo a 7 giorni ed e' stato incassato SUBITO: il blocco era
+# chiesto solo per la carta. Regola del fondatore: nelle 48 ore, dal voucher, la cancellazione deve
+# essere immediata su ogni metodo. Quindi con il blocco la cassa propone SOLO questi, e lo chiede su
+# OGNUNO. Sono i metodi accesi sul conto (letti dall'API il 3/10) che Stripe dichiara capaci di
+# blocco («Manual capture», docs.stripe.com/payments/payment-method-support, e le pagine di
+# satispay e amazon-pay); Apple Pay e Google Pay passano dentro «card». Misurato su Stripe di prova
+# (versione 2026-05-27, la stessa del conto vivo): un valore fuori dalla lista di Stripe fa
+# rifiutare la sessione (400); con usd, gbp e jpy Stripe toglie da solo i metodi che non vanno.
+METODI_COL_BLOCCO = ("card", "link", "klarna", "amazon_pay", "satispay")
+
 
 def blocco_sulla_carta(check_in: Any, *, oggi: Optional[datetime.date] = None) -> bool:
     """Vero se il pagamento di una prenotazione con questo arrivo va BLOCCATO sulla carta invece
@@ -152,12 +163,15 @@ class ProviderStripe:
                 ("client_reference_id", ref),
                 ("metadata[riferimento]", ref),
             ]
-            # IL BLOCCO SULLA CARTA, e SOLO sulle carte: `payment_intent_data[capture_method]`
-            # varrebbe per tutti i metodi, e quelli che il blocco non lo reggono (iDEAL, SEPA,
-            # Pix...) non potrebbero piu' pagare. Cosi' le carte si autorizzano, gli altri
-            # metodi incassano subito come sempre (docs.stripe.com, «place a hold»).
+            # IL BLOCCO, metodo per metodo (vedi METODI_COL_BLOCCO): `allowed_payment_method_types`
+            # e' un FILTRO sui metodi idonei (un metodo spento sul conto sparisce invece di far
+            # fallire la cassa), e il blocco si chiede per OGNI metodo proposto: chiesto solo per
+            # la carta, Link e gli altri incassavano subito. Senza blocco la cassa resta com'era.
             if blocco_sulla_carta(dati.get("check_in")):
-                params.append(("payment_method_options[card][capture_method]", "manual"))
+                for i, metodo in enumerate(METODI_COL_BLOCCO):
+                    params.append(("allowed_payment_method_types[%d]" % i, metodo))
+                    params.append(("payment_method_options[%s][capture_method]" % metodo,
+                                   "manual"))
             email = dati.get("email")
             if isinstance(email, str) and "@" in email:
                 params.append(("customer_email", email))
