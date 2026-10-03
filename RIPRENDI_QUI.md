@@ -3435,7 +3435,64 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 15c4758
+CONSEGNE AGGIORNATE A: d5ed231
+
+## PASSAGGIO DI CONSEGNE 34 (2026-10-03 notte) - IL CONTRATTO COL MANDATO E' IN PRODUZIONE (master d5ed231 su PC, GitHub e VPS); CHIAVETTA RIGENERATA E PROVATA; I TERMINI OSPITE COL MANDATO PROPOSTI DA GML, NON APPLICATI:
+- CONTESTO: non letto (la barra la legge il fondatore con `/context`).
+- PERMESSI, parole del fondatore in questa sessione: «Procedi al commit, autorizzato: commit, richiesta di unione, CI
+  dall'API, unione e deploy col protocollo di DEPLOY.md (copia dei dati, paracadute, sonde, fotografia dei soldi prima e
+  dopo).» e «Subito dopo il deploy rigenera la chiavetta».
+- SUITE INTERA dei cinque file (PowerShell vera, `suite_20261002_231554.log`): «Ran 7189 tests in 6895.623s - OK
+  (skipped=4) - CODICE_USCITA_DIRETTO=0»; caricatore 7194 rimisurato dopo (scarto 5 = openssl); nessun file modificato
+  durante il giro (ultima modifica 23:15:41, partenza 23:15:54). ⚠️ All'inizio della sessione l'avevo creduta morta: il
+  registro `.log` resta all'intestazione fino alla fine e la data di modifica del `.err` non si aggiorna mentre e' aperto;
+  la verita' l'hanno detta il processo (`Win32_Process`) e la coda del `.err`.
+- COMMIT 2c82c5a sul ramo `ricerca-chi-tiene-i-soldi` (pre-fatto: 10 controlli, 0 rossi), richiesta #242, CI 16 controlli
+  gate success (23:28:19Z, `zap` skipped); unione dall'API -> master d5ed231, `merged=True` riletto, `git diff
+  2c82c5a d5ed231` vuoto; CI di master 16 controlli gate success (23:46:29Z).
+- DEPLOY (pulsante a tappe, script in `/root/deploy_20261003/`): copia `/root/pre_deploy_20261003` alle 23:28:55Z (27
+  database col backup di SQLite, `integrity ok` su ognuno, 12 altri file, sha256 OK); FOTOGRAFIA DEI SOLDI prima
+  a703586f (identica alla «dopo» del 2/10: nessun movimento negli otto archivi da ieri); paracadute prec = viva 82b4bab4,
+  HEAD prima 15c4758; `SCAMBIO FATTO alle 23:47:43Z` (pull 15c4758..d5ed231 in avanti veloce); verifica: healthy,
+  `money_path_pronto: True`, `avvisi: []`, nessuna PAGAMENTO_, immagine viva 4d45df38 diversa da prec; sonde 17 su 17;
+  `/api/admin/controversie` e `/api/admin/diagnosi` 401, `/api/bunker/invarianti` 403; `verifica_produzione.py` 190
+  controlli, 0 violazioni, finestra delle sonde dichiarata (certificato ancora 51 giorni); fotografia DOPO identica
+  (a703586f); contratto servito `CONTRATTO_HOST_VERSIONE` 2026-10-02 (letto dentro il contenitore); nessun .flag;
+  tre posti su d5ed231, VPS senza file tracciati modificati.
+- IL GUARDIANO alla riaccensione (23:47:39Z): `INVARIANTI ARCHIVI` I1-I5, violazioni=0, non_eseguiti=0, ciechi=0; poi
+  «3 stato/i anomalo/i» ma SOLO `guasti_isolati` (i tre «Collega Stripe» del 2/10 alle 17:26:37, 17:26:43, 17:27:01Z):
+  `riconciliazione_stripe` non c'e' piu', il rimborso dei 12 centesimi l'ha chiusa. Le 16 righe del Bunker «accesso
+  NEGATO» fra le 23:48:39 e le 23:49:05Z sono le mie sonde: indirizzo 101.57.50.246, lo stesso che risponde
+  `api.ipify.org` dal PC.
+- CHIAVETTA (`Desktop\BOOKINVIP USB 2026`, generazione d5ed231): `impacchetta.sh` uscita 0 (al primo giro l'avevo letta
+  dopo un `| tail`: era l'uscita di tail, regola ferrea 7; rifatto su file e letto diretto); `verifica_impronte.sh`
+  uscita 0: 840 file su 840 identici, 27 database integri; `chiavetta_extra.sh` uscita 0 (immagine 4d45df38, 14
+  salvataggi, 5 righe di cron, certificato fino al 22/11); 8 archivi scaricati con sha256 identiche al server;
+  `/root/chiavetta_extra` cancellata; 27 database riaperti sul PC, tutti ok; dentro l'archivio dell'immagine
+  4d45df380fab (containerd) e b5381a6c5806 (classico); suite intera in una copia estratta in una cartella vuota
+  (`suite_20261003_020747.log`): «Ran 7189 tests in 6700.778s - OK (skipped=4) - CODICE_USCITA_DIRETTO=0», copia
+  cancellata; guida e LEGGIMI riscritti coi numeri nuovi; la generazione del 30/9 e' in `precedente_6889a7a_30mezzogiorno\`.
+- GML (canale, Desktop\claude&gml fhash.txt): COMPITO 21 (rilettura del contratto) verificato sul codice: «Stripe» nel
+  6-BIS e' voluto (`test_trasparenza_costi.py:185` e `:202` lo pretendono); veri ma rimandati per non invalidare la
+  suite: «il gateway» generico (`fase163_accettazioni.py:115` e `:276`) e il rimando «(artt. 6 e 6-TER)» che sta dentro
+  l'art. 6 (`:107` e `:269`). COMPITO 22 (termini ospite, 8 lingue): frase nuova nell'ultima riga dell'art. 1 («...
+  incassa i corrispettivi in nome e per conto dell'Host tramite un prestatore di servizi di pagamento autorizzato»),
+  «pagamento» tolto dall'elenco degli strumenti, art. 4 intoccato; verificato: nessuna guardia legge quell'elenco, righe
+  sotto i 90 caratteri, nessun accento; DIFETTO nel francese («encaisse ... aupres d'un prestataire» = incassa DAL
+  prestatore: va «par l'intermediaire d'un prestataire de services de paiement agree»), nello spagnolo solo uniformita'
+  («proveedor» come all'art. 4). Chiesta a GML la conferma alle 01:15: nessuna risposta fino alle 04:00. I testi stanno
+  nel canale, voce delle 01:14.
+- RESTA, in ordine:
+  1. IL FONDATORE: riaccettare il contratto 2026-10-02 dal pannello host (prova dal vivo: un `POST /api/host/riaccetta
+     200` in nginx e le righe nuove nell'archivio dei consensi).
+  2. i termini ospite col mandato (`fase185_testi_legali.py`, testi di GML col francese e lo spagnolo corretti, la prima
+     riga in EN ES FR DE PT da ri-spezzare col pezzo che la precede, `TERMINI_VERSIONE` alzata, una guardia vista rossa
+     prima): e' produzione, serve «autorizzato».
+  3. la prossima versione del contratto host: i due ritocchi del Compito 21 qui sopra.
+  4. il Guardiano: `guasti_isolati` esce al primo giro intero dopo le 24 ore dall'ultimo «Collega Stripe» fallito (il
+     deploy ha spostato il giro intero a circa le 23:47Z), se nessuno lo riprova; poi `python
+     collaudi/esame_produzione.py --scrivi` (casella 6 del blocco 1).
+  5. il resto delle consegne 33 (commercialista, scelta del fornitore, visti per strada), 32 e 31.
 
 ## PASSAGGIO DI CONSEGNE 33 (2026-10-02 sera) - IL CONTRATTO HOST DICE IL MANDATO CON RAPPRESENTANZA; RICERCA «CHI TIENE I SOLDI» (R5 nel REGISTRO); 12 CENTESIMI RESTITUITI; CONNECT IN MODALITA' VERA LASCIATO A META' APPOSTA:
 - CONTESTO: 63%, letto dal fondatore con `/context` alle 21:4x. ⛔ D21 VIOLATA: superato il 50% senza fermarsi.
