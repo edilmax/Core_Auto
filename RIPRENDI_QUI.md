@@ -3437,6 +3437,87 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 ```
 CONSEGNE AGGIORNATE A: 0f43ecd
 
+## PASSAGGIO DI CONSEGNE 36 (2026-10-03 sera) - IL BLOCCO SU OGNI METODO DI PAGAMENTO RIPARATO (non committato); LA SCANSIONE DI GML VERIFICATA; CHIAVETTA SU 6bac451 IN PROVA:
+- STATO VERIFICATO all'inizio (18:35Z): master 6bac451 su PC, GitHub e VPS (`rev-parse`, `ls-remote`, ssh), #244
+  `merged=True`, CI di master 6bac451 16 controlli, gate success; contenitori healthy, `/api/health` 200.
+- PERMESSI, parole del fondatore in questa sessione: «autorizzato, ripara il blocco su ogni metodo». NON detto: «procedi
+  al commit», ne' il via al deploy.
+- PRE-VOLO: scopo dichiarato con `--nonostante` (la suite della chiavetta girava; la rimisura su master resta da fare
+  PRIMA del commit, comando `python collaudi/rimisura.py`).
+- DIFETTO (a), IL BLOCCO SU OGNI METODO (fatto del fondatore del 3/10, BVIP-7040, Link incassato subito):
+  GUARDIA `test_blocco_carta.TestIlLinkVeroChiedeIlBlocco.test_CON_IL_BLOCCO_OGNI_METODO_PROPOSTO_E_BLOCCATO_DAVVERO`
+  vista ROSSA sul codice di produzione («CON IL BLOCCO LA CASSA PROPONE OGNI METODO»; nel corpo solo
+  `payment_method_options[card][capture_method]=manual`), con la gemella `test_SENZA_IL_BLOCCO_LA_CASSA_PROPONE_TUTTO_
+  COME_SEMPRE` (verde prima e dopo). RIPARAZIONE (`fase85_pagamenti_stripe.py`, `METODI_COL_BLOCCO` = card, link,
+  klarna, amazon_pay, satispay): con il blocco `allowed_payment_method_types[i]` + `payment_method_options[<metodo>]
+  [capture_method]=manual` per ognuno. sha256 prima C5D11914, dopo 28849F9F. GUASTI A MANO con l'editor, tutti presi
+  (senza link; manual solo sulla carta; «apple_pay» aggiunto), ripristino 28849F9F identico. 649 prove dei 19 file che
+  toccano la cassa verdi; 61 di `test_blocco_carta` verdi. Caricatore 7203.
+- GIUDICE ESTERNO (Stripe di PROVA, chiave in `Desktop\TXT_VECCHI`, mai stampata; sonde nello scratchpad):
+  versione API 2026-05-27.dahlia, la STESSA del conto vivo (riletta dal VPS in sola lettura, insieme ai metodi accesi:
+  amazon_pay apple_pay bancontact blik card eps kakao_pay klarna link mb_way naver_pay payco pix samsung_pay satispay).
+  La proposta di GML (Compito 31.A) FALSA in due punti misurati: «apple_pay» in `payment_method_types` -> 400 «Invalid
+  payment_method_types[1]» (nessun arrivo lontano avrebbe piu' pagato); elenco ristretto col solo manual sulla carta ->
+  link/klarna/amazon_pay senza blocco. La `crea_link` VERA dopo la riparazione: arrivo a 20 giorni EUR -> tipi card
+  link klarna amazon_pay satispay, tutti manual; a 2 giorni -> tutti i metodi di sempre, nessun manual; 20 giorni USD
+  -> card link amazon_pay, tutti manual (Stripe toglie da solo klarna e satispay). Al primo giro il mio giudice era
+  ROSSO per colpa sua (pretendeva tutti e cinque anche in dollari): corretto in «ogni metodo offerto ha il blocco».
+  Fonti: docs.stripe.com/payments/payment-method-support (colonna «Manual capture»: card, link, klarna, amazon_pay si;
+  samsung_pay, bancontact, eps, blik, mb_way no), /payments/satispay e /payments/amazon-pay («Manual capture
+  support: Yes»), /payments/place-a-hold-on-a-payment-method (carta 7 giorni, Klarna 28: l'incasso a 48 ore ci sta).
+- GML, COMPITO 31 (voce delle 20:37 e le risposte delle 20:41-20:54), VERIFICATO sul codice:
+  31.A (1) VERO (chi legge il blocco non dipende dal metodo), (2) FALSO (sopra), (3) a meta'.
+  31.B (giro dei tasti): proxy «un file nomina la rotta», non «una prova preme il tasto»: la lista del difetto (f)
+  va misurata davvero.
+  GIRO 1 della scansione: A VERO i ritorni ignorati nella cancellazione dell'host (`pd.rimuovi`, `gz.annulla` con
+  `except: pass` senza riga) ma niente soldi persi oggi (la garanzia «annullato» non paga, e `_trasferisci_all_host`
+  si ferma sul pendente non pagato): BASSA. B FALSO sul ritorno (`apri` torna False solo senza importo host; un errore
+  del database solleva e scrive ERROR), VERO il seguito: senza riga di garanzia `_garanzia_aperta` dice «si parte».
+  MEDIA. C VERO: `registra_in_attesa`/`registra_maturato` (fase131) inghiottono l'errore, il chiamante non lo guarda,
+  nessun invariante cerca «pagato senza riga di payout»: l'host non viene pagato e nessuno lo vede. MEDIA. D VERO,
+  latente (VIES non scritto, ritenuta spenta). E VERO con doppio guasto, BASSA. F VERO: se l'etichetta «in_transito»
+  non si scrive (fase83 ~:7061) il payout resta «maturato», la guardia anti-doppio guarda solo l'etichetta e la chiave
+  d'idempotenza del bonifico vale circa 24 ore: un ritento dopo paga DUE volte. MEDIA-ALTA, raro. G VERO e silenziato
+  due volte (`revoca` del check-in), BASSA oggi (nessuna serratura collegata, il pass nasce alla conferma).
+  GIRO 2: scenario FALSO (nel ramo arbitrato il payout non si legge); VERO che «in_transito» passa il FRENO 3 di
+  «Restituisci», ma ogni cancellazione rietichetta in_transito -> «trattenuto»: il buco vero e' che «trattenuto»
+  NASCONDE un bonifico gia' partito; il freno giusto guarda la riga «payout_host» del giornale. DUBBIO finche' B o F
+  non portano li'.
+  31.E: punti 1, 2, 4, 5, 7 accettati come letti, non rimisurati; 3 e 6 dentro C e Compito 23.
+- GML, COMPITO 32 (testi del voucher dopo la cancellazione, 8 lingue, per il difetto b): impostazione giusta; quattro
+  correzioni chieste alle 21:03 (accento italiano, inglese contraddittorio, «オーソリティ» = autorita' nel giapponese,
+  portoghese a registri misti). I testi stanno nel canale.
+- CHIAVETTA (`Desktop\BOOKINVIP USB 2026`), RIGENERATA su 6bac451: sul server `impacchetta.sh` uscita 0 (27 database, integrita'
+  NON ok 0), `verifica_impronte.sh` uscita 0 (840 su 840, 27 integri), `chiavetta_extra.sh` uscita 0 (immagine viva
+  6ba188f3eb2b, 14 salvataggi, 5 righe di cron, certificato fino al 22/11); 8 archivi scaricati in
+  `_nuova_6bac451\` con sha256 identiche al server; 27 database riaperti sul PC, tutti ok; video invariato (53a6d4fe).
+  Suite intera nella copia estratta `Desktop\_copia_prova_6bac451` (caricatore 7201, registro
+  `suite_20261003_204214.log`, partita alle 20:42): «Ran 7196 tests in 3905.441s - OK (skipped=4) -
+  CODICE_USCITA_DIRETTO=0» (scarto 5 = openssl). Copia cancellata da FUORI della cartella; generazione d5ed231 in
+  `precedente_d5ed231\`; `progetto\` (1266 file, `.env.casavip` presente) e `dati_vergini\` (27 database) estratti
+  dai pacchi nuovi; immagine letta dentro l'archivio: 6ba188f3eb2b (containerd) / c18b6a0c738e (classico), nginx
+  54f2a904c251; guida e LEGGIMI riscritti coi numeri nuovi; `/root/chiavetta_extra` cancellata sul server (`ls`: non
+  esiste). ⚠️ Non contiene la riparazione (a): e' la fotografia del server.
+- RIMISURA (22:17, `python collaudi/rimisura.py` sull'albero con la riparazione (a) non committata, registri
+  `%TEMP%\bookinvip_rimisure\20261003-221717`; scrive `collaudi/scheda.json`, scopo ri-dichiarato col motivo): uscita
+  1, eseguiti 13, rossi 3, saltati 2 (mutazione), a mano 3.
+  ROSSO `esame_orologi.py --scrivi` 24 passi su 25: hold, penale e rimborsi su Stripe di prova VERDI; rosso solo
+  «nasce un conto Connect di prova per l'host»: Stripe risponde 400 «You tried to create an Accounts v1 connected
+  account using the legacy `type` field with your platform as the losses collector. Use Accounts v2, remove `type`,
+  and set `losses_collector` to `stripe`». NON e' la riparazione (a): e' la configurazione di Connect cambiata dal
+  fondatore (consegne 33) contro `fase101` che crea gli account col campo `type`. VISTO PER STRADA, non riparato:
+  quando il profilo della piattaforma sara' completo, «Collega Stripe» in produzione fallira' per lo stesso motivo
+  se Connect resta con la piattaforma responsabile delle perdite. ROSSO `esame_produzione.py --scrivi`: il giro
+  intero del Guardiano alle 18:30:22Z ha 3 `guasti_isolati`, cioe' «Collega Stripe» premuto il 3/10 alle 10:42:51 e
+  alle 18:31:51Z (400 «You must complete your platform profile»): decide il fondatore. ROSSO
+  `esame_sentinella.py --scrivi` (gia' rosso dal 2/10: nessun monitor esterno nelle letture).
+- RESTA, in ordine:
+  1. (fatto: la chiavetta, qui sopra);
+  2. (fatto: la rimisura, qui sopra) su master, poi suite intera dell'albero con la riparazione (a);
+  3. «procedi al commit» -> commit, richiesta di unione, CI; il deploy col protocollo solo col via del fondatore;
+  4. difetti (b)-(f) delle consegne 35, uno alla volta col suo «autorizzato»; poi C e F qui sopra (guardia rossa prima);
+  5. il controllo DENTRO `_trasferisci_all_host` (Compito 29) e il FRENO 3 sul giornale invece che sull'etichetta.
+
 ## PASSAGGIO DI CONSEGNE 35 (2026-10-03 pomeriggio) - «RIMBORSA» RESTITUIVA TUTTO ALL'OSPITE CON L'HOST GIA' PAGATO: TROVATO DA GML, MISURATO, RIPARATO (non committato):
 - CONTESTO: 38%, letto dal fondatore con `/context` alle 12:2x.
 - PERMESSI, parole del fondatore: «autorizzato, ripara il freno di Rimborsa». Prima, sulla scansione: «non ci possiamo
@@ -5485,7 +5566,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 7201 test
+SUITE ATTUALE: Ran 7203 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

@@ -530,6 +530,43 @@ class TestIlLinkVeroChiedeIlBlocco(unittest.TestCase):
                       "d'arrivo, le richieste approvate si incassano subito e l'annullo nelle 48 "
                       "ore diventa un rimborso con la commissione persa")
 
+    # L'ORACOLO, scritto qui e non letto da fase85: i metodi ACCESI sul conto vivo (letti
+    # dall'API il 3/10) che Stripe dichiara capaci di blocco («Manual capture support: Yes»,
+    # docs.stripe.com/payments/payment-method-support e le pagine di satispay e amazon-pay).
+    # Apple Pay e Google Pay non ci sono perche' passano dentro «card»: come valore a parte
+    # Stripe rifiuta la sessione (400, misurato su Stripe di prova il 3/10).
+    REGGONO_IL_BLOCCO = {"card", "link", "klarna", "amazon_pay", "satispay"}
+
+    def test_CON_IL_BLOCCO_OGNI_METODO_PROPOSTO_E_BLOCCATO_DAVVERO(self):
+        """Fatto del 3/10 (BVIP-7040): il fondatore ha pagato con LINK un arrivo a 7 giorni ed e'
+        stato incassato SUBITO, perche' il blocco era chiesto solo per la carta. Con il blocco la
+        cassa deve proporre SOLO metodi che lo reggono, e chiederlo su OGNUNO di essi."""
+        from urllib.parse import parse_qsl
+        self.prenota("subito", 20)
+        p = dict(parse_qsl(self.corpi[-1]))
+        proposti = {v for k, v in p.items()
+                    if k.startswith(("allowed_payment_method_types[", "payment_method_types["))}
+        self.assertTrue(proposti,
+                        "CON IL BLOCCO LA CASSA PROPONE OGNI METODO: Link, Klarna, Amazon Pay e "
+                        "gli altri si incassano subito, e l'annullo nelle 48 ore diventa un "
+                        "rimborso con la commissione persa (corpo: %s)" % self.corpi[-1])
+        self.assertLessEqual(proposti, self.REGGONO_IL_BLOCCO,
+                             "proposto un metodo che il blocco non lo regge, o che Stripe non "
+                             "conosce: %s" % sorted(proposti - self.REGGONO_IL_BLOCCO))
+        self.assertIn("card", proposti, "con il blocco la carta deve restare")
+        self.assertIn("link", proposti, "il caso del 3/10: Link regge il blocco e deve restare")
+        senza = sorted(m for m in proposti
+                       if p.get("payment_method_options[%s][capture_method]" % m) != "manual")
+        self.assertEqual(senza, [],
+                         "METODI PROPOSTI SENZA IL BLOCCO: %s si incasserebbero subito" % senza)
+
+    def test_SENZA_IL_BLOCCO_LA_CASSA_PROPONE_TUTTO_COME_SEMPRE(self):
+        """L'altro verso: un arrivo vicino non ha il blocco, e restringere i metodi li'
+        toglierebbe all'ospite Bancontact, EPS, Pix... senza nessun motivo."""
+        self.prenota("subito", 2)
+        self.assertNotIn("payment_method_types", self.corpi[-1])
+        self.assertNotIn("capture_method", self.corpi[-1])
+
 
 class TestISorveglientiConosconoIlBlocco(unittest.TestCase):
     """Chi sorveglia i conti non deve gridare su un pagamento BLOCCATO dentro la sua finestra
