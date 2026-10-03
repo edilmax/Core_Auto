@@ -144,10 +144,27 @@ class TestBloccoPayoutDAC7(unittest.TestCase):
         self.r._trasferisci_all_host(rif, netto)
         self.assertEqual(len(self.connect.chiamate), 1)      # in regola: nessun blocco
 
+    # ── 3-bis) i dati completati NON pagano in anticipo un soggiorno non fatto ──
+    def test_I_DATI_FISCALI_NON_PAGANO_IN_ANTICIPO_UN_SOGGIORNO_NON_FATTO(self):
+        """Consegne 35: completare i dati fiscali ritentava TUTTI i bonifici 'maturato'
+        dell'host, anche con la garanzia ancora aperta (soggiorno non ancora fatto)."""
+        self._sopra_soglia()
+        rif = self._prenota_paga()
+        self.assertEqual((self.sis.garanzia.stato(rif) or {}).get("stato"), "in_garanzia",
+                         "setup: soggiorno non ancora confermato")
+        s, c = self.r.gestisci("POST", "/api/host/dati_fiscali", {},
+                               json.dumps(self._dati_completi()), self._token())
+        self.assertEqual(s, 200, c)
+        self.assertEqual(self.connect.chiamate, [],
+                         "i dati fiscali hanno pagato l'host prima del soggiorno")
+        self.assertEqual(self.sis.payout.stato_di(rif), "maturato")
+
     # ── 4) SBLOCCO AUTOMATICO al completamento dei dati ────────────────────────
     def test_sblocco_automatico_quando_completa(self):
         self._sopra_soglia()
         rif = self._prenota_paga()
+        # il bonifico nasce allo sblocco della garanzia (consegne 35): prima, niente da ritentare
+        self.assertTrue(self.sis.garanzia.conferma_ospite(rif).get("ok"), "setup: sblocco")
         netto = self.sis.payout.riepilogo(self.hid)["EUR"]["maturato"]
         self.r._trasferisci_all_host(rif, netto)             # -> hold
         self.assertEqual(self.connect.chiamate, [])

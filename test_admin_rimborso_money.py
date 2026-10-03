@@ -344,16 +344,84 @@ class TestIlRimborsoARRIVADavveroAllOspite(unittest.TestCase):
 
         rif, idem = self._prenota_e_paga("2026-09-20", "2026-09-22")
         self.sys.payout = _Rotto()
-        s, res = self.g("POST", "/api/admin/rimborso",
-                        {"alloggio_id": "casa", "check_in": "2026-09-20",
-                         "check_out": "2026-09-22", "idem_key": idem}, {"X-Admin-Key": "ak"})
+        with self.assertLogs("core_auto.server", level="WARNING") as registro:
+            s, res = self.g("POST", "/api/admin/rimborso",
+                            {"alloggio_id": "casa", "check_in": "2026-09-20",
+                             "check_out": "2026-09-22", "idem_key": idem}, {"X-Admin-Key": "ak"})
         self.assertEqual(s, 200, res)
+        # Il freno (`_garanzia_gia_divisa`) non decide su un payout illeggibile, ma lo DICE, con
+        # la traccia: altrimenti il guasto si vedrebbe solo nel passo dopo.
+        freno = [r for r in registro.records
+                 if "freno rimborso: payout illeggibile" in r.getMessage()]
+        self.assertEqual(len(freno), 1, [r.getMessage() for r in registro.records])
+        self.assertIsInstance((freno[0].exc_info or (None, None))[1], RuntimeError,
+                              "la riga del freno non porta la traccia dell'errore")
         self.assertIn("payout_trattenuto", res.get("passi_falliti") or [],
                       "setup: il passo doveva fallire")
         self.assertEqual(self._rimborsi(), [],
                          "i soldi sono partiti mentre il payout NON era trattenuto: l'host "
                          "puo' essere gia' stato pagato -> paghiamo due volte la stessa "
                          "prenotazione, e la seconda la paghiamo noi")
+
+    def test_SE_IL_BONIFICO_ALL_HOST_E_GIA_PARTITO_RIMBORSA_SI_FERMA(self):
+        """⛔ D16, il caso senza componenti rotte (Compito 23 di GML, 3/10): soggiorno finito,
+        garanzia `rilasciato`, trasferimento all'host gia' partito (`in_transito`, come lo scrive
+        `_trasferisci_all_host`). «Rimborsa» non deve restituire all'ospite: l'host ha gia'
+        incassato e la seconda volta la pagheremmo noi. I passi di sicurezza qui NON falliscono
+        da soli -- `annulla` sulla garanzia rilasciata risponde `ok: False` senza sollevare e
+        `in_transito -> trattenuto` e' una transizione permessa -- quindi il freno deve guardare
+        la garanzia e il payout PRIMA di toccare date e soldi, come `rimborsa_dovuto`."""
+        rif, idem = self._prenota_e_paga("2026-09-24", "2026-09-26", "pi_host_gia_pagato")
+        self.assertEqual((self.sys.garanzia.stato(rif) or {}).get("stato"), "in_garanzia",
+                         "setup: dopo il pagamento la garanzia doveva essere aperta")
+        self.assertTrue(self.sys.garanzia.conferma_ospite(rif).get("ok"), "setup: rilascio")
+        stato_payout = self.sys.payout.stato_di(rif)
+        self.assertIn(stato_payout, ("in_attesa", "maturato"),
+                      "setup: dopo il pagamento il bonifico all'host doveva esistere")
+        if stato_payout == "in_attesa":
+            self.assertTrue(self.sys.payout.aggiorna_stato(rif, "maturato"), "setup: maturato")
+        self.assertTrue(self.sys.payout.aggiorna_stato(rif, "in_transito"), "setup: partito")
+        s, adm = self.g("GET", "/api/admin/prenotazioni", None, {"X-Admin-Key": "ak"})
+        riga = [p for p in adm["prenotazioni"] if p.get("idem_key") == idem][0]
+        self.assertFalse(riga.get("rimborsabile"),
+                         "il pannello offre «Rimborsa» su una prenotazione il cui trasferimento "
+                         "all'host e' gia' partito: %r" % ({k: riga.get(k) for k in
+                                                           ("stato", "rimborsabile")},))
+        s, res = self.g("POST", "/api/admin/rimborso",
+                        {"alloggio_id": "casa", "check_in": "2026-09-24",
+                         "check_out": "2026-09-26", "idem_key": idem}, {"X-Admin-Key": "ak"})
+        self.assertEqual(self._rimborsi(), [],
+                         "PERDITA PIENA: rimborsato l'ospite su una prenotazione il cui "
+                         "trasferimento all'host era gia' partito. Risposta: %r %r" % (s, res))
+        self.assertEqual((s, res.get("errore")), (409, "escrow_gia_liquidato"),
+                         "la rotta doveva rifiutare prima di toccare date e soldi: %r" % (res,))
+        self.assertEqual(self.sys.payout.stato_di(rif), "in_transito",
+                         "l'etichetta del bonifico e' cambiata: «trattenuto» su soldi gia' usciti")
+
+    def test_IL_FRENO_GUARDA_GARANZIA_E_BONIFICO_OGNUNO_DA_SOLO(self):
+        """Il freno ha due occhi e ognuno deve bastare da solo: senza questi casi separati, togliere
+        uno dei due lascerebbe verde la prova qui sopra (che li accende tutti e due insieme).
+        Garanzia rilasciata col bonifico non ancora partito: e' la regola della cancellazione
+        dell'host (soggiorno confermato = soldi dell'host, si passa dall'arbitrato). Bonifico
+        partito con la garanzia ancora aperta: i soldi sono fuori comunque."""
+        casi = (("2026-09-27", "2026-09-28", True, ("maturato",)),
+                ("2026-09-28", "2026-09-29", False, ("maturato", "in_transito")),
+                ("2026-09-29", "2026-09-30", False, ("maturato", "in_transito", "pagato")))
+        for ci, co, rilascia, passi in casi:
+            with self.subTest(garanzia_rilasciata=rilascia, bonifico=passi[-1]):
+                del CHIAMATE[:]
+                rif, idem = self._prenota_e_paga(ci, co, "pi_freno_" + ci[-2:])
+                if rilascia:
+                    self.assertTrue(self.sys.garanzia.conferma_ospite(rif).get("ok"), "setup")
+                for p in passi:
+                    if self.sys.payout.stato_di(rif) != p:
+                        self.assertTrue(self.sys.payout.aggiorna_stato(rif, p), "setup: " + p)
+                s, res = self.g("POST", "/api/admin/rimborso",
+                                {"alloggio_id": "casa", "check_in": ci, "check_out": co,
+                                 "idem_key": idem}, {"X-Admin-Key": "ak"})
+                self.assertEqual((s, res.get("errore"), self._rimborsi()),
+                                 (409, "escrow_gia_liquidato", []),
+                                 "il freno non ha fermato «Rimborsa»: %r" % (res,))
 
     def test_RIMBORSO_RIPETUTO_NON_RESTITUISCE_DUE_VOLTE(self):
         """Doppio clic dell'operatore. Lo stato e' gia' 'rimborsato': non deve partire una
