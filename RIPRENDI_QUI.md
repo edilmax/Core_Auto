@@ -3435,7 +3435,95 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: d5ed231
+CONSEGNE AGGIORNATE A: 0f43ecd
+
+## PASSAGGIO DI CONSEGNE 35 (2026-10-03 pomeriggio) - «RIMBORSA» RESTITUIVA TUTTO ALL'OSPITE CON L'HOST GIA' PAGATO: TROVATO DA GML, MISURATO, RIPARATO (non committato):
+- CONTESTO: 38%, letto dal fondatore con `/context` alle 12:2x.
+- PERMESSI, parole del fondatore: «autorizzato, ripara il freno di Rimborsa». Prima, sulla scansione: «non ci possiamo
+  permettere questi errori sono gravi ... deve scansionare bene tutto il codice e se non basta una volta lo ripetiamo due
+  o tre volte».
+- IL DIFETTO (Compito 23 di GML, verificato qui e corretto in un punto): `_admin_rimborso` frenava solo la garanzia
+  `risolto`. Con la garanzia `rilasciato` e il trasferimento all'host gia' partito nessun passo di sicurezza falliva:
+  `gz.annulla` risponde `{"ok": False}` senza sollevare (fase160 `_muta`) e la rotta guarda solo le eccezioni;
+  `in_transito -> trattenuto` e' una transizione permessa (fase131). Quindi `passi_falliti` vuoto e rimborso Stripe
+  PIENO. GUARDIA `test_admin_rimborso_money.TestIlRimborsoARRIVADavveroAllOspite.
+  test_SE_IL_BONIFICO_ALL_HOST_E_GIA_PARTITO_RIMBORSA_SI_FERMA`, vista ROSSA sul codice di produzione: il pannello
+  diceva `rimborsabile: True` e la rotta rispondeva 200 «rimborsato», `passi_falliti: []`, con un refund a Stripe di
+  `amount=100000` e la nota falsa «payout trattenuto ed escrow chiuso». Le rotte gemelle erano gia' protette: la
+  cancellazione dell'host (409 su garanzia liquidata, fase83:7116-7129), la cancellazione dell'ospite (tetto di cassa,
+  :7652-7669) e «Restituisci» (`rimborsa_dovuto`, `payout_gia_pagato`).
+- LA RIPARAZIONE (`fase83_server.py`, `_garanzia_gia_divisa`, usata dalla rotta E dal pannello): ferma anche la garanzia
+  `rilasciato` e il bonifico `in_transito`/`pagato`. Un payout illeggibile NON decide nel freno (come `stato_di` sugli
+  errori del database): riga WARNING con la traccia, e lo ferma `_payout_trattieni` dopo. Prima versione senza quel ramo:
+  2 prove esistenti rosse (500 invece di 200 col componente rotto) -> ramo aggiunto. Seconda prova
+  `test_IL_FRENO_GUARDA_GARANZIA_E_BONIFICO_OGNUNO_DA_SOLO` (tre casi separati); la prova esistente col payout rotto ora
+  pretende anche la riga WARNING del freno con la traccia. Codice di prima rimesso al suo posto: le prove nuove rosse
+  (tre casi a 200 con refund, pannello `rimborsabile: True`); ripristino sha256 identico (8E9A522F). GUASTI A MANO
+  con l'editor, tutti presi: senza «rilasciato», senza «pagato», senza «in_transito», ramo di difesa che risponde
+  «fermati», `exc_info=False`; ogni volta ripristino sha256 identico. 104 prove in cinque file dei soldi verdi
+  (test_admin_rimborso_money, test_stripe_connect_escrow, test_rimborso_coppie_stessa_chiave, test_ritenuta,
+  test_escrow_gia_liquidato). Caricatore 7196.
+- PRE-VOLO: dichiarato con `--nonostante` (7 caselle da rimisurare dopo il deploy del 2/10: la rimisura su master resta da
+  fare), motivo nella traccia.
+- LA SCANSIONE CHIESTA DAL FONDATORE: ispettore AST nello scratchpad, copiato in
+  `Core_Auto_GUARDIE_PRONTE\scansione_20261003\` (`ritorni_ignorati.py` e `.out`): 185 metodi che segnalano il
+  fallimento col ritorno, 98 chiamate che lo ignorano (67 in fase83); tarato sui due casi del 23 (fase83:4989 e :7228).
+  Consegnato a GML in tre giri (la macchina, le rotte dei soldi a mano con la tabella dei freni delle gemelle, il
+  controllo dei miei verdetti). Mio primo giro: `marca_da_rimborsare` ignorata e' innocua (False solo su prenotazione gia'
+  chiusa, fase162:561-564).
+- GML, oltre al 23: COMPITO 24 (oltre 90 giorni): punti 2 e 4 FALSI (la strada viva incassa sul saldo della PIATTAFORMA,
+  fase85:288-291; il destination charge di fase101 non e' usato), opzioni valide: (A) vetrina a 90 giorni invece di 365,
+  (C) caparra + saldo vicino all'arrivo. COMPITO 25 (ricevuta): chiave nuova `ric_per_conto` in 8 lingue, il nome c'e'
+  (`ragione_sociale`, fase88:451). COMPITO 26 (certificazione ritenute): manca il nome legale dei privati; nel testo va
+  tolta «versate all'Erario». COMPITO 22: conferma FR ed ES data.
+- VISTI PER STRADA, non riparati (D1): `_payout_trattieni` dice True anche quando la transizione e' rifiutata (fase83:7228,
+  riparazione 2 di GML); la riga `rimborso` del giornale e' scritta prima di sapere se il rimborso parte (riparazione 3 di
+  GML: DUBBIO, la lista «Rimborsi da eseguire» la legge).
+- PRIMA SUITE INTERA (12:48, `suite_20261003_124858.log`): «Ran 7191 - FAILED (failures=1)», rossa SOLO su
+  `test_rotte_ostile.test_giro_completo_tutte_le_rotte`: «Rimborsa» atteso 200, ottenuto 409 `escrow_gia_liquidato`.
+  Sonda nello scratchpad attorno al freno: nella prova le prenotazioni con la garanzia `in_garanzia` avevano il bonifico
+  GIA' `in_transito`. LA CAUSA, SECONDO DIFETTO VIVO, piu' grave del primo: rimettere l'host «verificato»
+  (`_admin_verifica_stato`) e completare i dati fiscali ritentavano TUTTI i bonifici `maturato` dell'host, e
+  `_trasferisci_all_host` non guarda la garanzia: l'host veniva pagato PRIMA del soggiorno, e una cancellazione dopo ci
+  faceva pagare due volte. La prova pretendeva il rimborso pieno dopo quel pagamento anticipato: il freno nuovo aveva
+  ragione. Parola del fondatore: «autorizzato, ripara la verifica dell'host».
+- SECONDA RIPARAZIONE (`fase83_server.py`): `_garanzia_aperta` (garanzia `in_garanzia` o `contestato`) e i due giri che
+  ritentano i bonifici fermi la saltano. NON dentro `_trasferisci_all_host`: decine di prove la chiamano subito dopo il
+  pagamento e lo scopo si sarebbe allargato a decine di file. GUARDIE `test_verifiche_host.
+  test_LA_VERIFICA_NON_PAGA_IN_ANTICIPO_UN_SOGGIORNO_NON_FATTO`, `..._NON_PAGA_UN_SOGGIORNO_CONTESTATO` e
+  `test_dac7_blocco_payout.test_I_DATI_FISCALI_NON_PAGANO_IN_ANTICIPO_UN_SOGGIORNO_NON_FATTO`, viste ROSSE sul codice
+  di prima (bonifici partiti di 17400 e 17000 centesimi con la garanzia aperta). Tre prove esistenti rese realistiche
+  (sbloccano la garanzia prima di ritentare: `test_verifiche_host.test_revoca_blocca_e_ripristino_sblocca`,
+  `test_dac7_blocco_payout.test_sblocco_automatico_quando_completa`, `test_ritenuta.
+  test_ritenuta_fatta_bonifico_in_hold_DAC7_poi_riparte_UNA_volta_ridotto`); quello che pretendono non e' cambiato.
+  Codice di prima rimesso: le 4 prove (le 3 nuove e il giro ostile) rosse, ripristino sha256 identico (A5D17AFF).
+  Guasti a mano: senza «contestato», senza «in_garanzia», tutti presi. Caricatore 7199.
+- COMPITO 29 DI GML (5.3 Max, revisione della seconda riparazione), verificato qui: gli altri quattro chiamanti di
+  `_trasferisci_all_host` pagano solo a garanzia chiusa (VERO); il suo dubbio del Compito 28 si chiude (la gara chiedeva
+  proprio questi due giri); suo punto (4) VERO ma raro: un rimborso con DUE passi falliti (payout non trattenuto e
+  pendente non marcato) lascia garanzia «annullato» + payout «maturato» + pendente «pagato», e un elenco di chi BLOCCA
+  non conteneva «annullato». Seconda suite (14:27) BUTTATA a meta' per questo (S18). `_garanzia_aperta` ora e' un
+  elenco di chi PUO' partire: solo «rilasciato»/«risolto». GUARDIE `test_LA_VERIFICA_PAGA_SOLO_CON_LA_GARANZIA_CHIUSA`
+  (vista ROSSA sul codice di un attimo prima, A5D17AFF: bonifico di 17400 con la garanzia annullata) e
+  `test_LA_VERIFICA_PAGA_LA_QUOTA_DECISA_DALL_ARBITRO` (l'altro verso). Guasti a mano: senza «risolto», senza
+  «rilasciato», presi; ripristino sha256 identico (9AEE8FF2). 120 prove dei soldi verdi. Caricatore 7201. Suo
+  consiglio non preso adesso: il controllo DENTRO `_trasferisci_all_host` come invariante (decine di prove la chiamano
+  subito dopo il pagamento: lavoro a se').
+- DAL FONDATORE, provando il sito il 3/10 (prenotazione vera BVIP-7040, 0,50 EUR, cancellata dal voucher dopo un minuto,
+  «Restituisci» premuto alle 11:57Z: refund 50 succeeded su Stripe): DA FARE, in quest'ordine, ognuno con «autorizzato»:
+  (1) il blocco sulla carta anche su LINK (pagato con Link: `payment_method_types ['link']`, incassato subito,
+  `payment_method_options[card]` non lo copre) e, con l'arrivo a >= 6 giorni, solo metodi che reggono il blocco: regola
+  del fondatore, «nelle 48 ore dal voucher deve essere immediato»; (2) il voucher dopo la cancellazione dice «non c'e'
+  niente da pagare» invece di «rimborso di X avviato, arriva in 5-10 giorni»; (3) la chat del voucher e del pannello host
+  non si aggiorna da sola; (4) «Ritrova la tua prenotazione» con riferimento + PIN (oggi senza l'email non si torna al
+  voucher); (5) la riga fantasma 8a448a3a in «Rimborsi da eseguire» (rimborsata su Stripe il 16/8, il record e' stato
+  purgato prima del 17/8); (6) casa-test ha paese «XX» e coordinate a Portland (dato, non codice); (7) la ricerca per
+  nome dell'annuncio. Il rimborso automatico alla cancellazione resta A MANO per decisione del fondatore del 16/8.
+- SUITE INTERA, SECONDO GIRO: lanciata dopo questi documenti; l'esito va nel messaggio del commit.
+- RESTA, in ordine:
+  1. «procedi al commit» (gia' detto dal fondatore per il freno) -> commit, PR, CI, unione, deploy col protocollo;
+  2. i giri 1-3 della scansione di GML, ognuno verificato qui con guardia rossa prima per ogni ALTA;
+  3. il resto delle consegne 34 (riaccettazione del contratto, termini ospite, rimisura su master).
 
 ## PASSAGGIO DI CONSEGNE 34 (2026-10-03 notte) - IL CONTRATTO COL MANDATO E' IN PRODUZIONE (master d5ed231 su PC, GitHub e VPS); CHIAVETTA RIGENERATA E PROVATA; I TERMINI OSPITE COL MANDATO PROPOSTI DA GML, NON APPLICATI:
 - CONTESTO: non letto (la barra la legge il fondatore con `/context`).
@@ -5397,7 +5485,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 7194 test
+SUITE ATTUALE: Ran 7201 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

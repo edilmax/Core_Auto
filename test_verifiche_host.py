@@ -179,6 +179,8 @@ class TestVerificheHost(unittest.TestCase):
     # ── 4) revoca FERMA i bonifici; ripristino li fa ripartire ────────────────
     def test_revoca_blocca_e_ripristino_sblocca(self):
         rif = self._book_paga()
+        # il bonifico nasce allo sblocco della garanzia (consegne 35): prima, niente da ritentare
+        self.assertTrue(self.sis.garanzia.conferma_ospite(rif).get("ok"), "setup: sblocco")
         hb = self._hb()
         s, _ = self.g("POST", "/api/admin/verifica_stato",
                       {"host_id": self.hid, "stato": "revocato",
@@ -195,6 +197,70 @@ class TestVerificheHost(unittest.TestCase):
         self.assertGreaterEqual(c["payout_riprovati"], 1)
         self.assertEqual(len(self.connect.chiamate), 1)          # PARTITO
         self.assertEqual(self.sis.payout.stato_di(rif), "in_transito")
+
+    def test_LA_VERIFICA_NON_PAGA_IN_ANTICIPO_UN_SOGGIORNO_NON_FATTO(self):
+        """Consegne 35 (trovato dalla suite il 3/10): rimettere l'host «verificato» ritentava
+        TUTTI i suoi bonifici 'maturato', anche quelli con la garanzia ancora aperta -> l'host
+        incassava prima del soggiorno, e una cancellazione dopo ci faceva pagare due volte.
+        Si ritenta solo cio' che la garanzia ha gia' sbloccato."""
+        rif = self._book_paga()
+        self.assertEqual((self.sis.garanzia.stato(rif) or {}).get("stato"), "in_garanzia",
+                         "setup: soggiorno non ancora confermato")
+        hb = self._hb()
+        self.g("POST", "/api/admin/verifica_stato",
+               {"host_id": self.hid, "stato": "revocato", "motivo": "controllo in corso"}, hb)
+        s, c = self.g("POST", "/api/admin/verifica_stato",
+                      {"host_id": self.hid, "stato": "verificato", "motivo": "ok"}, hb)
+        self.assertEqual(s, 200, c)
+        self.assertEqual(self.connect.chiamate, [],
+                         "la verifica ha pagato l'host prima del soggiorno (garanzia aperta)")
+        self.assertEqual(self.sis.payout.stato_di(rif), "maturato")
+
+    def test_LA_VERIFICA_PAGA_SOLO_CON_LA_GARANZIA_CHIUSA(self):
+        """Compito 29 di GML: un rimborso con DUE passi di sicurezza falliti lascia la garanzia
+        «annullato», il bonifico «maturato» e la prenotazione «pagato». Un elenco degli stati che
+        bloccano non conteneva «annullato»: il giro della verifica avrebbe pagato l'host di una
+        prenotazione annullata. Si paga SOLO con la garanzia chiusa (rilasciata o risolta)."""
+        rif = self._book_paga()
+        self.assertTrue(self.sis.garanzia.annulla(rif).get("ok"), "setup: annullata")
+        self.assertEqual(self.sis.payout.stato_di(rif), "maturato", "setup: payout rimasto")
+        hb = self._hb()
+        self.g("POST", "/api/admin/verifica_stato",
+               {"host_id": self.hid, "stato": "revocato", "motivo": "controllo in corso"}, hb)
+        s, c = self.g("POST", "/api/admin/verifica_stato",
+                      {"host_id": self.hid, "stato": "verificato", "motivo": "ok"}, hb)
+        self.assertEqual(s, 200, c)
+        self.assertEqual(self.connect.chiamate, [],
+                         "la verifica ha pagato l'host di una prenotazione con la garanzia annullata")
+
+    def test_LA_VERIFICA_PAGA_LA_QUOTA_DECISA_DALL_ARBITRO(self):
+        """L'altro verso: garanzia 'risolto' (l'arbitro ha deciso) e bonifico fermo per la
+        verifica revocata -> rimesso «verificato», la quota dell'host PARTE."""
+        rif = self._book_paga()
+        self.assertTrue(self.sis.garanzia.contesta(rif, "prova").get("ok"), "setup: contestata")
+        self.assertTrue(self.sis.garanzia.risolvi(rif, rimborso_ospite_cents=0).get("ok"),
+                        "setup: risolta tutta all'host")
+        hb = self._hb()
+        self.g("POST", "/api/admin/verifica_stato",
+               {"host_id": self.hid, "stato": "revocato", "motivo": "controllo in corso"}, hb)
+        s, c = self.g("POST", "/api/admin/verifica_stato",
+                      {"host_id": self.hid, "stato": "verificato", "motivo": "ok"}, hb)
+        self.assertEqual(s, 200, c)
+        self.assertEqual(len(self.connect.chiamate), 1,
+                         "la quota decisa dall'arbitro non e' partita alla nuova verifica")
+
+    def test_LA_VERIFICA_NON_PAGA_UN_SOGGIORNO_CONTESTATO(self):
+        """Gemella: con la controversia aperta i soldi aspettano l'arbitro, non la verifica."""
+        rif = self._book_paga()
+        self.assertTrue(self.sis.garanzia.contesta(rif, "prova").get("ok"), "setup: contestata")
+        hb = self._hb()
+        self.g("POST", "/api/admin/verifica_stato",
+               {"host_id": self.hid, "stato": "revocato", "motivo": "controllo in corso"}, hb)
+        s, c = self.g("POST", "/api/admin/verifica_stato",
+                      {"host_id": self.hid, "stato": "verificato", "motivo": "ok"}, hb)
+        self.assertEqual(s, 200, c)
+        self.assertEqual(self.connect.chiamate, [],
+                         "la verifica ha pagato l'host con la controversia ancora aperta")
 
     # ── 5) fascicolo legale: Bunker-gated, dati PIENI dentro ──────────────────
     def test_fascicolo_bunker_gated(self):

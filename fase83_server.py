@@ -2962,17 +2962,45 @@ class RouterHTTP:
                      "per_pagina": per_pagina}
 
     def _garanzia_gia_divisa(self, idem):
-        """La garanzia di questa prenotazione e' gia' stata divisa ('risolto')? Succede con la
-        decisione dell'arbitro e con la cancellazione con penale (`chiudi_proporzionale`).
-        Consegne 30, punto c: dopo la decisione «Rimborsa» restituiva TUTTO all'ospite e
-        toglieva all'host la quota decisa; il rimborso deciso passa da «Rimborsi da eseguire».
-        Il riferimento si ricava dalla chiave del calendario come in `_admin_rimborso`. Una
-        garanzia illeggibile SOLLEVA: decide chi chiama, e nel dubbio non si rimborsa."""
+        """La garanzia di questa prenotazione e' gia' stata divisa ('risolto') o data all'host
+        ('rilasciato'), oppure il bonifico all'host e' gia' partito ('in_transito'/'pagato')?
+        'risolto' nasce dalla decisione dell'arbitro e dalla cancellazione con penale
+        (`chiudi_proporzionale`). Consegne 30, punto c: dopo la decisione «Rimborsa» restituiva
+        TUTTO all'ospite e toglieva all'host la quota decisa; il rimborso deciso passa da
+        «Rimborsi da eseguire». Compito 23 di GML (3/10): a soggiorno confermato e trasferimento
+        partito restituiva tutto all'ospite con l'host gia' pagato, senza che nessun passo di
+        sicurezza fallisse (`annulla` risponde ok:False senza sollevare, `in_transito ->
+        trattenuto` e' permesso). Stesso freno di `rimborsa_dovuto` e della cancellazione
+        dell'host. Il riferimento si ricava dalla chiave del calendario come in
+        `_admin_rimborso`. Una garanzia illeggibile SOLLEVA: decide chi chiama, e nel dubbio non
+        si rimborsa. Un payout illeggibile no, come fa gia' `stato_di` sugli errori del
+        database: lo ferma il passo di sicurezza `_payout_trattieni`, e la risposta lo dice."""
         idem = str(idem or "")
         rif = idem[len("reblock:"):] if idem.startswith("reblock:") else idem[:24]
         gz = getattr(self._sys, "garanzia", None)
         st = gz.stato(rif) if gz is not None else None
-        return isinstance(st, dict) and st.get("stato") == "risolto"
+        if isinstance(st, dict) and st.get("stato") in ("risolto", "rilasciato"):
+            return True
+        pd = getattr(self._sys, "payout", None)
+        try:
+            return pd is not None and pd.stato_di(rif) in ("in_transito", "pagato")
+        except Exception:
+            logger.warning("freno rimborso: payout illeggibile, decide il passo di sicurezza",
+                           exc_info=True)
+            return False
+
+    def _garanzia_aperta(self, rif):
+        """La garanzia di questa prenotazione NON e' ancora chiusa a favore dell'host
+        ('rilasciato' o 'risolto')? Allora i soldi non sono suoi: il bonifico parte allo
+        sblocco, non quando si ritentano i bonifici fermi (verifica dell'host, dati fiscali
+        completati). Consegne 35: quei due giri pagavano in anticipo anche i soggiorni non
+        fatti, e una cancellazione dopo ci faceva pagare due volte. Elenco di chi PUO' partire,
+        non di chi blocca (Compito 29 di GML): «annullato» dopo un rimborso con due passi falliti
+        non era nell'elenco di chi blocca. Senza garanzia si parte come prima; una garanzia
+        illeggibile SOLLEVA: il giro che chiama si ferma e nessun bonifico parte."""
+        gz = getattr(self._sys, "garanzia", None)
+        st = gz.stato(rif) if gz is not None else None
+        return isinstance(st, dict) and st.get("stato") not in ("rilasciato", "risolto")
 
     def _voucher_per_admin(self, pp, p):
         """Il collegamento al voucher, per l'admin (D12 della prova vera del 29/9): l'ospite che
@@ -3397,6 +3425,8 @@ class RouterHTTP:
             if pd is not None:
                 try:
                     for r in pd.elenca(hid, stato="maturato"):
+                        if self._garanzia_aperta(r["prenotazione_id"]):
+                            continue                  # soggiorno non ancora confermato
                         self._trasferisci_all_host(r["prenotazione_id"], int(r["minori"]))
                         riprovati += 1
                     if riprovati:
@@ -3601,6 +3631,8 @@ class RouterHTTP:
             if pd is not None:
                 try:
                     for r in pd.elenca(hid, stato="maturato"):
+                        if self._garanzia_aperta(r["prenotazione_id"]):
+                            continue                  # soggiorno non ancora confermato
                         self._trasferisci_all_host(r["prenotazione_id"], int(r["minori"]))
                         riprovati += 1
                     if riprovati:

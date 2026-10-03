@@ -302,6 +302,8 @@ class TestAccesa(_Base):
                                        soggetto="host:" + self.hid, importo_cents=100000,
                                        valuta="EUR", causale="volume")
         rif, _q = self._prenota_paga()
+        # il bonifico nasce allo sblocco della garanzia (consegne 35): prima, niente da ritentare
+        self.assertTrue(self.sis.garanzia.conferma_ospite(rif).get("ok"), "setup: sblocco")
         pieno = self._maturato(rif)
         self.r._trasferisci_all_host(rif, pieno)
         self.assertEqual(self.connect.chiamate, [], "doveva fermarsi per i dati DAC7")
