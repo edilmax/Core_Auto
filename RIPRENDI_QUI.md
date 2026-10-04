@@ -3435,9 +3435,25 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 0f43ecd
+CONSEGNE AGGIORNATE A: 51d197b
 
-## PASSAGGIO DI CONSEGNE 36 (2026-10-03 sera) - IL BLOCCO SU OGNI METODO DI PAGAMENTO RIPARATO (non committato); LA SCANSIONE DI GML VERIFICATA; CHIAVETTA SU 6bac451 IN PROVA:
+## PASSAGGIO DI CONSEGNE 36 (2026-10-03 sera) - IL BLOCCO SU OGNI METODO DI PAGAMENTO IN PRODUZIONE (master 51d197b su PC, GitHub e VPS); LA SCANSIONE DI GML VERIFICATA; CHIAVETTA SU 6bac451 (DA RIGENERARE):
+- COMMIT E DEPLOY (aggiunto dopo, nella notte fra il 3 e il 4/10): parole del fondatore «Sei autorizzato a fare
+  tutto.» e «Procedi al commit». Suite intera dell'albero (`suite_20261003_222703.log`): «Ran 7198 tests in
+  6351.181s - OK (skipped=4) - CODICE_USCITA_DIRETTO=0», caricatore 7203, nessun file modificato durante il giro.
+  Commit df50953 sul ramo `blocco-ogni-metodo` (pre-fatto 10 controlli, 0 rossi), richiesta #245, CI 16 controlli
+  gate success (22:33:08Z); unione dall'API -> master 51d197b, `merged=True` riletto, `git diff df50953 51d197b`
+  vuoto; CI di master gate success (22:55:13Z). DEPLOY (script in `/root/deploy_20261004/`): copia
+  `/root/pre_deploy_20261004` (27 database `integrity ok` + 12 file, sha256 OK); fotografia dei soldi PRIMA e912cecf
+  (identica al dopo del 3/10 sera); paracadute prec = viva 6ba188f3; `SCAMBIO FATTO alle 22:56:23Z` (pull
+  6bac451..51d197b in avanti veloce); verifica: healthy, `money_path_pronto: True`, `avvisi: []`, nessuna PAGAMENTO_,
+  immagine viva 2d872b46 diversa da prec, `METODI_COL_BLOCCO` dentro il contenitore; fotografia DOPO identica
+  (e912cecf); nessun file tracciato modificato sul VPS, nessun .flag; sonde 17 su 17; `/api/admin/controversie` e
+  `/api/admin/diagnosi` 401, `/api/bunker/invarianti` 403; `verifica_produzione.py` al primo giro 1 violazione
+  (P6 `/recensione/token-inventato`: WinError 10060, la richiesta non e' mai arrivata a nginx, che registra solo le
+  mie tre curl a mano, 404 come atteso) e al secondo giro 190 controlli, 0 violazioni. Guardiano alla riaccensione
+  (22:56:22Z): I1-I5 su 27 archivi, violazioni 0; anomalo solo per 4 `guasti_isolati` (i «Collega Stripe»).
+  ⚠️ La CHIAVETTA e' su 6bac451: va rigenerata, ma DOPO l'ultimo deploy della notte (non a ogni difetto).
 - STATO VERIFICATO all'inizio (18:35Z): master 6bac451 su PC, GitHub e VPS (`rev-parse`, `ls-remote`, ssh), #244
   `merged=True`, CI di master 6bac451 16 controlli, gate success; contenitori healthy, `/api/health` 200.
 - PERMESSI, parole del fondatore in questa sessione: «autorizzato, ripara il blocco su ogni metodo». NON detto: «procedi
@@ -3511,12 +3527,41 @@ CONSEGNE AGGIORNATE A: 0f43ecd
   intero del Guardiano alle 18:30:22Z ha 3 `guasti_isolati`, cioe' «Collega Stripe» premuto il 3/10 alle 10:42:51 e
   alle 18:31:51Z (400 «You must complete your platform profile»): decide il fondatore. ROSSO
   `esame_sentinella.py --scrivi` (gia' rosso dal 2/10: nessun monitor esterno nelle letture).
+- CONTESTO: 46%, letto dal fondatore con `/context` alle 01:4x del 4/10. Sessione chiusa qui per D21 (blocco chiuso,
+  il difetto (b) avrebbe passato il 50% a lavoro aperto). Questo blocco di consegne e' l'unica modifica rispetto a
+  51d197b: va con un commit di soli documenti (suite intera, ramo, richiesta, CI, unione, `git pull` sul VPS).
+- GML A META': Compiti 36 (smentire la riparazione (a), ora gia' in produzione: `git diff 6bac451 51d197b --
+  fase85_pagamenti_stripe.py test_blocco_carta.py`) e 37 (la lista VERA dei tasti: per ogni tasto la prova che lo
+  PREME) scritti nel canale alle 00:00 e 01:39, senza risposta alla chiusura. Le sue risposte le verifica la sessione
+  nuova, riga per riga; se il 36 trova un caso che incassa subito o impedisce la cassa e' un difetto VIVO.
+- PRONTI PER I DIFETTI (tutti col via gia' dato: «Sei autorizzato a fare tutto.»; i commit con «procedi al commit»):
+  (b) i testi `v_cancellata_annullo` e `v_cancellata_rimborso` in 8 lingue stanno nel canale (voce 32-BIS delle 22:00,
+  verificata); il piano letto sul codice: in `pagina_voucher_html` (fase83, cerca `_cancellata`) con `_blocco(rec)`
+  «aperto»/«annullato» -> annullo con l'importo pagato; soldi entrati -> rimborso con la cifra dell'ULTIMA riga
+  «rimborso» del giornale (`sistema.finanza.movimenti(rif)`, la stessa fonte della lista «Rimborsi da eseguire»);
+  altrimenti il testo di oggi. Guardia rossa prima: prenotazione pagata e cancellata -> oggi «non c'e' niente da pagare».
+  (c) progetto di GML (Compito 34, verificato): ciclo di 20 s con la pagina visibile, stop dopo 3 errori o 2 ore, che
+  richiama `carica()` (fase83 ~:1356) e `caricaThread` (deploy/host.html ~:1545); prova browser nel job «browser».
+  (d) progetto di GML (Compito 33, verificato con UNA correzione): pagina `/ritrova` + POST `/api/voucher/ritrova`
+  {codice BVIP, PIN}; il codice tiene solo i primi 8 caratteri del riferimento (fase59:86) -> ricerca per prefisso
+  nei pendenti, sempre eseguita; doppio limitatore (per codice e per indirizzo, 5 errori in 15 minuti); risposta unica
+  per «sbagliato» e «inesistente»; mai PIN o codice nel registro; risponde SOLO il voucher_token.
+  (e) progetto di GML (Compito 35, verificato con DUE correzioni): POST `/api/admin/rimborso_chiusura` {riferimento,
+  refund_id} col Bunker; il re_ si rilegge VIVO da Stripe (succeeded, importo == dovuto) e il riferimento si prova via
+  re_ -> payment_intent -> `GET /v1/checkout/sessions?payment_intent=` -> `client_reference_id`; riga NUOVA
+  «rimborso_chiuso» nel giornale, mai cancellare. PRIMA contare sul server, in sola lettura, le righe «rimborso» del
+  giornale col pendente assente (8a448a3a e quante altre).
+  (f) aspetta il Compito 37 di GML.
 - RESTA, in ordine:
-  1. (fatto: la chiavetta, qui sopra);
-  2. (fatto: la rimisura, qui sopra) su master, poi suite intera dell'albero con la riparazione (a);
-  3. «procedi al commit» -> commit, richiesta di unione, CI; il deploy col protocollo solo col via del fondatore;
-  4. difetti (b)-(f) delle consegne 35, uno alla volta col suo «autorizzato»; poi C e F qui sopra (guardia rossa prima);
-  5. il controllo DENTRO `_trasferisci_all_host` (Compito 29) e il FRENO 3 sul giornale invece che sull'etichetta.
+  1. il commit di soli documenti di questo blocco (vedi CONTESTO) e i tre posti di nuovo allineati;
+  2. la CHIAVETTA rigenerata su master (oggi e' su 6bac451, il server su 51d197b), stessa procedura qui sopra;
+  3. le risposte di GML ai Compiti 36 e 37;
+  4. i difetti (b), (c), (d), (e), (f) in quest'ordine, ognuno: guardia rossa, riparazione, suite intera, commit,
+     richiesta, CI, unione, deploy col protocollo; la chiavetta UNA volta alla fine;
+  5. C e F della scansione (guardia rossa prima), il controllo DENTRO `_trasferisci_all_host` (Compito 29), il FRENO 3
+     di «Restituisci» sul giornale invece che sull'etichetta;
+  6. `fase101`: «Collega Stripe» crea il conto col campo `type`, che Stripe rifiuta con la piattaforma responsabile
+     delle perdite (visto per strada nella rimisura): decidere col fondatore Accounts v2 o la scelta su Stripe.
 
 ## PASSAGGIO DI CONSEGNE 35 (2026-10-03 pomeriggio) - «RIMBORSA» RESTITUIVA TUTTO ALL'OSPITE CON L'HOST GIA' PAGATO: TROVATO DA GML, MISURATO, RIPARATO (non committato):
 - CONTESTO: 38%, letto dal fondatore con `/context` alle 12:2x.
