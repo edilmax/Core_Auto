@@ -3435,9 +3435,58 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 2678b3a
+CONSEGNE AGGIORNATE A: 1242f7a
+
+## PASSAGGIO DI CONSEGNE 38 (2026-10-04 sera) - «COLLEGA STRIPE» IN PRODUZIONE E PROVATO SUL SITO VERO; PC, GITHUB E VPS SU 1242f7a; CHIAVETTA ANCORA SU 2678b3a:
+- STATO all'inizio (19:49): PC e GitHub ramo `collega-stripe-express` su a4cdf21; master e VPS su 2678b3a; `git status`: solo
+  RIPRENDI_QUI.md (l'aggiornamento della sera delle consegne 37, non committato).
+- #247: gate success (tabella dall'API: 15 success, zap skipped), mergeable clean; unita dall'API alle 19:50 -> master
+  1242f7a (albero de5afe3d = quello di a4cdf21, `git rev-parse`). CI di master: gate success alle 18:09:18Z, 13 success +
+  zap skipped (tabella dall'API).
+- DEPLOY col protocollo (D17, attrezzi in `/root/deploy_20261004b/`): copia_db 27 db «integrity ok», USCITA_COPIA=0 letta
+  diretta al secondo giro (al primo il `$?` lo aveva espanso PowerShell: «True»); copia_fuori in `/root/pre_deploy_20261004b`
+  USCITA_FUORI=0, 38 impronte OK, e `.watchdog_stato` controllato a parte (ba7d7918..., uguale alla copia nel contenitore);
+  foto dei soldi PRIMA 75a8b39a...115a; paracadute: `:prec` = immagine viva 2d872b46, `PRE_DEPLOY_20261004_181025.commit` =
+  2678b3a; scambio 18:11:12Z USCITA=0; verifica: healthy, money_path_pronto True, avvisi [], nessuna PAGAMENTO_, VPS 1242f7a,
+  viva 25fdaa9b / prec 2d872b46; foto DOPO IDENTICA (stessa sha256, `cmp`); nel contenitore fase101:189
+  `controller[stripe_dashboard][type]` e nessun `type` standard; `verifica_produzione.py` 190 controlli, 0 violazioni,
+  uscita 0. Tre posti su 1242f7a (rev-parse, ls-remote, ssh).
+- BUSTA 3 (Compito 39 a GML; il fondatore alle 20:00: «fai verificare anche gml»): domanda nel canale alle 20:02; risposta
+  di Claude in `Core_Auto_GUARDIE_PRONTE\buste\busta3_claude.txt`, sha256
+  29815c99b98ba72a284b29263e0e0076ec01a8f19455bd203d7adb5be3ebd199, nel canale alle 20:04, prima di qualunque voce di GML
+  (canale fermo a 345873 byte); GML alle 20:11; confronto alle 20:13. D'accordo sul percorso: host.html:1376 -> fase83:2390
+  -> fase83:7091 -> fase101:181 -> conto salvato PRIMA del modulo (fase83:7110) -> fase101:199 -> fase101:211. Due
+  affermazioni di GML verificate FALSE sul codice: il pannello NON richiama `stripe_link` al caricamento (host.html: solo
+  :1380, dentro l'onclick di :1376); il bonifico NON guarda `payouts_enabled` (fase83:6987 guarda solo che il conto esista;
+  `stato_account` e' chiamata solo a fase83:7113).
+- IL CLIC VERO del fondatore: conto acct_1UMtwnR7a5by5BAe nato alle 18:15:43Z, salvato per h_a42409370062f6fb
+  (`registro_host.db` in sola lettura, un conto solo). Riletto da Stripe dal contenitore (`leggi_conto.py` nello scratchpad
+  della sessione, GET, chiave mai stampata, modo live): country IT, controller express/application, fees e losses
+  application, requirement_collection stripe, transfers inactive. Dopo il modulo, alle 18:26Z: transfers ACTIVE,
+  charges_enabled True, payouts_enabled True, details_submitted True, currently_due [], disabled_reason None. Il pannello ha
+  detto «✅ Conto collegato» al secondo clic. Registro del sito dalle 18:13Z: nessuna riga Connect, nessun errore.
+- APERTI, trovati stasera (nessuno blocca):
+  a. gli 11 centesimi 'maturato' (busta 2): fondi sul saldo della piattaforma, poi un grilletto (l'host risalva i dati
+     fiscali, fase83:3636); decide il fondatore.
+  b. il Compito 38 di GML (`payout_manuale` piu' `payout_host` = doppio nel giornale?) e il buco che la busta 3 ha reso
+     concreto: il bonifico parte verso un conto collegato ma non ancora pronto, e fallisce.
+  c. il pannello non ricontrolla da solo al ritorno da Stripe: all'host serve un secondo clic.
+  d. `copia_fuori_c.sh` fa `sha256sum *`, che salta i file nascosti: 38 impronte su 39 file.
+  e. DUBBI non verificati sui documenti di Stripe: nessun collegamento alla Dashboard Express nel codice (git grep: zero);
+     nessun `country` alla creazione (il conto prende il paese della piattaforma); `window.open` dopo un `await`.
+  f. CHIAVETTA su 2678b3a: da rigenerare sul commit dei documenti.
+- PRIMO GESTO della prossima sessione: rev-parse · status · ls-remote · VPS; poi, se manca, il commit di questi documenti.
 
 ## PASSAGGIO DI CONSEGNE 37 (2026-10-04 pomeriggio) - BUSTA 1 «COLLEGA STRIPE»: RIPARATO SUL PC, NON COMMITTATO; CHIAVETTA SU 2678b3a; PC, GITHUB, VPS E CHIAVETTA SU 2678b3a:
+- AGGIORNAMENTO DELLA SERA, scritto DOPO il commit (questa riga non e' nel commit a4cdf21: va committata con
+  la suite intera). Contesto letto dal fondatore: 48%, chiusura per D21. Suite intera VERDE
+  (`suite_20261004_170639.log`: «Ran 7199 tests in 5646.376s - OK (skipped=4) - CODICE_USCITA_DIRETTO=0»);
+  «procedi al commit» -> a4cdf21 sul ramo `collega-stripe-express`, push, richiesta #247, CI in corso; NON unita,
+  NON in produzione. Attrezzi del deploy pronti sul VPS in `/root/deploy_20261004b/`. Il fondatore alle 19:19 ha
+  confermato sul pannello vero anche le scelte di integrazione (Express, attivazione su Stripe, responsabilita'
+  alla piattaforma); alle 19:12 il sito vero diceva ancora «answer the questionnaire». Busta 2 (gli 11 centesimi)
+  chiusa nel canale: collegarsi non fa ripartire i bonifici 'maturato', e oggi fallirebbero sul saldo negativo.
+  PRIMO GESTO: tabella della CI di #247 -> unione -> deploy -> il fondatore preme «Collega Stripe».
 - STATO all'inizio (15:02): PC, GitHub e VPS su 2678b3a (rev-parse, ls-remote, ssh), git status vuoto.
 - CHIAVETTA CHIUSA: suite nella copia estratta (`suite_20261004_135621.log`) «Ran 7198 tests in 4623.209s - OK
   (skipped=4) - CODICE_USCITA_DIRETTO=0»; `verifica_impronte.sh` sul server VERIFICA_USCITA=0, 840/840, 27 db
