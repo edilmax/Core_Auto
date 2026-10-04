@@ -3435,7 +3435,29 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 1242f7a
+CONSEGNE AGGIORNATE A: 64d7f6e
+
+## PASSAGGIO DI CONSEGNE 39 (2026-10-04 notte) - BUG CONTABILE DEL BONIFICO FALLITO RIPARATO (Compito 38 di GML), NON ANCORA IN PRODUZIONE; master e VPS su 64d7f6e:
+- STATO all'inizio: PC, GitHub, VPS su 64d7f6e (consegne 38, solo documenti, gate verde); gli 11 cent di a2c63fd8 ancora
+  'maturato' (il fondatore fa la ricarica da 2 EUR domani, PRIMA di risalvare i dati fiscali, cosi' il bonifico non fallisce).
+- IL BUG (Compito 38, trovato da GML, verificato da Claude riga per riga): un bonifico FALLITO scrive `payout_manuale` nel
+  giornale (prova del tentativo), ma `fase177` lo mappava con lo stesso paio di `payout_host` (debiti_vs_host/cassa): il
+  libro contava i soldi come usciti anche se non si erano mossi, e al ritento riuscito il debito verso l'host si saldava DUE
+  volte. Stesso doppio conteggio nel reddito DAC7 del ramo storico (prenotazioni senza riga commissione). L'host NON e'
+  pagato due volte (idem key + guardia in_transito): e' un bug CONTABILE. Verificato: nel giornale VERO non c'e' ancora
+  nessuna riga payout_manuale (siamo in tempo).
+- RIPARAZIONE (`fase177_financial_controller.py`, autorizzata «autorizzato ... tutto quello che va fatto»): la riga
+  `payout_manuale` resta (prova immutabile che un test e l'audit pretendono) ma diventa PROMEMORIA a saldo zero
+  (`promemoria_bonifico_da_fare` su se stesso), ed esce dal reddito DAC7. Divergenza da GML (che la toglieva): toglierla
+  perdeva la prova. Ordine D20: 3 guardie in `test_movimenti_giornale` viste ROSSE sul codice di produzione (cassa mossa da
+  un fallito; debito saldato due volte; DAC7 storico 1000 invece di 500), poi il fix, poi verdi. 482 test vicini rilanciati,
+  tutti verdi (DAC7, cancellazioni, dati reali, audit, copertura critica, integrazione, rimborso admin).
+- DUE FILE CAMBIATI: `fase177_financial_controller.py` (produzione), `test_movimenti_giornale.py` (3 guardie). Caricatore
+  7207 (erano 7204). ⛔ Codice di produzione: il deploy e' un deploy VERO (immagine ricostruita), non un git pull.
+- MANCANO: esito suite intera, «procedi al commit», ramo+PR+gate, deploy col protocollo, tre posti, chiavetta.
+- APERTO, compartimento a parte (NON in questo commit): Compito 41 — legare il bonifico al pagamento dell'ospite con
+  `source_transaction` (fase101:242-248; l'id dell'addebito gia' letto a fase85:363-365), cosi' non fallisce piu' sul saldo
+  negativo. GML d'accordo (busta 4 / Compito 41), Claude verificato sui documenti Stripe.
 
 ## PASSAGGIO DI CONSEGNE 38 (2026-10-04 sera) - «COLLEGA STRIPE» IN PRODUZIONE E PROVATO SUL SITO VERO; PC, GITHUB E VPS SU 1242f7a; CHIAVETTA ANCORA SU 2678b3a:
 - STATO all'inizio (19:49): PC e GitHub ramo `collega-stripe-express` su a4cdf21; master e VPS su 2678b3a; `git status`: solo
@@ -5711,7 +5733,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 7204 test
+SUITE ATTUALE: Ran 7207 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
