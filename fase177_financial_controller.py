@@ -65,7 +65,14 @@ TIPI_GIORNALE = ("nota_debito", "nota_credito", "penale_offset", "penale_incassa
 _CONTI_MOVIMENTO = {
     "incasso":         ("cassa_piattaforma", "debiti_vs_host"),      # entra denaro ospite
     "payout_host":     ("debiti_vs_host", "cassa_piattaforma"),      # esce verso l'host (auto)
-    "payout_manuale":  ("debiti_vs_host", "cassa_piattaforma"),      # transfer fallito -> manuale
+    # ⛔ UN TRANSFER FALLITO NON MUOVE DENARO (Compito 38 di GML, verificato 2026-10-04).
+    # Prima aveva lo STESSO paio di `payout_host`: il libro contava i soldi come USCITI anche
+    # quando non si erano mossi, e al ritento riuscito il debito verso l'host si saldava DUE
+    # volte (saldi() e aggrega_dac7). Resta la PROVA immutabile del tentativo -- la "scatola
+    # nera", che un test e la console di audit pretendono -- ma a SALDO ZERO: paio promemoria
+    # su se stesso, nessun conto dei soldi toccato. Il bonifico vero, quando riesce, e'
+    # `payout_host`. Guardie: test_movimenti_giornale (viste rosse prima).
+    "payout_manuale":  ("promemoria_bonifico_da_fare", "promemoria_bonifico_da_fare"),
     "rimborso":        ("debiti_vs_ospite", "cassa_piattaforma"),    # esce verso l'ospite
     # ── LA TASSA DI SOGGIORNO PASSA ALL'HOST (decisione del fondatore, 2026-08-19) ──────
     # Prima erano ("cassa_piattaforma", "debiti_vs_comune") e ("debiti_vs_comune",
@@ -440,9 +447,10 @@ class FinancialController:
                     d["host"] = sog[5:]
             elif tipo == "tassa_incassata":
                 d["tassa"] += imp
-            elif tipo in ("payout_host", "payout_manuale", "ritenuta"):
-                # la ritenuta e' reddito dell'host versato allo Stato per lui, non una nostra
-                # commissione: nel ramo storico (netto dai bonifici) conta nel suo netto
+            elif tipo in ("payout_host", "ritenuta"):
+                # ⛔ NON `payout_manuale`: un transfer fallito e' solo un TENTATIVO, non reddito
+                # dell'host (Compito 38, 2026-10-04). La ritenuta SI': e' reddito dell'host
+                # versato allo Stato per lui, non una nostra commissione -> conta nel suo netto.
                 d["netto"] += imp
                 if sog.startswith("host:") and not d["host"]:
                     d["host"] = sog[5:]

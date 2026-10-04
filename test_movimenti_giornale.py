@@ -61,6 +61,21 @@ class TestMovimentoUnit(unittest.TestCase):
         self.assertEqual(sum(1 for m in self.fc.movimenti("R1")
                              if m["tipo"] == "payout_host"), 1)
 
+    def test_DAC7_ramo_storico_un_bonifico_fallito_non_e_reddito(self):
+        """D20 — Compito 38, faccia DAC7. Nel ramo STORICO (prenotazioni vecchie senza riga
+        'commissione') il netto dell'host si ricostruisce dai bonifici. Un `payout_manuale`
+        (transfer FALLITO) NON deve contare come reddito: altrimenti un fallito-poi-riuscito
+        lo conta due volte. Il reddito dell'host e' il bonifico RIUSCITO, una volta sola."""
+        self.fc.movimento(tipo="incasso", riferimento="R", soggetto="host:h",
+                          importo_cents=1000, valuta="EUR", causale="c")
+        self.fc.movimento(tipo="payout_manuale", riferimento="R", soggetto="host:h",
+                          importo_cents=500, valuta="EUR", causale="c")   # FALLITO
+        self.fc.movimento(tipo="payout_host", riferimento="R", soggetto="host:h",
+                          importo_cents=500, valuta="EUR", causale="c")   # poi RIUSCITO
+        anno = time.gmtime().tm_year
+        self.assertEqual(self.fc.aggrega_dac7(anno).get("h", {}).get("netto", 0), 500,
+                         "il bonifico fallito+riuscito e' contato due volte nel reddito DAC7")
+
 
 class _FakeConnect:
     def __init__(self, tid):
@@ -157,6 +172,44 @@ class TestAgganciMoneyPath(unittest.TestCase):
         self.r._trasferisci_all_host(rif2, netto2)
         self.assertIn("payout_manuale", self._tipi(rif2))
         self.assertNotIn("payout_host", self._tipi(rif2))
+        self.assertTrue(self.sis.finanza.verifica_catena()["ok"])
+
+    def test_un_bonifico_FALLITO_non_muove_denaro_ne_e_reddito(self):
+        """D20 — Compito 38 di GML, verificato 2026-10-04. Un transfer FALLITO scriveva
+        `payout_manuale` con lo STESSO paio di conti del bonifico riuscito
+        (debiti_vs_host/cassa_piattaforma, fase177): il libro contava i soldi come USCITI
+        anche se non si erano mossi, e lo stesso bonifico entrava nel reddito DAC7 dell'host.
+        Un bonifico fallito NON muove denaro e NON e' reddito: la PROVA del tentativo resta
+        (riga immutabile, la 'scatola nera'), ma a saldo zero."""
+        self.sis.registro_host.imposta_stripe_account(self.hid, "acct_TEST")
+        rif = self._prenota_paga()
+        netto = self.sis.payout.riepilogo(self.hid)["EUR"]["maturato"]
+        self.assertGreater(netto, 0)
+        prima = self.sis.finanza.saldi()
+        self.sis.connect = _FakeConnect(None)            # Connect FALLISCE
+        self.r._trasferisci_all_host(rif, netto)
+        dopo = self.sis.finanza.saldi()
+        for conto in ("cassa_piattaforma", "debiti_vs_host"):
+            self.assertEqual(dopo.get(conto, 0), prima.get(conto, 0),
+                             "il conto '%s' e' cambiato per un bonifico FALLITO" % conto)
+        self.assertIn("payout_manuale", self._tipi(rif))     # la prova resta
+        self.assertTrue(self.sis.finanza.verifica_catena()["ok"])
+
+    def test_bonifico_fallito_poi_riuscito_salda_il_debito_UNA_volta(self):
+        """Lo scenario reale: il transfer fallisce (saldo negativo), il payout resta
+        'maturato', poi un ritento RIESCE. Il debito verso l'host va saldato UNA volta sola,
+        non due; e un solo bonifico entra nel reddito DAC7."""
+        self.sis.registro_host.imposta_stripe_account(self.hid, "acct_TEST")
+        rif = self._prenota_paga()
+        netto = self.sis.payout.riepilogo(self.hid)["EUR"]["maturato"]
+        prima = self.sis.finanza.saldi().get("debiti_vs_host", 0)
+        self.sis.connect = _FakeConnect(None)            # 1) FALLITO -> payout_manuale
+        self.r._trasferisci_all_host(rif, netto)
+        self.sis.connect = _FakeConnect("tr_OK")         # 2) RIUSCITO -> payout_host
+        self.r._trasferisci_all_host(rif, netto)
+        dopo = self.sis.finanza.saldi().get("debiti_vs_host", 0)
+        self.assertEqual(dopo - prima, netto,
+                         "il debito verso l'host e' stato saldato DUE volte (fallito+riuscito)")
         self.assertTrue(self.sis.finanza.verifica_catena()["ok"])
 
 
