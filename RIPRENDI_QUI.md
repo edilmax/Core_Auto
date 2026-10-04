@@ -3435,7 +3435,58 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 51d197b
+CONSEGNE AGGIORNATE A: 2678b3a
+
+## PASSAGGIO DI CONSEGNE 37 (2026-10-04 pomeriggio) - BUSTA 1 «COLLEGA STRIPE»: RIPARATO SUL PC, NON COMMITTATO; CHIAVETTA SU 2678b3a; PC, GITHUB, VPS E CHIAVETTA SU 2678b3a:
+- STATO all'inizio (15:02): PC, GitHub e VPS su 2678b3a (rev-parse, ls-remote, ssh), git status vuoto.
+- CHIAVETTA CHIUSA: suite nella copia estratta (`suite_20261004_135621.log`) «Ran 7198 tests in 4623.209s - OK
+  (skipped=4) - CODICE_USCITA_DIRETTO=0»; `verifica_impronte.sh` sul server VERIFICA_USCITA=0, 840/840, 27 db
+  integri; sha256 clone_progetto 92ee818d... e clone_dati f18114ff... uguali server/PC; 27 db riaperti sul PC ok;
+  immagine 2d872b4692f4 (classico 1b18d60a7d20) = quella viva; copia di prova cancellata; generazione 6bac451 in
+  `precedente_6bac451\`; GUIDA e LEGGIMI aggiornati.
+- BUSTA 1 (ricerca a buste chiuse, ordine del fondatore del 4/10): risposta di Claude in
+  `Core_Auto_GUARDIE_PRONTE\buste\busta1_claude.txt`, sha256 e04eae46445728e110957f9778c3f8a78a9943fb96fd1cfe800b45fe6d7b616e
+  nel canale alle 15:08, PRIMA di leggere la voce di GML delle 14:08; confronto nel canale alle 15:12, una fonte in
+  piu' alle 16:22. MISURE su Stripe di prova prima della conferma (15:03): type=standard 200; type=express e
+  type=custom 400 «legacy `type` field with your platform as the losses collector» (= F2); v1 senza type con
+  perdite alla piattaforma 400; v2 400 `account_creation_losses_collector_unavailable`; v2 con perdite a Stripe
+  400 «Losses collector can only be "application" for the set of configurations this account has».
+  DISACCORDI con GML chiusi dalle misure: F2 viene dai collaudi type=custom (`collaudi/prova_bonifico_host.py:157`,
+  `collaudi/esame_orologi.py:369`), non dal tasto; «Stripe responsabile» non si puo' (docs managed-risk:
+  «You must use direct charges»; docs risk-management: «If you use indirect charges, assign negative balance
+  responsibility to your platform, not to Stripe»).
+- IL FONDATORE, 16:33, conto vero acct_1TiYZ5JMRnB73twq, Impostazioni > Connect > Profilo della piattaforma:
+  «Accettazione della responsabilita' dei rimborsi e degli storni» -> «4 ottobre 2026 di completamento». Sulla
+  stessa pagina resta «Attivazione incompleta»; il suo bottone porta a Panoramica Connect, senza compiti visibili.
+  NON SO se il sito vero ora crea i conti (F1): si sapra' premendo il tasto col codice nuovo.
+- DOPO la conferma, in prova (16:34): v1 controller express/application/application 200 e link 200; type=express
+  200; v2 200; type=custom 400 «Please review the responsibilities of collecting requirements for connected
+  accounts» (un'altra conferma, quella dei Custom).
+- RIPARAZIONE SUL PC, NON COMMITTATA (scopo dichiarato con `--nonostante`: 5 rimisure scadute in sospeso):
+  guardia `test_fase101_stripe_connect.TestCollegaStripe_IlContoDellHostNasceComeLoAccettaStripe` vista ROSSA sul
+  codice di produzione («{'type': 'standard', 'email': 'h@x.it'} != ...»); `fase101.crea_account` riparato
+  (controller express, fees application, losses application, capabilities[transfers]); verde; test_fase101 +
+  test_stripe_connect_escrow «Ran 29 - OK», uscita 0 letta diretta. Senza capabilities il conto nasce con
+  capabilities={} (misurato). Giudice esterno, 16:39: la funzione di produzione contro Stripe di prova ->
+  acct_1UMqZOJd3MYe8FHu express/application, transfers inactive, link connect.stripe.com/setup/e, pronto False.
+  `collaudi/prova_bonifico_host.py:132` allineato (pretendeva «standard»).
+- VISTO PER STRADA, non riparato: (1) gli 11 centesimi di a2c63fd8: `trasferisci` (fase101) non usa
+  `source_transaction`, quindi parte dal saldo DISPONIBILE, che sul pannello del fondatore era -0,27 EUR il 4/10
+  (la commissione della prova del 16/8): il bonifico fallirebbe finche' il saldo resta negativo; (2) la docstring
+  di `fase83_server._host_stripe_link` dice ancora «Connect standard, GRATIS»; (3) i due collaudi type=custom
+  restano rossi finche' il fondatore non conferma anche la raccolta dei requisiti, o finche' non si riscrivono;
+  (4) i conti Express costano alla piattaforma: appendice del REGISTRO, R5 punto 4.
+- DALLE CONSEGNE 36, verificati ma mai scritti: Compito 36 di GML (revisione del blocco su ogni metodo): niente di
+  vivo; crea_link vera in 21 valute, cassa sempre creata, ogni metodo col blocco; Klarna 28 giorni; Amazon Pay e
+  Satispay finestra non documentata, prova vera a 48 ore APERTA (serve il browser); fase102:46 crea_link senza
+  check_in, dormiente; nella prova va vietata la CHIAVE `payment_method_types[i]` accanto ad `allowed_`.
+  Compito 37 (lista dei tasti, voce delle 02:00): ~72 tasti, 33 premuti, 33 solo rotta, 6 senza rotta, nomi
+  verificati tranne `test_fase191`; e' la base del difetto (f).
+- RESTA, in ordine: 1. suite intera, «procedi al commit», ramo + richiesta + gate, unione, deploy col protocollo;
+  2. il fondatore preme «Collega Stripe» -- ⛔ NON PRIMA DEL DEPLOY: il codice vecchio, se il sito vero ora
+  accetta, creerebbe uno Standard e ne salverebbe l'id, e `_host_stripe_link` riusa l'id salvato; se torna F1,
+  «Visualizza attivazione» col fondatore; 3. il saldo per gli 11 centesimi (fondi o `source_transaction`, da
+  decidere); 4. le 5 rimisure scadute; 5. il resto delle consegne 36.
 
 ## PASSAGGIO DI CONSEGNE 36 (2026-10-03 sera) - IL BLOCCO SU OGNI METODO DI PAGAMENTO IN PRODUZIONE (master 51d197b su PC, GitHub e VPS); LA SCANSIONE DI GML VERIFICATA; CHIAVETTA SU 6bac451 (DA RIGENERARE):
 - COMMIT E DEPLOY (aggiunto dopo, nella notte fra il 3 e il 4/10): parole del fondatore «Sei autorizzato a fare
@@ -5611,7 +5662,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 7203 test
+SUITE ATTUALE: Ran 7204 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

@@ -362,5 +362,28 @@ class TestIBuchiDelGiudice(unittest.TestCase):
                 self.assertIsNone(p.trasferisci("acct_1", 100, "eur", "R"))
 
 
+class TestCollegaStripe_IlContoDellHostNasceComeLoAccettaStripe(unittest.TestCase):
+    """Busta 1, 2026-10-04. Il fondatore ha scelto «Dashboard Express» e la piattaforma responsabile
+    delle perdite (conferma data il 4/10): con gli addebiti indiretti e' l'unica strada che Stripe
+    raccomanda («If you use indirect charges, assign negative balance responsibility to your
+    platform», docs.stripe.com/connect/risk-management). Misurato su Stripe di prova il 4/10 alle
+    16:34: `type=custom` -> 400; i parametri `controller` qui sotto -> 200 e link 200. Senza
+    `capabilities[transfers]` il conto nasce con `capabilities={}`: l'host compila il modulo e poi
+    non puo' ricevere nessun bonifico. Un conto Standard (`type=standard`, dashboard completa) non
+    e' ammesso con la piattaforma responsabile."""
+
+    def test_crea_account_chiede_Express_con_la_piattaforma_responsabile_e_i_bonifici_senza_type(self):
+        spy = PostFinto({ProviderConnect.ACCOUNTS: {"id": "acct_9"}})
+        self.assertEqual(ProviderConnect("sk", fetch=spy).crea_account("h@x.it"), "acct_9")
+        url, body, _ = spy.chiamate[0]
+        self.assertEqual(url, ProviderConnect.ACCOUNTS)
+        self.assertEqual(_decodifica(body), {
+            "controller[stripe_dashboard][type]": "express",
+            "controller[fees][payer]": "application",
+            "controller[losses][payments]": "application",
+            "capabilities[transfers][requested]": "true",
+            "email": "h@x.it"})
+
+
 if __name__ == "__main__":
     unittest.main()

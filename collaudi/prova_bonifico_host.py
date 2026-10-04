@@ -129,8 +129,10 @@ else:
           "False", pronto)
     if acct:
         st, a = stripe("GET", "/accounts/" + acct)
-        passo("Stripe conferma che il conto esiste ed e' 'standard'",
-              st == 200 and a.get("type") == "standard", "standard", a.get("type"))
+        c = a.get("controller") or {}
+        forma = ((c.get("stripe_dashboard") or {}).get("type"), (c.get("losses") or {}).get("payments"))
+        passo("Stripe conferma il conto: Express, perdite alla piattaforma (busta 1)",
+              st == 200 and forma == ("express", "application"), "('express', 'application')", forma)
 
 print("\n-- [3] C'E' SALDO PER BONIFICARE? --")
 st, bal = stripe("GET", "/balance")
