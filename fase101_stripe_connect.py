@@ -104,8 +104,8 @@ def crea_provider_stripe_connect(secret_key: Optional[str], *, success_url: str 
 # ─────────────────────────────────────────────────────────────────────────────
 # ProviderConnect — modello ESCROW del fondatore (charge alla piattaforma come oggi,
 # TRANSFER all'host SOLO allo sblocco della garanzia: ok cliente / 24h di silenzio /
-# esito controversia). Account "standard" (GRATIS, zero canoni) + Account Link per
-# l'onboarding. Transfer IDEMPOTENTE (Idempotency-Key per riferimento: mai doppi
+# esito controversia). Account Express con la piattaforma responsabile (vedi crea_account)
+# + Account Link per l'onboarding. Transfer IDEMPOTENTE (Idempotency-Key per riferimento: mai doppi
 # bonifici anche se il rilascio viene richiamato). GATED + fetch iniettabile + ISOLATO.
 # ─────────────────────────────────────────────────────────────────────────────
 class ProviderConnect:
@@ -179,10 +179,17 @@ class ProviderConnect:
             return None
 
     def crea_account(self, email: str = "") -> Optional[str]:
-        """Crea l'account connesso dell'host (type=standard: GRATIS). -> acct_... o None."""
+        """Crea l'account connesso dell'host: Dashboard Express, piattaforma responsabile delle
+        perdite, capacita' di ricevere i bonifici. -> acct_... o None.
+        ⛔ Niente `type` (busta 1, 2026-10-04): con la piattaforma responsabile Stripe rifiuta
+        `custom` ed `express` col campo `type`, e lo `standard` (dashboard completa, perdite a
+        Stripe) non e' compatibile con gli addebiti indiretti. Costi: REGISTRO, appendice R5."""
         if not self._key:
             return None
-        params = {"type": "standard"}
+        params = {"controller[stripe_dashboard][type]": "express",
+                  "controller[fees][payer]": "application",
+                  "controller[losses][payments]": "application",
+                  "capabilities[transfers][requested]": "true"}
         if isinstance(email, str) and "@" in email:
             params["email"] = email
         r = self._post(self.ACCOUNTS, params)
