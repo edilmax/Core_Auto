@@ -674,6 +674,9 @@ class TestContrattoCatalogoFase57(BaseContratto, unittest.TestCase):
         "alloggio_immagini": (
             "id INTEGER PK1", "alloggio_id INTEGER NOT NULL", "url TEXT NOT NULL",
             "ordine INTEGER NOT NULL", "alt TEXT NOT NULL"),
+        # 2026-10-05, IDOR di `/api/host/foto_elimina`: chi ha caricato ogni foto (Compito 49).
+        "upload_proprietario": (
+            "nome TEXT NOT NULL PK1", "host_id TEXT NOT NULL", "creato_ts TEXT NOT NULL"),
     }
     INDICI = {
         "idx_alloggi_host": "CREATE INDEX idx_alloggi_host ON alloggi(host_id)",
@@ -686,10 +689,12 @@ class TestContrattoCatalogoFase57(BaseContratto, unittest.TestCase):
         "idx_img_alloggio":
             "CREATE INDEX idx_img_alloggio ON alloggio_immagini(alloggio_id, ordine)",
     }
-    UNICI = {"alloggi": ("unique(slug)",), "alloggio_immagini": ()}
-    CHECK = {"alloggi": (), "alloggio_immagini": ()}
+    UNICI = {"alloggi": ("unique(slug)",), "alloggio_immagini": (),
+             "upload_proprietario": ("pk(nome)",)}
+    CHECK = {"alloggi": (), "alloggio_immagini": (), "upload_proprietario": ()}
     FK = {"alloggi": (),
-          "alloggio_immagini": ("alloggio_id -> alloggi.id ON DELETE CASCADE",)}
+          "alloggio_immagini": ("alloggio_id -> alloggi.id ON DELETE CASCADE",),
+          "upload_proprietario": ()}
     TRIGGER = {}
     DENARO = ("alloggi.prezzo_notte_cents", "alloggi.sconto_mese_bps",
               "alloggi.sconto_settimana_bps", "alloggi.tassa_max_notti",

@@ -2674,6 +2674,17 @@ class RouterHTTP:
         except Exception:
             logger.error("upload foto: salvataggio fallito (ISOLATO)", exc_info=True)
             return 503, {"errore": "storage_non_disponibile"}
+        # IL PADRONE DEL FILE, appena il file esiste (IDOR di `_foto_elimina`, 2026-10-05): e' lui,
+        # non le citazioni degli annunci, a decidere chi potra' cancellarlo. Solo col token:
+        # l'operatore carica per conto di un host, e quel file lo governa l'annuncio. ISOLATO: senza
+        # la riga l'upload resta valido e il file cade nella regola prudente dei file senza padrone.
+        hid = self._host_id_da_token(headers)
+        if hid:
+            try:
+                self._sys.catalogo.registra_upload(nome, hid)
+            except Exception:
+                logger.error("upload foto: proprietario NON registrato (ISOLATO): il file %s "
+                             "resta senza padrone", nome, exc_info=True)
         return 201, {"url": "/uploads/" + nome}
 
     def _salva_foto_raw(self, raw64):
@@ -10809,13 +10820,26 @@ class RouterHTTP:
         except Exception:
             logger.error("import portability: modulo non disponibile", exc_info=True)
             return 503, {"errore": "service_unavailable"}
+
+        def _ri_ospita(url):
+            # La foto ri-ospitata e' di chi importa, come una caricata dal pannello (IDOR di
+            # `_foto_elimina`, 2026-10-05). ISOLATO come in `_upload_foto`.
+            nuovo = self._scarica_immagine(url)
+            if hid and isinstance(nuovo, str) and nuovo.startswith("/uploads/"):
+                try:
+                    self._sys.catalogo.registra_upload(nuovo.rsplit("/", 1)[1], hid)
+                except Exception:
+                    logger.error("import: proprietario della foto NON registrato (ISOLATO)",
+                                 exc_info=True)
+            return nuovo
+
         risultati = []
         importati = 0
         for item in lista:
             try:
                 rep = _imp(item, sorgente=sorgente, catalogo=self._sys.catalogo,
                            inventario=self._sys.inventario, host_id=hid,
-                           genera_slug=self._slug_unico, rehost=self._scarica_immagine,
+                           genera_slug=self._slug_unico, rehost=_ri_ospita,
                            arricchisci=self._geocodifica_se_serve)
             except Exception:
                 logger.error("import portability: eccezione ISOLATA su un annuncio",
@@ -10927,6 +10951,28 @@ class RouterHTTP:
         nome = _pp.basename(url)
         if not nome or nome in (".", ".."):
             return 422, {"errore": "url_non_valido"}
+        # ⛔ IDOR (Compiti 46-49 di GML, verificati 2026-10-05): le URL delle foto sono pubbliche, e
+        # qui bastava essere un host per cancellare il file di chiunque. Operatore (X-Host-Key,
+        # nessun token): consentito, come `_verifica_proprieta`. Host col token: decide il catalogo
+        # (`upload_cancellabile_da`) -- il padrone registrato quando il file e' nato; senza padrone,
+        # mai se il file e' citato in una CHAT (le prove che l'ospite carica in una controversia:
+        # l'host della prenotazione ne legge l'URL nel thread), altrimenti solo chi lo cita, da
+        # solo, nei suoi annunci. Una bozza che cita la foto di un altro non la rende tua.
+        # Fail-closed: proprieta' non verificabile -> 403. Guardia: test_idor_foto_elimina.
+        hid = self._host_id_da_token(headers)
+        if hid:
+            try:
+                msg = getattr(self._sys, "messaggistica", None)
+                in_chat = msg is not None and nome.lower() in {
+                    n.lower() for n in msg.nomi_uploads()}
+                consentita = self._sys.catalogo.upload_cancellabile_da(nome, hid,
+                                                                       in_chat=in_chat)
+            except Exception:
+                logger.warning("foto_elimina: proprieta' non verificabile -> NEGO (fail-closed)",
+                               exc_info=True)
+                return 403, {"errore": "non_tua"}
+            if not consentita:
+                return 403, {"errore": "non_tua"}
         updir = _os.environ.get("UPLOAD_DIR", "data/uploads")
         percorso = _os.path.abspath(_os.path.join(updir, nome))
         try:

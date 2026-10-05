@@ -26,6 +26,51 @@
 
 ---
 
+## 🎯 IL PROGRAMMA «98%» — deciso dal fondatore il 2026-10-05 (vale sopra la «prima casella del Blocco 1»)
+
+Parole sue: *«avere un conto misurato e matematico dei problemi rimasti, senza stime»* · *«testare
+qualunque cosa che c'è dentro questa macchina, tutto»* · *«ammappare tutto bene [...] come, quando,
+perché salva i dati [...] GDPR e sicurezza»* · *«per adesso fatelo tu e GML [...] non dimenticare
+nulla, dobbiamo arrivare al 98 percento»*.
+
+**LA MAPPA CHIUSA, cinque strati** (dove si puo' la produce una macchina; ogni numero si rimisura,
+non si ricorda — D22):
+1. **PEZZI** — ogni file di produzione (`ls fase*.py`, `collaudi/piano.py` per i 10 blocchi,
+   `collaudi/raggiungibilita.py` per cio' che la produzione esegue): letto da Claude e da GML.
+2. **PORTE** — ogni rotta (`collaudi/esame_accessi.py`): chi la chiama, quali identificativi prende
+   da fuori, se controlla che siano di chi chiama (file:riga), verdetto SICURA/VULNERABILE/DUBBIO.
+   ⇒ **Compito 50**, pubblicato a GML il 2026-10-05 alle 16:42 (busta 6): la busta di Claude si
+   scrive e si sigilla (sha256 nel canale) PRIMA di leggere la risposta di GML.
+3. **DATI** — ogni archivio, tabella e colonna: dato personale?, chi lo scrive, quando, perche',
+   quanto si tiene, come si cancella = il registro dei trattamenti del GDPR (art. 30).
+4. **RAMI** — righe e bivi eseguiti dai test: il job CI `copertura` (righe + rami) e
+   `collaudi/denominatore.py` (rotte, email, pagine, lingue che nessun collaudo attraversa).
+5. **COMPORTAMENTO** — per ogni blocco la lista di controllo: OWASP ASVS 5.0 (Livello 2 su tutto,
+   i controlli del Livello 3 sui soldi) + la lista del fondatore (IDOR, campi nascosti nel JSON,
+   SQL injection, XSS, troppi tentativi, intestazioni di sicurezza, importi manomessi, valuta,
+   doppia spesa, replay, webhook falso, rimborsi doppi/oltre, acconto/saldo, overbooking, date,
+   capienza, voucher riusato/a raffica/oltre il totale/cumulato/scaduto, percorso completo,
+   iniezione nelle email, oblio, dettagli tecnici negli errori). Verdetto = guardia vista ROSSA.
+
+**IL 98%** si misura su quei numeri (rotte con verdetto, righe e bivi eseguiti, colonne personali con
+la regola di cancellazione, voci della lista verificate); quello che resta fuori si elenca per nome.
+**ORDINE:** soldi → identita' e sicurezza (Compito 50) → prenotazioni → pannello host → ospite →
+prezzi → legale → infrastruttura → crescita → legacy. **CICLO per ogni pezzo:** mappa → buste chiuse
+Claude+GML → guardia rossa → riparazione (il codice lo scrive solo Claude) → suite intera → «procedi
+al commit» → richiesta di unione e `gate` → deploy col via. **DUE FOGLI:** il canale con GML
+(`Desktop\claude&gml fhash.txt`) e un registro della mappa fuori dal progetto (una riga per rotta,
+tabella, modulo e controllo, col verdetto di ognuno e la prova) — da creare al primo pezzo.
+**Prima lettura dei test (grep, un indizio e non una prova):** ci sono prove su concorrenza,
+idempotenza, firma dei webhook, rimborsi doppi, 429, iniezione nelle email, oblio, percorso
+completo; deboli o assenti: campi nascosti nel JSON, dettagli tecnici negli errori, ospiti
+negativi o enormi, voucher cumulati/scaduti/a raffica. **Decisione del fondatore aperta:** un
+voucher piu' grande del totale oggi perde il resto — ridarlo o no?
+**Terzo revisore:** sul PC c'e' `deepseek-browser-agent` 1.0.1, che da solo scrive, cancella file ed
+esegue qualunque comando, senza chiedere: NON si usa sul PC che ha le chiavi della produzione e le
+copie dei dati veri. Per ora lavorano Claude e GML (parole del fondatore).
+
+---
+
 **⏰ 6 SETTEMBRE, mattina — BLOCCO 1, LA CASELLA «OGNI ORA» (ramo `casella14-invarianti-ogni-ora` su `0f6ccb9`, albero
 Core_Auto_B3, «autorizzato» del fondatore: «finiamo oggi tutto? autorizzato»):** il tick del Guardiano in `fase83` dorme
 un'ora invece di un giorno; 23 passi su 24 chiamano `_invarianti_orari` (i cinque invarianti di fase202 sugli archivi veri,
@@ -3435,7 +3480,18 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 64d7f6e
+CONSEGNE AGGIORNATE A: fd4723d
+
+## PASSAGGIO DI CONSEGNE 40 (2026-10-05) - IDOR «CANCELLA FOTO» CHIUSO COL PADRONE REGISTRATO (Compiti 46-49 con GML, a buste chiuse), NON ANCORA COMMITTATO; master fd4723d su PC e GitHub, VPS su 64d7f6e:
+- STATO all'inizio: PC+GitHub su fd4723d (fix contabile Compito 38 unito), VPS su 64d7f6e (quel fix NON ancora in produzione, aspetta «vai»). Chiavetta su 2678b3a.
+- GML sicurezza (Compiti 43-45, report 11:04): sistema ben difeso; un solo punto aperto dichiarato, la mappa esaustiva IDOR. COMPITO 46 (11:46): 45 rotte /api/host/* mappate, UN buco: `_foto_elimina` (fase83) non controllava che il file fosse del chiamante.
+- IL BUCO, QUATTRO STRADE, misurate sulle rotte vere con archivi temporanei: (a) la foto PUBBLICATA di un altro, URL copiato dalla pagina; (b) la BOZZA-TRUCCO (GML, C48): A salva una bozza con l'URL della foto di B e per un controllo che legge gli annunci la foto «e' sua»; (c) ⛔ la PROVA FOTO dell'ospite in una controversia (trovata da Claude e da GML ciascuno per conto suo, C49, ALTA): sta nella stessa cartella, l'host della prenotazione ne legge l'URL nella chat e poteva cancellarla mentre l'arbitro decide il rimborso; (d) i NOMI-ALIAS del laboratorio Windows: `ABC.PNG`, `abc.png.`, `abc.png ` e `abc.png::$DATA` aprono lo stesso file di `abc.png`. La prima riparazione di stamattina (`nomi_uploads_di_host`, zero schema) chiudeva solo (a), e in piu' toglieva la foto al suo padrone se un altro la citava: TOLTA.
+- RIPARAZIONE («autorizzato» del fondatore; disegno di Claude attaccato da GML a buste chiuse, 8 divergenze chiuse e un emendamento di GML sull'ordine, 14:49): tabella NUOVA `upload_proprietario(nome PK in minuscolo, host_id, creato_ts)` in catalogo.db, scritta da `_upload_foto` e dall'import, solo col token (nessuna riga per l'operatore ne' per le prove dell'ospite); nasce UNA volta, nella stessa transazione che la riempie coi nomi gia' citati da UN SOLO host (i contesi restano senza riga); la riga resta quando il file si cancella (il secondo clic resta 200); se ne va con l'oblio (`cancella_alloggi_host`, altrimenti fase156 risponde ok=False). `_foto_elimina` per un host col token: padrone registrato -> solo lui; senza padrone e citato in una chat -> 403; senza padrone -> solo se lo citano annunci SUOI e di nessun altro; il resto -> 403 (deny by default); errore di lettura -> 403. L'operatore resta libero. Nuovi: `fase57.registra_upload`, `fase57.upload_cancellabile_da` (proprietario e citazioni in UNA istruzione SELECT).
+- D20 e regola ferrea 2: `test_idor_foto_elimina.py`, 18 test. Rosse su master fd4723d puro: foto di B, bozza, prova, alias (200 invece di 403). Rossa sulla prima riparazione anche «il padrone vero cancella» (403 invece di 200). 11 guasti diversi messi a mano con l'editor su una copia, ognuno visto rosso e rimesso a sha256 identico. La vecchia prova «orfana scritta a mano -> 200» ha cambiato verso (403, concordato con GML). Prima delle modifiche, 401 test vicini verdi.
+- PRODUZIONE, misura in sola lettura (13:2x): 1 annuncio, 1 immagine /uploads/, 0 nomi contesi, 2 prove in chat, 4 file in UPLOAD_DIR. Il deploy crea la tabella e ci scrive 1 riga.
+- FILE: `fase57_vetrina.py`, `fase83_server.py`, `test_idor_foto_elimina.py` (nuovo), `test_host_ux.py` (la prova del path traversal accettava 200 o 422: ora un host riceve 403, e il file fuori cartella resta come prima), `test_contratto_persistenza.py` (il contratto del catalogo dichiara la tabella nuova: la suite delle 16:33 aveva 2 rossi attesi li', piu' il conto dei file di test nel README che l'audit millimetrico ha preso), `README.md`, `RIPRENDI_QUI.md`, `REGISTRO_INGEGNERIA.md`. Pre-volo sbloccato con `--nonostante` (motivo scritto nella traccia: alla domanda il fondatore ha risposto «nessuna preferenza», scelta tecnica D12).
+- MANCANO: suite intera, «procedi al commit», ramo+PR+gate, deploy VERO (immagine nuova, e la tabella nasce sul DB vivo: solo col «vai» del fondatore; insieme al fix contabile Compito 38), tre posti, chiavetta.
+- APERTI, a parte (NON in questo commit): (1) ⛔ POST /api/messaggi (fase83:10462-10478) non controlla che la prenotazione sia del chiamante: chi CONOSCE il riferimento di una prenotazione altrui puo' scrivere a quell'ospite e far sparire il thread al suo host (letto sul codice, NON misurato; candidato Compito 50); (2) furto di facciata (A mostra la foto di B): moderazione dei contenuti, e se si fa va normalizzato anche l'URL assoluto; (3) `_upload_foto` senza tetto di file per host (BASSA, gia' 5 MB/file); (4) la risposta di `_host_pubblica` dice "pubblicato" anche per una bozza (fase83:10658); (5) le 17 rimisure arretrate del pre-volo; (6) il deploy del fix contabile Compito 38; (7) Compito 41 (source_transaction per i bonifici); (8) decisione prodotto: credito>totale, il resto si perde; (9) ricarica 2 EUR -> 11 centesimi; (10) chiavetta.
 
 ## PASSAGGIO DI CONSEGNE 39 (2026-10-04 notte) - BUG CONTABILE DEL BONIFICO FALLITO RIPARATO (Compito 38 di GML), NON ANCORA IN PRODUZIONE; master e VPS su 64d7f6e:
 - STATO all'inizio: PC, GitHub, VPS su 64d7f6e (consegne 38, solo documenti, gate verde); gli 11 cent di a2c63fd8 ancora
@@ -5733,7 +5789,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 7207 test
+SUITE ATTUALE: Ran 7225 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
