@@ -275,7 +275,8 @@ class TestHostUX(unittest.TestCase):
                         "/etc/passwd", "../segreto.txt"):
             s, c = self.r.gestisci("POST", "/api/host/foto_elimina", headers=self.h,
                                    body=json.dumps({"url": cattivo}))
-            self.assertIn(s, (200, 422))
+            # 403 dal 2026-10-05: un host non cancella un file senza padrone (test_idor_foto_elimina)
+            self.assertIn(s, (200, 403, 422))
         self.assertTrue(os.path.isfile(segreto), "traversal ha cancellato un file esterno!")
 
     def test_foto_elimina_richiede_auth(self):

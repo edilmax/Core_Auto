@@ -395,6 +395,10 @@ def _valida_immagini(imgs: Any) -> List[Immagine]:
     return out
 
 
+# Il basename di un file /uploads/ dentro un URL: la stessa espressione di `nomi_uploads`.
+_NOME_UPLOAD = re.compile(r"/uploads/([A-Za-z0-9_.\-]+)")
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Catalogo durevole (SQLite, conn-per-operazione + WAL, come fase34/52)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -529,8 +533,99 @@ class CatalogoVetrina:
                             "ON alloggi(stato, aggiornato_ts)")
                 con.execute("CREATE INDEX IF NOT EXISTS idx_img_alloggio "
                             "ON alloggio_immagini(alloggio_id, ordine)")
+            # ⛔ CHI HA CARICATO OGNI FOTO (IDOR di `/api/host/foto_elimina`, Compiti 46-49 di GML,
+            # 2026-10-05). Il permesso di cancellare un file di UPLOAD_DIR e' la proprieta' scritta
+            # quando il file nasce (`registra_upload`), non le citazioni degli annunci: quelle si
+            # fabbricano con una bozza. Tabella NUOVA, nessun ALTER. Nasce una volta sola, nella
+            # STESSA transazione che la riempie coi nomi gia' citati da UN SOLO host (citati da due:
+            # nessuna riga, il padrone non si sceglie a caso). Un crash a meta' annulla anche la
+            # tabella e al prossimo avvio si rifa'; un riavvio non cambia i dati, e una bozza fatta
+            # dopo non diventa proprieta'.
+            if con.execute("SELECT 1 FROM sqlite_master WHERE type='table' "
+                           "AND name='upload_proprietario'").fetchone() is None:
+                con.execute("BEGIN IMMEDIATE")
+                try:
+                    if con.execute("SELECT 1 FROM sqlite_master WHERE type='table' "
+                                   "AND name='upload_proprietario'").fetchone() is None:
+                        # NOT NULL anche sulla chiave: in SQLite una PRIMARY KEY di testo
+                        # accetta NULL, se non lo si vieta.
+                        con.execute("CREATE TABLE IF NOT EXISTS upload_proprietario ("
+                                    "nome TEXT PRIMARY KEY NOT NULL, host_id TEXT NOT NULL, "
+                                    "creato_ts TEXT NOT NULL)")
+                        citanti: Dict[str, set] = {}
+                        for u, h in con.execute(
+                                "SELECT i.url, a.host_id FROM alloggio_immagini i JOIN alloggi a "
+                                "ON a.id = i.alloggio_id WHERE i.url LIKE '%/uploads/%'"):
+                            for n in _NOME_UPLOAD.findall(str(u)):
+                                citanti.setdefault(n.lower(), set()).add(h)
+                        ora = datetime.datetime.now().isoformat(timespec="seconds")
+                        con.executemany(
+                            "INSERT INTO upload_proprietario (nome, host_id, creato_ts) "
+                            "VALUES (?,?,?)",
+                            [(n, next(iter(hs)), ora) for n, hs in sorted(citanti.items())
+                             if len(hs) == 1])
+                    con.execute("COMMIT")
+                except Exception:
+                    con.execute("ROLLBACK")
+                    raise
         finally:
             con.close()
+
+    def registra_upload(self, nome: Any, host_id: Any) -> None:
+        """Il file /uploads/<nome> l'ha caricato `host_id`. Lo chiamano `_upload_foto` (fase83)
+        appena salvato il file e l'import per le foto che ri-ospita. SOLLEVA su errore: il
+        chiamante lo isola (l'upload resta valido, e un file senza padrone lo protegge la regola
+        prudente di `upload_cancellabile_da`)."""
+        if not (isinstance(nome, str) and nome and isinstance(host_id, str) and host_id.strip()):
+            raise ValueError("registra_upload: nome o host_id non validi")
+        ora = datetime.datetime.now().isoformat(timespec="seconds")
+        con = self._apri()
+        try:
+            with con:
+                con.execute("INSERT INTO upload_proprietario (nome, host_id, creato_ts) "
+                            "VALUES (?,?,?)", (nome.lower(), host_id, ora))
+        finally:
+            con.close()
+
+    def upload_cancellabile_da(self, nome: Any, host_id: Any, *, in_chat: bool = True) -> bool:
+        """Questo host puo' cancellare il file /uploads/<nome>? (IDOR di `_foto_elimina`, 2026-10-05)
+
+        In quest'ordine, concordato con GML (Compito 49):
+          1. proprietario registrato -> solo lui (anche se lui stesso l'ha incollata in chat);
+          2. senza proprietario e citato in una CHAT (`in_chat`, che il chiamante legge
+             nell'archivio dei messaggi) -> NO: sono le prove che l'ospite carica in una
+             controversia, e non hanno mai un proprietario;
+          3. senza proprietario (file nati prima della tabella, caricati dall'operatore) -> solo
+             se lo citano annunci SUOI e nessun annuncio di un altro host;
+          4. tutto il resto -> NO: si nega per difetto, l'orfano lo toglie la pulizia dei 7
+             giorni e il pannello non guarda la risposta.
+        `in_chat` vale True se non lo si dice: chi dimentica di passarlo nega, non apre.
+        Il nome si confronta in minuscolo: su un disco Windows `ABC.PNG` e' lo stesso file di
+        `abc.png`, e un nome che non coincide con nessuno (`abc.png.`, `abc.png::$DATA`) resta
+        senza padrone e quindi negato. Proprietario e citazioni arrivano da UNA istruzione sola:
+        in SQLite un'istruzione legge un'unica fotografia del database, e una pubblicazione
+        concorrente non apre una finestra. SOLLEVA su errore DB: il chiamante nega."""
+        if not (isinstance(nome, str) and nome and isinstance(host_id, str) and host_id.strip()):
+            return False
+        chiave = nome.lower()
+        con = self._apri()
+        try:
+            righe = con.execute(
+                "SELECT 'proprietario', host_id, '' FROM upload_proprietario WHERE nome = ? "
+                "UNION ALL "
+                "SELECT 'citata', a.host_id, i.url FROM alloggio_immagini i "
+                "JOIN alloggi a ON a.id = i.alloggio_id WHERE i.url LIKE '%/uploads/%'",
+                (chiave,)).fetchall()
+        finally:
+            con.close()
+        proprietari = {r[1] for r in righe if r[0] == "proprietario"}
+        if proprietari:
+            return proprietari == {host_id}
+        if in_chat:
+            return False
+        citanti = {r[1] for r in righe if r[0] == "citata"
+                   and chiave in {n.lower() for n in _NOME_UPLOAD.findall(str(r[2]))}}
+        return citanti == {host_id}
 
     def nomi_uploads(self) -> set:
         """Basename dei file /uploads/ citati dalle immagini di TUTTI gli annunci (ogni
@@ -844,6 +939,9 @@ class CatalogoVetrina:
                 # l'host_id, che e' l'unico ago che cerca.
                 con.execute("DELETE FROM alloggio_immagini WHERE alloggio_id IN "
                             "(SELECT id FROM alloggi WHERE host_id=?)", (host_id,))
+                # Le foto che ha caricato portano il suo host_id: senza questa riga l'oblio
+                # (fase156) lo ritrova in catalogo.db e risponde ERRORE alla persona.
+                con.execute("DELETE FROM upload_proprietario WHERE host_id=?", (host_id,))
                 cur = con.execute("DELETE FROM alloggi WHERE host_id=?", (host_id,))
             return cur.rowcount if (cur.rowcount and cur.rowcount > 0) else 0
         finally:

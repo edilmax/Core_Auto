@@ -43,7 +43,7 @@ competitivo è il **take-rate più basso del mercato**, reso possibile dall'auto
 Core_Auto/
 ├── main_casavip.py             avvio del prodotto: legge le variabili d'ambiente e compone il sistema
 ├── fase*.py                    154 moduli del motore (uno per funzione — indice in REGISTRO_INGEGNERIA.md)
-├── test_*.py                   435 file di test (la suite INTERA deve essere verde prima di ogni deploy)
+├── test_*.py                   436 file di test (la suite INTERA deve essere verde prima di ogni deploy)
 ├── deploy/                     ciò che vede il browser: 14 pagine + app.js + configurazioni nginx
 │   ├── index.html              vetrina, ricerca, mappa, checkout (ospite)
 │   ├── host.html               pannello host: pubblica, calendario, incassi, consensi
@@ -209,7 +209,8 @@ vecchie **restano** in archivio: servono a dimostrare cosa valeva in quel moment
 
 Gatekeeper sulle pagine riservate (senza sessione → redirect al login) · super-admin **Bunker**
 con secondo fattore (TOTP o password) e sessione di 15 minuti legata all'IP · escape
-centralizzato in `app.js` (niente XSS) · upload con whitelist di tipo e nome casuale ·
+centralizzato in `app.js` (niente XSS) · upload con whitelist di tipo e nome casuale · una foto
+la cancella solo l'host che l'ha caricata, e le prove che l'ospite carica in chat nessun host ·
 CSP e HSTS attivi · blocco dei bonifici per host non conformi **DAC7** · backup automatici ogni
 6 ore più copia cifrata fuori dal server.
 
