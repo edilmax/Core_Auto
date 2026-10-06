@@ -319,7 +319,11 @@ class TestSimulazioneTotale(unittest.TestCase):
         for metodo, path, body, query in casi:
             s, c = self.g(metodo, path, body, tok, query)
             self.assertEqual(s, 200, f"{path} -> {s} {c}")
-        # messaggi host<->ospite
+        # messaggi host<->ospite, su una prenotazione VERA di questo host (V1 della busta 6,
+        # 2026-10-05: prima il riferimento era inventato, cioe' cio' che il difetto permetteva)
+        self.assertTrue(self.sis.pagamenti_pendenti.registra(
+            "REFX", alloggio_id=h["slug"], check_in="2026-09-01", check_out="2026-09-03",
+            host_id=h["hid"]))
         s, _ = self.g("POST", "/api/messaggi",
                       {"prenotazione_id": "REFX", "guest_id": "g@sim.it", "testo": "ciao"}, tok)
         self.assertIn(s, (200, 201))

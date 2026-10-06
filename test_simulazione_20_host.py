@@ -243,7 +243,11 @@ class TestSimulazione20Host(unittest.TestCase):
             self.assertEqual(s, 200)
             self.assertTrue(json.dumps(ld).find("http") >= 0 or ld.get("link") or ld.get("url"),
                             f"host{h['i']} link diretto non condivisibile: {ld}")
-            # messaggi host<->ospite (riquadro conversazioni)
+            # messaggi host<->ospite (riquadro conversazioni). La chat e' di una prenotazione
+            # VERA del suo host (V1 della busta 6, 2026-10-05): prima il riferimento era inventato.
+            self.assertTrue(self.sis.pagamenti_pendenti.registra(
+                f"REF{h['i']}", alloggio_id=h["slug"], check_in="2026-09-01",
+                check_out="2026-09-03", host_id=h["hid"]))
             s, _ = self.g("POST", "/api/messaggi",
                           {"prenotazione_id": f"REF{h['i']}", "guest_id": "g@sim.it",
                            "testo": "Benvenuto!"}, tok)

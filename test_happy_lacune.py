@@ -267,9 +267,17 @@ class TestRecensioni(_BaseLacune):
 # ══════════════════════════════════════════════════════════════════════════════
 class TestThreadMessaggi(_BaseLacune):
 
+    def _prenotazione(self, rif):
+        # La chat e' della prenotazione e del SUO host (V1 della busta 6, 2026-10-05): prima
+        # qui si scriveva su un riferimento inventato, cioe' proprio cio' che il difetto
+        # permetteva. Adesso la prenotazione esiste, sull'annuncio di questo host.
+        self.assertTrue(self.sis.pagamenti_pendenti.registra(
+            rif, alloggio_id=SLUG, check_in=self.ci, check_out=self.co, host_id=self.host_id))
+
     def test_thread_messaggi_letto_dall_host(self):
         """GET /api/messaggi?prenotazione_id=... -> 200: l'host rilegge, in ordine, le
         bolle che ha scritto lui (mittente = il suo host_id vero)."""
+        self._prenotazione("REF-LACUNE-1")
         s, vuoto = self.g("GET", "/api/messaggi", None, self.tk,
                           {"prenotazione_id": "REF-LACUNE-1"})
         self.assertEqual(s, 200, vuoto)
@@ -299,6 +307,7 @@ class TestThreadMessaggi(_BaseLacune):
         """Due prenotazioni, due thread: GET /api/messaggi ne torna UNO solo (la
         prova che il filtro per prenotazione_id esiste davvero)."""
         for rif, testo in (("REF-A", "messaggio della A"), ("REF-B", "messaggio della B")):
+            self._prenotazione(rif)
             s, c = self.g("POST", "/api/messaggi",
                           {"prenotazione_id": rif, "guest_id": "ospite-" + rif,
                            "testo": testo}, self.tk)

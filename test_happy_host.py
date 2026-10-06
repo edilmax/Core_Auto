@@ -840,6 +840,11 @@ class TestCrescitaHost(_BaseHost):
     def test_conversazioni_dell_host(self):
         st, vuote = self.chiama("GET", "/api/host/conversazioni", atteso=200)
         self.assertEqual(vuote, {"conversazioni": []})
+        # la chat e' di una prenotazione VERA di questo host (V1 della busta 6, 2026-10-05:
+        # prima il riferimento era inventato, cioe' proprio cio' che il difetto permetteva)
+        self.assertTrue(self.sis.pagamenti_pendenti.registra(
+            "REF-CHAT-1", alloggio_id=self.slug, check_in="2027-03-01", check_out="2027-03-03",
+            host_id=self.host_id))
         st, _ = self.r.gestisci("POST", "/api/messaggi", {}, json.dumps(
             {"prenotazione_id": "REF-CHAT-1", "guest_id": "ospite",
              "testo": "Benvenuto, il check-in e' dalle 15."}), self.tok)
