@@ -234,6 +234,10 @@ class TestIdorFotoElimina(unittest.TestCase):
         chat controllata per prima, la SUA foto diventava non cancellabile per sempre."""
         url = self._carica(self.tokA)
         nome = url.rsplit("/", 1)[1]
+        # la chat e' di una prenotazione VERA di A (V1 della busta 6, 2026-10-05)
+        self.assertTrue(self.sis.pagamenti_pendenti.registra(
+            "pren-della-chat", alloggio_id="casa-a", check_in="2027-03-01",
+            check_out="2027-03-03", host_id=self.hidA))
         s, c = self.g("POST", "/api/messaggi",
                       {"prenotazione_id": "pren-della-chat", "guest_id": "ospite",
                        "testo": "ecco la foto del balcone: " + url},

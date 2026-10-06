@@ -10485,7 +10485,13 @@ class RouterHTTP:
         mittente = self._host_id_da_token(headers) or "host"
         if not (isinstance(pren, str) and isinstance(guest, str) and isinstance(testo, str)):
             return 422, {"errore": "campi_non_validi"}
-        ok = msg.invia(pren, mittente, guest, mittente, testo)
+        negata = self._chat_non_tua(headers, pren)
+        if negata:
+            return negata
+        # L'ospite della chat e' UNO e si chiama 'ospite' (come in `_voucher_chat_ctx`): il
+        # guest_id del corpo non decide niente. Una riga con un altro nome faceva restituire a
+        # `fase113.thread` un thread VUOTO a ospite, arbitro e subentro (V1 della busta 6).
+        ok = msg.invia(pren, mittente, "ospite", mittente, testo)
         return (201, {"stato": "inviato"}) if ok else (422, {"errore": "non_inviato"})
 
     def _msg_thread(self, query, headers):
@@ -10495,8 +10501,36 @@ class RouterHTTP:
         if msg is None:
             return 503, {"errore": "messaggistica_non_attiva"}
         pren = query.get("prenotazione_id", "")
+        negata = self._chat_non_tua(headers, pren)
+        if negata:
+            return negata
         richiedente = self._host_id_da_token(headers) or "host"
         return 200, {"messaggi": msg.thread(pren, richiedente)}
+
+    def _chat_non_tua(self, headers, pren):
+        """La chat di una prenotazione la usa SOLO l'host di quella prenotazione (V1 della busta 6,
+        2026-10-05). None = puo'; altrimenti la risposta di rifiuto. Il padrone si RIDERIVA
+        dall'alloggio, come in `_decidi_richiesta`; il pendente senza alloggio leggibile ripiega sul
+        suo host_id. Deny by default: prenotazione inesistente -> 404, padrone diverso o non
+        verificabile -> 403. L'operatore (X-Host-Key senza gettone) resta libero, come in
+        `_verifica_proprieta`. Guardie: test_fase113_endpoint.TestLaChatEDellaPrenotazioneEDelSuoHost."""
+        hid = self._host_id_da_token(headers)
+        if not hid:
+            return None
+        pp = getattr(self._sys, "pagamenti_pendenti", None)
+        try:
+            rec = pp.info(pren) if (pp is not None and isinstance(pren, str) and pren) else None
+            if rec is None:
+                return 404, {"errore": "prenotazione_non_trovata"}
+            padrone = (self._sys.catalogo.host_di_alloggio(rec.get("alloggio_id", ""))
+                       or rec.get("host_id") or None)
+        except Exception:
+            logger.warning("chat: padrone della prenotazione non verificabile -> NEGO "
+                           "(fail-closed)", exc_info=True)
+            return 403, {"errore": "non_tua"}
+        if padrone != hid:
+            return 403, {"errore": "non_tua"}
+        return None
 
     def _alloggio_ha_prenotazioni(self, slug) -> bool:
         """Vero se sull'alloggio e' MAI stata fatta una prenotazione (anche rimborsata):
