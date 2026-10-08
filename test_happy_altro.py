@@ -25,16 +25,18 @@ import base64
 import datetime
 import hashlib
 import hmac
+import html
 import http.client
 import json
 import os
+import re
 import shutil
 import socket
 import tempfile
 import threading
 import time
 import unittest
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 import fase83_server
 from fase61_localizzazione import LINGUE_SUPPORTATE
@@ -704,10 +706,23 @@ class TestHappyAltroHTTP(unittest.TestCase):
         self.assertIn("DTSTART;VALUE=DATE:" + compatto, b)
         self.assertIn("DTEND;VALUE=DATE:" + domani, b)
 
-    # ── L) /host/azione?t=... — Approva da un messaggio, un tocco ─────────────
+    # ── L) /host/azione?t=... — Approva da un messaggio: il link, poi il pulsante ─
     def test_azione_da_messaggio(self):
+        # ⛔ V4 (2026-10-08): fino a quel giorno questa prova pretendeva che APRIRE il link
+        # approvasse -- cioe' il difetto: lo aprono anche antispam e anteprime. Adesso il
+        # link mostra la domanda, e il pulsante (col gettone letto DALLA PAGINA) decide.
         s, hd, b = self.req("GET", self.azione_path)
         self.assertEqual(s, 200, self.azione_path)
+        self.assertTrue(hd.get("content-type", "").startswith("text/html"))
+        info = self.sis.pagamenti_pendenti.info(self.riferimento)
+        self.assertEqual("in_attesa_host", (info or {}).get("stato"),
+                         "aprire il link ha gia' deciso: lo fanno anche le macchine")
+        gettone = re.search(r'name="t" value="([^"]+)"', b)
+        self.assertIsNotNone(gettone, "la pagina non ha il pulsante col gettone")
+        s, hd, b = self.req("POST", "/host/azione",
+                            {"Content-Type": "application/x-www-form-urlencoded"},
+                            urlencode({"t": html.unescape(gettone.group(1))}))
+        self.assertEqual(s, 200, b[:300])
         self.assertTrue(hd.get("content-type", "").startswith("text/html"))
         self.assertIn("Prenotazione approvata", b)
         # EFFETTO VERO: la richiesta non e' piu' in attesa (e' stata evasa davvero)

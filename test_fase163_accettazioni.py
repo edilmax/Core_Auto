@@ -165,11 +165,15 @@ class TestIntegrazioneHTTP(unittest.TestCase):
         s, d = self._reg(
             {"email": "a@b.com", "password": "password1", "accetta_termini": True,
              "accetta_clausole": True, "accetta_privacy": True, "lang": "it"},
-            {"X-Forwarded-For": "203.0.113.9, 10.0.0.1", "User-Agent": "Firefox"})
+            # ⛔ Premessa resa VERA il 2026-10-08 (V2): era «203.0.113.9, 10.0.0.1» e
+            # pretendeva il PRIMO. Ma nginx AGGIUNGE IN CODA l'indirizzo vero
+            # (`proxy_add_x_forwarded_for`): il primo lo sceglie chi chiama. Qui il primo e'
+            # inventato, e nella prova legale deve finire quello vero, l'ultimo.
+            {"X-Forwarded-For": "10.0.0.1, 203.0.113.9", "User-Agent": "Firefox"})
         self.assertEqual(s, 201)
         self.assertTrue(d["accettazione"]["registrata"])
         self.assertTrue(d["accettazione"]["vessatorie"])
-        # la prova e' recuperabile e INTEGRA, con IP (primo hop) e UA catturati
+        # la prova e' recuperabile e INTEGRA, con IP (l'ultimo: quello del nostro nginx) e UA
         tok = d["token"]
         s2, d2 = self.r.gestisci("GET", "/api/host/accettazioni", {}, None,
                                  {"X-Host-Token": tok})

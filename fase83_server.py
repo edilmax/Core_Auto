@@ -1826,7 +1826,21 @@ def pagina_azione_html(esito: Dict[str, Any]) -> str:
     rossa=rifiutata, arancio=link scaduto/già gestito."""
     ok = bool(esito.get("ok"))
     stato = esito.get("stato")
-    if ok and stato == "approvata":
+    pannello = "https://bookinvip.com/host.html"
+    bottone = "<a class=\"b\" href=\"%s\">Vai al pannello host</a>" % pannello
+    if ok and esito.get("da_confermare"):
+        # V4: la GET mostra solo la domanda; decide il POST di questo pulsante (stesso gettone)
+        import html
+        approva = esito.get("azione") == "approva"
+        col, bg, ic = "#1e3c72", "#e3ebf8", "❓"
+        h1 = "Approvare la prenotazione?" if approva else "Rifiutare la prenotazione?"
+        p1 = "Tocca il pulsante qui sotto per confermare."
+        p2 = "Finché non lo tocchi non cambia niente."
+        bottone = ("<form method=\"post\" action=\"/host/azione\"><input type=\"hidden\" "
+                   "name=\"t\" value=\"%s\"><button class=\"b\" type=\"submit\">%s</button>"
+                   "</form>") % (html.escape(str(esito.get("t") or "")),
+                                 "Sì, approva" if approva else "Sì, rifiuta")
+    elif ok and stato == "approvata":
         col, bg, ic, h1 = "#155724", "#d4edda", "✅", "Prenotazione approvata"
         p1 = "Ottimo! Il calendario e il tuo pannello si aggiornano da soli."
         p2 = "Il cliente riceve la conferma. Non devi fare altro."
@@ -1851,7 +1865,6 @@ def pagina_azione_html(esito: Dict[str, Any]) -> str:
         else:
             h1, p1 = "Link non valido", "Non riusciamo a leggere questo link."
         p2 = "Apri il pannello host per gestire le tue prenotazioni."
-    pannello = "https://bookinvip.com/host.html"
     return (
         "<!DOCTYPE html><html lang=\"it\"><head><meta charset=\"UTF-8\">"
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
@@ -1864,12 +1877,13 @@ def pagina_azione_html(esito: Dict[str, Any]) -> str:
         ".i{width:74px;height:74px;border-radius:50%%;background:%s;color:%s;"
         "display:flex;align-items:center;justify-content:center;font-size:2.3rem;margin:0 auto 1rem}"
         "h1{font-size:1.35rem;margin:.2rem 0 .6rem}p{color:#5e6f8d;line-height:1.6;margin:.4rem 0}"
-        "a.b{display:inline-block;margin-top:1.2rem;background:#1e3c72;color:#fff;"
+        ".b{display:inline-block;margin-top:1.2rem;background:#1e3c72;color:#fff;border:0;"
+        "font:inherit;cursor:pointer;"
         "text-decoration:none;padding:.7rem 1.5rem;border-radius:2rem;font-weight:600}"
         "</style></head><body><div class=\"c\"><div class=\"logo\">BookinVIP</div>"
         "<div class=\"i\">%s</div><h1>%s</h1><p>%s</p><p>%s</p>"
-        "<a class=\"b\" href=\"%s\">Vai al pannello host</a></div></body></html>"
-    ) % (h1, bg, col, ic, h1, p1, p2, pannello)
+        "%s</div></body></html>"
+    ) % (h1, bg, col, ic, h1, p1, p2, bottone)
 
 
 def pagina_login_gate(livello: str, base_url: str = "", lang: str = "it") -> str:
@@ -6403,8 +6417,9 @@ class RouterHTTP:
             logger.warning("registra richiesta su-richiesta fallita (ignorata)", exc_info=True)
 
     def _avvisa_host_richiesta(self, allog, ref, ci, co, host_id):
-        """Avvisa l'host di una richiesta DA APPROVARE con i link Approva/Rifiuta (un tocco,
-        da qualsiasi canale) + il link al pannello. Best-effort isolato: non blocca mai."""
+        """Avvisa l'host di una richiesta DA APPROVARE con i link Approva/Rifiuta (il link e
+        poi il pulsante di conferma, da qualsiasi canale) + il link al pannello. Best-effort
+        isolato: non blocca mai."""
         try:
             notif = getattr(self._sys, "notificatore_prenotazione", None)
             reg = getattr(self._sys, "registro_host", None)
@@ -6451,7 +6466,8 @@ class RouterHTTP:
 
     def _link_azione(self, ref, host_id, azione):
         """URL FIRMATO per approvare/rifiutare una richiesta da QUALSIASI messaggio (email/
-        Telegram/WhatsApp): un tocco, niente login. Firmato HMAC (fase59.firma), scade 3gg."""
+        Telegram/WhatsApp): niente login; aprirlo mostra la domanda, decide il pulsante (V4).
+        Firmato HMAC (fase59.firma), scade 3gg."""
         firma = getattr(self._sys, "firma", None)
         if firma is None or not ref:
             return ""
@@ -6465,8 +6481,12 @@ class RouterHTTP:
         from urllib.parse import quote as _q
         return (self._base_url or "https://bookinvip.com") + "/host/azione?t=" + _q(tok)
 
-    def _azione_richiesta(self, token):
-        """Verifica il link firmato ed esegue la decisione. Ritorna un esito per la pagina."""
+    def _azione_richiesta(self, token, esegui=True):
+        """Verifica il link firmato ed esegue la decisione. Ritorna un esito per la pagina.
+
+        ⛔ `esegui=False` (V4, 2026-10-08, «autorizzato»): verifica soltanto, per la GET. Aprire
+        il link lo fanno anche le macchine (antispam, anteprime delle chat): la GET mostra la
+        domanda, decide solo il POST del pulsante (MDN «Safe (HTTP Methods)»; RFC 8058)."""
         firma = getattr(self._sys, "firma", None)
         d = firma.decodifica(token) if (firma and token) else None
         if not (isinstance(d, dict) and d.get("k") == "az_richiesta"):
@@ -6477,6 +6497,8 @@ class RouterHTTP:
         az = d.get("az")
         if az not in ("approva", "rifiuta"):
             return {"ok": False, "motivo": "link_non_valido"}
+        if not esegui:
+            return {"ok": True, "azione": az, "da_confermare": True, "t": token}
         status, esito = self._decidi_richiesta(d.get("rif"), d.get("hid") or None,
                                                az == "approva")
         if status == 200:
@@ -10090,13 +10112,24 @@ class RouterHTTP:
     # --- rotte host ---
     @staticmethod
     def _client_ip(headers):
-        """IP reale dell'host dietro nginx (X-Forwarded-For ha priorita', primo hop).
+        """IP reale di chi chiama dietro nginx: l'ULTIMO elemento di X-Forwarded-For.
+
+        ⛔⛔ L'ULTIMO, NON IL PRIMO (V2, 2026-10-08, «autorizzato» del fondatore). Davanti
+        all'app c'e' UN solo proxy nostro (`casavip_nginx`, misurato sul server), che fa
+        `proxy_add_x_forwarded_for`: tiene cio' che ha mandato il client e AGGIUNGE IN CODA
+        l'indirizzo vero della connessione. Il primo elemento lo sceglie chi chiama: col
+        primo, cambiandolo a ogni tentativo non si finiva mai nel buttafuori, e un indirizzo
+        inventato ma ben formato entrava nelle prove legali dei consensi. MDN,
+        «X-Forwarded-For»: per ogni uso di sicurezza solo gli indirizzi aggiunti da un proxy
+        fidato, contando da destra. Se un giorno davanti a nginx si mette un secondo proxy
+        (Cloudflare), questo diventa il SUO indirizzo: si riconfigura nginx (`real_ip`).
+        Guardie: `TestLIndirizzoELUltimoQuelloCheScriveIlNostroNginx` (test_fase83_server.py).
 
         ⛔⛔ UN INDIRIZZO IP E' UNA FORMA, NON TESTO LIBERO — e fino al 2026-08-18 questa
         funzione restituiva **qualunque cosa** ci fosse nell'intestazione, troncata a 64
         caratteri. Il punto e' che quel valore **lo sceglie chi chiama**: nginx AGGIUNGE il
-        proprio in coda (`proxy_add_x_forwarded_for`), quindi il primo elemento -- proprio
-        quello che prendiamo qui -- arriva dal client.
+        proprio in coda (`proxy_add_x_forwarded_for`), quindi il primo elemento -- quello che
+        si prendeva fino al 2026-10-08 -- arriva dal client.
 
         Misurato sui 31 usi di questa funzione, finiva in tre posti, e solo il primo e' un
         problema di registro:
@@ -10115,15 +10148,15 @@ class RouterHTTP:
         spazzature diverse non possono piu' produrre due chiavi diverse.
 
         ⛔ Comportamento invariato per tutto cio' che e' legittimo: un IP vero esce identico,
-        la catena di proxy continua a dare il primo elemento, e «nessuna intestazione»
-        continua a rispondere stringa vuota (assenza di informazione, non attacco).
+        e «nessuna intestazione» continua a rispondere stringa vuota (assenza di
+        informazione, non attacco).
         Guardie: `TestLIndirizzoDiChiChiamaEUnaFORMANonTestoLibero` (test_fase83_server.py),
         viste rosse prima -- 14 rossi, fra cui una riga di registro fabbricata.
         """
         h = headers or {}
         xff = h.get("X-Forwarded-For") or h.get("x-forwarded-for") or ""
         if xff:
-            grezzo = xff.split(",")[0].strip()[:64]
+            grezzo = xff.split(",")[-1].strip()[:64]
         else:
             grezzo = (h.get("X-Real-IP") or h.get("x-real-ip") or "")[:64]
         if not grezzo:
@@ -13146,11 +13179,13 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                     # sull'unica risposta che leggono i parser di Booking/Airbnb.
                     self._testo(200, "text/calendar", ics)
             elif u.path == "/host/azione":
-                # APPROVA/RIFIUTA una richiesta da un messaggio (link firmato, un tocco).
+                # APPROVA/RIFIUTA da un messaggio (link firmato). ⛔ V4 (2026-10-08): la GET
+                # NON decide -- la aprono anche antispam e anteprime -- mostra la domanda;
+                # decide il POST del pulsante, in do_POST.
                 query = {k: v[0] for k, v in parse_qs(u.query).items()}
-                esito = router._azione_richiesta(query.get("t", ""))
+                esito = router._azione_richiesta(query.get("t", ""), esegui=False)
                 self._testo(200 if esito.get("ok") else 400, "text/html",
-                            pagina_azione_html(esito))
+                            pagina_azione_html(esito), no_store=True)
             elif u.path.startswith("/affitta/"):
                 # Inbound SEO/AEO (fase97): landing host per città (server-rendered,
                 # crawlabile). Solo città note → niente thin-content da slug arbitrari.
@@ -13289,6 +13324,12 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
             u = urlparse(self.path)
             lung = lunghezza_corpo(self.headers.get("Content-Length", 0))
             body = corpo_richiesta_testo(self.rfile.read(lung)) if lung else ""
+            if u.path == "/host/azione":
+                # il pulsante della pagina di conferma (V4): qui, e solo qui, si decide
+                esito = router._azione_richiesta(parse_qs(body).get("t", [""])[0])
+                self._testo(200 if esito.get("ok") else 400, "text/html",
+                            pagina_azione_html(esito), no_store=True)
+                return
             s, c = router.gestisci("POST", u.path, {}, body, dict(self.headers))
             self._scrivi(s, c)
 
