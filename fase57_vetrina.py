@@ -587,6 +587,20 @@ class CatalogoVetrina:
         finally:
             con.close()
 
+    def proprietario_upload(self, nome: Any) -> Optional[str]:
+        """Chi ha caricato /uploads/<nome>: l'host, oppure «prova:<riferimento>» per la foto che
+        l'ospite carica come prova in una controversia (D2 del Compito 52: la prova si serve solo
+        con un link firmato). None = nessuna riga. SOLLEVA su errore DB: il chiamante nega."""
+        if not (isinstance(nome, str) and nome):
+            return None
+        con = self._apri()
+        try:
+            r = con.execute("SELECT host_id FROM upload_proprietario WHERE nome = ?",
+                            (nome.lower(),)).fetchone()
+        finally:
+            con.close()
+        return str(r[0]) if r else None
+
     def upload_cancellabile_da(self, nome: Any, host_id: Any, *, in_chat: bool = True) -> bool:
         """Questo host puo' cancellare il file /uploads/<nome>? (IDOR di `_foto_elimina`, 2026-10-05)
 

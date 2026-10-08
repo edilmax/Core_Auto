@@ -1311,7 +1311,7 @@ async function apriConv(rif){
     const d=await getJson('/api/messaggi?prenotazione_id='+encodeURIComponent(rif),{headers:authHeaders()});
     if(d.errore){ b.textContent='⚠️ '+fraseErrore(d.errore); return; }
     b.innerHTML=(d.messaggi||[]).filter(Boolean).map(m=>{
-      let t=escH(m.testo||'').replace(/(\/uploads\/[a-z0-9]+\.[a-z]+)/g,"<a href='$1' target='_blank'>📷 apri foto</a>");
+      let t=escH(m.testo||'').replace(/(\/uploads\/[a-z0-9]+\.[a-z]+(?:\?t=[A-Za-z0-9_.=-]+)?)/g,"<a href='$1' target='_blank'>📷 apri foto</a>");
       const mio=(m.mittente!=='ospite');
       return `<div style="margin:.2rem 0;text-align:${mio?'right':'left'}"><span style="display:inline-block;padding:.3rem .6rem;border-radius:.7rem;background:${mio?'#d7e8e0':'#fff'}">${t}</span></div>`;
     }).join('')||T('no_msg'); b.scrollTop=b.scrollHeight;

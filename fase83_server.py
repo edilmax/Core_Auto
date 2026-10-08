@@ -1348,7 +1348,7 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: Any = None) -> Optiona
         "function esc(x){return String(x).replace(/[<>&]/g,function(c){return {'<':'&lt;','>':'&gt;','&':'&amp;'}[c];});}"
         "function rendi(ms){var b=document.getElementById('chBox');"
         "b.innerHTML=(ms||[]).map(function(m){var mio=(m.mittente==='ospite');"
-        "var t=esc(m.testo||'');t=t.replace(/(\\/uploads\\/[a-z0-9]+\\.[a-z]+)/g,"
+        "var t=esc(m.testo||'');t=t.replace(/(\\/uploads\\/[a-z0-9]+\\.[a-z]+(?:\\?t=[A-Za-z0-9_.=-]+)?)/g,"
         "\"<a href='$1' target='_blank'>&#128247; \"+BVL.apri_foto+\"</a>\");"
         "return \"<div style='margin:.2rem 0;text-align:\"+(mio?'right':'left')+\"'><span style='display:inline-block;"
         "padding:.3rem .6rem;border-radius:.7rem;background:\"+(mio?'#d7e8e0':'#fff')+\"'>\"+t+\"</span></div>\";}).join('')"
@@ -2141,6 +2141,33 @@ MAX_PREVENTIVI_EMAIL_ORA = 3
 # controversia vera. Il prefisso identifica le prove nel thread (serve anche a contarle).
 MAX_PROVE_FOTO = 10
 _PREFISSO_PROVA = "📎 PROVA FOTO:"
+# LA PROVA FOTO E' PRIVATA (D2 del Compito 52, 2026-10-08, «autorizzato» del fondatore). Stava
+# nella cartella delle foto degli annunci e `/uploads/` la dava a chiunque avesse l'URL, in cache
+# pubblica per un anno. Ora nasce con la riga «prova:<riferimento>» in `upload_proprietario` e si
+# serve SOLO con un link firmato e a scadenza, che ricevono i tre lettori della chat (ospite dal
+# voucher, host della prenotazione, arbitro); la risposta e' «private, no-store». Fonti: AWS S3,
+# «presigned URL» (un permesso a tempo per scaricare un oggetto privato); OWASP, IDOR Prevention
+# Cheat Sheet («Even with complex identifiers, access control checks are essential»).
+_PROPRIETARIO_PROVA = "prova:"
+_TIPO_GETTONE_PROVA = "prova_foto"
+PROVA_LINK_TTL_SEC = 3600
+_NOME_PROVA_IN_CHAT = re.compile(r"/uploads/([0-9a-f]{32}\.(?:png|jpg|webp|gif))")
+
+
+def _gettone_prova_valido(firma: Any, gettone: Any, nome: str, ora: int) -> bool:
+    """Il link firmato apre QUESTA prova, adesso? Mai solleva: ogni dubbio e' un no (anche il
+    `compare_digest` di `decodifica`, che solleva su un gettone non ASCII)."""
+    if firma is None or not (isinstance(gettone, str) and gettone and len(gettone) <= 2048):
+        return False
+    try:
+        d = firma.decodifica(gettone)
+    except Exception:
+        return False
+    if not isinstance(d, dict):
+        return False
+    exp = d.get("exp")
+    return (d.get("tipo") == _TIPO_GETTONE_PROVA and d.get("nome") == nome
+            and isinstance(exp, int) and not isinstance(exp, bool) and exp >= ora)
 
 
 class RouterHTTP:
@@ -2760,7 +2787,82 @@ class RouterHTTP:
         if ctx is None:
             return 400, {"errore": "voucher_non_valido"}
         rif, _hid = ctx
-        return 200, {"messaggi": msg.thread(rif, "ospite")}
+        return 200, {"messaggi": self._firma_prove(msg.thread(rif, "ospite"), rif)}
+
+    def _firma_prove(self, messaggi, rif):
+        """D2: nei messaggi di QUESTA prenotazione, il link di ogni prova registrata come
+        «prova:<rif>» riceve la firma a scadenza (`?t=`). Chi cita in chat la prova di un'altra
+        prenotazione non riceve una firma che la apra. Un errore lascia il link senza firma, cioe'
+        chiuso: si nega, non si apre."""
+        cat = getattr(self._sys, "catalogo", None)
+        firma = getattr(self._sys, "firma", None)
+        if not messaggi or firma is None or not hasattr(cat, "proprietario_upload"):
+            return messaggi
+        import time as _t
+        scade = int(_t.time()) + PROVA_LINK_TTL_SEC
+        atteso = _PROPRIETARIO_PROVA + str(rif)
+        sua: Dict[str, bool] = {}
+
+        def _con_firma(m):
+            nome = m.group(1)
+            if nome not in sua:
+                try:
+                    sua[nome] = cat.proprietario_upload(nome) == atteso
+                except Exception:
+                    logger.warning("prova foto: proprietario non leggibile (ISOLATO): il link "
+                                   "resta senza firma", exc_info=True)
+                    sua[nome] = False
+            if not sua[nome]:
+                return m.group(0)
+            return m.group(0) + "?t=" + firma.codifica(
+                {"tipo": _TIPO_GETTONE_PROVA, "nome": nome, "exp": scade})
+
+        return [dict(x, testo=_NOME_PROVA_IN_CHAT.sub(_con_firma, x["testo"]))
+                if isinstance(x, dict) and isinstance(x.get("testo"), str) else x
+                for x in messaggi]
+
+    def _registra_prove_storiche(self) -> int:
+        """D2: le prove caricate PRIMA della riparazione non hanno la riga «prova:<rif>» e
+        sarebbero rimaste pubbliche. All'avvio del server si registrano quelle citate in chat
+        DALL'OSPITE con la forma della prova, senza nessun proprietario e non citate da nessun
+        annuncio (un finto messaggio non deve togliere al pubblico la foto di un annuncio). Un
+        file citato come prova in PIU' prenotazioni non si assegna a nessuna: diventa privato per
+        tutti (riga «prova:» senza riferimento, nessuno riceve la firma) e lo dice un ERROR, cosi'
+        lo decide una persona. Idempotente; un errore lascia tutto com'era, con un ERROR."""
+        msg = getattr(self._sys, "messaggistica", None)
+        cat = getattr(self._sys, "catalogo", None)
+        if msg is None or not hasattr(cat, "proprietario_upload"):
+            return 0
+        try:
+            citate: Dict[str, set] = {}
+            for conv in msg.prenotazioni_con_ultimo_messaggio(limit=5000):
+                rif = str(conv.get("prenotazione_id") or "")
+                for m in msg.thread(rif, "ospite") if rif else []:
+                    testo = str(m.get("testo") or "")
+                    if m.get("mittente") != "ospite" or not testo.startswith(_PREFISSO_PROVA):
+                        continue
+                    for nome in _NOME_PROVA_IN_CHAT.findall(testo):
+                        citate.setdefault(nome, set()).add(rif)
+            if not citate:
+                return 0
+            negli_annunci = {n.lower() for n in cat.nomi_uploads()}
+            fatte = 0
+            for nome, rifs in sorted(citate.items()):
+                if nome in negli_annunci or cat.proprietario_upload(nome) is not None:
+                    continue
+                if len(rifs) > 1:
+                    logger.error("PROVA FOTO CONTESA | %s citata come prova in %d prenotazioni: "
+                                 "resa privata per tutti, da assegnare a mano", nome, len(rifs))
+                cat.registra_upload(nome, _PROPRIETARIO_PROVA
+                                    + (next(iter(rifs)) if len(rifs) == 1 else ""))
+                fatte += 1
+            if fatte:
+                logger.warning("PROVE FOTO STORICHE rese private: %d", fatte)
+            return fatte
+        except Exception:
+            logger.error("prove foto storiche: registrazione fallita (ISOLATO): restano "
+                         "pubbliche finche' non si riavvia", exc_info=True)
+            return 0
 
     def _voucher_prova(self, body):
         """Il CLIENTE carica una FOTO come PROVA (controversia): la foto entra nella CHAT
@@ -2791,16 +2893,28 @@ class RouterHTTP:
         st, out = self._salva_foto_raw(dati.get("image_base64"))
         if st != 201:
             return st, out
+        # D2: la prova nasce PRIVATA, con la riga «prova:<riferimento>». Senza la riga sarebbe
+        # servita a chiunque, quindi se non si scrive la prova non si accetta (stessa uscita
+        # della bolla mancante qui sotto: file rimosso e 503).
+        try:
+            self._sys.catalogo.registra_upload(out["url"].rsplit("/", 1)[1],
+                                               _PROPRIETARIO_PROVA + rif)
+            ok = True
+        except Exception:
+            logger.error("prova foto: proprietario non registrato (ISOLATO): senza la riga la "
+                         "prova sarebbe pubblica, quindi non si accetta", exc_info=True)
+            ok = False
         # ESITO DELLA BOLLA VERIFICATO (fix 2026-07-19): prima msg.invia era IGNORATO ->
         # con DB occupato (fase113 ritorna False, mai solleva) il cliente leggeva
         # "caricata" ma la prova NON esisteva in chat (l'arbitro non l'avrebbe mai vista)
         # e la foto restava ORFANA su disco. Niente bolla -> file rimosso + 503 onesto.
-        try:
-            ok = bool(msg.invia(rif, hid, "ospite", "ospite",
-                                _PREFISSO_PROVA + " " + out["url"]))
-        except Exception:
-            logger.error("prova foto: bolla non scritta (ISOLATO)", exc_info=True)
-            ok = False
+        if ok:
+            try:
+                ok = bool(msg.invia(rif, hid, "ospite", "ospite",
+                                    _PREFISSO_PROVA + " " + out["url"]))
+            except Exception:
+                logger.error("prova foto: bolla non scritta (ISOLATO)", exc_info=True)
+                ok = False
         if not ok:
             import os as _os
             try:
@@ -2819,7 +2933,7 @@ class RouterHTTP:
         rif = query.get("riferimento")
         if msg is None or not (isinstance(rif, str) and rif):
             return 422, {"errore": "campi_non_validi"}
-        return 200, {"messaggi": msg.thread(rif, "ospite")}
+        return 200, {"messaggi": self._firma_prove(msg.thread(rif, "ospite"), rif)}
 
     def _auth_admin(self, headers: Dict[str, str]) -> bool:
         if self._admin_key is None:
@@ -10505,7 +10619,7 @@ class RouterHTTP:
         if negata:
             return negata
         richiedente = self._host_id_da_token(headers) or "host"
-        return 200, {"messaggi": msg.thread(pren, richiedente)}
+        return 200, {"messaggi": self._firma_prove(msg.thread(pren, richiedente), pren)}
 
     def _chat_non_tua(self, headers, pren):
         """La chat di una prenotazione la usa SOLO l'host di quella prenotazione (V1 della busta 6,
@@ -12639,6 +12753,7 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
 
     router = crea_router(sistema, host_key=host_key, admin_key=admin_key,
                          base_url=base_url)
+    router._registra_prove_storiche()       # D2: le prove caricate prima diventano private
 
     # --- Auto-pubblicazione campagna (GATED, default-off): parte solo se nel .env c'è
     #     CAMPAGNA_AUTO_GIORNI e il sistema ha un motore marketing. Isolato: se fallisce,
@@ -12716,12 +12831,31 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
             if not getattr(self, '_solo_head', False):   # HEAD = header senza corpo
                 self.wfile.write(dati)
 
-        def _serve_upload(self, path):
+        def _serve_upload(self, path, query=""):
             updir = os.environ.get("UPLOAD_DIR", "data/uploads")
             fpath = percorso_statico_sicuro(path, updir)   # anti-traversal (basename only)
             if fpath is None or not os.path.isfile(fpath):
                 self._scrivi(404, {"errore": "file_non_trovato"})
                 return
+            # D2: una PROVA FOTO si apre solo col link firmato e non resta in nessuna memoria
+            # intermedia. Proprieta' non leggibile -> si nega (non si sa se e' una prova).
+            nome = os.path.basename(fpath)
+            try:
+                cat = getattr(sistema, "catalogo", None)
+                prop = (cat.proprietario_upload(nome)
+                        if hasattr(cat, "proprietario_upload") else None)
+                privata = isinstance(prop, str) and prop.startswith(_PROPRIETARIO_PROVA)
+            except Exception:
+                logger.error("upload: proprietario non leggibile (ISOLATO): si nega",
+                             exc_info=True)
+                privata = True
+            if privata:
+                import time as _t
+                gettone = (parse_qs(query or "").get("t") or [""])[0]
+                if not _gettone_prova_valido(getattr(sistema, "firma", None), gettone, nome,
+                                             int(_t.time())):
+                    self._scrivi(403, {"errore": "prova_privata"})
+                    return
             with open(fpath, "rb") as f:
                 dati = f.read()
             import mimetypes
@@ -12734,7 +12868,8 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
             ctype = ctype.replace("\r", "").replace("\n", "")
             self.send_response(200)
             self.send_header("Content-Type", ctype)
-            self.send_header("Cache-Control", "public, max-age=31536000")
+            self.send_header("Cache-Control",
+                             "private, no-store" if privata else "public, max-age=31536000")
             self._cors()
             self.end_headers()
             if not getattr(self, '_solo_head', False):   # HEAD = header senza corpo
@@ -13084,7 +13219,7 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
             elif u.path == "/openapi.json":
                 self._scrivi(200, openapi_agent_spec(base_url))   # spec per agenti non-MCP
             elif u.path.startswith("/uploads/"):
-                self._serve_upload(u.path)                        # foto alloggi caricate
+                self._serve_upload(u.path, u.query)               # foto alloggi e prove (D2)
             elif u.path == "/sitemap-index.xml":
                 # INDICE: referenzia la sitemap alloggi + le sitemap-host a SHARD (scala >50k URL)
                 from fase97_inbound_seo import (registro_citta, shard_citta,
