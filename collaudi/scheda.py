@@ -404,6 +404,243 @@ def _blocchi():
     return modulo.BLOCCHI
 
 
+# ═══════════════════════════════════════════════════════════════════════════════════════
+#  LA MISURA SEGUE IL CODICE — il cricchetto delle caselle (DECISIONE DEL METODO, 8/10/2026)
+# ═══════════════════════════════════════════════════════════════════════════════════════
+#  ⛔ PERCHE' ESISTE, misurato: l'8/10 `piano.py` contava 25 caselle da fare e 21 erano SOLO
+#  SCADUTE -- le unioni cambiavano il codice dei blocchi e nessuno rimisurava, perche'
+#  rimisurare era un gesto a mano (`rimisura.py`). Regola 2 della decisione: «una PR che fa
+#  scadere una casella non si unisce se non la rimisura nella stessa PR». Il gate la fa
+#  rispettare: `python collaudi/scheda.py --cricchetto HEAD^1 --riesegui` (job `caselle`).
+#  Fonti (D25): SonarSource, «Clean as You Code» -- il gate guarda il codice NUOVO, e «nessun
+#  problema nuovo» e' una condizione che non si allenta; Petrovic, Ivankovic, Fraser, Just,
+#  «Practical Mutation Testing at Scale», IEEE TSE 2021 -- la mutazione sulle righe cambiate
+#  (il passo `--diff` dello stesso job).
+#  Guardia: `test_pipeline_ci.TestLaMisuraSegueIlCodice`.
+
+# Le misure che in CI guarderebbero un'ALTRA cosa: la produzione, Stripe di prova, il server.
+# Dalla CI misurerebbero il sito vivo, non il codice della PR (D23: l'ambiente fa parte della
+# misura). Si rifanno a mano, una volta, alla chiusura del blocco. ⛔ L'elenco NON si allarga
+# per comodita': la guardia pretende che ogni voce apra davvero la rete, paghi su Stripe o
+# entri nel server, cosi' un esame che la CI sa fare non si toglie dal gate scrivendolo qui.
+FUORI_CI = {
+    "python collaudi/esame_accessi.py --casella matrice --scrivi":
+        "interroga il SITO VIVO: dalla CI misurerebbe la produzione, non il codice della PR",
+    "python collaudi/esame_accessi.py --casella sonde --scrivi":
+        "interroga il SITO VIVO: dalla CI misurerebbe la produzione, non il codice della PR",
+    "python collaudi/esame_plausibilita.py --scrivi":
+        "legge i numeri dal SITO VIVO, non dal codice della PR",
+    "python collaudi/esame_orologi.py --scrivi":
+        "paga su Stripe di PROVA: la chiave sta sul computer del fondatore, non in CI",
+    "python collaudi/esame_produzione.py --scrivi":
+        "legge gli invarianti sulla macchina di PRODUZIONE (ssh)",
+    "python collaudi/esame_produzione.py --casella ogni-ora --scrivi":
+        "legge il registro del server di PRODUZIONE (ssh)",
+    "python collaudi/esame_sentinella.py --scrivi":
+        "legge la sentinella esterna sul sito vivo e l'API di GitHub",
+}
+TETTO_RIFAI_SEC = 3600       # un esame che in CI non finisce in un'ora e' appeso, non lento
+
+NON_GUARDA_CRICCHETTO = (
+    "non giudica se la condizione e' giusta ne' se l'attrezzo misura bene: confronta la scheda "
+    "di master con quella della PR e, con --riesegui, rifa' l'attrezzo",
+    "i TEST che cambiano non fanno scadere nessuna casella (l'impronta guarda solo i moduli del "
+    "blocco): una PR che indebolisce un test non la ferma questo controllo",
+    "le caselle FUORI_CI, quelle «a mano» e il giro di mutazione intero qui si DICHIARANO e non "
+    "si rifanno: si rimisurano una volta, alla chiusura del blocco (le righe cambiate le "
+    "sorveglia il passo `--diff` dello stesso job)",
+    "una casella spuntata che SPARISCE dal piano (testo riscritto o tolto) si dichiara e non "
+    "ferma: la decisione si legge nel diff di collaudi/piano.py",
+    "--riesegui rifa' SOLO le righe che la PR ha scritto o cambiato: una spunta di master che "
+    "la PR non tocca resta creduta com'era quando fu misurata",
+)
+
+
+def come_si_rimisura(comando):
+    """Chi puo' rifare questa misura: 'a_mano' (vuole materiale preso sul server, il
+    segnaposto fra <>), 'mutazione' (il giro intero dura ore: in CI vale il `--diff`),
+    'fuori_ci' (vedi FUORI_CI) oppure 'ci'."""
+    comando = " ".join(str(comando or "").split())
+    if "<" in comando and ">" in comando:
+        return "a_mano"
+    if "mutazione_prodotto.py" in comando:
+        return "mutazione"
+    if comando in FUORI_CI:
+        return "fuori_ci"
+    return "ci"
+
+
+def stati_dell_albero(radice):
+    """{chiave: casella} per ogni condizione del piano DI QUELL'ALBERO, giudicata con lo
+    `scheda.py` DI QUELL'ALBERO: le sue regole, il suo piano, la sua scheda, i suoi moduli.
+
+    ⛔ Giudicare master con le regole della PR (o viceversa) confronterebbe due cose diverse:
+    ogni albero si giudica da se', e poi si confrontano i due giudizi.
+    """
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "_scheda_di_un_albero", os.path.join(radice, "collaudi", "scheda.py"))
+    modulo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(modulo)
+    dati = modulo.leggi()
+    fuori = {}
+    for blocco in modulo._blocchi():
+        ordine = blocco["ordine"]
+        impronta = modulo.impronta_del_blocco(ordine)
+        for testo in blocco.get("finito_quando") or ():
+            k = modulo.chiave(testo, ordine)
+            spuntata, motivo = modulo.stato(testo, ordine, schedario=dati, impronta=impronta)
+            riga = dati.get(k) if isinstance(dati.get(k), dict) else None
+            fuori[k] = {"chiave": k, "blocco": ordine, "testo": " ".join(str(testo).split()),
+                        "spuntata": bool(spuntata), "motivo": str(motivo),
+                        "comando": str((riga or {}).get("comando") or ""), "riga": riga}
+    return fuori
+
+
+def confronta(prima, dopo):
+    """Il giudizio, puro: {'rossi', 'dichiarati', 'da_rifare'} fra master (prima) e la PR.
+
+    · ROSSA: spuntata su master, non piu' spuntata nella PR, e la CI la sa rimisurare; oppure
+      una QUALUNQUE che la PR ha lasciato rossa, senza denominatore o senza riga: «a mano»
+      copre una misura che manca, mai un rosso trovato.
+    · DICHIARATA: spuntata su master e SCADUTA nella PR, ma da rifare a mano, sulla
+      produzione, con Stripe di prova o col giro di mutazione intero (alla chiusura del
+      blocco); spuntata e SPARITA dal piano; scritta dalla PR ma non rifacibile in CI.
+    · DA RIFARE IN CI: ogni riga della scheda che la PR ha scritto o cambiato, spuntata, e
+      misurabile in CI.
+    """
+    ordine = lambda kv: (kv[1]["blocco"], kv[1]["testo"])  # noqa: E731
+    rossi, dichiarati, da_rifare = [], [], []
+    for k, v in sorted(prima.items(), key=ordine):
+        if not v["spuntata"]:
+            continue
+        d = dopo.get(k)
+        if d is None:
+            dichiarati.append(dict(v, perche="spuntata su master e SPARITA dal piano della PR "
+                                             "(condizione riscritta o tolta)"))
+            continue
+        if d["spuntata"]:
+            continue
+        modo = come_si_rimisura(d["comando"] or v["comando"])
+        scaduta = d["motivo"].startswith(("SCADUTA", "misurata quando", "l'impronta"))
+        if modo == "ci" or not scaduta:
+            rossi.append(dict(d, perche="spuntata su master, nella PR no: %s" % d["motivo"]))
+        else:
+            dichiarati.append(dict(d, perche="scaduta, si rimisura alla chiusura del blocco "
+                                             "(%s)" % modo))
+    for k, d in sorted(dopo.items(), key=ordine):
+        p = prima.get(k)
+        if not d["spuntata"] or (p is not None and p["riga"] == d["riga"]):
+            continue
+        modo = come_si_rimisura(d["comando"])
+        if modo == "ci":
+            da_rifare.append(d)
+        else:
+            dichiarati.append(dict(d, perche="scritta dalla PR, la CI non puo' rifarla (%s)"
+                                             % modo))
+    return {"rossi": rossi, "dichiarati": dichiarati, "da_rifare": da_rifare}
+
+
+def _rifai(comandi, radice):
+    """{comando: (uscita, coda dell'uscita)}: uno alla volta, l'uscita letta DIRETTA (ferrea 7)."""
+    import shlex
+    esiti = {}
+    for comando in comandi:
+        pezzi = shlex.split(comando, posix=True)
+        if pezzi and pezzi[0] in ("python", "python3", "py"):
+            pezzi[0] = sys.executable
+        try:
+            p = subprocess.run(  # nosec B603 - comandi letti dalla scheda del progetto, mai input esterno  # noqa: S603
+                pezzi, cwd=radice, capture_output=True, text=True, encoding="utf-8",
+                errors="replace", timeout=TETTO_RIFAI_SEC,
+                env=dict(os.environ, PYTHONIOENCODING="utf-8"))
+            esiti[comando] = (p.returncode, (p.stdout + p.stderr)[-1200:])
+        except subprocess.TimeoutExpired:
+            esiti[comando] = ("SCADUTO dopo %ds" % TETTO_RIFAI_SEC, "")
+    return esiti
+
+
+def cricchetto(base, radice=RADICE, riesegui=False):
+    """(uscita, giudizio): 0 nessuna casella persa, 1 ROSSO, 2 non ho potuto misurare.
+
+    `base` e' il commit di master (in CI: HEAD^1 del commit d'unione). Si apre in un albero a
+    parte (`git worktree`), si giudica con le SUE regole, si confronta con l'albero della PR.
+    """
+    import shutil
+    import tempfile
+    righe = []
+    giudizio = {"rossi": [], "dichiarati": [], "da_rifare": [], "rifatte": [], "righe": righe}
+    culla = tempfile.mkdtemp(prefix="cricchetto_base_")
+    albero = os.path.join(culla, "base")
+    git = ["git", "-C", radice]
+    try:
+        p = subprocess.run(git + ["worktree", "add", "--detach", albero, base],  # nosec B603 B607 - git, argomenti fissi  # noqa: S603 S607
+                           capture_output=True, text=True, timeout=300)
+        if p.returncode != 0:
+            righe.append("⛔ FERMO: la base %r non si apre (%s): senza base non c'e' confronto, "
+                         "e nessun confronto non e' «nessuna casella persa»"
+                         % (base, (p.stderr or "").strip()[-200:]))
+            return 2, giudizio
+        try:
+            prima = stati_dell_albero(albero)
+        except Exception as e:  # noqa: BLE001 - una base che non si giudica e' una misura mancata, si dichiara
+            righe.append("⛔ FERMO: la scheda della base non si giudica (%s: %s)"
+                         % (type(e).__name__, e))
+            return 2, giudizio
+        finally:
+            subprocess.run(git + ["worktree", "remove", "--force", albero],  # nosec B603 B607 - git, argomenti fissi  # noqa: S603 S607
+                           capture_output=True, text=True, timeout=300)
+    finally:
+        shutil.rmtree(culla, ignore_errors=True)
+        subprocess.run(git + ["worktree", "prune"],  # nosec B603 B607 - git, argomenti fissi  # noqa: S603 S607
+                       capture_output=True, text=True, timeout=120)
+    try:
+        dopo = stati_dell_albero(radice)
+    except Exception as e:  # noqa: BLE001 - idem: la PR che non si giudica non passa per verde
+        righe.append("⛔ FERMO: la scheda della PR non si giudica (%s: %s)" % (type(e).__name__, e))
+        return 2, giudizio
+    if not prima or not dopo:
+        righe.append("⛔ FERMO: nessuna casella letta (base %d, PR %d): il confronto non "
+                     "misurerebbe niente (S1)" % (len(prima), len(dopo)))
+        return 2, giudizio
+    esito = confronta(prima, dopo)
+    giudizio.update(esito)
+    if riesegui and esito["da_rifare"]:
+        comandi = sorted({v["comando"] for v in esito["da_rifare"]})
+        esiti = _rifai(comandi, radice)
+        riletti = stati_dell_albero(radice)
+        for v in esito["da_rifare"]:
+            uscita, coda = esiti[v["comando"]]
+            ora = riletti.get(v["chiave"]) or {}
+            if uscita == 0 and ora.get("spuntata"):
+                giudizio["rifatte"].append(v)
+            else:
+                giudizio["rossi"].append(dict(v, perche="la PR la scrive spuntata, rifatta in "
+                                                        "CI no: uscita %s, %s\n%s"
+                                                        % (uscita, ora.get("motivo", "?"), coda)))
+    n_prima = sum(1 for v in prima.values() if v["spuntata"])
+    n_dopo = sum(1 for v in dopo.values() if v["spuntata"])
+    righe.append("caselle spuntate: su master %d · nella PR %d · rosse %d · dichiarate %d · "
+                 "da rifare in CI %d · rifatte e confermate %d%s"
+                 % (n_prima, n_dopo, len(giudizio["rossi"]), len(giudizio["dichiarati"]),
+                    len(giudizio["da_rifare"]), len(giudizio["rifatte"]),
+                    "" if riesegui else " (senza --riesegui: non rifatte)"))
+    for v in giudizio["rossi"]:
+        righe.append("  ⛔ ROSSA  blocco %d  %s\n      %s\n      si rimisura: %s"
+                     % (v["blocco"], v["testo"][:110], v["perche"][:900], v["comando"] or "?"))
+    for v in giudizio["dichiarati"]:
+        righe.append("  ⚠️  DICHIARATA  blocco %d  %s -- %s"
+                     % (v["blocco"], v["testo"][:90], v["perche"]))
+    for v in giudizio["rifatte"]:
+        righe.append("  ✅ RIFATTA IN CI  blocco %d  %s" % (v["blocco"], v["testo"][:110]))
+    righe.append("⛔ COSA QUESTO CONTROLLO NON GUARDA (D18 punto 3)")
+    righe.extend("   · %s" % r for r in NON_GUARDA_CRICCHETTO)
+    uscita = 1 if giudizio["rossi"] else 0
+    righe.append("VERDETTO: %s" % ("✅ nessuna casella persa" if uscita == 0 else
+                                   "⛔ la PR fa perdere caselle: si rimisurano NELLA STESSA PR"))
+    return uscita, giudizio
+
+
 def stampa(solo=None):
     dati = leggi()
     ora = commit_attuale()
@@ -452,7 +689,20 @@ def main(argv=None):
                    help="stampa solo il blocco indicato (es. --blocco 1)")
     p.add_argument("--rimisura", action="store_true",
                    help="elenca gli attrezzi da rilanciare per le caselle SCADUTE")
+    p.add_argument("--cricchetto", metavar="BASE", default=None,
+                   help="ROSSO se una casella spuntata su BASE non lo e' piu' qui (il gate)")
+    p.add_argument("--riesegui", action="store_true",
+                   help="col --cricchetto: rifa' gli attrezzi delle righe scritte dalla PR")
     argomenti = p.parse_args(list(argv if argv is not None else sys.argv[1:]))
+    if argomenti.cricchetto:
+        print("=" * 78)
+        print("🔒 IL CRICCHETTO DELLE CASELLE — base %s (decisione del metodo, 8/10)"
+              % argomenti.cricchetto)
+        print("=" * 78)
+        uscita, giudizio = cricchetto(argomenti.cricchetto, riesegui=argomenti.riesegui)
+        for r in giudizio["righe"]:
+            print(r)
+        return uscita
     if argomenti.rimisura:
         # ⛔ ELENCA, NON ESEGUE. Fra questi comandi ci sono giri di mutazione da 60 e da 600
         #    minuti: lanciarli «per comodita'» da un attrezzo di lettura sarebbe un gesto

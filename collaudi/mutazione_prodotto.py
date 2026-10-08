@@ -2192,6 +2192,11 @@ def verdetto_modulo(esiti, rinunce, parziale=False):
                       % len(basi_rosse))
     if assenti:
         motivi.append("%d moduli ASSENTI: zero misure, non zero problemi" % len(assenti))
+    # Solo il modo --diff lo produce: un file cambiato che non si analizza non e' giudicato.
+    illeggibili = [e for e in esiti if e["verdetto"] == "non_analizzabile"]
+    if illeggibili:
+        motivi.append("%d file NON ANALIZZABILI: nessun punto generato, nessun giudizio"
+                      % len(illeggibili))
     # ⛔ UN «UCCISO» CHE NON SI RI-CONFERMA E' ROSSO, E «--parziale» NON LO CONDONA: non e'
     #    un punto che il giro non ha guardato, e' un punto che il giro credeva di aver
     #    coperto. Un falso «ucciso» e' peggio di un sopravvissuto, perche' non grida mai.
@@ -2543,11 +2548,15 @@ if __name__ == "__main__" and "--diff" in sys.argv:
     # un elenco scritto a mano. La domanda diventa quella giusta: «la riga che ho appena
     # scritto, se fosse sbagliata, se ne accorgerebbe qualcuno?».
     _i = sys.argv.index("--diff")
-    _base = sys.argv[_i + 1] if len(sys.argv) > _i + 1 else "HEAD~1"
+    _base = (sys.argv[_i + 1] if len(sys.argv) > _i + 1 and not sys.argv[_i + 1].startswith("--")
+             else "HEAD~1")
+    # Il tetto si DICHIARA da fuori (in CI: job `caselle`): i punti oltre il tetto non sono
+    # provati, e qui sotto il verdetto li conta rossi -- tagliare e' una scelta visibile.
+    _tetto = int(sys.argv[sys.argv.index("--tetto") + 1]) if "--tetto" in sys.argv else 40
     print("=" * 90)
-    print("MUTANTI GENERATI SUL DIFF  (base: %s)" % _base)
+    print("MUTANTI GENERATI SUL DIFF  (base: %s · tetto: %d)" % (_base, _tetto))
     print("=" * 90)
-    _esiti, _rinunce = giro_sul_diff(_base)
+    _esiti, _rinunce = giro_sul_diff(_base, tetto=_tetto)
     _sopr = [e for e in _esiti if e["verdetto"] == "sopravvissuto"]
     _scop = [e for e in _esiti if e["verdetto"] == "scoperto"]
     for e in _esiti:
@@ -2575,10 +2584,24 @@ if __name__ == "__main__" and "--diff" in sys.argv:
     for e in _sopr + _scop:
         print("::error title=Riga NON SORVEGLIATA in %s::riga %s -- %s | %s"
               % (e["file"], e["riga"], e["danno"], e.get("nota", "")))
-    if _sopr or _scop:
-        print("\nQueste righe sono state cambiate e NESSUN test si accorgerebbe se fossero "
-              "sbagliate.")
-        sys.exit(1)
+    # ⛔ L'USCITA LA DECIDE LO STESSO VERDETTO DI `--modulo` (8/10/2026). Fino a quel giorno
+    #    qui contavano solo sopravvissuti e scoperti: un diff con punti oltre il tetto, a base
+    #    rossa o coi test che non finivano usciva 0 -- un verde che non aveva guardato, e il
+    #    passo che il gate stava per aspettare. Guardia:
+    #    `test_pipeline_ci.TestLaMisuraSegueIlCodice.test_IL_DIFF_ESCE_ROSSO_ANCHE_SE_HA_LASCIATO_PUNTI_FUORI`.
+    _uscita, _motivi = verdetto_modulo(_esiti, _rinunce)
+    if not _esiti and not _rinunce["oltre_il_tetto"]:
+        print("\nNessun punto di mutazione sulle righe di produzione cambiate rispetto a %s "
+              "(nessuna riga, o righe senza punti): niente da giudicare." % _base)
+    if _uscita:
+        print("\nVERDETTO: ROSSO -- %s" % " · ".join(_motivi))
+        if _rinunce["oltre_il_tetto"]:
+            print("(nel modo --diff non c'e' --parziale: si divide la PR, oppure si alza "
+                  "--tetto dove lo si lancia, dichiarandolo)")
+        if _sopr or _scop:
+            print("Queste righe sono state cambiate e NESSUN test si accorgerebbe se fossero "
+                  "sbagliate.")
+        sys.exit(_uscita)
     print("\nOgni riga cambiata e' sorvegliata: un guasto li' verrebbe visto.")
     sys.exit(0)
 

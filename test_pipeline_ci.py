@@ -1286,9 +1286,9 @@ class TestNeedsDelGateCompleto(unittest.TestCase):
         leggere e tornasse una lista vuota, i due confronti dinamici qui sotto
         potrebbero passare a vuoto. Questa lista scritta a mano lo impedisce."""
         self.assertEqual(sorted(self.bloccanti),
-                         ["accessibilita", "atheris", "browser", "copertura", "full-suite",
-                          "full-suite-311", "immagine", "money-smoke", "mutazione",
-                          "qualita", "w3c"],
+                         ["accessibilita", "atheris", "browser", "caselle", "copertura",
+                          "full-suite", "full-suite-311", "immagine", "money-smoke",
+                          "mutazione", "qualita", "w3c"],
                          "se hai aggiunto un job BLOCCANTE devi aggiornare questa "
                          "lista di proposito, dopo esserti accertato che sia anche "
                          "nei needs del gate: e' il punto in cui la decisione si "
@@ -14685,6 +14685,258 @@ class TestLEsameDellaRiconciliazioneNonPuoBARARE(_GuardieSugliAttrezziDelLavoro)
         uscita = esame.main(["--autoprova"])
         self.assertEqual(uscita, 0,
                          "l'autoprova non vede piu' il proprio guasto (cron spento)")
+
+
+class TestLaMisuraSegueIlCodice(unittest.TestCase):
+    """⛔ DECISIONE DEL METODO (2026-10-08, RIPRENDI_QUI «CONSEGNE AGGIORNATE A: 920e85d»), regola 2:
+    «le caselle che possono girare in CI si collegano al `gate` sul pezzo cambiato; una PR che
+    fa scadere una casella non si unisce se non la rimisura nella stessa PR».
+
+    PERCHE' ESISTE, misurato e non raccontato: l'8/10 `collaudi/piano.py` contava 21 caselle su
+    25 da fare SOLO SCADUTE -- non rotte, vecchie: le unioni cambiavano il codice dei blocchi e
+    nessuno rimisurava, perche' rimisurare era un gesto a mano (`rimisura.py`, 16/9) e un
+    obbligo affidato alla buona volonta' si rompe di nuovo (D22). Qui il gesto diventa del gate.
+
+    Tre pezzi, ognuno con la sua prova nelle due direzioni (D18 punto 2):
+      1. il CRICCHETTO: una casella spuntata su master che la PR fa diventare vuota ferma
+         l'unione, se la CI la sa rimisurare; quelle che leggono la produzione, Stripe di
+         prova o materiale preso sul server, e la mutazione intera, si DICHIARANO (restano a
+         mano, una volta, alla chiusura del blocco: lo dice la decisione);
+      2. la CI RIFA ogni misura che la PR ha scritto nella scheda: «NESSUNO SCRIVE scheda.json
+         A MANO» smette di essere una frase e diventa un controllo;
+      3. il modo `--diff` del Giudice (le righe toccate, come Google: Petrovic, Ivankovic,
+         Fraser, Just, IEEE TSE 2021) esce ROSSO anche quando ha lasciato punti fuori, con
+         lo stesso verdetto di `--modulo`.
+
+    Il progetto in miniatura porta dentro lo `scheda.py` VERO, copiato: si prova il codice che
+    girera' in CI, non una sua imitazione.
+    """
+
+    A = "la casella che la CI sa rimisurare da sola"
+    B = "la casella che paga su Stripe di prova: si rimisura a mano alla chiusura del blocco"
+    C = "zero punti di mutazione scoperti sul modulo finto"
+    COMANDO_CI = "python collaudi/esame_finto.py --scrivi"
+    COMANDO_FUORI = "python collaudi/esame_orologi.py --scrivi"
+    COMANDO_MUTAZIONE = "python collaudi/mutazione_prodotto.py --modulo modulo_finto.py --minuti 1"
+
+    @staticmethod
+    def _scrivi(percorso, testo):
+        with io.open(percorso, "w", encoding="utf-8", newline="\n") as f:
+            f.write(testo)
+
+    @staticmethod
+    def _git(culla, *argomenti):
+        return subprocess.run(  # nosec B603 B607 - git con argomenti fissi, in una cartella di prova  # noqa: S603 S607
+            ["git", "-C", culla, "-c", "user.name=cricchetto",
+             "-c", "user.email=cricchetto@prova.invalid"] + list(argomenti),
+            capture_output=True, text=True, timeout=120)
+
+    def _fotografa(self, culla, messaggio):
+        """Un commit del progetto in miniatura: torna il suo identificativo."""
+        self._git(culla, "add", "-A")
+        p = self._git(culla, "commit", "-q", "-m", messaggio)
+        self.assertEqual(p.returncode, 0, "il commit di prova non si fa: %s" % p.stderr[-300:])
+        return self._git(culla, "rev-parse", "HEAD").stdout.strip()
+
+    def _esame_finto(self, culla, esito):
+        """L'attrezzo di una casella misurabile in CI: registra A con l'esito dato."""
+        self._scrivi(os.path.join(culla, "collaudi", "esame_finto.py"),
+                     "import os\nimport sys\n"
+                     "sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))\n"
+                     "import scheda\n"
+                     "scheda.registra(%r, esito=%r, denominatore=3, comando=%r, ordine=1)\n"
+                     "sys.exit(0 if %r else 1)\n" % (self.A, esito, self.COMANDO_CI, esito))
+
+    def _scheda_di(self, culla):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "_scheda_cricchetto_%s" % os.path.basename(culla),
+            os.path.join(culla, "collaudi", "scheda.py"))
+        modulo = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(modulo)
+        return modulo
+
+    def _albero(self):
+        """Un blocco, un modulo, tre caselle (una per ogni modo di rimisurarsi), tutte spuntate
+        sul commit di base. Torna (cartella, scheda di quella cartella, commit di base)."""
+        culla = tempfile.mkdtemp(prefix="cricchetto_")
+        self.addCleanup(shutil.rmtree, culla, True)
+        os.makedirs(os.path.join(culla, "collaudi"))
+        shutil.copy(os.path.join(QUI, "collaudi", "scheda.py"),
+                    os.path.join(culla, "collaudi", "scheda.py"))
+        self._scrivi(os.path.join(culla, "collaudi", "piano.py"),
+                     "BLOCCHI = [{'ordine': 1, 'nome': 'PROVA', 'moduli': ['modulo_finto'],\n"
+                     "            'finito_quando': [%r, %r, %r]}]\n" % (self.A, self.B, self.C))
+        self._scrivi(os.path.join(culla, "modulo_finto.py"), "def somma(a, b):\n    return a + b\n")
+        self._esame_finto(culla, esito=True)
+        self.assertEqual(self._git(culla, "init", "-q").returncode, 0, "git init non riesce")
+        s = self._scheda_di(culla)
+        for testo, comando in ((self.A, self.COMANDO_CI), (self.B, self.COMANDO_FUORI),
+                               (self.C, self.COMANDO_MUTAZIONE)):
+            s.registra(testo, esito=True, denominatore=3, comando=comando, ordine=1)
+        base = self._fotografa(culla, "base: tre caselle spuntate")
+        self.assertEqual(sum(1 for v in s.stati_dell_albero(culla).values() if v["spuntata"]), 3,
+                         "la premessa manca: sul commit di base le tre caselle non sono "
+                         "spuntate, e senza premessa questa prova non e' verde, e' NON ESEGUITA (S7)")
+        return culla, s, base
+
+    def _cambia_il_modulo(self, culla):
+        self._scrivi(os.path.join(culla, "modulo_finto.py"), "def somma(a, b):\n    return a - b\n")
+
+    @staticmethod
+    def _testi(voci):
+        return sorted(v["testo"] for v in voci)
+
+    def test_UNA_PR_CHE_FA_SCADERE_UNA_CASELLA_MISURABILE_IN_CI_NON_SI_UNISCE(self):
+        culla, s, base = self._albero()
+        # (1) il SILENZIO: una PR che non tocca il codice del blocco non fa scadere niente
+        self._scrivi(os.path.join(culla, "LEGGIMI.txt"), "solo un documento\n")
+        self._fotografa(culla, "solo un documento")
+        uscita, giudizio = s.cricchetto(base)
+        self.assertEqual((uscita, giudizio["rossi"]), (0, []),
+                         "un documento non cambia il codice del blocco: il cricchetto deve "
+                         "tacere (ferrea 10). Righe: %s" % giudizio["righe"])
+        # (2) il GRIDO: il modulo cambia e nessuno rimisura
+        self._cambia_il_modulo(culla)
+        self._fotografa(culla, "il modulo cambia, nessuno rimisura")
+        uscita, giudizio = s.cricchetto(base)
+        self.assertEqual(uscita, 1, "una casella spuntata su master scade nella PR e la CI la "
+                                    "sa rimisurare: l'unione deve fermarsi")
+        self.assertEqual(self._testi(giudizio["rossi"]), [self.A],
+                         "rossa deve essere SOLO la casella misurabile in CI: %s" % giudizio["rossi"])
+        self.assertTrue(any(self.COMANDO_CI in r for r in giudizio["righe"]),
+                        "il rosso non dice COME si rimisura: chi legge non sa cosa fare")
+        # le altre due si DICHIARANO: a mano (Stripe di prova) e mutazione intera, alla chiusura
+        self.assertEqual(self._testi(giudizio["dichiarati"]), sorted([self.B, self.C]),
+                         "le caselle che la CI non puo' rimisurare devono comparire per nome, "
+                         "non sparire (D18 punto 3): %s" % giudizio["dichiarati"])
+        # (3) la PR rimisura: torna verde
+        s.registra(self.A, esito=True, denominatore=3, comando=self.COMANDO_CI, ordine=1)
+        self._fotografa(culla, "la PR rimisura la casella")
+        uscita, giudizio = s.cricchetto(base)
+        self.assertEqual((uscita, giudizio["rossi"]), (0, []),
+                         "rimisurata nella stessa PR, la casella non deve piu' fermare niente")
+
+    def test_UNA_CASELLA_RIMISURATA_E_TROVATA_ROSSA_FERMA_ANCHE_SE_SI_RIMISURA_A_MANO(self):
+        culla, s, base = self._albero()
+        self._cambia_il_modulo(culla)
+        s.registra(self.A, esito=True, denominatore=3, comando=self.COMANDO_CI, ordine=1)
+        s.registra(self.B, esito=False, denominatore=3, comando=self.COMANDO_FUORI, ordine=1,
+                   motivo="la penale non torna")
+        self._fotografa(culla, "rimisurata a mano: rossa")
+        uscita, giudizio = s.cricchetto(base)
+        self.assertEqual(uscita, 1, "«a mano» copre una misura che manca, mai un rosso trovato")
+        self.assertEqual(self._testi(giudizio["rossi"]), [self.B])
+
+    def test_LA_CI_RIFA_LE_MISURE_CHE_LA_PR_HA_SCRITTO(self):
+        culla, s, base = self._albero()
+        self._cambia_il_modulo(culla)
+        # la PR dichiara A spuntata, ma il suo attrezzo, rifatto, dice di no
+        s.registra(self.A, esito=True, denominatore=3, comando=self.COMANDO_CI, ordine=1)
+        self._esame_finto(culla, esito=False)
+        self._fotografa(culla, "una spunta che l'attrezzo non conferma")
+        uscita, giudizio = s.cricchetto(base)
+        self.assertEqual(uscita, 0, "senza --riesegui il cricchetto guarda solo la scheda: "
+                                    "la prova seguente e' quella che conta")
+        uscita, giudizio = s.cricchetto(base, riesegui=True)
+        self.assertEqual(uscita, 1, "la CI ha rifatto la misura scritta dalla PR, l'attrezzo "
+                                    "dice ROSSO e il gate resta verde: la scheda si scriverebbe "
+                                    "a mano senza che nessuno se ne accorga")
+        self.assertEqual(self._testi(giudizio["rossi"]), [self.A])
+        # e l'altra direzione: l'attrezzo conferma -> verde
+        self._esame_finto(culla, esito=True)
+        s.registra(self.A, esito=True, denominatore=3, comando=self.COMANDO_CI, ordine=1)
+        self._fotografa(culla, "l'attrezzo conferma")
+        uscita, giudizio = s.cricchetto(base, riesegui=True)
+        self.assertEqual((uscita, giudizio["rossi"]), (0, []),
+                         "rifatta in CI e confermata: deve passare. Righe: %s" % giudizio["righe"])
+        self.assertEqual(self._testi(giudizio["rifatte"]), [self.A],
+                         "la misura rifatta deve comparire nel giudizio (il denominatore)")
+
+    def test_SENZA_UNA_BASE_LEGGIBILE_IL_CRICCHETTO_SI_FERMA_E_NON_DICE_VERDE(self):
+        culla, s, _base = self._albero()
+        uscita, giudizio = s.cricchetto("ffffffffffffffffffffffffffffffffffffffff")
+        self.assertEqual(uscita, 2, "una base che non si legge non e' «nessuna casella scaduta»: "
+                                    "e' nessuna misura (D18 punto 1, sbaglio S1)")
+
+    def test_COME_SI_RIMISURA_OGNI_COMANDO_E_FUORI_CI_NON_SI_ALLARGA(self):
+        import importlib
+        s = importlib.import_module("collaudi.scheda")
+        self.assertEqual(s.come_si_rimisura(
+            "python collaudi/esame_backup.py --file <db.gz> --scrivi"), "a_mano")
+        self.assertEqual(s.come_si_rimisura(
+            "python collaudi/mutazione_prodotto.py --modulo x.py --minuti 9"), "mutazione")
+        self.assertEqual(s.come_si_rimisura("python collaudi/esame_gare.py --scrivi"), "ci")
+        self.assertTrue(s.FUORI_CI, "l'elenco di cio' che la CI non puo' misurare e' vuoto")
+        comandi = {str(r.get("comando")) for r in s.leggi().values() if isinstance(r, dict)}
+        segni = re.compile(r"urlopen\(|\[\"ssh\"|sk_test|STRIPE_SECRET_KEY")
+        for comando, motivo in sorted(s.FUORI_CI.items()):
+            with self.subTest(comando=comando):
+                self.assertEqual(s.come_si_rimisura(comando), "fuori_ci")
+                self.assertTrue(motivo.strip(), "una voce fuori dalla CI senza il suo perche'")
+                self.assertIn(comando, comandi,
+                              "FUORI_CI nomina un comando che nessuna casella usa: un errore "
+                              "di battitura lascerebbe il comando vero DENTRO la CI")
+                attrezzo = os.path.join(QUI, comando.split()[1])
+                with io.open(attrezzo, encoding="utf-8") as f:
+                    trovato = segni.search(f.read())
+                self.assertIsNotNone(
+                    trovato, "%s e' dichiarato fuori dalla CI ma non apre la rete, non paga "
+                             "su Stripe e non entra nel server: cosi' si toglie dal gate un "
+                             "esame che la CI sa fare" % comando)
+
+    def test_IL_GATE_ASPETTA_LE_CASELLE_E_LA_MUTAZIONE_SUL_DIFF(self):
+        doc = _doc_ci()
+        job = doc["jobs"].get("caselle")
+        self.assertIsNotNone(job, "manca il job `caselle`: la misura non segue il codice")
+        self.assertIn("caselle", doc["jobs"][GATE]["needs"],
+                      "il job `caselle` gira ma il gate non lo aspetta: il suo rosso non "
+                      "fermerebbe nessuna unione")
+        passi = job.get("steps") or []
+        comandi = "\n".join(str(p.get("run", "")) for p in passi)
+        self.assertIn("python collaudi/scheda.py --cricchetto HEAD^1 --riesegui", comandi)
+        self.assertRegex(comandi,
+                         r"python collaudi/mutazione_prodotto\.py --diff HEAD\^1 --tetto \d+")
+        checkout = [p for p in passi if str(p.get("uses", "")).startswith("actions/checkout")]
+        self.assertTrue(checkout, "il job non prende il codice")
+        profondita = (checkout[0].get("with") or {}).get("fetch-depth")
+        self.assertTrue(profondita == 0 or (isinstance(profondita, int) and profondita >= 2),
+                        "senza almeno due commit HEAD^1 non esiste: niente base, niente "
+                        "confronto (fetch-depth = %r)" % (profondita,))
+
+    def test_IL_DIFF_ESCE_ROSSO_ANCHE_SE_HA_LASCIATO_PUNTI_FUORI(self):
+        import ast
+        import importlib
+        giudice = importlib.import_module("collaudi.mutazione_prodotto")
+        with io.open(os.path.join(QUI, "collaudi", "mutazione_prodotto.py"), encoding="utf-8") as f:
+            albero = ast.parse(f.read())
+        blocchi = [n for n in albero.body
+                   if isinstance(n, ast.If) and "'--diff'" in ast.dump(n.test)]
+        self.assertEqual(len(blocchi), 1, "il modo --diff del Giudice non si trova")
+        chiamate = [n for n in ast.walk(blocchi[0])
+                    if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)]
+        self.assertIn("verdetto_modulo", {c.func.id for c in chiamate},
+                      "il modo --diff decide l'uscita da se': fino all'8/10 usciva 0 con punti "
+                      "oltre il tetto, a base rossa o non finiti -- un verde che non ha guardato")
+        giro = [c for c in chiamate if c.func.id == "giro_sul_diff"]
+        self.assertTrue(giro and (len(giro[0].args) >= 2
+                                  or any(k.arg == "tetto" for k in giro[0].keywords)),
+                        "il tetto del modo --diff non arriva al giro: in CI si dichiara")
+        vuoto = {"oltre_il_tetto": 0, "senza_sorveglianti": 0, "generatore": {},
+                 "senza_dedicato": ["fase_x.py"]}
+        ucciso = {"file": "fase_x.py", "riga": 1, "verdetto": "ucciso", "danno": "x"}
+        equivalente = {"file": "fase_x.py", "riga": 2, "verdetto": "equivalente", "danno": "y"}
+        self.assertEqual(giudice.verdetto_modulo([ucciso, equivalente], dict(vuoto)), (0, []),
+                         "un diff tutto ucciso deve passare (ferrea 10)")
+        for nome, esiti, rinunce in (
+                ("non analizzabile", [{"file": "fase_x.py", "riga": 3,
+                                       "verdetto": "non_analizzabile", "danno": "z"}], vuoto),
+                ("oltre il tetto", [ucciso], dict(vuoto, oltre_il_tetto=4)),
+                ("base rossa", [dict(ucciso, verdetto="base_rossa")], vuoto),
+                ("non finito", [dict(ucciso, verdetto="non_determinabile")], vuoto)):
+            with self.subTest(nome=nome):
+                self.assertEqual(giudice.verdetto_modulo(esiti, dict(rinunce))[0], 1,
+                                 "un punto %s non e' un punto sano" % nome)
 
 
 if __name__ == "__main__":
