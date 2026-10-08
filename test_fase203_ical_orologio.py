@@ -7,11 +7,21 @@ INIETTATI (recente / ok / errore), la riga di registro con l'ora esatta e SENZA 
 un feed rotto per un'ora che diventa anomalia, il giro periodico, la rilettura prima della
 conferma (fail-open sulla rete), l'archivio accanto all'inventario, e «mai solleva».
 """
+import contextlib
+import email.message
+import io
+import ipaddress
 import os
 import shutil
+import socket
 import tempfile
+import threading
 import unittest
+import urllib.request
+import urllib.response
+from unittest import mock
 
+import fase203_ical_orologio as f203
 from fase58_channel_manager import crea_channel_manager
 from fase203_ical_orologio import (
     ERRORI_PER_ALLARME, MARCA, MARCA_ROTTO, MAX_BYTES, RILETTURA_CONFERMA_SEC, RILETTURA_SEC,
@@ -463,6 +473,189 @@ class TestLeGuardieDeiPuntiScoperti(unittest.TestCase):
         t.start()
         t.join()
         self.assertEqual(esiti, [True, 1])
+
+
+class _PostoInterno:
+    """Una porta su 127.0.0.1 che fa da servizio INTERNO: conta chi ci entra e chiude."""
+
+    def __init__(self):
+        self.s = socket.socket()
+        self.s.bind(("127.0.0.1", 0))
+        self.s.listen(8)
+        self.porta = self.s.getsockname()[1]
+        self.entrati = 0
+        threading.Thread(target=self._gira, daemon=True).start()
+
+    def _gira(self):
+        while True:
+            try:
+                c, _ = self.s.accept()
+            except OSError:                              # chiuso da chiudi()
+                return
+            self.entrati += 1
+            c.close()
+
+    def chiudi(self):
+        with contextlib.suppress(OSError):
+            self.s.shutdown(socket.SHUT_RDWR)
+        self.s.close()
+
+
+class TestIlFeedNonPortaIlServerDentroCasa(unittest.TestCase):
+    """🏠 V3 (busta 6, 2026-10-05; MEDIA, confermato da GML nel Compito 52): SSRF DAL FEED iCal.
+
+    **Il fatto.** Un host qualunque (la registrazione e' libera) salva l'indirizzo del suo
+    calendario esterno, e ogni 15 minuti -- e prima di ogni conferma -- e' il NOSTRO server
+    ad andarlo a prendere. `scarica` controllava solo «https», poi `urlopen`: nessun
+    controllo su DOVE porta l'indirizzo, e i rinvii (redirect) seguiti in automatico, anche
+    verso «http». Cosi' il server si poteva mandare a bussare a servizi interni (la rete dei
+    contenitori, l'indirizzo dei metadati del fornitore, le porte della macchina stessa), e
+    l'errore scritto nell'esito dice se la porta c'era.
+
+    **Il contratto.** Il server si collega SOLO a indirizzi pubblici; lo controlla nel momento
+    in cui si collega, sull'indirizzo a cui si collega davvero (non sul nome, che una seconda
+    risoluzione puo' cambiare: DNS rebinding); e i rinvii passano dallo stesso controllo, e
+    mai verso «http». Fonte (D25): OWASP, «Server-Side Request Forgery Prevention Cheat
+    Sheet» («Validate the resolved destination IP addresses [...] then ensure the HTTP client
+    connects only to validated addresses. A second, unchecked DNS lookup between validation
+    and connection can bypass these checks»; «Apply the destination policy to retries and
+    fallback connections as well»; elenco minimo da bloccare: 127.0.0.0/8, 0.0.0.0/8, ::1,
+    10/8, 172.16/12, 192.168/16, fc00::/7, fe80::/10, multicast).
+    """
+
+    def setUp(self):
+        self.posto = _PostoInterno()
+        self.addCleanup(self.posto.chiudi)
+        self._rete_prec = f203.RETE
+        f203.RETE = None                                 # la strada VERA: urllib
+        self.addCleanup(setattr, f203, "RETE", self._rete_prec)
+
+    def _nessuno_e_entrato(self, perche):
+        self.assertEqual(0, self.posto.entrati,
+                         "il server ha bussato a un servizio interno (%s): e' l'SSRF" % perche)
+
+    def test_UN_INDIRIZZO_INTERNO_NON_SI_TOCCA(self):
+        with self.assertRaises(OSError):
+            scarica("https://127.0.0.1:%d/feed.ics" % self.posto.porta, timeout=2)
+        self._nessuno_e_entrato("indirizzo diretto")
+
+    def test_UN_NOME_CHE_PORTA_DENTRO_NON_SI_TOCCA(self):
+        with self.assertRaises(OSError):
+            scarica("https://localhost:%d/feed.ics" % self.posto.porta, timeout=2)
+        self._nessuno_e_entrato("localhost")
+
+    def test_BASTA_UN_INDIRIZZO_INTERNO_FRA_QUELLI_DEL_NOME(self):
+        porta = self.posto.porta
+
+        def risposte(host, *_a, **_k):
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", porta)),
+                    (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", porta))]
+
+        with mock.patch.object(socket, "getaddrinfo", risposte):
+            with self.assertRaises(OSError):
+                scarica("https://feed.esempio.it:%d/x.ics" % porta, timeout=2)
+        self._nessuno_e_entrato("un nome con un indirizzo pubblico e uno interno")
+
+    def test_SI_COLLEGA_ALL_INDIRIZZO_CONTROLLATO_NON_AL_NOME(self):
+        """DNS rebinding: il nome risponde «pubblico» al controllo e «interno» alla seconda
+        domanda. Chi controlla il nome e poi si collega al NOME entra; chi si collega
+        all'indirizzo controllato no. Nessuna rete vera: un collegamento verso un indirizzo
+        che non e' il posto interno si ferma e si annota."""
+        porta, domande, tentati = self.posto.porta, [], []
+        vera_connessione = socket.create_connection
+
+        def risolvi(host, *_a, **_k):
+            if host in ("8.8.8.8", "127.0.0.1"):
+                ip = host
+            else:
+                domande.append(host)
+                ip = "8.8.8.8" if len(domande) == 1 else "127.0.0.1"
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (ip, porta))]
+
+        def collega(indirizzo, *a, **k):
+            ip = risolvi(indirizzo[0])[0][4][0]          # un nome si risolve ADESSO
+            if ip != "127.0.0.1":
+                tentati.append(ip)
+                raise OSError("fermato dal banco: nessuna rete vera")
+            return vera_connessione((ip, indirizzo[1]), *a, **k)
+
+        with mock.patch.object(socket, "getaddrinfo", risolvi), \
+                mock.patch.object(socket, "create_connection", collega):
+            with self.assertRaises(OSError):
+                scarica("https://feed.esempio.it:%d/x.ics" % porta, timeout=2)
+        self._nessuno_e_entrato("la seconda risposta del nome")
+        self.assertEqual(["8.8.8.8"], tentati,
+                         "il collegamento doveva andare all'indirizzo pubblico controllato")
+
+    def _con_risposte(self, ips):
+        """`scarica` con un DNS che risponde `ips` e una rete finta che annota e rifiuta."""
+        tentati = []
+
+        def risolvi(host, porta, *_a, **_k):
+            return [(socket.AF_INET6 if ":" in ip else socket.AF_INET, socket.SOCK_STREAM, 6,
+                     "", (ip, porta)) for ip in ips]
+
+        def collega(indirizzo, *_a, **_k):
+            tentati.append(indirizzo[0])
+            raise OSError("fermato dal banco: nessuna rete vera")
+
+        with mock.patch.object(socket, "getaddrinfo", risolvi), \
+                mock.patch.object(socket, "create_connection", collega):
+            with self.assertRaises(OSError):
+                scarica("https://feed.esempio.it/x.ics", timeout=2)
+        return tentati
+
+    def test_SE_IL_PRIMO_INDIRIZZO_NON_RISPONDE_SI_PROVA_IL_SECONDO(self):
+        """Il contenitore puo' non avere IPv6: il nome risponde prima IPv6 e poi IPv4, e il
+        feed deve arrivare lo stesso -- passando sempre e solo da indirizzi controllati."""
+        self.assertEqual(["2606:4700:4700::1111", "8.8.8.8"],
+                         self._con_risposte(["2606:4700:4700::1111", "8.8.8.8"]))
+
+    def test_UNA_RISPOSTA_VUOTA_DEL_DNS_NON_SI_COLLEGA_A_NIENTE(self):
+        """D19: `getaddrinfo` di solito solleva invece di rispondere vuoto; lo stato si
+        costruisce a mano, e deve finire in un rifiuto, non in un collegamento."""
+        self.assertEqual([], self._con_risposte([]))
+        self._nessuno_e_entrato("risposta vuota")
+
+    def _rinvio_verso(self, destinazione):
+        """Il feed esterno risponde 302 verso `destinazione`; tutto il resto e' la rete vera
+        (che qui e' solo il posto interno)."""
+        vero_do_open = urllib.request.AbstractHTTPHandler.do_open
+
+        def do_open(gestore, classe, req, **kw):
+            if req.host.startswith("feed.esempio.it"):
+                intestazioni = email.message.Message()
+                intestazioni["Location"] = destinazione
+                r = urllib.response.addinfourl(io.BytesIO(b""), intestazioni, req.full_url, 302)
+                r.msg = "Found"
+                return r
+            return vero_do_open(gestore, classe, req, **kw)
+
+        with mock.patch.object(urllib.request.AbstractHTTPHandler, "do_open", do_open):
+            with self.assertRaises(OSError):
+                scarica("https://feed.esempio.it/x.ics", timeout=2)
+
+    def test_UN_RINVIO_VERSO_HTTP_INTERNO_NON_SI_SEGUE(self):
+        self._rinvio_verso("http://127.0.0.1:%d/latest/meta-data/" % self.posto.porta)
+        self._nessuno_e_entrato("rinvio verso http")
+
+    def test_UN_RINVIO_VERSO_HTTPS_INTERNO_NON_SI_SEGUE(self):
+        self._rinvio_verso("https://127.0.0.1:%d/feed.ics" % self.posto.porta)
+        self._nessuno_e_entrato("rinvio verso https interno")
+
+    def test_QUALI_INDIRIZZI_SONO_PUBBLICI(self):
+        for ip in ("8.8.8.8", "151.101.1.69", "2606:4700:4700::1111", "::ffff:8.8.8.8"):
+            with self.subTest(ip=ip):
+                self.assertTrue(f203._indirizzo_pubblico(ip))
+        # l'indirizzo «nessuno» si scrive dal suo numero: su Linux collegarsi li' porta alla
+        # macchina stessa, e la stringa letterale bandit la legge come «ascolto su tutto» (B104)
+        nessuno = str(ipaddress.IPv4Address(0))
+        for ip in ("127.0.0.1", nessuno, "0.1.2.3", "10.1.2.3", "172.16.0.5", "192.168.1.1",
+                   "169.254.169.254", "100.64.0.1", "224.0.0.1", "255.255.255.255", "::1",
+                   "fc00::1", "fe80::1%eth0", "ff02::1", "::ffff:127.0.0.1",
+                   "::ffff:10.0.0.1", "non-un-indirizzo", ""):
+            with self.subTest(ip=ip):
+                self.assertFalse(f203._indirizzo_pubblico(ip))
 
 
 if __name__ == "__main__":

@@ -439,17 +439,17 @@
  "555972b586e3": {
   "blocco": 2,
   "comando": "python collaudi/esame_feed_due_versi.py --scrivi",
-  "commit": "0a70cd8",
+  "commit": "2d2de61",
   "condizione": "il feed esterno vale nei due versi: una notte chiusa da un feed si riapre quando sparisce da QUEL feed (e da nessun altro), con lo stato di prima, e solo se l'host non l'ha toccata nel frattempo; i blocchi esterni sono oggetti con origine, non sovrascritture dell'inventario; l'eco del nostro calendario riesportato dall'OTA non chiude le nostre notti; un feed che passa da N eventi a zero non riapre niente e diventa un'anomalia",
   "denominatore": 14,
   "esito": true,
-  "impronta": "0f9afc4223b1",
+  "impronta": "434ea1be62ce",
   "impronte_moduli": {
    "fase111_cancellazione": "cdaa0ff5cea8",
    "fase135_ical_bidirezionale": "7400c7b99498",
    "fase152_notifiche_prenotazione": "d43723ad39d6",
    "fase187_fuso_orario": "831d20429805",
-   "fase203_ical_orologio": "a6fd5a3dde7a",
+   "fase203_ical_orologio": "ea15acf5d4f9",
    "fase34_prenotazioni": "87f010d9f3cd",
    "fase36_booking_api": "519033218af6",
    "fase58_channel_manager": "cbd59916c97c",
@@ -460,7 +460,7 @@
    "fase82_ical_sync": "1402326ece2b"
   },
   "motivo": "",
-  "quando": "2026-09-30T12:52:42"
+  "quando": "2026-10-08T17:13:10"
  },
  "5c447a0ee514": {
   "blocco": 5,
@@ -1119,17 +1119,17 @@
  "ec84faaea398": {
   "blocco": 2,
   "comando": "python collaudi/esame_prenotazioni.py --scrivi",
-  "commit": "0a70cd8",
+  "commit": "2d2de61",
   "condizione": "la macchina a stati copre cancellazioni, modifiche, no-show e sovra-affitto",
   "denominatore": 34,
   "esito": true,
-  "impronta": "0f9afc4223b1",
+  "impronta": "434ea1be62ce",
   "impronte_moduli": {
    "fase111_cancellazione": "cdaa0ff5cea8",
    "fase135_ical_bidirezionale": "7400c7b99498",
    "fase152_notifiche_prenotazione": "d43723ad39d6",
    "fase187_fuso_orario": "831d20429805",
-   "fase203_ical_orologio": "a6fd5a3dde7a",
+   "fase203_ical_orologio": "ea15acf5d4f9",
    "fase34_prenotazioni": "87f010d9f3cd",
    "fase36_booking_api": "519033218af6",
    "fase58_channel_manager": "cbd59916c97c",
@@ -1140,7 +1140,7 @@
    "fase82_ical_sync": "1402326ece2b"
   },
   "motivo": "",
-  "quando": "2026-09-30T12:55:54"
+  "quando": "2026-10-08T17:13:16"
  },
  "eec63adbaf5b": {
   "blocco": 3,
@@ -1167,17 +1167,17 @@
  "f10f35b6a7b3": {
   "blocco": 2,
   "comando": "python collaudi/esame_ical.py --scrivi",
-  "commit": "0a70cd8",
+  "commit": "2d2de61",
   "condizione": "iCal ha una difesa dal RITARDO 15 min-2 ore (oggi: zero, e' la finestra delle prenotazioni fantasma)",
   "denominatore": 24,
   "esito": true,
-  "impronta": "0f9afc4223b1",
+  "impronta": "434ea1be62ce",
   "impronte_moduli": {
    "fase111_cancellazione": "cdaa0ff5cea8",
    "fase135_ical_bidirezionale": "7400c7b99498",
    "fase152_notifiche_prenotazione": "d43723ad39d6",
    "fase187_fuso_orario": "831d20429805",
-   "fase203_ical_orologio": "a6fd5a3dde7a",
+   "fase203_ical_orologio": "ea15acf5d4f9",
    "fase34_prenotazioni": "87f010d9f3cd",
    "fase36_booking_api": "519033218af6",
    "fase58_channel_manager": "cbd59916c97c",
@@ -1188,7 +1188,7 @@
    "fase82_ical_sync": "1402326ece2b"
   },
   "motivo": "",
-  "quando": "2026-09-30T12:52:42"
+  "quando": "2026-10-08T17:12:53"
  },
  "f132bc4f619c": {
   "blocco": 10,
@@ -1204,17 +1204,17 @@
  "f5d22a937896": {
   "blocco": 2,
   "comando": "python collaudi/esame_gare.py --scrivi",
-  "commit": "0a70cd8",
+  "commit": "2d2de61",
   "condizione": "il blocco atomico regge sotto gara (misurato: 10 giri x 24 agenti, 1 conferma)",
   "denominatore": 51,
   "esito": true,
-  "impronta": "0f9afc4223b1",
+  "impronta": "434ea1be62ce",
   "impronte_moduli": {
    "fase111_cancellazione": "cdaa0ff5cea8",
    "fase135_ical_bidirezionale": "7400c7b99498",
    "fase152_notifiche_prenotazione": "d43723ad39d6",
    "fase187_fuso_orario": "831d20429805",
-   "fase203_ical_orologio": "a6fd5a3dde7a",
+   "fase203_ical_orologio": "ea15acf5d4f9",
    "fase34_prenotazioni": "87f010d9f3cd",
    "fase36_booking_api": "519033218af6",
    "fase58_channel_manager": "cbd59916c97c",
@@ -1225,7 +1225,7 @@
    "fase82_ical_sync": "1402326ece2b"
   },
   "motivo": "",
-  "quando": "2026-09-30T12:52:40"
+  "quando": "2026-10-08T17:13:10"
  },
  "fb42414c3b6b": {
   "blocco": 3,

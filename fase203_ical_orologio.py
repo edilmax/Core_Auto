@@ -38,8 +38,11 @@ from __future__ import annotations
 
 import datetime
 import hashlib
+import http.client
+import ipaddress
 import logging
 import os
+import socket
 import sqlite3
 import time
 import urllib.parse
@@ -116,10 +119,70 @@ def _senza_segreti(testo: str, url: str) -> str:
     return fuori[:160]
 
 
+def _indirizzo_pubblico(ip: Any) -> bool:
+    """True SOLO per un indirizzo pubblico. Fuori: interni, della macchina, dei metadati del
+    fornitore, condivisi, multicast, e gli IPv4 travestiti da IPv6 (`::ffff:127.0.0.1`)."""
+    try:
+        a = ipaddress.ip_address(str(ip))        # anche con la zona IPv6 (fe80::1%eth0)
+    except ValueError:
+        return False
+    if a.version == 6 and a.ipv4_mapped is not None:
+        a = a.ipv4_mapped
+    return a.is_global and not a.is_multicast
+
+
+def _collegamento_pubblico(indirizzo: Any, timeout: Any = None,
+                           source_address: Any = None) -> socket.socket:
+    """Prende il posto di `socket.create_connection` nella connessione HTTPS del feed: risolve
+    il nome UNA volta, pretende che OGNI indirizzo sia pubblico e si collega a quelli
+    controllati -- il nome resta per SNI e certificato. Cosi' una seconda risposta del DNS
+    (rebinding) non ha un secondo momento in cui entrare, e i rinvii passano di qui."""
+    host, porta = indirizzo[0], indirizzo[1]
+    ips = [r[4][0] for r in socket.getaddrinfo(host, porta, 0, socket.SOCK_STREAM)]
+    if not ips or not all(_indirizzo_pubblico(ip) for ip in ips):
+        raise OSError("feed rifiutato: %s non porta solo a indirizzi pubblici" % host)
+    for ip in ips[:-1]:
+        try:
+            return socket.create_connection((ip, porta), timeout, source_address)
+        except OSError:                          # IPv6 assente nel contenitore: il prossimo
+            continue
+    return socket.create_connection((ips[-1], porta), timeout, source_address)
+
+
+class _HTTPSSoloPubblico(http.client.HTTPSConnection):
+    def __init__(self, *a: Any, **kw: Any) -> None:
+        super().__init__(*a, **kw)
+        self._create_connection = _collegamento_pubblico
+
+
+class _GestoreHTTPSSoloPubblico(urllib.request.HTTPSHandler):
+    def https_open(self, req: Any) -> Any:
+        return self.do_open(_HTTPSSoloPubblico, req, context=self._context)
+
+
+def _apri(req: urllib.request.Request, timeout: float) -> Any:
+    """Un apritore che sa fare SOLO https verso indirizzi pubblici: senza il gestore di
+    «http», un rinvio verso http finisce in «unknown url type» invece di partire."""
+    apritore = urllib.request.OpenerDirector()
+    for gestore in (_GestoreHTTPSSoloPubblico(), urllib.request.HTTPRedirectHandler(),
+                    urllib.request.HTTPDefaultErrorHandler(),
+                    urllib.request.HTTPErrorProcessor(), urllib.request.UnknownHandler()):
+        apritore.add_handler(gestore)
+    return apritore.open(req, timeout=timeout)
+
+
 def scarica(url: str, *, timeout: float,
             fetch: Optional[Callable[[str, float], str]] = None) -> str:
     """Il testo del feed. `fetch(url, timeout) -> str` e' iniettabile (collaudi senza rete).
-    Di serie urllib: si leggono al massimo MAX_BYTES + 1 byte, e oltre il tetto e' un errore."""
+    Di serie urllib: si leggono al massimo MAX_BYTES + 1 byte, e oltre il tetto e' un errore.
+
+    ⛔ V3 (busta 6, 2026-10-08, «autorizzato» del fondatore): l'indirizzo lo sceglie un host
+    qualunque e a bussare e' il NOSTRO server. Fino a quel giorno `urlopen` andava ovunque
+    portasse il nome e seguiva i rinvii anche verso http: un feed poteva mandarci a bussare
+    ai servizi interni (SSRF). Adesso `_apri`: solo https, solo indirizzi pubblici, controllati
+    sull'indirizzo a cui ci si collega davvero, anche dopo un rinvio. OWASP, «Server-Side
+    Request Forgery Prevention Cheat Sheet». Guardie:
+    `test_fase203_ical_orologio.TestIlFeedNonPortaIlServerDentroCasa`."""
     if not url_valido(url):
         raise ValueError("url non valido: solo https, senza spazi, al massimo %d caratteri"
                          % MAX_URL)
@@ -128,8 +191,7 @@ def scarica(url: str, *, timeout: float,
         testo = str(fetch(url, timeout))
     else:
         req = urllib.request.Request(url, headers={"User-Agent": "BookinVIP-iCal/1.0"})
-        # solo https, validato qui sopra: non e' un'apertura di file ne' di schemi arbitrari
-        with urllib.request.urlopen(req, timeout=timeout) as r:  # nosec B310  # noqa: S310
+        with _apri(req, timeout) as r:
             testo = r.read(MAX_BYTES + 1).decode("utf-8", "replace")
     if len(testo) > MAX_BYTES:
         raise ValueError("feed troppo grande (oltre %d byte)" % MAX_BYTES)

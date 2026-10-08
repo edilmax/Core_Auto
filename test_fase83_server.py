@@ -6,10 +6,21 @@ dettaglio/404, flusso concierge quote->book via HTTP, MCP JSON-RPC, host pubblic
 disponibilita' (auth X-Host-Key), errori (json invalido/rotta ignota/sistema spento),
 mai solleva. Usa un SistemaCasaVIP reale (fase81).
 """
+import datetime
+import http.client
 import json
+import os
+import shutil
+import socket
+import tempfile
+import threading
+import time
 import unittest
+from urllib.parse import parse_qs, quote, urlencode, urlparse
 
+import fase83_server
 from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
+from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
 from test_rimborso_torna_da_ogni_strada import _BancoDelleStrade
 from fase83_server import (
     RouterHTTP, crea_router, percorso_statico_sicuro,
@@ -1402,11 +1413,320 @@ class TestLIndirizzoDiChiChiamaEUnaFORMANonTestoLibero(unittest.TestCase):
         self.assertEqual("", RouterHTTP._client_ip({}))
         self.assertEqual("", RouterHTTP._client_ip(None))
 
-    def test_LA_CATENA_DEI_PROXY_PRENDE_IL_PRIMO_E_LO_CONVALIDA(self):
-        """`X-Forwarded-For` puo' contenere piu' indirizzi separati da virgola: si continua a
-        prendere il primo (comportamento invariato), ma passa dalla stessa convalida."""
-        self.assertEqual("203.0.113.9", self._ip("203.0.113.9, 10.0.0.1, 172.16.0.1"))
-        self.assertNotIn("cattivo", self._ip("cattivo, 10.0.0.1"))
+    def test_LA_CATENA_DEI_PROXY_PRENDE_L_ULTIMO_E_LO_CONVALIDA(self):
+        """⛔ CAMBIATA DICHIARANDOLO il 2026-10-08 (V2 della busta 6, confermato da GML nel
+        Compito 52). Fino a quel giorno questa prova si chiamava «PRENDE_IL_PRIMO» e
+        pretendeva proprio il difetto: il primo elemento lo scrive chi chiama, e nginx mette
+        il NOSTRO in coda (`proxy_add_x_forwarded_for`). Adesso pretende l'ultimo, che e'
+        l'unico scritto da un proxy nostro (MDN, «X-Forwarded-For», trusted proxy count),
+        e la stessa convalida di forma."""
+        self.assertEqual("172.16.0.1", self._ip("203.0.113.9, 10.0.0.1, 172.16.0.1"))
+        self.assertNotIn("cattivo", self._ip("10.0.0.1, cattivo"))
+
+
+class TestLIndirizzoELUltimoQuelloCheScriveIlNostroNginx(unittest.TestCase):
+    """🌐 V2 (busta 6, 2026-10-05; MEDIA, confermato da GML nel Compito 52): CHI CHIAMA
+    SCEGLIEVA IL PROPRIO INDIRIZZO.
+
+    **Il fatto, misurato sul server vivo il 2026-10-08.** Davanti all'app c'e' UN solo proxy,
+    il contenitore `casavip_nginx` con `deploy/nginx.casavip.ssl.conf`, che fa
+    `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for`: prende cio' che il client
+    ha mandato e ci AGGIUNGE IN CODA l'indirizzo vero da cui e' arrivata la connessione. Il
+    DNS punta dritto al server (niente Cloudflare) e nginx vede indirizzi pubblici (400
+    righe del suo registro: 0 privati). Quindi l'ULTIMO elemento e' il solo che non sceglie
+    chi chiama; `_client_ip` prendeva il PRIMO.
+
+    ⛔ Cosa si poteva fare: cambiare il primo elemento a ogni tentativo e non finire MAI nel
+    buttafuori (chiave admin, accessi host e operatori, bunker); mettere un indirizzo
+    inventato nelle prove legali dei consensi; ingannare il legame della sessione bunker
+    all'indirizzo. La convalida di forma del 2026-08-18 non bastava: un indirizzo FINTO ma
+    ben formato la passa.
+
+    Fonti (D25): MDN «X-Forwarded-For» («Any security-related use of X-Forwarded-For (such
+    as for rate limiting or IP-based access control) must only use IP addresses added by a
+    trusted proxy»; con N proxy fidati si conta da DESTRA); Adam Pritchard, «The perils of
+    the "real" client IP», 2022 («Danger on the left, trust on the right»).
+    """
+
+    def setUp(self):
+        self.r = crea_router(_sistema(), host_key="hk", admin_key="ak")
+
+    def _admin(self, chiave, xff):
+        s, _ = self.r.gestisci("GET", "/api/admin/alloggi", {}, None,
+                               {"X-Admin-Key": chiave, "X-Forwarded-For": xff})
+        return s
+
+    def test_IL_PRIMO_ELEMENTO_INVENTATO_NON_DIVENTA_L_INDIRIZZO(self):
+        self.assertEqual("198.51.100.7",
+                         RouterHTTP._client_ip({"X-Forwarded-For": "1.2.3.4, 198.51.100.7"}))
+
+    def test_CAMBIARE_IL_PRIMO_ELEMENTO_NON_CAMBIA_LA_CHIAVE_DEL_BUTTAFUORI(self):
+        chiavi = {RouterHTTP._client_ip({"X-Forwarded-For": "10.9.%d.%d, 198.51.100.7"
+                                         % (i // 250, i % 250)}) for i in range(300)}
+        self.assertEqual({"198.51.100.7"}, chiavi,
+                         "trecento prefissi inventati hanno prodotto %d chiavi diverse: il "
+                         "limite di frequenza si aggira cambiando intestazione" % len(chiavi))
+
+    def test_LA_CHIAVE_ADMIN_A_RAFFICA_NON_SI_AGGIRA_CAMBIANDO_IL_PRIMO_ELEMENTO(self):
+        """Il danno vero, sul router vero: otto chiavi sbagliate dallo STESSO indirizzo,
+        ognuna con un primo elemento diverso, devono chiudere fuori quell'indirizzo -- anche
+        quando al nono colpo arriva la chiave giusta (come `test_rate_limit_login`)."""
+        vero = "198.51.100.7"
+        self.assertNotEqual(401, self._admin("ak", "203.0.113.50"),
+                            "premessa: la chiave giusta da un indirizzo pulito deve entrare")
+        for i in range(8):
+            self.assertEqual(401, self._admin("chiave-sbagliata", "10.0.0.%d, %s" % (i, vero)))
+        self.assertEqual(401, self._admin("ak", "10.0.0.99, %s" % vero),
+                         "otto chiavi sbagliate dallo stesso indirizzo vero e quello non e' "
+                         "chiuso fuori: il buttafuori conta il primo elemento, che sceglie "
+                         "chi chiama")
+
+
+def _deve(condizione, *dettaglio):
+    """Premessa della preparazione (S7): un'eccezione esplicita, non `assert`."""
+    if not condizione:
+        raise AssertionError("premessa non valida: %r" % (dettaglio,))
+
+
+def _porta_libera():
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    p = s.getsockname()[1]
+    s.close()
+    return p
+
+
+class TestAprireIlLinkNonDecideNiente(unittest.TestCase):
+    """📬 V4 (busta 6, 2026-10-05; MEDIA, confermato da GML nel Compito 52): UNA GET DECIDEVA.
+
+    **Il fatto.** `GET /host/azione?t=...` -- il link «Approva»/«Rifiuta» che arriva all'host
+    per email, Telegram o WhatsApp -- ESEGUIVA la decisione nel momento stesso in cui veniva
+    aperto. Ma un link in un messaggio lo aprono anche le MACCHINE: i filtri antispam e
+    antivirus delle caselle aziendali, le anteprime dei link nelle chat. Il primo che lo
+    apriva decideva al posto dell'host: una prenotazione approvata (date bloccate, ospite
+    avvisato) o rifiutata (cliente perso) senza che nessuno avesse toccato niente.
+
+    **Il contratto.** Aprire il link (GET, e HEAD che passa da `do_GET`) MOSTRA soltanto la
+    domanda con un pulsante; decide solo il pulsante, con un POST che porta lo stesso
+    gettone firmato. Fonti (D25): MDN, «Safe (HTTP Methods)» («an application should not
+    allow GET requests to alter its state»; «Browsers can call safe methods [...] pre-fetching
+    [...] Web crawlers also rely on calling safe methods»); RFC 8058 (2017), perche' la
+    disiscrizione in un clic e' un POST: «anti-spam software often fetches all resources in
+    mail header fields automatically, without any action by the user».
+
+    ⛔ Sta QUI, nel test dedicato di fase83, e non in `test_azione_richiesta.py`: il Giudice
+    della mutazione accende per primo `test_fase83_server` e poi i primi in ordine alfabetico
+    fra chi importa il modulo -- li', in CI, nessun guasto di queste righe sarebbe stato visto.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls._env_prec = {k: os.environ.get(k) for k in ("MARCA_TEMPORALE", "UPLOAD_DIR",
+                                                         "PAGE_GATE")}
+        cls.dir = d = tempfile.mkdtemp()
+        os.environ["MARCA_TEMPORALE"] = "0"
+        os.environ["UPLOAD_DIR"] = d + "/uploads"
+        os.environ.pop("PAGE_GATE", None)
+        cls.sis = crea_sistema(ConfigCasaVIP(
+            abilitato=True, segreto_hmac=SEG, con_registrazione_host=True,
+            db_catalogo=d + "/c.db", db_inventario=d + "/i.db", db_registro_host=d + "/r.db",
+            db_accettazioni=d + "/acc.db", db_pendenti=d + "/p.db"))
+        cls.r = crea_router(cls.sis, host_key="hk", base_url="https://bookinvip.com")
+        s, c = cls._g("POST", "/api/host/registrazione",
+                      {"email": "h@sim.it", "password": "password1", "accetta_termini": True,
+                       "accetta_clausole": True, "accetta_privacy": True,
+                       "doc_sha256": doc_sha256(), "versione": CONTRATTO_HOST_VERSIONE})
+        _deve(s == 201, s, c)
+        cls.hid, tok = c["host_id"], c["token"]
+        s, p = cls._g("POST", "/api/host/pubblica",
+                      {"slug": "casa-get", "titolo": "Casa GET", "citta": "Roma",
+                       "prezzo_notte_cents": 10000, "capacita": 2,
+                       "modalita_prenotazione": "su_richiesta"}, {"X-Host-Token": tok})
+        _deve(s == 201, s, p)
+        oggi = datetime.date.today()
+        s, _ = cls._g("POST", "/api/host/disponibilita_range",
+                      {"alloggio_id": "casa-get",
+                       "da": (oggi + datetime.timedelta(days=10)).isoformat(),
+                       "a": (oggi + datetime.timedelta(days=80)).isoformat(),
+                       "unita_totali": 1, "prezzo_netto_cents": 10000}, {"X-Host-Token": tok})
+        _deve(s == 200, s)
+        cls.porta = _porta_libera()
+        threading.Thread(
+            target=fase83_server.servi,
+            kwargs=dict(sistema=cls.sis, host="127.0.0.1", porta=cls.porta,
+                        cartella_statica=os.path.join(os.path.dirname(os.path.abspath(
+                            __file__)), "deploy"),
+                        host_key="hk", admin_key="ak", base_url="https://bookinvip.com"),
+            daemon=True).start()
+        for _ in range(300):
+            try:
+                if cls._http("GET", "/api/health/live")[0] == 200:
+                    break
+            except OSError:                              # il server non ascolta ancora
+                time.sleep(0.02)
+
+    @classmethod
+    def tearDownClass(cls):
+        for k, v in cls._env_prec.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        shutil.rmtree(cls.dir, ignore_errors=True)
+
+    @classmethod
+    def _g(cls, metodo, path, body=None, headers=None):
+        return cls.r.gestisci(metodo, path, {},
+                              json.dumps(body) if body is not None else None, headers or {})
+
+    @classmethod
+    def _http(cls, metodo, path, corpo=None):
+        c = http.client.HTTPConnection("127.0.0.1", cls.porta, timeout=10)
+        try:
+            h = {"Content-Type": "application/x-www-form-urlencoded"} if corpo else {}
+            c.request(metodo, path, body=corpo, headers=h)
+            r = c.getresponse()
+            return r.status, (r.getheader("Content-Type") or ""), r.read().decode("utf-8")
+        finally:
+            c.close()
+
+    _giorno = [12]
+
+    def _richiesta(self):
+        """Una richiesta VERA in attesa dell'host, su date tutte sue (una per prova)."""
+        oggi = datetime.date.today()
+        g = self._giorno[0]
+        self._giorno[0] += 3
+        s, q = self._g("POST", "/api/concierge/quote",
+                       {"alloggio_id": "casa-get",
+                        "check_in": (oggi + datetime.timedelta(days=g)).isoformat(),
+                        "check_out": (oggi + datetime.timedelta(days=g + 2)).isoformat(),
+                        "party": 2})
+        _deve(s == 200 and q.get("quote_token"), s, q)
+        s, b = self._g("POST", "/api/concierge/book",
+                       {"quote_token": q["quote_token"], "email": "cliente@sim.it"})
+        _deve(s == 201 and b.get("stato") == "in_attesa_host", s, b)
+        return b["riferimento"]
+
+    def _gettone(self, rif, azione):
+        link = self.r._link_azione(rif, self.hid, azione)
+        _deve("/host/azione?t=" in link, link)
+        return parse_qs(urlparse(link).query)["t"][0]
+
+    def _stato(self, rif):
+        return (self.sis.pagamenti_pendenti.info(rif) or {}).get("stato")
+
+    def _date_di(self, rif):
+        info = self.sis.pagamenti_pendenti.info(rif) or {}
+        _deve(info.get("check_in") and info.get("check_out"), info)   # senza date, verde finto
+        return info.get("check_in"), info.get("check_out")
+
+    def test_APRIRE_IL_LINK_NON_APPROVA(self):
+        rif = self._richiesta()
+        tok = self._gettone(rif, "approva")
+        s, _, pagina = self._http("GET", "/host/azione?t=" + quote(tok))
+        self.assertEqual("in_attesa_host", self._stato(rif),
+                         "aprire il link ha gia' deciso: chi apre i link al posto dell'host "
+                         "(antispam, anteprime) approva le prenotazioni")
+        self.assertEqual(200, s)
+        self.assertIn('method="post"', pagina, "la pagina deve chiedere la conferma con un "
+                      "pulsante che fa un POST")
+        self.assertIn('value="%s"' % tok, pagina, "il pulsante deve portare il gettone")
+        self.assertIn("Approvare la prenotazione?", pagina)
+        self.assertIn("Sì, approva", pagina)
+
+    def test_APRIRE_IL_LINK_NON_RIFIUTA(self):
+        rif = self._richiesta()
+        s, _, pagina = self._http("GET", "/host/azione?t=" + quote(self._gettone(rif, "rifiuta")))
+        self.assertEqual("in_attesa_host", self._stato(rif))
+        self.assertEqual(200, s)
+        self.assertIn('method="post"', pagina)
+        self.assertIn("Rifiutare la prenotazione?", pagina)
+        self.assertIn("Sì, rifiuta", pagina)
+
+    def test_UNA_HEAD_NON_DECIDE(self):
+        """HEAD passa da `do_GET` (do_HEAD lo riusa): e' cio' che usano i controllori di link."""
+        rif = self._richiesta()
+        self._http("HEAD", "/host/azione?t=" + quote(self._gettone(rif, "approva")))
+        self.assertEqual("in_attesa_host", self._stato(rif))
+
+    def test_IL_PULSANTE_APPROVA(self):
+        rif = self._richiesta()
+        ci, co = self._date_di(rif)          # PRIMA: dopo la decisione la richiesta non c'e' piu'
+        tok = self._gettone(rif, "approva")
+        s, tipo, pagina = self._http("POST", "/host/azione", urlencode({"t": tok}))
+        self.assertEqual(200, s, pagina[:300])
+        self.assertIn("text/html", tipo)
+        self.assertIn("Prenotazione approvata", pagina)
+        self.assertNotEqual("in_attesa_host", self._stato(rif))
+        s, q2 = self._g("POST", "/api/concierge/quote",
+                        {"alloggio_id": "casa-get", "check_in": ci, "check_out": co,
+                         "party": 2})
+        self.assertFalse(q2.get("quote_token"), "approvata: le date dovevano bloccarsi")
+
+    def test_IL_PULSANTE_RIFIUTA(self):
+        rif = self._richiesta()
+        ci, co = self._date_di(rif)
+        s, _, pagina = self._http("POST", "/host/azione",
+                                  urlencode({"t": self._gettone(rif, "rifiuta")}))
+        self.assertEqual(200, s, pagina[:300])
+        self.assertIn("Prenotazione rifiutata", pagina)
+        self.assertNotEqual("in_attesa_host", self._stato(rif))
+        s, q2 = self._g("POST", "/api/concierge/quote",
+                        {"alloggio_id": "casa-get", "check_in": ci, "check_out": co,
+                         "party": 2})
+        self.assertTrue(q2.get("quote_token"), "rifiutata: le date dovevano tornare libere")
+
+    def test_UN_POST_CON_GETTONE_FALSO_NON_DECIDE(self):
+        rif = self._richiesta()
+        tok = self._gettone(rif, "approva")
+        s, _, pagina = self._http("POST", "/host/azione", urlencode({"t": tok[:-3] + "AAA"}))
+        self.assertEqual(400, s)
+        self.assertIn("Link non valido", pagina)
+        self.assertEqual("in_attesa_host", self._stato(rif))
+
+    def test_UN_LINK_FALSO_NON_MOSTRA_IL_PULSANTE(self):
+        s, _, pagina = self._http("GET", "/host/azione?t=spazzatura.non.firmata")
+        self.assertEqual(400, s)
+        self.assertNotIn("<form", pagina)
+
+    def test_UN_LINK_SCADUTO_NON_MOSTRA_IL_PULSANTE(self):
+        """La domanda si mostra solo dopo TUTTI i controlli del link, scadenza compresa."""
+        rif = self._richiesta()
+        tok = self.sis.firma.codifica({"k": "az_richiesta", "rif": rif, "hid": self.hid,
+                                       "az": "approva", "exp": int(time.time()) - 10})
+        s, _, pagina = self._http("GET", "/host/azione?t=" + quote(tok))
+        self.assertEqual(400, s)
+        self.assertIn("Link scaduto", pagina)
+        self.assertNotIn("<form", pagina)
+
+    def test_LE_DUE_PAGINE_DEL_LINK_NON_SI_CONSERVANO(self):
+        """La domanda porta il gettone nel modulo, l'esito dice cosa e' stato deciso: nessuna
+        memoria intermedia (browser, proxy aziendale) le deve tenere. Chiusi cosi' i due
+        sopravvissuti della mutazione sul diff (`no_store=True` -> False, 2026-10-08)."""
+        rif = self._richiesta()
+        tok = self._gettone(rif, "rifiuta")
+        for metodo, path, corpo in (("GET", "/host/azione?t=" + quote(tok), None),
+                                    ("POST", "/host/azione", urlencode({"t": tok}))):
+            with self.subTest(metodo=metodo):
+                c = http.client.HTTPConnection("127.0.0.1", self.porta, timeout=10)
+                try:
+                    h = {"Content-Type": "application/x-www-form-urlencoded"} if corpo else {}
+                    c.request(metodo, path, body=corpo, headers=h)
+                    r = c.getresponse()
+                    r.read()
+                    self.assertEqual(200, r.status)
+                    self.assertIn("no-store", r.getheader("Cache-Control") or "")
+                finally:
+                    c.close()
+
+    def test_UN_AZIONE_INVENTATA_NON_MOSTRA_IL_PULSANTE(self):
+        rif = self._richiesta()
+        tok = self.sis.firma.codifica({"k": "az_richiesta", "rif": rif, "hid": self.hid,
+                                       "az": "cancella", "exp": int(time.time()) + 3600})
+        s, _, pagina = self._http("GET", "/host/azione?t=" + quote(tok))
+        self.assertEqual(400, s)
+        self.assertNotIn("<form", pagina)
 
 
 class TestIlTestoLiberoRESTALEGGIBILEMaNonPuoFabbricareRIGHE(unittest.TestCase):
