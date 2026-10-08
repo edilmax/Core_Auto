@@ -681,7 +681,7 @@ async function vediChat(rif,i){
     if(r.status!==200){ box.textContent='❌ '+fraseErrore('errore_server_'+r.status); return; }
     const d=await r.json(); const ms=(d.messaggi||[]).filter(Boolean);
     box.innerHTML = ms.length ? ms.map(m=>{
-      let t=esc(m.testo||'').replace(/(\/uploads\/[a-z0-9]+\.[a-z]+)/g,"<a href='$1' target='_blank'>📷 apri foto prova</a>");
+      let t=esc(m.testo||'').replace(/(\/uploads\/[a-z0-9]+\.[a-z]+(?:\?t=[A-Za-z0-9_.=-]+)?)/g,"<a href='$1' target='_blank'>📷 apri foto prova</a>");
       const chi=(m.mittente==='ospite')?'👤 Cliente':'🏠 Host';
       return `<div style="margin:.2rem 0"><b>${chi}:</b> ${t}</div>`;
     }).join('') : '<span style="color:#8a9bb5">Nessun messaggio: cliente e host non hanno ancora scritto.</span>';
