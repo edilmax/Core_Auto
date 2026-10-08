@@ -53,6 +53,13 @@ PREFISSO = fase83_server._PREFISSO_PROVA
 CACHE_ANNUNCI = "public, max-age=31536000"
 
 
+def _deve(condizione, *dettaglio):
+    """Premessa della preparazione: se non vale, il banco non e' quello che le prove credono
+    (S7). Un'eccezione esplicita, non `assert`, che `python -O` toglierebbe."""
+    if not condizione:
+        raise AssertionError("premessa non valida: %r" % (dettaglio,))
+
+
 def _porta_libera():
     s = socket.socket()
     s.bind(("127.0.0.1", 0))
@@ -87,12 +94,16 @@ class TestLeProveFotoSonoPrivate(unittest.TestCase):
                         host_key="hk", admin_key="ak", base_url="https://bookinvip.com"),
             daemon=True).start()
         for _ in range(300):
-            try:
-                if cls._http("GET", "/api/health/live")[0] == 200:
-                    break
-            except Exception:
-                pass
+            if cls._risponde():
+                break
             time.sleep(0.02)
+
+    @classmethod
+    def _risponde(cls):
+        try:
+            return cls._http("GET", "/api/health/live")[0] == 200
+        except OSError:                              # il server non ascolta ancora
+            return False
 
     @classmethod
     def tearDownClass(cls):
@@ -118,23 +129,23 @@ class TestLeProveFotoSonoPrivate(unittest.TestCase):
                                                      prezzo_netto_cents=10000)
         s, q = cls._g("POST", "/api/concierge/quote",
                       {"alloggio_id": slug, "check_in": ci, "check_out": co, "party": 2})
-        assert s == 200, (s, q)
+        _deve(s == 200, s, q)
         s, b = cls._g("POST", "/api/concierge/book",
                       {"quote_token": q["quote_token"], "email": slug + "@ospite.it"})
-        assert s == 201 and b.get("voucher_token"), (s, b)
+        _deve(s == 201 and b.get("voucher_token"), s, b)
         rif = b["riferimento"]
         pp = cls.sis.pagamenti_pendenti
         if pp.info(rif) is None:
-            assert pp.registra(rif, alloggio_id=slug, check_in=ci, check_out=co, host_id=hid)
+            _deve(pp.registra(rif, alloggio_id=slug, check_in=ci, check_out=co, host_id=hid))
         pp.conferma(rif)
-        assert pp.info(rif).get("stato") == "pagato", pp.info(rif)
+        _deve(pp.info(rif).get("stato") == "pagato", pp.info(rif))
         return b["voucher_token"], rif
 
     @classmethod
     def _prova(cls, voucher):
         s, c = cls._g("POST", "/api/voucher/prova", {
             "voucher_token": voucher, "image_base64": base64.b64encode(PNG).decode("ascii")})
-        assert s == 201, (s, c)
+        _deve(s == 201, s, c)
         return c["url"].rsplit("/", 1)[1]
 
     @classmethod
@@ -142,7 +153,7 @@ class TestLeProveFotoSonoPrivate(unittest.TestCase):
         reg = cls.sis.registro_host
         a = reg.registra("a@host.it", "password-a-1", accetta_termini=True)
         b = reg.registra("b@host.it", "password-b-1", accetta_termini=True)
-        assert a.ok and b.ok
+        _deve(a.ok and b.ok)
         cls.hid_a, cls.tok_a, cls.hid_b = a.host_id, a.token, b.host_id
         updir = os.environ["UPLOAD_DIR"]
         os.makedirs(updir, exist_ok=True)
@@ -162,7 +173,7 @@ class TestLeProveFotoSonoPrivate(unittest.TestCase):
         s, c = cls._g("POST", "/api/host/upload_foto",
                       {"image_base64": base64.b64encode(PNG).decode("ascii")},
                       {"X-Host-Token": cls.tok_a})
-        assert s == 201, (s, c)
+        _deve(s == 201, s, c)
         cls.foto_annuncio = c["url"].rsplit("/", 1)[1]
         # le PROVE: una per prenotazione, caricate dall'ospite col suo voucher
         cls.prova_a = cls._prova(cls.voucher_a)
@@ -172,22 +183,22 @@ class TestLeProveFotoSonoPrivate(unittest.TestCase):
         cls.prova_vecchia = secrets.token_hex(16) + ".png"
         with open(os.path.join(updir, cls.prova_vecchia), "wb") as f:
             f.write(PNG)
-        assert cls.sis.messaggistica.invia(cls.rif_a, cls.hid_a, "ospite", "ospite",
-                                           PREFISSO + " /uploads/" + cls.prova_vecchia)
+        _deve(cls.sis.messaggistica.invia(cls.rif_a, cls.hid_a, "ospite", "ospite",
+                                          PREFISSO + " /uploads/" + cls.prova_vecchia))
         # UNA PROVA VECCHIA CONTESA: l'ospite A la cita come prova, e anche l'ospite B (un finto
         # messaggio). Non si sa di chi sia: privata per tutti, e nessuno riceve la firma.
         cls.prova_contesa = secrets.token_hex(16) + ".png"
         with open(os.path.join(updir, cls.prova_contesa), "wb") as f:
             f.write(PNG)
-        assert cls.sis.messaggistica.invia(cls.rif_a, cls.hid_a, "ospite", "ospite",
-                                           PREFISSO + " /uploads/" + cls.prova_contesa)
+        _deve(cls.sis.messaggistica.invia(cls.rif_a, cls.hid_a, "ospite", "ospite",
+                                          PREFISSO + " /uploads/" + cls.prova_contesa))
         # L'OSPITE B CITA in chat, con la forma della prova, la prova di A, la foto vecchia
         # dell'annuncio di A e la prova contesa: non deve ottenere niente da nessuna.
         for nome in (cls.prova_a, cls.foto_vecchia, cls.prova_contesa):
             s, c = cls._g("POST", "/api/voucher/messaggio",
                           {"voucher_token": cls.voucher_b,
                            "testo": PREFISSO + " /uploads/" + nome})
-            assert s == 201, (s, c)
+            _deve(s == 201, s, c)
 
     # ── trasporto HTTP grezzo ──
     @classmethod
