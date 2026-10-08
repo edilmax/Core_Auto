@@ -44,8 +44,8 @@ permissions:
 #  MAPPA DEI JOB — chi blocca e chi no (dichiarato, niente ambiguita')
 # ============================================================================
 #  BLOCCANTI (entrano nel job finale "gate"):
-#    money-smoke · full-suite · full-suite-311 · copertura · mutazione · qualita ·
-#    w3c · accessibilita · atheris · immagine · browser
+#    money-smoke · full-suite · full-suite-311 · copertura · mutazione · caselle ·
+#    qualita · w3c · accessibilita · atheris · immagine · browser
 #  NON BLOCCANTI (fuori dal "gate", di proposito):
 #    lint-severo  -> lint severo su codice gia' scritto: informativo, si legge il log
 #    zap          -> gira solo a schedule/manuale, non ad ogni commit
@@ -67,7 +67,7 @@ permissions:
 #  NON BLOCCA SUI RILIEVI (il suo comando finisce con `|| true`, vedi la sua
 #  dichiarazione): resta nel gate perche' se il validatore stesso non gira il job
 #  e' rosso e il gate lo vede, ma un errore HTML da solo non ferma la build.
-#  Gli altri dieci bloccano davvero sul contenuto.
+#  Gli altri undici bloccano davvero sul contenuto.
 #
 #  >>> DA FARE A MANO DAL FONDATORE (io non ho accesso alle impostazioni di GitHub):
 #      Settings -> Branches -> Branch protection rule su "master" ->
@@ -469,6 +469,49 @@ jobs:
           python-version: '3.9'
       - name: Mutazione (i test si accorgono dei guasti?)
         run: python collaudi/mutazione_prodotto.py
+
+  # ==========================================================================
+  #  LE CASELLE SEGUONO IL CODICE — DECISIONE DEL METODO (2026-10-08), regola 2
+  # ==========================================================================
+  #  L'8/10 `collaudi/piano.py` contava 25 caselle da fare e 21 erano SOLO SCADUTE: le
+  #  unioni cambiavano il codice dei blocchi e nessuno rimisurava, perche' rimisurare era
+  #  un gesto a mano. Da qui lo fa rispettare il gate, con due passi, tutti e due bloccanti:
+  #   1. il CRICCHETTO: una casella spuntata su master che questa PR fa diventare vuota
+  #      ferma l'unione, se la CI la sa rimisurare (si rimisura NELLA STESSA PR e la scheda
+  #      si committa con lei); ogni riga che la PR scrive nella scheda la CI la RIFA'
+  #      (--riesegui). Le misure che guardano la produzione, Stripe di prova o il server si
+  #      DICHIARANO (FUORI_CI in collaudi/scheda.py) e si rifanno a mano alla chiusura del
+  #      blocco; idem il giro di mutazione intero.
+  #   2. la MUTAZIONE SULLE RIGHE CAMBIATE (Petrovic, Ivankovic, Fraser, Just, IEEE TSE 2021):
+  #      rossa se un guasto su una riga nuova passa inosservato E se ha lasciato punti fuori
+  #      (tetto, base rossa, test che non finiscono): lo stesso verdetto di `--modulo`.
+  #  HEAD^1: nel commit d'unione di una PR e' master; nel push su master e' il master di prima.
+  #  ⛔ IL TETTO (60 punti) E IL TEMPO, MISURATI l'8/10 sulle ultime unioni, non scelti:
+  #     punti generati sul diff 1 (#249) · 25 (#250) · 7 (#252) · 45 (#254, D2); una passata
+  #     dei sorveglianti di fase83 184 s, di fase57 29 s (sul PC del fondatore, Windows).
+  #     Caso peggiore visto: 45 x 184 s = 138 minuti; il tetto del job e' 300. Un diff oltre
+  #     i 60 punti e' ROSSO, non tagliato: si divide la PR, o si alza il tetto QUI dicendolo.
+  #     ⚠️ Il tempo degli esami rifatti da --riesegui NON e' misurato: dipende da quali righe
+  #     della scheda la PR scrive (nessuna, in una PR che non rimisura).
+  caselle:
+    timeout-minutes: 300
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 2                  # HEAD^1 deve esistere: e' la base del confronto
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.9'
+          cache: pip
+      # Le stesse della suite intera: gli esami rifatti e i sorveglianti della mutazione
+      # importano quello che importano i test.
+      - name: Dipendenze di test
+        run: pip install -r requirements.txt hypothesis pyyaml coverage z3-solver
+      - name: Il cricchetto delle caselle (e le misure della PR rifatte qui)
+        run: python collaudi/scheda.py --cricchetto HEAD^1 --riesegui
+      - name: Mutazione sulle righe cambiate
+        run: python collaudi/mutazione_prodotto.py --diff HEAD^1 --tetto 60
 
   # ==========================================================================
   #  QUALITA' STATICA — qui ci sono i GATE VERI del lint (blocca sul certo)
@@ -1224,6 +1267,7 @@ jobs:
       - full-suite-311
       - copertura
       - mutazione
+      - caselle
       - qualita
       - w3c
       - accessibilita
@@ -1240,6 +1284,7 @@ jobs:
           echo "full-suite-311 .... ${{ needs['full-suite-311'].result }}"
           echo "copertura ......... ${{ needs.copertura.result }}"
           echo "mutazione ......... ${{ needs.mutazione.result }}"
+          echo "caselle ........... ${{ needs.caselle.result }}"
           echo "qualita ........... ${{ needs.qualita.result }}"
           echo "w3c ............... ${{ needs.w3c.result }}"
           echo "accessibilita ..... ${{ needs.accessibilita.result }}"
@@ -1256,6 +1301,7 @@ jobs:
             echo "| full-suite-311 | ${{ needs['full-suite-311'].result }} |"
             echo "| copertura | ${{ needs.copertura.result }} |"
             echo "| mutazione | ${{ needs.mutazione.result }} |"
+            echo "| caselle | ${{ needs.caselle.result }} |"
             echo "| qualita | ${{ needs.qualita.result }} |"
             echo "| w3c | ${{ needs.w3c.result }} |"
             echo "| accessibilita | ${{ needs.accessibilita.result }} |"
@@ -1304,7 +1350,7 @@ jobs:
           ${{ contains(needs.*.result, 'failure')
           || contains(needs.*.result, 'cancelled')
           || contains(needs.*.result, 'skipped')
-          || join(needs.*.result, ' ') != 'success success success success success success success success success success success' }}
+          || join(needs.*.result, ' ') != 'success success success success success success success success success success success success' }}
         run: |
           echo "::error title=CI ROSSA::Almeno un job bloccante non e' verde, OPPURE non ha consegnato nessun esito. Guarda la tabella qui sopra: se un job ha esito diverso da 'success' e' quello da aprire; se una riga e' VUOTA quel job non e' mai partito (guasto di GitHub o runner mai assegnato) e il suo controllo NON e' stato fatto."
           exit 1
