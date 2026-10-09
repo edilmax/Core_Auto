@@ -246,11 +246,11 @@
  "24faa37bd025": {
   "blocco": 7,
   "comando": "python collaudi/esame_host_da_solo.py --scrivi",
-  "commit": "0a70cd8",
+  "commit": "f51a808",
   "condizione": "un host si iscrive, carica un annuncio e incassa SENZA che nessuno lo aiuti",
   "denominatore": 23,
   "esito": true,
-  "impronta": "042d078ea4fb",
+  "impronta": "463e9152d832",
   "impronte_moduli": {
    "fase109_referral_host": "5f390a47ceef",
    "fase115_dashboard_metriche": "582b15ad00df",
@@ -259,10 +259,10 @@
    "fase72_digital_twin": "9004ef285f00",
    "fase75_guardian_engine": "c6b61d9e6d89",
    "fase78_sleep_guarantee": "05e5c1b2a549",
-   "fase88_registro_host": "c4209cf21c4e"
+   "fase88_registro_host": "c869d09df20c"
   },
   "motivo": "",
-  "quando": "2026-09-30T12:52:45"
+  "quando": "2026-10-09T10:54:39"
  },
  "3226d2908ddf": {
   "blocco": 1,
@@ -851,11 +851,11 @@
  "bf93b1c1b0ce": {
   "blocco": 7,
   "comando": "python collaudi/esame_pannello_soldi.py --scrivi",
-  "commit": "0a70cd8",
+  "commit": "f51a808",
   "condizione": "il pannello dice sempre la verita' sui suoi soldi (nessun saldo stimato)",
   "denominatore": 20,
   "esito": true,
-  "impronta": "042d078ea4fb",
+  "impronta": "463e9152d832",
   "impronte_moduli": {
    "fase109_referral_host": "5f390a47ceef",
    "fase115_dashboard_metriche": "582b15ad00df",
@@ -864,10 +864,10 @@
    "fase72_digital_twin": "9004ef285f00",
    "fase75_guardian_engine": "c6b61d9e6d89",
    "fase78_sleep_guarantee": "05e5c1b2a549",
-   "fase88_registro_host": "c4209cf21c4e"
+   "fase88_registro_host": "c869d09df20c"
   },
   "motivo": "",
-  "quando": "2026-09-30T12:55:55"
+  "quando": "2026-10-09T10:54:32"
  },
  "c3cf3da4543f": {
   "blocco": 1,

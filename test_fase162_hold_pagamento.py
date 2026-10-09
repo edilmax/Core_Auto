@@ -797,5 +797,209 @@ class TestIlProspettoDelCommercialistaNONSpacciaLaNostraTariffaPerStripe(unittes
             % (self.NOSTRA_TARIFFA, etichetta))
 
 
+class _CursoreConAggancio:
+    """Un cursore vero che, DOPO aver consegnato la riga letta, lascia lavorare un altro."""
+
+    def __init__(self, cur, dopo):
+        self._cur, self._dopo = cur, dopo
+
+    def fetchone(self):
+        r = self._cur.fetchone()
+        self._dopo()
+        return r
+
+    def __getattr__(self, n):
+        return getattr(self._cur, n)
+
+
+class _ConnConAggancio:
+    """Connessione VERA su file; alla prima lettura di `corpo_json` fa scattare l'aggancio."""
+
+    def __init__(self, con, aggancio):
+        object.__setattr__(self, "_con", con)
+        object.__setattr__(self, "_aggancio", aggancio)
+
+    def execute(self, sql, *a):
+        cur = self._con.execute(sql, *a)
+        if sql.lstrip().startswith("SELECT corpo_json FROM pendenti") \
+                and self._aggancio.get("armato"):
+            self._aggancio["armato"] = False
+            return _CursoreConAggancio(cur, self._aggancio["fn"])
+        return cur
+
+    def __enter__(self):
+        return self._con.__enter__()
+
+    def __exit__(self, *a):
+        return self._con.__exit__(*a)
+
+    def close(self):
+        self._con.close()
+
+    def __getattr__(self, n):
+        return getattr(self._con, n)
+
+
+class TestDueScrittureSulloStessoRecordNonSiCancellanoAVicenda(unittest.TestCase):
+    """C53-B1-7 (busta 8): quattro scritture leggono `corpo_json` e lo riscrivono INTERO.
+    La lettura stava FUORI dalla transazione (il modulo sqlite3 apre la transazione solo
+    alla prima scrittura), quindi due scritture sullo stesso riferimento leggevano la stessa
+    copia e l'ultima cancellava i campi dell'altra. Il caso che costa: l'host annulla mentre
+    arriva il webhook del pagamento -- lo `stripe_pi` sparisce e il rimborso all'ospite non
+    parte piu' da solo («manca payment_intent»).
+
+    L'ordine dei due e' FORZATO, non lasciato alla fortuna dei thread: la prima scrittura
+    legge, POI (aggancio dopo la lettura) la seconda prova a scrivere da un'altra
+    connessione, POI la prima scrive. Fonti (D25): SQLite, «Transaction» (BEGIN IMMEDIATE
+    prende il lucchetto di scrittura subito, DEFERRED solo alla prima scrittura); Python,
+    documentazione di `sqlite3` («isolation_level»: la transazione implicita si apre prima
+    di INSERT/UPDATE/DELETE, non prima di una SELECT).
+    """
+
+    RIF = "RIF-GARA"
+
+    def setUp(self):
+        import os
+        self.dir = tempfile.mkdtemp()
+        self.percorso = os.path.join(self.dir, "p.db")
+        self.altro = crea_pagamenti_pendenti(self.percorso)
+        self.altro.inizializza_schema()
+        self.assertTrue(self.altro.registra(self.RIF, alloggio_id="casa", check_in="2027-01-10",
+                                            check_out="2027-01-12",
+                                            corpo_json=json.dumps({"valuta": "EUR"})))
+        self.aggancio = {"armato": False}
+
+        def cf():
+            import sqlite3
+            c = sqlite3.connect(self.percorso, timeout=20)
+            c.row_factory = sqlite3.Row
+            return _ConnConAggancio(c, self.aggancio)
+        from fase162_pagamenti_pendenti import PagamentiPendenti
+        self.primo = PagamentiPendenti(cf)
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def _gara(self, scrivi_primo, scrivi_altro):
+        import threading
+        finito = threading.Event()
+        esito = {}
+
+        def altro():
+            esito["altro"] = scrivi_altro()
+            finito.set()
+        filo = threading.Thread(target=altro)
+
+        def dopo_la_lettura():
+            filo.start()
+            finito.wait(1.0)          # se la prima tiene il lucchetto, l'altra aspetta lei
+        self.aggancio.update(armato=True, fn=dopo_la_lettura)
+        esito["primo"] = scrivi_primo()
+        filo.join(30)
+        self.assertFalse(filo.is_alive(), "la seconda scrittura e' rimasta bloccata")
+        self.assertFalse(self.aggancio["armato"], "PREMESSA NON VALIDA: l'aggancio non e' "
+                                                  "scattato, la gara non c'e' stata")
+        self.assertIs(True, esito["primo"])
+        self.assertIs(True, esito["altro"])
+        return json.loads(self.altro.info(self.RIF)["corpo_json"])
+
+    def test_l_host_annulla_mentre_arriva_il_pagamento_e_lo_stripe_pi_RESTA(self):
+        cj = self._gara(lambda: self.primo.marca_cancellata_host(self.RIF, 150),
+                        lambda: self.altro.salva_stripe_session(self.RIF, "cs_1", "pi_1"))
+        self.assertEqual("pi_1", cj.get("stripe_pi"),
+                         "AGGIORNAMENTO PERSO: la cancellazione dell'host ha cancellato lo "
+                         "stripe_pi scritto dal webhook nello stesso istante: %r" % (cj,))
+        self.assertEqual(150, cj.get("penale_host_cents"))
+        self.assertEqual("EUR", cj.get("valuta"))
+
+    def test_il_costo_del_gestore_non_cancella_lo_stripe_pi(self):
+        cj = self._gara(lambda: self.primo.salva_costo_gateway(self.RIF, 27),
+                        lambda: self.altro.salva_stripe_session(self.RIF, "cs_1", "pi_1"))
+        self.assertEqual("pi_1", cj.get("stripe_pi"), "%r" % (cj,))
+        self.assertEqual(27, cj.get("costo_stripe_reale_cents"))
+
+    def test_il_blocco_sulla_carta_non_cancella_lo_stripe_pi(self):
+        cj = self._gara(lambda: self.primo.segna_blocco(self.RIF, blocco_pi="pi_B"),
+                        lambda: self.altro.salva_stripe_session(self.RIF, "cs_1", "pi_1"))
+        self.assertEqual("pi_1", cj.get("stripe_pi"), "%r" % (cj,))
+        self.assertEqual("pi_B", cj.get("blocco_pi"))
+
+    def test_lo_stripe_pi_non_cancella_il_costo_del_gestore(self):
+        cj = self._gara(lambda: self.primo.salva_stripe_session(self.RIF, "cs_1", "pi_1"),
+                        lambda: self.altro.salva_costo_gateway(self.RIF, 27))
+        self.assertEqual(27, cj.get("costo_stripe_reale_cents"), "%r" % (cj,))
+        self.assertEqual("pi_1", cj.get("stripe_pi"))
+
+    def test_una_connessione_GIA_in_transazione_scrive_senza_aprirne_una_seconda(self):
+        # D19: la connessione condivisa di `:memory:` (piu' fili sulla stessa connessione)
+        # puo' essere gia' dentro la transazione di un altro; un secondo BEGIN solleverebbe
+        # «cannot start a transaction within a transaction» e la scrittura andrebbe persa.
+        # Lo stato si costruisce a mano: transazione aperta, poi ognuna delle quattro.
+        pp = crea_pagamenti_pendenti(":memory:")
+        pp.inizializza_schema()
+        self.assertTrue(pp.registra(self.RIF, alloggio_id="casa", check_in="2027-01-10",
+                                    check_out="2027-01-12",
+                                    corpo_json=json.dumps({"valuta": "EUR"})))
+        con = pp._cf()
+        scritture = (("salva_stripe_session", lambda: pp.salva_stripe_session(self.RIF, "cs_1",
+                                                                             "pi_1")),
+                     ("salva_costo_gateway", lambda: pp.salva_costo_gateway(self.RIF, 27)),
+                     ("segna_blocco", lambda: pp.segna_blocco(self.RIF, blocco_pi="pi_B")),
+                     ("marca_cancellata_host", lambda: pp.marca_cancellata_host(self.RIF, 150)))
+        for nome, scrivi in scritture:
+            con.execute("BEGIN")
+            self.assertTrue(con.in_transaction, "PREMESSA NON VALIDA: nessuna transazione")
+            self.assertIs(True, scrivi(), "%s non scrive dentro una transazione gia' aperta"
+                          % nome)
+        cj = json.loads(pp.info(self.RIF)["corpo_json"])
+        self.assertEqual(("pi_1", 27, "pi_B", 150),
+                         (cj.get("stripe_pi"), cj.get("costo_stripe_reale_cents"),
+                          cj.get("blocco_pi"), cj.get("penale_host_cents")), "%r" % (cj,))
+
+
+class TestLaPrenotazioneSiTrovaDalPagamento(unittest.TestCase):
+    """C53-B1-4: una contestazione di carta arriva col solo `payment_intent`, e da li' si
+    risale alla prenotazione (`per_payment_intent`). Il filtro `instr` cerca un pezzo di
+    testo: a decidere dev'essere il confronto ESATTO sui due campi del pagamento."""
+
+    def setUp(self):
+        self.pp = crea_pagamenti_pendenti(":memory:")
+        self.pp.inizializza_schema()
+
+    def _reg(self, rif, corpo):
+        self.assertTrue(self.pp.registra(rif, alloggio_id="casa", check_in="2027-01-10",
+                                         check_out="2027-01-12", corpo_json=corpo))
+
+    def test_la_trova_dal_pagamento_e_dal_blocco_sulla_carta(self):
+        self._reg("R-PAG", json.dumps({"stripe_pi": "pi_ABC", "valuta": "EUR"}))
+        self._reg("R-BLK", json.dumps({"blocco_pi": "pi_BLK"}))
+        self.assertEqual("R-PAG", (self.pp.per_payment_intent("pi_ABC") or {}).get("riferimento"))
+        self.assertEqual("R-BLK", (self.pp.per_payment_intent("pi_BLK") or {}).get("riferimento"))
+        self.assertIsNone(self.pp.per_payment_intent("pi_MAI"))
+
+    def test_un_pezzo_del_pagamento_NON_basta(self):
+        self._reg("R-LUNGO", json.dumps({"stripe_pi": "pi_ABCD", "nota": "pi_AB scritto qui"}))
+        self.assertIsNone(self.pp.per_payment_intent("pi_AB"),
+                          "un pagamento diverso che lo CONTIENE e' stato preso per lui")
+        self._reg("R-GIUSTO", json.dumps({"stripe_pi": "pi_AB"}))
+        self.assertEqual("R-GIUSTO",
+                         (self.pp.per_payment_intent("pi_AB") or {}).get("riferimento"))
+
+    def test_una_riga_col_JSON_rotto_si_salta_e_non_ferma_la_ricerca(self):
+        # D19: la riga corrotta viene PRIMA di quella buona, e contiene lo stesso testo
+        self._reg("R-ROTTO", '{"stripe_pi": "pi_DOPPIO"')
+        self._reg("R-LISTA", '["pi_DOPPIO"]')
+        self._reg("R-BUONO", json.dumps({"stripe_pi": "pi_DOPPIO"}))
+        self.assertEqual("R-BUONO",
+                         (self.pp.per_payment_intent("pi_DOPPIO") or {}).get("riferimento"))
+        self._reg("R-SOLO-LISTA", '["pi_SOLO"]')
+        self.assertIsNone(self.pp.per_payment_intent("pi_SOLO"))
+
+    def test_quello_che_non_e_un_pagamento_non_trova_niente_e_non_esplode(self):
+        self._reg("R-X", json.dumps({"stripe_pi": "pi_X", "carica": "ch_1"}))
+        for cattivo in (None, 7, b"pi_X", "ch_1", ""):
+            self.assertIsNone(self.pp.per_payment_intent(cattivo), repr(cattivo))
+
+
 if __name__ == "__main__":
     unittest.main()

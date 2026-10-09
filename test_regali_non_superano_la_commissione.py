@@ -58,6 +58,11 @@ class _PayoutFinto:
     def aggiorna_stato(self, prenotazione_id, nuovo):
         return True
 
+    def stato_di(self, prenotazione_id):
+        # C53-B1-5 (9/10): la conferma guarda che il bonifico NON sia rimasto 'in_attesa'.
+        # `aggiorna_stato` qui riesce sempre, quindi il bonifico e' maturato.
+        return "maturato"
+
     def aumenta_payout(self, prenotazione_id, delta_cents):
         self.aumenti.append(int(delta_cents))
         return True

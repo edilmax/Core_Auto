@@ -1296,12 +1296,20 @@ class TestMigrazioneEventiStripeFase204(BaseMigrazione, unittest.TestCase):
     def test_la_deduplicazione_per_fatto_funziona_sull_archivio_migrato(self):
         """Il motivo della colonna: dopo la migrazione un secondo Event per lo stesso
         oggetto dev'essere riconosciuto come lo stesso fatto, e uno per un oggetto
-        diverso no."""
+        diverso no.
+        ⛔ CAMBIATA DICHIARANDOLO il 9/10 (C53-B1-10): pretendeva che un evento solo SALVATO
+        contasse come fatto gia' presente, cioe' il difetto: un evento mai elaborato (503)
+        faceva da duplicato al gemello e nessuno dei due confermava il pagamento. Ora il
+        fatto conta da quando il primo evento e' ELABORATO, e prima no."""
         self.assertNotIn("ix_eventi_fatto", oggetti(self.vecchio, "index"))
         archivio = self.apri(self.vecchio)
         self.assertIn("ix_eventi_fatto", oggetti(self.vecchio, "index"))
         self.assertIs(archivio.salva("evt_7g8h9i", tipo="checkout.session.completed",
                                      oggetto_id="cs_test_a1"), True)
+        self.assertIs(archivio.fatto_gia_presente(tipo="checkout.session.completed",
+                                                  oggetto_id="cs_test_a1",
+                                                  evt_id="evt_altro"), False)
+        self.assertIs(archivio.segna_elaborato("evt_7g8h9i"), True)
         self.assertIs(archivio.fatto_gia_presente(tipo="checkout.session.completed",
                                                   oggetto_id="cs_test_a1",
                                                   evt_id="evt_altro"), True)

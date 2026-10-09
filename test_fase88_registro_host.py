@@ -873,8 +873,17 @@ class TestI52PuntiSopravvissutiDellaNotteDel7Settembre(unittest.TestCase):
 
     # ── riga 424: la scadenza del gettone d'accesso ────────────────────────────────
     def _gettone_forgiato(self, host_id, exp):
+        # D3: un gettone vero porta l'impronta della password ATTUALE (`fp`). Senza, questo
+        # gettone forgiato sarebbe rifiutato per l'impronta e non per la scadenza, e le prove
+        # qui sotto passerebbero per il motivo sbagliato.
+        con = self.reg._apri()
+        try:
+            r = con.execute("SELECT pw_hash FROM host WHERE host_id=?", (host_id,)).fetchone()
+        finally:
+            con.close()
         return self.reg._firma.codifica({"tipo": "host_token", "host_id": host_id,
-                                         "email": "host@mail.it", "exp": exp})
+                                         "email": "host@mail.it", "exp": exp,
+                                         "fp": r["pw_hash"][:16] if r else ""})
 
     def test_riga424_un_gettone_con_scadenza_NON_numerica_non_vale_e_non_esplode(self):
         e = self._host()
@@ -1029,6 +1038,84 @@ class TestI52PuntiSopravvissutiDellaNotteDel7Settembre(unittest.TestCase):
         self._rompi(self.reg, "DELETE FROM host", cursore=_CursoreSenzaConteggio())
         self.assertEqual(0, self.reg.cancella_host(e.host_id),
                          "cancella_host ha risposto un conteggio negativo")
+
+
+class TestIlCambioPasswordChiudeIGettoniDiPrima(unittest.TestCase):
+    """D3 (busta 6): il gettone d'accesso dell'host restava valido fino alla scadenza (30
+    giorni) anche dopo il cambio o il ripristino della password. Chi aveva rubato un gettone
+    restava dentro il pannello -- annunci, prenotazioni, dati per i bonifici -- anche dopo che
+    l'host, accorgendosene, aveva cambiato la password: cioe' proprio il gesto con cui si
+    caccia un intruso non lo cacciava.
+
+    Fonti (D25): OWASP ASVS (le altre sessioni si chiudono dopo il cambio di un fattore
+    d'autenticazione); Django, «Session invalidation on password change» (la sessione porta
+    un'impronta della password e non vale piu' quando la password cambia). Qui l'impronta e'
+    la stessa che usa gia' il link di ripristino (`fp`): nessuna colonna nuova.
+    """
+
+    def setUp(self):
+        self.orologio = {"t": 1_700_000_000}
+        self.reg = crea_registro_host(":memory:", SEG, orologio=lambda: self.orologio["t"])
+        self.e = self.reg.registra("host@mail.it", "passwordlunga", accetta_termini=True)
+        self.assertTrue(self.e.ok)
+
+    def test_il_CAMBIO_della_password_chiude_tutti_i_gettoni_di_prima(self):
+        rubato = self.reg.login("host@mail.it", "passwordlunga").token
+        self.assertEqual(self.e.host_id, self.reg.verifica_token(rubato))
+        cambio = self.reg.cambia_password(self.e.host_id, "passwordlunga", "nuovapassword1")
+        self.assertTrue(cambio.ok)
+        self.assertIsNone(self.reg.verifica_token(rubato),
+                          "un gettone di PRIMA del cambio password apre ancora il pannello")
+        self.assertIsNone(self.reg.verifica_token(self.e.token),
+                          "il gettone della registrazione sopravvive al cambio password")
+        self.assertEqual(self.e.host_id, self.reg.verifica_token(cambio.token),
+                         "il gettone NUOVO, dato a chi ha cambiato la password, non vale")
+
+    def test_il_RIPRISTINO_della_password_chiude_tutti_i_gettoni_di_prima(self):
+        rubato = self.reg.login("host@mail.it", "passwordlunga").token
+        link = self.reg.token_reset_password("host@mail.it")
+        esito = self.reg.reset_password(link, "nuovapassword1")
+        self.assertTrue(esito.ok)
+        self.assertIsNone(self.reg.verifica_token(rubato),
+                          "un gettone di PRIMA del ripristino apre ancora il pannello")
+        self.assertEqual(self.e.host_id, self.reg.verifica_token(esito.token))
+
+    def test_un_gettone_SENZA_impronta_o_con_un_impronta_SBAGLIATA_non_entra(self):
+        senza = self.reg._firma.codifica({"tipo": "host_token", "host_id": self.e.host_id,
+                                          "email": "host@mail.it",
+                                          "exp": self.orologio["t"] + 100})
+        self.assertIsNone(self.reg.verifica_token(senza),
+                          "un gettone firmato ma senza l'impronta della password entra")
+        for fp in ("0" * 16, None, 7, ""):
+            falso = self.reg._firma.codifica({"tipo": "host_token", "host_id": self.e.host_id,
+                                              "email": "host@mail.it", "fp": fp,
+                                              "exp": self.orologio["t"] + 100})
+            self.assertIsNone(self.reg.verifica_token(falso),
+                              "un gettone con impronta %r entra" % (fp,))
+
+    def test_un_cambio_password_RIFIUTATO_non_butta_fuori_nessuno(self):
+        tok = self.reg.login("host@mail.it", "passwordlunga").token
+        self.assertFalse(self.reg.cambia_password(self.e.host_id, "sbagliata!!", "nuova12345").ok)
+        self.assertEqual(self.e.host_id, self.reg.verifica_token(tok),
+                         "un tentativo FALLITO di cambio password ha chiuso le sessioni")
+
+    def test_la_pagina_dell_host_TIENE_il_gettone_nuovo_dopo_il_cambio_password(self):
+        # Il server, cambiata la password, restituisce un gettone nuovo: se la pagina non lo
+        # conserva, l'host che ha appena cambiato la propria password viene buttato fuori
+        # alla richiesta successiva (il vecchio non vale piu').
+        import os
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "deploy",
+                               "host.html"), encoding="utf-8") as f:
+            pagina = f.read()
+        inizio = pagina.find("getElementById('lnkPwCh')")
+        self.assertGreater(inizio, 0, "il gestore del cambio password non c'e' piu' in host.html")
+        fine = pagina.find("\n};", inizio)
+        gestore = pagina[inizio:fine]
+        self.assertIn("/api/host/cambia_password", gestore)
+        self.assertIn("r.data.token", gestore,
+                      "la pagina non legge il gettone nuovo dalla risposta del cambio password")
+        self.assertIn("localStorage.setItem('bookinvip_host_token',r.data.token)", gestore,
+                      "la pagina non conserva il gettone nuovo dopo il cambio password")
 
 
 if __name__ == "__main__":

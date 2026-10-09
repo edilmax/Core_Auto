@@ -638,12 +638,16 @@ class TestGiroOstileTutteLeRotte(unittest.TestCase):
             if "#reset=" in (html or ""):
                 tok_reset = html.split("#reset=")[1].split('"')[0].split("<")[0].strip()
         self.assertTrue(tok_reset, "password dimenticata: nessun magic-link nell'email")
-        self.chiama("POST", "/api/host/password_reset", 200, [("token", str)],
-                    body={"token": tok_reset, "password": "password3A"}, headers=IP,
-                    valore={"ok": True, "host_id": host_id})
-        self.chiama("POST", "/api/host/cambia_password", 200, [("token", str)],
-                    body={"attuale": "password3A", "vecchia": "password3A",
-                          "nuova": "password4A"}, headers=TOK, valore={"ok": True})
+        rs = self.chiama("POST", "/api/host/password_reset", 200, [("token", str)],
+                         body={"token": tok_reset, "password": "password3A"}, headers=IP,
+                         valore={"ok": True, "host_id": host_id})
+        # D3 (9/10): il ripristino e il cambio della password chiudono i gettoni di prima;
+        # l'host continua col gettone NUOVO che il server gli restituisce.
+        TOK = dict(self.IP, **{"X-Host-Token": rs["token"]})
+        cp = self.chiama("POST", "/api/host/cambia_password", 200, [("token", str)],
+                         body={"attuale": "password3A", "vecchia": "password3A",
+                               "nuova": "password4A"}, headers=TOK, valore={"ok": True})
+        TOK = dict(self.IP, **{"X-Host-Token": cp["token"]})
 
         # ── ADMIN: letture ───────────────────────────────────────────────────────────
         aa = self.chiama("GET", "/api/admin/alloggi", 200, [("alloggi", list)], headers=ADM)
