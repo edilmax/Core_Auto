@@ -251,9 +251,12 @@ class RegistroHost:
         finally:
             con.close()
 
-    def _token(self, host_id: str, email: str) -> str:
+    def _token(self, host_id: str, email: str, pw_hash: str) -> str:
+        # D3: il gettone porta l'impronta della password di adesso (la stessa del link di
+        # ripristino): cambiata la password, i gettoni di prima non aprono piu' il pannello.
         return self._firma.codifica({"tipo": "host_token", "host_id": host_id,
-                                     "email": email, "exp": self._now() + self._ttl})
+                                     "email": email, "fp": pw_hash[:16],
+                                     "exp": self._now() + self._ttl})
 
     # ── PASSWORD DIMENTICATA (C2 mega-audit 2026-07-20: prima era il LOCK-OUT ETERNO:
     #    nessun reset, email UNIQUE -> l'host che dimenticava la password perdeva
@@ -301,11 +304,12 @@ class RegistroHost:
                 con.execute("COMMIT")
                 return EsitoHost(False, errore="link_non_valido")   # usato/revocato
             salt = secrets.token_bytes(16)
+            nuovo = _hash_password(nuova, salt)
             con.execute("UPDATE host SET salt=?, pw_hash=? WHERE host_id=?",
-                        (salt.hex(), _hash_password(nuova, salt), host_id))
+                        (salt.hex(), nuovo, host_id))
             con.execute("COMMIT")
             return EsitoHost(True, host_id=host_id,
-                             token=self._token(host_id, r["email"]))
+                             token=self._token(host_id, r["email"], nuovo))
         except Exception:
             try:
                 con.execute("ROLLBACK")
@@ -336,11 +340,12 @@ class RegistroHost:
                 con.execute("COMMIT")
                 return EsitoHost(False, errore="credenziali_non_valide")
             salt = secrets.token_bytes(16)
+            nuovo = _hash_password(nuova, salt)
             con.execute("UPDATE host SET salt=?, pw_hash=? WHERE host_id=?",
-                        (salt.hex(), _hash_password(nuova, salt), host_id))
+                        (salt.hex(), nuovo, host_id))
             con.execute("COMMIT")
             return EsitoHost(True, host_id=host_id,
-                             token=self._token(host_id, r["email"]))
+                             token=self._token(host_id, r["email"], nuovo))
         except Exception:
             try:
                 con.execute("ROLLBACK")
@@ -386,7 +391,8 @@ class RegistroHost:
                  str(wechat_webhook or "").strip(), str(versione_termini),
                  self._now(), nato))
             con.execute("COMMIT")
-            return EsitoHost(True, host_id=host_id, token=self._token(host_id, email_n))
+            return EsitoHost(True, host_id=host_id,
+                             token=self._token(host_id, email_n, pw_hash))
         except Exception:
             try:
                 con.execute("ROLLBACK")
@@ -417,11 +423,12 @@ class RegistroHost:
         if not hmac.compare_digest(atteso, calcolato):
             return EsitoHost(False, errore="credenziali_non_valide")
         return EsitoHost(True, host_id=r["host_id"],
-                         token=self._token(r["host_id"], email_n))
+                         token=self._token(r["host_id"], email_n, atteso))
 
     def verifica_token(self, token: Any) -> Optional[str]:
         """Ritorna l'host_id se il token è firmato, è un host_token e non è scaduto;
-        altrimenti None. Verifica anche che l'account esista e sia attivo."""
+        altrimenti None. Verifica anche che l'account esista e sia attivo, e che il
+        gettone porti l'impronta della password ATTUALE (D3)."""
         dati = self._firma.decodifica(token)
         if not isinstance(dati, dict) or dati.get("tipo") != "host_token":
             return None
@@ -433,10 +440,13 @@ class RegistroHost:
             return None
         con = self._apri()
         try:
-            r = con.execute("SELECT stato FROM host WHERE host_id=?", (host_id,)).fetchone()
+            r = con.execute("SELECT stato, pw_hash FROM host WHERE host_id=?",
+                            (host_id,)).fetchone()
         finally:
             con.close()
         if r is None or r["stato"] != "attivo":
+            return None
+        if r["pw_hash"][:16] != dati.get("fp"):
             return None
         return host_id
 

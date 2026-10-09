@@ -146,5 +146,58 @@ class TestIBuchiDelGiudice(unittest.TestCase):
                 self.assertEqual(gestisci_webhook(corpo, h, SECRET, ora=1000), (False, "", None))
 
 
+class TestIlSegretoRinnovatoNonFermaIPagamenti(unittest.TestCase):
+    """C53-B1-1 (busta 8): l'intestazione si leggeva in un dizionario, quindi di piu' firme
+    `v1` restava solo l'ULTIMA. Stripe, quando il segreto del webhook si rinnova, per un
+    periodo ne tiene vivi due e manda una firma per ciascuno: «During this time, multiple
+    secrets are active for the endpoint. Stripe generates one signature per secret until
+    expiration» (docs.stripe.com, «Manage webhook endpoints», letta l'8/10/2026). Se la firma
+    buona non era l'ultima, OGNI evento prendeva 400: nessun pagamento confermato, stanze
+    liberate, ospiti addebitati senza prenotazione. La libreria ufficiale (stripe-python,
+    `WebhookSignature.verify_header`) accetta l'evento se UNA qualunque delle firme `v1`
+    combacia.
+
+    C53-B1-2 (stessa riga): `hmac.compare_digest` su testo con un carattere non ASCII
+    SOLLEVA invece di dire False, e il modulo promette «non solleva MAI».
+    """
+
+    def _firma(self, segreto, ts=1000):
+        return firma_di_test(PAYLOAD, segreto, ts).split("v1=", 1)[1]
+
+    def test_la_firma_buona_PRIMA_di_una_di_un_altro_segreto_vale(self):
+        h = "t=1000,v1=%s,v1=%s" % (self._firma(SECRET), self._firma("whsec_nuovo"))
+        self.assertTrue(verifica_firma_stripe(PAYLOAD, h, SECRET, ora=1000),
+                        "con due firme (segreto in rinnovo) vale solo l'ultima")
+
+    def test_la_firma_buona_DOPO_una_di_un_altro_segreto_vale(self):
+        h = "t=1000,v1=%s,v1=%s" % (self._firma("whsec_vecchio"), self._firma(SECRET))
+        self.assertTrue(verifica_firma_stripe(PAYLOAD, h, SECRET, ora=1000))
+
+    def test_la_firma_v0_di_prova_si_ignora_e_non_vale_come_v1(self):
+        h = "t=1000,v1=%s,v0=%s" % (self._firma("whsec_altro"), self._firma(SECRET))
+        self.assertFalse(verifica_firma_stripe(PAYLOAD, h, SECRET, ora=1000),
+                         "una firma v0 giusta e' stata presa per una v1")
+        h = "t=1000,v0=%s,v1=%s" % (self._firma("whsec_altro"), self._firma(SECRET))
+        self.assertTrue(verifica_firma_stripe(PAYLOAD, h, SECRET, ora=1000))
+
+    def test_nessuna_firma_giusta_fra_tante_resta_un_RIFIUTO(self):
+        h = "t=1000,v1=%s,v1=%s,v1=%s" % (self._firma("whsec_a"), self._firma("whsec_b"),
+                                          "0" * 64)
+        self.assertFalse(verifica_firma_stripe(PAYLOAD, h, SECRET, ora=1000))
+
+    def test_una_firma_con_un_carattere_NON_ASCII_e_un_rifiuto_e_non_esplode(self):
+        for cattiva in ("é" * 64, "abcé", "€"):
+            for h in ("t=1000,v1=%s" % cattiva,
+                      "t=1000,v1=%s,v1=%s" % (cattiva, self._firma("whsec_altro"))):
+                try:
+                    esito = verifica_firma_stripe(PAYLOAD, h, SECRET, ora=1000)
+                except TypeError as e:
+                    self.fail("la verifica della firma ESPLODE su %r: %s" % (cattiva, e))
+                self.assertIs(False, esito)
+        h = "t=1000,v1=%s,v1=%s" % ("é" * 64, self._firma(SECRET))
+        self.assertTrue(verifica_firma_stripe(PAYLOAD, h, SECRET, ora=1000),
+                        "una firma storta davanti fa scartare quella buona")
+
+
 if __name__ == "__main__":
     unittest.main()

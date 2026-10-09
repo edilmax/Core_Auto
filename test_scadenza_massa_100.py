@@ -45,6 +45,10 @@ class TestScadenzaMassa(unittest.TestCase):
             db_viral=f"{d}/v.db", db_messaggi=f"{d}/m.db", db_domanda=f"{d}/dom.db",
             db_garanzia=f"{d}/g.db", db_pendenti=self.db_pendenti,
             db_tassa_comunale=f"{d}/tc.db", file_referral=f"{d}/ref.json",
+            # il registro dei bonifici su FILE, come in produzione (data/payout.db): in
+            # memoria e' UNA connessione condivisa dai 54 fili della gara, e li' le scritture
+            # falliscono davvero (C53-B1-5 le vede e fa ritentare Stripe con un 503)
+            db_payout=f"{d}/po.db",
             commissione_bps=1500, stripe_webhook_secret=WHSEC))
         # Stripe "configurato" finto -> attiva il percorso HOLD (in_attesa_pagamento)
         self.sis.concierge._link = lambda dati: "https://pay/" + str(dati.get("riferimento", ""))

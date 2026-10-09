@@ -1609,6 +1609,8 @@ document.getElementById('lnkPwCh').onclick=async function(ev){ ev.preventDefault
   const n=prompt(T('pw_nuova')); if(n===null) return;
   if((n||'').length<8){ alert(T('pw_corta')); return; }
   const r=await post('/api/host/cambia_password',{vecchia:v,nuova:n});
+  // D3: il cambio chiude i gettoni di prima e il server ne da' uno nuovo: va tenuto
+  if(r.status===200&&r.data&&r.data.token){ localStorage.setItem('bookinvip_host_token',r.data.token); }
   alert(r.status===200?T('pw_cambiata'):T('pw_cambia_ko'));
 };
 // date di default VIVE nei form (oggi / +14 / +30): mai piu' default fissi che invecchiano

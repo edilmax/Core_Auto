@@ -106,6 +106,40 @@ class TestRiconciliazione(unittest.TestCase):
         d = rep["importo_diverso"][0]
         self.assertEqual((d["stripe_cents"], d["giornale_cents"]), (24999, 25000))
 
+    def test_una_CONTESTAZIONE_di_carta_non_passa_per_un_mondo_perfetto(self):
+        """C53-B1-4 (busta 8): il confronto guardava solo charge, refund e transfer. Una
+        contestazione (chargeback) toglie dal saldo l'importo E la commissione («Addebita
+        l'importo contestato, oltre a una commissione di contestazione, sul tuo account
+        Stripe», docs.stripe.com, «Come funzionano le contestazioni», letta l'8/10/2026), e
+        nel giornale non c'e' nessuna riga che la racconti: il confronto diceva «tutto
+        quadra» mentre i soldi uscivano. Ora la categoria `dispute` entra nel confronto, e
+        siccome il giornale non ne ha, una contestazione nel periodo e' sempre un delta."""
+        self._incasso("R1", 25000)
+        st = _StripeFinto(
+            sessioni=[_sessione("R1", 25000)],
+            balance=[{"id": "txn_1", "reporting_category": "charge",
+                      "currency": "eur", "amount": 25000},
+                     {"id": "txn_2", "reporting_category": "dispute",
+                      "currency": "eur", "amount": -25000},
+                     {"id": "txn_3", "reporting_category": "dispute",
+                      "currency": "eur", "amount": -1500}])
+        rep = self._ric(st)
+        self.assertFalse(rep["ok"], "una contestazione da 265 EUR e il confronto dice che "
+                                    "tutto quadra: %r" % (rep.get("confronti"),))
+        self.assertEqual({"EUR": 26500},
+                         rep["confronti"].get("contestazioni", {}).get("delta"),
+                         "la contestazione non si legge nel report: %r" % (rep["confronti"],))
+
+    def test_senza_contestazioni_il_confronto_resta_muto(self):
+        self._incasso("R1", 25000)
+        st = _StripeFinto(sessioni=[_sessione("R1", 25000)],
+                          balance=[{"id": "txn_1", "reporting_category": "charge",
+                                    "currency": "eur", "amount": 25000}])
+        rep = self._ric(st)
+        self.assertTrue(rep["ok"], rep)
+        self.assertEqual({}, rep["confronti"].get("contestazioni", {}).get("delta", {}),
+                         "un mondo senza contestazioni ne mostra una")
+
     def test_non_pagate_filtrate(self):
         st = _StripeFinto(sessioni=[_sessione("ABBAND", 5000, pagata=False)])
         self.assertEqual(stripe_sessioni_pagate("sk", 0, fetch=st), [])

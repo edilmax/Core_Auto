@@ -2137,5 +2137,412 @@ class TestIlBloccoVuotoDellaHomePrometteIlCreditoVERO(unittest.TestCase):
                                           "essere le 8 vere del sito")
 
 
+class _ConnectCheRicorda:
+    """Il bonifico Connect, finto al bordo: ricorda cosa gli e' stato chiesto di pagare."""
+
+    def __init__(self):
+        self.bonifici = []
+
+    def trasferisci(self, acct, importo, valuta, rif):
+        self.bonifici.append((acct, importo, valuta, rif))
+        return "tr_%d" % len(self.bonifici)
+
+
+class _BancoDeiSoldiDelServer(unittest.TestCase):
+    """Sistema VERO su file (pendenti, bonifici, garanzia, giornale), webhook firmato,
+    Stripe finto solo nella rete e Connect finto al bordo. Le guardie dei soldi che toccano
+    righe di `fase83_server` stanno in QUESTO file: e' quello che il Giudice accende per
+    fase83 (misurato l'8/10 con `scegli_sorveglianti`), altrove i mutanti sopravviverebbero."""
+
+    WH = "whsec_banco_server"
+    # in una costante: passata come stringa a un argomento `*_key` conta per bandit come
+    # segreto cablato (B106). La rete e' finta, la chiave non conta.
+    CHIAVE = "sk_test_x"
+
+    @classmethod
+    def setUpClass(cls):
+        import fase85_pagamenti_stripe as _stripe
+        cls._stripe = _stripe
+        cls._orig_fetch = _stripe.ProviderStripe._fetch_reale
+        _stripe.ProviderStripe._fetch_reale = staticmethod(
+            lambda u, b, h: {"id": u.rstrip("/").rsplit("/", 1)[-1], "payment_status": "paid"}
+            if not b and "/checkout/sessions/" in u
+            else {"url": "https://checkout.stripe.test/cs", "id": "cs_1"})
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._stripe.ProviderStripe._fetch_reale = cls._orig_fetch
+
+    def setUp(self):
+        d = self.dir = tempfile.mkdtemp()
+        self.sis = crea_sistema(ConfigCasaVIP(
+            abilitato=True, segreto_hmac=b"S" * 32, con_registrazione_host=True,
+            db_catalogo=f"{d}/c.db", db_inventario=f"{d}/i.db",
+            db_registro_host=f"{d}/r.db", db_accettazioni=f"{d}/acc.db",
+            db_pendenti=f"{d}/p.db", db_payout=f"{d}/pay.db", db_garanzia=f"{d}/g.db",
+            db_tassa_comunale=f"{d}/t.db", db_finanza=f"{d}/fin.db",
+            commissione_bps=1000, psp_bps=300,
+            stripe_secret_key=self.CHIAVE, stripe_webhook_secret=self.WH,
+            stripe_success_url="https://x/ok", stripe_cancel_url="https://x/ko"))
+        self.connect = _ConnectCheRicorda()
+        self.sis.connect = self.connect
+        self.r = crea_router(self.sis, host_key="hk", admin_key="ak",
+                             base_url="https://bookinvip.com")
+        s, c = self.g("POST", "/api/host/registrazione",
+                      {"email": "h@banco.it", "password": "password1", "accetta_termini": True,
+                       "accetta_clausole": True, "accetta_privacy": True,
+                       "doc_sha256": doc_sha256(), "versione": CONTRATTO_HOST_VERSIONE})
+        _deve(s == 201, s, c)
+        self.hid, self.tok = c["host_id"], c["token"]
+        self.sis.registro_host.imposta_stripe_account(self.hid, "acct_banco")
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def g(self, m, p, b=None, h=None):
+        return self.r.gestisci(m, p, {}, json.dumps(b) if b is not None else None, h or {})
+
+    def pubblica(self, slug, politica="flessibile", **altro):
+        annuncio = {"slug": slug, "titolo": "Casa", "citta": "Roma", "prezzo_notte_cents": 10000,
+                    "capacita": 2, "politica_cancellazione": politica}
+        annuncio.update(altro)
+        self.g("POST", "/api/host/pubblica", annuncio, {"X-Host-Token": self.tok})
+        self.g("POST", "/api/host/disponibilita_range",
+               {"alloggio_id": slug, "da": _fra(0), "a": _fra(60), "unita_totali": 1,
+                "prezzo_netto_cents": 10000}, {"X-Host-Token": self.tok})
+
+    def prenota(self, slug, giorni_all_arrivo):
+        s, q = self.g("POST", "/api/concierge/quote",
+                      {"alloggio_id": slug, "check_in": _fra(giorni_all_arrivo),
+                       "check_out": _fra(giorni_all_arrivo + 2), "party": 2})
+        _deve(s == 200, s, q)
+        s, b = self.g("POST", "/api/concierge/book",
+                      {"quote_token": q["quote_token"], "email": "cli@banco.it"})
+        _deve(s == 201, s, b)
+        return b
+
+    def evento(self, tipo, oggetto, evt_id=None):
+        corpo = {"type": tipo, "data": {"object": oggetto}}
+        if evt_id:
+            corpo["id"] = evt_id
+        payload = json.dumps(corpo)
+        from fase87_stripe_webhook import firma_di_test
+        return self.r.gestisci("POST", "/api/payments/webhook", {}, payload,
+                               {"Stripe-Signature": firma_di_test(payload, self.WH,
+                                                                  int(time.time()))})
+
+    def paga(self, rif, pi):
+        return self.evento("checkout.session.completed",
+                           {"id": "cs_" + pi, "payment_intent": pi,
+                            "metadata": {"riferimento": rif}})
+
+    def contestazione(self, pi, dp="dp_banco1", importo=20000):
+        return self.evento("charge.dispute.created",
+                           {"id": dp, "object": "dispute", "payment_intent": pi,
+                            "charge": "ch_banco", "amount": importo, "currency": "eur",
+                            "reason": "fraudulent", "status": "needs_response"},
+                           evt_id="evt_" + dp)
+
+    def incassi(self, rif):
+        return [m for m in self.sis.finanza.movimenti(rif) if m.get("tipo") == "incasso"]
+
+    def ascolta(self):
+        """Raccoglie TUTTO cio' che il server scrive nel registro, senza pretendere niente:
+        cosi' la prova guarda prima i soldi e poi l'allarme, e il rosso dice il motivo vero
+        (con `assertLogs` un allarme mancante nasconderebbe il bonifico sbagliato)."""
+        import contextlib
+        import logging
+
+        @contextlib.contextmanager
+        def _ascolto():
+            righe = []
+
+            class _Orecchio(logging.Handler):
+                def emit(self, rec):
+                    # anche la traccia: «c'e' LA COSA, del tipo giusto?», non «non e' nulla»
+                    tipo = (rec.exc_info[0].__name__ if isinstance(rec.exc_info, tuple)
+                            and rec.exc_info[0] is not None else "-")
+                    righe.append("%s:%s |exc_info:%s" % (rec.levelname, rec.getMessage(), tipo))
+            orecchio = _Orecchio(level=logging.DEBUG)
+            lg = logging.getLogger("core_auto.server")
+            prima = lg.level
+            lg.addHandler(orecchio)
+            lg.setLevel(logging.DEBUG)
+            try:
+                yield righe
+            finally:
+                lg.removeHandler(orecchio)
+                lg.setLevel(prima)
+        return _ascolto()
+
+    @staticmethod
+    def errori_con(righe, *parole):
+        return [r for r in righe if r.startswith("ERROR:") and all(p in r for p in parole)]
+
+    @staticmethod
+    def avvisi_con(righe, *parole):
+        return [r for r in righe if r.startswith("WARNING:") and all(p in r for p in parole)]
+
+
+class TestLaPenaleNonDiventaUnBonificoPieno(_BancoDeiSoldiDelServer):
+    """C53-B1-9 (busta 8): nella cancellazione con penale il registro dei bonifici si
+    riallinea alla quota dell'host (`imposta_importo`) e poi parte il bonifico, che per
+    regola paga l'importo SCRITTO NEL REGISTRO. Il ritorno del riallineo non si guardava: se
+    la scrittura falliva (archivio bloccato) il registro restava all'importo PIENO e partiva
+    quello -- l'ospite riceveva indietro la sua parte E l'host riceveva tutto."""
+
+    def _cancella_con_penale(self, **annuncio):
+        self.pubblica("casa-pen", "moderata", **annuncio)
+        b = self.prenota("casa-pen", 2)                 # moderata a 2 giorni: meta' e meta'
+        rif = b["riferimento"]
+        s, c = self.paga(rif, "pi_pen")
+        _deve(s == 200, s, c)
+        pieno = self.sis.payout.info(rif)["minori"]
+        _deve(self.sis.payout.stato_di(rif) == "maturato", self.sis.payout.stato_di(rif))
+        s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": b["voucher_token"]})
+        self.assertEqual(200, s, c)
+        quota = self.sis.garanzia.stato(rif)["host_riceve_cents"]
+        _deve(0 < quota < pieno, "PREMESSA: serve una penale PARZIALE", quota, pieno, c)
+        return rif, quota, pieno
+
+    def test_se_il_registro_NON_si_riallinea_il_bonifico_pieno_NON_parte(self):
+        self.sis.payout.imposta_importo = lambda *a, **k: False
+        with self.ascolta() as righe:
+            rif, quota, pieno = self._cancella_con_penale()
+        self.assertEqual([], self.connect.bonifici,
+                         "BONIFICO PIENO SU UNA PENALE: la quota dell'host era %d, il registro "
+                         "non si e' riallineato e sono partiti %r (pieno %d)"
+                         % (quota, self.connect.bonifici, pieno))
+        self.assertTrue(self.errori_con(righe, "importo_non_riallineato",
+                                        "SOTTOCODICE: trattenuto |"),
+                        "nessun ERROR col codice e col bonifico trattenuto: %r" % (righe,))
+        self.assertEqual("trattenuto", self.sis.payout.stato_di(rif))
+
+    def test_se_ANCHE_il_trattenere_esplode_il_registro_lo_dice(self):
+        import sqlite3
+
+        def esplode(*a, **k):
+            raise sqlite3.OperationalError("database is locked")
+        self.sis.payout.imposta_importo = lambda *a, **k: False
+        vero = self.sis.payout.aggiorna_stato
+        self.sis.payout.aggiorna_stato = (
+            lambda pid, nuovo: esplode() if nuovo == "trattenuto" else vero(pid, nuovo))
+        with self.ascolta() as righe:
+            rif, quota, pieno = self._cancella_con_penale()
+        self.assertEqual([], self.connect.bonifici, "%r" % (self.connect.bonifici,))
+        self.assertTrue(self.errori_con(righe, "importo_non_riallineato",
+                                        "SOTTOCODICE: TRATTENUTA_FALLITA"), "%r" % (righe,))
+        self.assertTrue(self.avvisi_con(righe, "payout trattenuto su penale esploso",
+                                        "|exc_info:OperationalError"), "%r" % (righe,))
+
+    def test_con_DUE_archivi_fermi_il_bonifico_pieno_non_parte_nemmeno_dopo(self):
+        # D19, lo stato si costruisce a mano: insieme al registro dei bonifici non risponde
+        # nemmeno quello dei pagamenti, quindi il pagamento resta 'pagato'. La garanzia e' gia'
+        # 'risolto': il giro che ritenta i bonifici fermi quando l'host completa i dati
+        # fiscali pagherebbe il registro PIENO. A fermarlo resta solo il 'trattenuto'.
+        import sqlite3
+
+        def bloccato(*a, **k):
+            raise sqlite3.OperationalError("database is locked")
+        self.sis.payout.imposta_importo = lambda *a, **k: False
+        self.sis.pagamenti_pendenti.marca_da_rimborsare = bloccato
+        rif, quota, pieno = self._cancella_con_penale()
+        _deve(self.sis.pagamenti_pendenti.info(rif)["stato"] == "pagato",
+              "PREMESSA: il pagamento doveva restare 'pagato'",
+              self.sis.pagamenti_pendenti.info(rif))
+        s, c = self.g("POST", "/api/host/dati_fiscali",
+                      {"codice_fiscale": "RSSMRA80A01H501U", "indirizzo_fiscale": "Via Roma 1",
+                       "paese": "IT", "iban": "IT60X0542811101000000123456",
+                       "tipo_soggetto": "individuo"}, {"X-Host-Token": self.tok})
+        self.assertEqual(200, s, c)
+        self.assertEqual([], self.connect.bonifici,
+                         "BONIFICO PIENO DAL GIRO DEI BONIFICI FERMI: quota %d, partiti %r"
+                         % (quota, self.connect.bonifici))
+        self.assertEqual("trattenuto", self.sis.payout.stato_di(rif))
+
+    def test_se_il_riallineo_ESPLODE_il_bonifico_pieno_NON_parte(self):
+        import sqlite3
+
+        def esplode(*a, **k):
+            raise sqlite3.OperationalError("database is locked")
+        self.sis.payout.imposta_importo = esplode
+        with self.ascolta() as righe:
+            rif, quota, pieno = self._cancella_con_penale()
+        self.assertEqual([], self.connect.bonifici,
+                         "BONIFICO PIENO SU UNA PENALE (riallineo esploso): quota %d, partiti %r"
+                         % (quota, self.connect.bonifici))
+        self.assertTrue(self.errori_con(righe, "importo_non_riallineato"), "%r" % (righe,))
+        self.assertTrue(self.avvisi_con(righe, "riallineo payout su penale esploso",
+                                        "|exc_info:OperationalError"), "%r" % (righe,))
+
+    def test_col_registro_sano_parte_ESATTAMENTE_la_quota_dell_host(self):
+        rif, quota, pieno = self._cancella_con_penale()
+        self.assertEqual([("acct_banco", quota, "EUR", rif)], self.connect.bonifici)
+        self.assertEqual(quota, self.sis.payout.info(rif)["minori"])
+
+    def test_la_penale_arriva_INTERA_anche_con_la_ritenuta_accesa(self):
+        # `penale=True` dal percorso VERO: una penale non e' canone e la ritenuta non si opera
+        # (la guida AdE esclude le penali). C'e' gia' in test_ritenuta, ma il Giudice per
+        # fase83 accende QUESTO file: la' il guasto sulla riga del bonifico non lo vedrebbe.
+        _deve(self.sis.ritenuta.imposta(True, motivo="collaudo", chi="test"),
+              "PREMESSA: la ritenuta non si accende")
+        rif, quota, pieno = self._cancella_con_penale(paese="IT", cin="IT058091C2ABCDEF12")
+        self.assertEqual([("acct_banco", quota, "EUR", rif)], self.connect.bonifici,
+                         "la penale e' stata trattata come un canone")
+        self.assertEqual([], [m for m in self.sis.finanza.movimenti(rif)
+                              if m.get("tipo") == "ritenuta"])
+
+
+class TestUnPagamentoConfermatoNonLasciaIlBonificoFermo(_BancoDeiSoldiDelServer):
+    """C53-B1-5 (busta 8): dopo la conferma il bonifico dell'host passa da 'in_attesa' a
+    'maturato'. Se quel passo falliva (archivio bloccato: `aggiorna_stato` risponde False) il
+    ritorno non si guardava, il webhook rispondeva 200 e Stripe non ritentava MAI: il
+    bonifico restava 'in_attesa' per sempre, l'host non veniva pagato, e nessun allarme
+    (il Guardiano cerca i bonifici fermi solo fra i 'maturato')."""
+
+    def test_se_il_bonifico_non_matura_Stripe_deve_RITENTARE_e_il_ritentativo_sana(self):
+        self.pubblica("casa-mat")
+        b = self.prenota("casa-mat", 10)
+        rif = b["riferimento"]
+        _deve(self.sis.payout.stato_di(rif) == "in_attesa", self.sis.payout.stato_di(rif))
+        vero = self.sis.payout.aggiorna_stato
+
+        def bloccato(prenotazione_id, nuovo):
+            return False if nuovo == "maturato" else vero(prenotazione_id, nuovo)
+        self.sis.payout.aggiorna_stato = bloccato
+        s, c = self.paga(rif, "pi_mat")
+        self.assertEqual(503, s, "IL BONIFICO E' RIMASTO FERMO E STRIPE NON RITENTERA': il "
+                                 "webhook ha risposto %s %r" % (s, c))
+        self.assertEqual("in_attesa", self.sis.payout.stato_di(rif))
+        self.assertEqual("pagato", self.sis.pagamenti_pendenti.info(rif)["stato"])
+        self.sis.payout.aggiorna_stato = vero            # l'archivio torna libero
+        s, c = self.paga(rif, "pi_mat")                  # Stripe ritenta
+        self.assertEqual(200, s, c)
+        self.assertEqual("maturato", self.sis.payout.stato_di(rif),
+                         "il ritentativo non ha sanato il bonifico fermo")
+        s, c = self.paga(rif, "pi_mat")                  # e una riconsegna in piu' non e' un 503
+        self.assertEqual(200, s, "un bonifico GIA' maturato fa ritentare Stripe all'infinito: "
+                                 "%r" % (c,))
+        self.assertEqual(1, len(self.incassi(rif)), "%r" % (self.incassi(rif),))
+
+    def test_finche_il_bonifico_resta_fermo_ANCHE_il_ritentativo_risponde_503(self):
+        # il ritentativo passa da un'altra strada (il pagamento e' gia' 'pagato'): anche li'
+        # un bonifico fermo non puo' diventare «gestito»
+        self.pubblica("casa-mat2")
+        b = self.prenota("casa-mat2", 10)
+        rif = b["riferimento"]
+        vero = self.sis.payout.aggiorna_stato
+        self.sis.payout.aggiorna_stato = (
+            lambda pid, nuovo: False if nuovo == "maturato" else vero(pid, nuovo))
+        s1, c1 = self.paga(rif, "pi_mat2")
+        _deve(s1 == 503, "PREMESSA: la prima consegna deve fallire", s1, c1)
+        s2, c2 = self.paga(rif, "pi_mat2")               # ritenta con l'archivio ancora bloccato
+        self.assertEqual(503, s2, "il ritentativo ha detto «gestito» con il bonifico ancora "
+                                  "fermo: %r" % (c2,))
+        self.assertEqual("in_attesa", self.sis.payout.stato_di(rif))
+
+
+class TestUnaContestazioneDiCartaFermaIlBonifico(_BancoDeiSoldiDelServer):
+    """C53-B1-4 (busta 8): nessuno gestiva `charge.dispute.created`. L'ospite contesta
+    l'addebito con la sua banca, Stripe toglie importo e commissione dal NOSTRO saldo, e il
+    bonifico all'host partiva lo stesso allo scadere della garanzia; nel registro niente.
+    Stripe: «Non puoi emettere un rimborso al di fuori della procedura di contestazione quando
+    ce n'e' una» -- decide una persona, quindi la garanzia si ferma come per un reclamo
+    dell'ospite e lo dice un ERROR (che il Guardiano manda per email)."""
+
+    def _pagata(self, slug, pi):
+        self.pubblica(slug)
+        b = self.prenota(slug, 10)
+        rif = b["riferimento"]
+        s, c = self.paga(rif, pi)
+        _deve(s == 200, s, c)
+        _deve(self.sis.garanzia.stato(rif)["stato"] == "in_garanzia",
+              self.sis.garanzia.stato(rif))
+        _deve(self.sis.payout.stato_di(rif) == "maturato", self.sis.payout.stato_di(rif))
+        return rif
+
+    def test_la_contestazione_FERMA_la_garanzia_e_il_bonifico_e_grida(self):
+        rif = self._pagata("casa-dsp", "pi_dsp")
+        with self.ascolta() as righe:
+            s, c = self.contestazione("pi_dsp")
+        self.assertEqual(200, s, c)
+        self.assertEqual("contestato", self.sis.garanzia.stato(rif)["stato"],
+                         "UNA CONTESTAZIONE DI CARTA NON FERMA LA GARANZIA: allo scadere il "
+                         "bonifico all'host parte con i soldi che Stripe ci ha gia' tolto")
+        self.assertEqual("trattenuto", self.sis.payout.stato_di(rif))
+        self.assertTrue(self.errori_con(righe, "chargeback", "dp_banco1"),
+                        "nessun ERROR che dica la contestazione: %r" % (righe,))
+        # il giro orario di produzione: rilascio delle garanzie scadute + bonifico
+        for r in self.sis.garanzia.auto_rilascia(ora_ts=int(time.time()) + 40 * 86400,
+                                                 dettagli=True) or []:
+            self.r._trasferisci_all_host(r["prenotazione_id"], r["host_riceve_cents"])
+        self.assertEqual([], self.connect.bonifici,
+                         "dopo la contestazione il bonifico all'host e' partito: %r"
+                         % (self.connect.bonifici,))
+
+    def test_la_contestazione_su_un_bonifico_GIA_PARTITO_lo_dice(self):
+        rif = self._pagata("casa-dsp2", "pi_dsp2")
+        for r in self.sis.garanzia.auto_rilascia(ora_ts=int(time.time()) + 40 * 86400,
+                                                 dettagli=True) or []:
+            self.r._trasferisci_all_host(r["prenotazione_id"], r["host_riceve_cents"])
+        _deve(self.sis.payout.stato_di(rif) == "in_transito", self.sis.payout.stato_di(rif))
+        with self.ascolta() as righe:
+            s, c = self.contestazione("pi_dsp2", dp="dp_banco2")
+        self.assertEqual(200, s, c)
+        self.assertTrue(self.errori_con(righe, "bonifico_gia_partito", "dp_banco2"),
+                        "una contestazione su un bonifico gia' partito non grida: %r" % (righe,))
+
+    def test_la_contestazione_su_un_pagamento_SCONOSCIUTO_grida_e_non_fa_ritentare(self):
+        with self.ascolta() as righe:
+            s, c = self.contestazione("pi_mai_visto", dp="dp_banco3")
+        self.assertEqual(200, s, c)
+        self.assertTrue(self.errori_con(righe, "pagamento_sconosciuto", "dp_banco3"),
+                        "una contestazione che non sappiamo a chi appartiene tace: %r" % (righe,))
+
+    def test_se_la_garanzia_non_si_ferma_Stripe_deve_RITENTARE(self):
+        self._pagata("casa-dsp4", "pi_dsp4")
+        self.sis.garanzia.contesta = lambda *a, **k: {"ok": False, "motivo": "archivio"}
+        with self.ascolta() as righe:
+            s, c = self.contestazione("pi_dsp4", dp="dp_banco4")
+        self.assertEqual(503, s, "la garanzia non si e' fermata e il webhook dice «gestito»: "
+                                 "%r" % (c,))
+        self.assertTrue(self.errori_con(righe, "dp_banco4"), "%r" % (righe,))
+
+    def test_se_il_bonifico_non_si_trattiene_Stripe_deve_RITENTARE(self):
+        rif = self._pagata("casa-dsp5", "pi_dsp5")
+        self.sis.payout.aggiorna_stato = lambda *a, **k: False
+        with self.ascolta() as righe:
+            s, c = self.contestazione("pi_dsp5", dp="dp_banco5")
+        self.assertEqual(503, s, "il bonifico e' rimasto pagabile e il webhook dice «gestito»: "
+                                 "%r" % (c,))
+        self.assertEqual("maturato", self.sis.payout.stato_di(rif))
+        self.assertTrue(self.errori_con(righe, "bonifico_non_trattenuto", "dp_banco5"),
+                        "%r" % (righe,))
+
+    def test_una_garanzia_MAI_APERTA_non_fa_ritentare_ma_il_bonifico_si_ferma(self):
+        # senza garanzia il bonifico e' l'UNICA protezione: i giri dei bonifici fermi pagano
+        # chi non ha una garanzia aperta
+        rif = self._pagata("casa-dsp6", "pi_dsp6")
+        self.sis.garanzia.contesta = lambda *a, **k: {"ok": False, "motivo": "non_trovata"}
+        with self.ascolta() as righe:
+            s, c = self.contestazione("pi_dsp6", dp="dp_banco6")
+        self.assertEqual(200, s, "ritentare non fa nascere una garanzia: %r" % (c,))
+        self.assertEqual("trattenuto", self.sis.payout.stato_di(rif))
+        self.assertTrue(self.errori_con(righe, "chargeback", "dp_banco6"), "%r" % (righe,))
+
+    def test_se_la_ricerca_ESPLODE_Stripe_ritenta_e_il_registro_lo_dice(self):
+        # D19: l'archivio illeggibile si costruisce a mano
+        import sqlite3
+
+        def esplode(*a, **k):
+            raise sqlite3.OperationalError("database is locked")
+        self.sis.pagamenti_pendenti.per_payment_intent = esplode
+        with self.ascolta() as righe:
+            s, c = self.contestazione("pi_dsp7", dp="dp_banco7")
+        self.assertEqual(503, s, "%r" % (c,))
+        self.assertTrue(self.errori_con(righe, "contestazione_esplosa", "dp_banco7",
+                                        "|exc_info:OperationalError"), "%r" % (righe,))
+
+
 if __name__ == "__main__":
     unittest.main()

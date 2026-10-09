@@ -7859,13 +7859,30 @@ class RouterHTTP:
             # Ora: ledger riallineato alla quota VERA + bonifico automatico (gated
             # Connect; senza account resta 'maturato' = da_pagare giusto per il manuale).
             # PRIMA di marca_da_rimborsare: il transfer esige il pendente 'pagato'.
+            # C53-B1-9: il bonifico paga l'importo SCRITTO NEL REGISTRO. Se il riallineo alla
+            # quota non riesce il registro dice ancora il PIENO e partirebbe quello (l'ospite
+            # riavrebbe la sua parte E l'host avrebbe tutto): niente bonifico, e il registro
+            # passa a 'trattenuto', che i giri dei bonifici fermi (la garanzia e' gia'
+            # 'risolto') non ripagano. Decide una persona.
+            pd = getattr(self._sys, "payout", None)
             try:
-                pd = getattr(self._sys, "payout", None)
-                if pd is not None:
-                    pd.imposta_importo(rif, host_tiene)
+                riallineato = pd is None or pd.imposta_importo(rif, host_tiene) is True
             except Exception:
-                logger.warning("riallineo payout su penale fallito (ignorato)", exc_info=True)
-            self._trasferisci_all_host(rif, host_tiene, penale=True)   # una penale non e' canone
+                riallineato = False
+                logger.warning("riallineo payout su penale esploso", exc_info=True)
+            if riallineato:
+                self._trasferisci_all_host(rif, host_tiene, penale=True)   # una penale non e' canone
+            else:
+                try:
+                    fermo = pd.aggiorna_stato(rif, "trattenuto") is True
+                except Exception:
+                    fermo = False
+                    logger.warning("payout trattenuto su penale esploso", exc_info=True)
+                logger.error("BONIFICO FERMATO | RIF: %s | CODICE: importo_non_riallineato | "
+                             "SOTTOCODICE: %s | il registro dei bonifici non e' sceso alla quota "
+                             "dell'host (%d) e dice ancora l'importo pieno: il bonifico NON parte; "
+                             "correggere l'importo e pagare a mano", _rif_per_registro(rif),
+                             "trattenuto" if fermo else "TRATTENUTA_FALLITA", host_tiene)
         else:
             self._payout_trattieni(rif)        # nessuna quota host -> niente payout
         # STORNA SEMPRE (non solo se pagato_davvero): il tombstone del ledger tassa deve
@@ -9332,6 +9349,8 @@ class RouterHTTP:
             #    pagato e Stripe non l'avrebbe MAI piu' riproposto (2026-09-14).
             if self._conferma_pagamento(rif) is False:
                 esito_perso = "conferma_pagamento_fallita"
+        elif tipo == "charge.dispute.created":
+            esito_perso = self._contestazione_carta((dati or {}).get("object", {}) or {})
         elif str(tipo).startswith("identity.verification_session."):
             # STRIPE IDENTITY (Incr.11): il webhook porta l'ESITO (mai il documento).
             # ISOLATO: qualunque errore qui non tocca il resto del webhook.
@@ -9370,6 +9389,59 @@ class RouterHTTP:
                          esito_perso, tipo)
             return 503, {"errore": "esito_non_applicato", "sottocodice": esito_perso}
         return 200, {"ricevuto": True, "tipo": tipo}
+
+    def _contestazione_carta(self, obj):
+        """C53-B1-4: l'ospite contesta l'addebito con la sua banca (chargeback). Stripe toglie
+        importo e commissione dal NOSTRO saldo, e durante una contestazione un rimborso fuori
+        dalla procedura non si puo' fare: decide una persona. Quindi la garanzia si ferma come
+        per un reclamo dell'ospite (niente rilascio automatico), il bonifico non ancora partito
+        passa a 'trattenuto', e un ERROR lo dice (il Guardiano lo manda per email).
+        Ritorna "" se e' tutto scritto, altrimenti il sottocodice del 503 (Stripe ritenta).
+        ⚠️ Arriva solo se l'endpoint di Stripe e' iscritto a `charge.dispute.created`."""
+        dp = _rif_per_registro(obj.get("id") or "")
+        try:
+            pp = getattr(self._sys, "pagamenti_pendenti", None)
+            rec = pp.per_payment_intent(obj.get("payment_intent")) if pp is not None else None
+            if rec is None:
+                logger.error("CHARGEBACK | codice: chargeback | sottocodice: pagamento_sconosciuto"
+                             " | contestazione: %s | payment_intent: %s | importo: %s %s | nessuna"
+                             " prenotazione con questo pagamento: guardare a mano su Stripe", dp,
+                             _rif_per_registro(obj.get("payment_intent", "")),
+                             _rif_per_registro(obj.get("amount", "")),
+                             _rif_per_registro(obj.get("currency", "")))
+                return ""
+            rif = rec["riferimento"]
+            perso = ""
+            gz = getattr(self._sys, "garanzia", None)
+            esito = (gz.contesta(rif, motivo="chargeback:" + dp) if gz is not None
+                     else {"motivo": "non_trovata"})
+            # gia' decisa (rilasciata, risolta, gia' contestata) o mai aperta non si ritenta:
+            # ritentare non la cambia. Un altro fallimento (l'archivio) si'.
+            if not esito.get("ok") and esito.get("motivo") not in ("stato_non_valido",
+                                                                   "non_trovata"):
+                perso = "garanzia_non_fermata"
+            pd = getattr(self._sys, "payout", None)
+            bonifico = pd.stato_di(rif) if pd is not None else ""
+            if bonifico in ("in_attesa", "maturato"):
+                if pd.aggiorna_stato(rif, "trattenuto") is not True:
+                    perso = perso or "bonifico_non_trattenuto"
+            logger.error("CHARGEBACK | codice: chargeback | sottocodice: %s | contestazione: %s "
+                         "| RIF: %s | importo: %s %s | motivo: %s | garanzia: %s | bonifico: %s "
+                         "-> decide una persona: rispondere su Stripe (un bonifico gia' partito "
+                         "va recuperato dall'host)",
+                         perso or ("bonifico_gia_partito" if bonifico in ("in_transito", "pagato")
+                                   else "garanzia_fermata"),
+                         dp, _rif_per_registro(rif), _rif_per_registro(obj.get("amount", "")),
+                         _rif_per_registro(obj.get("currency", "")),
+                         _testo_per_registro(obj.get("reason", "")),
+                         _rif_per_registro(esito.get("stato", esito.get("motivo", ""))),
+                         _rif_per_registro(bonifico))
+            return perso
+        except Exception:
+            logger.error("CHARGEBACK | codice: chargeback | sottocodice: contestazione_esplosa | "
+                         "contestazione: %s | niente scritto: Stripe ritentera'", dp,
+                         exc_info=True)
+            return "contestazione_esplosa"
 
     # ── SCATTO ③: carta host off-session (fase183) ──────────────────────────
     MANDATO_CARTA = ("Autorizzo BookinVIP ad addebitare su questa carta gli importi che "
@@ -9754,6 +9826,16 @@ class RouterHTTP:
                                causale="tassa di soggiorno trattenuta")
         except Exception:
             logger.warning("riasserisci incasso fallito (ignorato)", exc_info=True)
+        # C53-B1-5: se il bonifico dell'host e' rimasto 'in_attesa' (archivio bloccato) il
+        # webhook non puo' dire «gestito»: Stripe non ritenterebbe MAI e il Guardiano cerca i
+        # bonifici fermi solo fra i 'maturato'. False -> 503, e il ritentativo lo matura.
+        pd = getattr(self._sys, "payout", None)
+        if pd is not None and pd.stato_di(rif) == "in_attesa":
+            logger.error("webhook | codice: bonifico_non_maturato | riferimento: %s | messaggio: "
+                         "pagamento confermato ma il bonifico dell'host e' rimasto 'in_attesa': "
+                         "rispondo 503 perche' Stripe ritenti", _rif_per_registro(rif))
+            return False
+        return True
 
     def _conferma_pagamento(self, rif):
         """Pagamento riuscito. Gestisce la GARA (chi paga prima se la prende):
@@ -9790,7 +9872,8 @@ class RouterHTTP:
                 # retry deve essere un NO-OP: senza questa guardia registreremmo il TOTALE come
                 # nostro incasso + la tassa che non abbiamo mai incassato (bug provato dal test).
                 if not self._rec_in_struttura(rec):
-                    self._riasserisci_incasso(rec, rif)
+                    if self._riasserisci_incasso(rec, rif) is False:
+                        return False                  # C53-B1-5: bonifico ancora fermo
                 return
             # WHITELIST: si conferma SOLO 'in_attesa' (hold vivo) o 'scaduto' (re-block sotto).
             # Ogni altro stato (cancellata dal cliente/host, rimborsata, richiesta NON ancora
@@ -9907,7 +9990,7 @@ class RouterHTTP:
             # comune a 'in_attesa' e 'scaduto-ribloccato': 'pagato' è GIÀ scritto dal CAS
             # in cima (acquisizione atomica); qui restano tassa + payout maturato (idempotenti,
             # ri-asseriti anche sul retry per sanare un crash del primo handler - BUG #32).
-            self._riasserisci_incasso(rec, rif)
+            incassato = self._riasserisci_incasso(rec, rif)
             self._email_pagamento_confermato(rec)      # C3: conferma col link voucher
             pd = getattr(self._sys, "payout", None)
             # REFERRAL: se l'host di questa prenotazione è stato INVITATO e raggiunge la soglia
@@ -9921,7 +10004,9 @@ class RouterHTTP:
                 dj = {}
             self._applica_credito_host(rif, hid_pag, self._commissione_regalabile(dj))
             self._forse_qualifica_referral(hid_pag, pd)
-            return True
+            # C53-B1-5: bonifico rimasto fermo -> False (503); il ritentativo passa dal ramo
+            # 'pagato' qui sopra e lo matura senza rifare email e crediti
+            return incassato is not False
         except Exception:
             # ⛔ ERROR e non warning, e `False` e non niente: il Guardiano legge solo gli
             #    ERROR, e il webhook deve poter rispondere 503 perche' Stripe ritenti. Un

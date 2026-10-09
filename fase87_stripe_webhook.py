@@ -43,16 +43,18 @@ def verifica_firma_stripe(payload: Any, header: Any, secret: Any, *,
             and isinstance(secret, str) and secret):
         return False
     try:
-        parti = {}
+        parti, firme = {}, []
         for seg in header.split(","):
             if "=" in seg:
                 k, v = seg.split("=", 1)
                 parti[k.strip()] = v.strip()
+                if k.strip() == "v1":
+                    firme.append(v.strip())
     except Exception:
         return False
-    t, v1 = parti.get("t"), parti.get("v1")
-    if not (t and v1):
-        return False
+    t = parti.get("t")
+    if not t:
+        return False                                   # nessuna firma v1: la rifiuta `any`
     try:
         ts = int(t)
     except (ValueError, TypeError):
@@ -61,8 +63,11 @@ def verifica_firma_stripe(payload: Any, header: Any, secret: Any, *,
     if abs(adesso - ts) > max(0, tolleranza_sec):
         return False                                   # anti-replay
     atteso = hmac.new(secret.encode("utf-8"), (t + "." + payload).encode("utf-8"),
-                      hashlib.sha256).hexdigest()
-    return hmac.compare_digest(v1, atteso)
+                      hashlib.sha256).hexdigest().encode("ascii")
+    # C53-B1-1: col segreto in rinnovo Stripe manda una firma v1 per ogni segreto vivo, e
+    # basta che UNA combaci (come stripe-python). C53-B1-2: il confronto e' in byte, perche'
+    # compare_digest su un testo non ASCII solleva invece di dire False.
+    return any(hmac.compare_digest(f.encode("utf-8"), atteso) for f in firme)
 
 
 def gestisci_webhook(payload: Any, header: Any, secret: Any, *,

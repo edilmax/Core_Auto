@@ -95,8 +95,8 @@ def stripe_somme_balance(chiave: str, da_ts: int, *, fetch: Any = None,
                          tronchi: Optional[List[str]] = None
                          ) -> Dict[str, Dict[str, int]]:
     """Somme delle balance transaction per categoria e valuta:
-    {'charge': {'EUR': cents}, 'refund': {...}, 'transfer': {...}}.
-    refund/transfer arrivano NEGATIVI da Stripe: qui in valore assoluto."""
+    {'charge': {'EUR': cents}, 'refund': {...}, 'transfer': {...}, 'dispute': {...}}.
+    refund/transfer/dispute arrivano NEGATIVI da Stripe: qui in valore assoluto."""
     f = fetch or _fetch_reale
     out: Dict[str, Dict[str, int]] = {}
     for t in _pagina("balance_transactions", chiave, da_ts, f, tronchi=tronchi):
@@ -152,9 +152,12 @@ def riconcilia(fc: Any, chiave: str, *, giorni: int = 30, fetch: Any = None,
         valute = sorted(set(s_tot) | set(g_tot))
         return {"stripe": s_tot, "giornale": g_tot,
                 "delta": {v: s_tot.get(v, 0) - g_tot.get(v, 0) for v in valute}}
+    # C53-B1-4: una contestazione di carta toglie dal saldo importo E commissione, e il
+    # giornale non ha righe che la raccontino: nel periodo e' sempre un delta da guardare.
     confronti = {"incassi": _tot("charge", ["incasso"]),
                  "rimborsi": _tot("refund", ["rimborso"]),
-                 "transfer": _tot("transfer", ["payout_host"])}
+                 "transfer": _tot("transfer", ["payout_host"]),
+                 "contestazioni": _tot("dispute", [])}
     fantasmi = len(solo_stripe) + len(solo_giornale) + len(importo_diverso)
     ok = (fantasmi == 0
           and all(d == 0 for c in confronti.values() for d in c["delta"].values()))

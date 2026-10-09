@@ -230,6 +230,14 @@ class PagamentiPendenti:
         con = self._apri()
         try:
             with con:
+                # C53-B1-7: si legge corpo_json per riscriverlo INTERO, quindi il lucchetto di
+                # scrittura si prende PRIMA della lettura (SQLite: BEGIN IMMEDIATE). Il modulo
+                # sqlite3 apre la transazione solo alla prima scrittura: due scritture
+                # leggevano la stessa copia e l'ultima cancellava i campi dell'altra. Una
+                # connessione gia' in transazione (la condivisa di `:memory:`, solo dei test)
+                # non ne apre una seconda: SQLite la rifiuterebbe.
+                if not con.in_transaction:
+                    con.execute("BEGIN IMMEDIATE")
                 r = con.execute("SELECT corpo_json FROM pendenti WHERE riferimento=?",
                                 (riferimento,)).fetchone()
                 if r is None:
@@ -279,6 +287,8 @@ class PagamentiPendenti:
         con = self._apri()
         try:
             with con:
+                if not con.in_transaction:          # C53-B1-7: vedi salva_stripe_session
+                    con.execute("BEGIN IMMEDIATE")
                 r = con.execute("SELECT corpo_json FROM pendenti WHERE riferimento=?",
                                 (riferimento,)).fetchone()
                 if r is None:
@@ -314,6 +324,8 @@ class PagamentiPendenti:
         con = self._apri()
         try:
             with con:
+                if not con.in_transaction:          # C53-B1-7: vedi salva_stripe_session
+                    con.execute("BEGIN IMMEDIATE")
                 r = con.execute("SELECT corpo_json FROM pendenti WHERE riferimento=?",
                                 (riferimento,)).fetchone()
                 if r is None:
@@ -586,6 +598,8 @@ class PagamentiPendenti:
         con = self._apri()
         try:
             with con:
+                if not con.in_transaction:          # C53-B1-7: vedi salva_stripe_session
+                    con.execute("BEGIN IMMEDIATE")
                 r = con.execute("SELECT corpo_json FROM pendenti WHERE riferimento=?",
                                 (riferimento,)).fetchone()
                 cj = {}
@@ -883,6 +897,29 @@ class PagamentiPendenti:
         finally:
             con.close()
         return self._riga(r) if r is not None else None
+
+    def per_payment_intent(self, pi: Any) -> Optional[Dict[str, Any]]:
+        """La prenotazione pagata con `pi` (lo `stripe_pi` salvato dal webhook, o il `blocco_pi`
+        del blocco sulla carta). C53-B1-4: le contestazioni della carta arrivano col solo
+        payment_intent. None se nessuna. Sola lettura; un archivio illeggibile SOLLEVA (chi
+        chiama risponde 503 e Stripe ritenta). `instr` restringe soltanto: decide il confronto
+        esatto sui campi, e una riga col JSON rotto si salta invece di fermare la ricerca."""
+        if not (isinstance(pi, str) and pi.startswith("pi_")):
+            return None
+        con = self._apri()
+        try:
+            righe = con.execute("SELECT * FROM pendenti WHERE instr(corpo_json, ?) > 0",
+                                (pi,)).fetchall()
+        finally:
+            con.close()
+        for r in righe:
+            try:
+                dj = json.loads(r["corpo_json"] or "{}")
+            except ValueError:
+                continue
+            if isinstance(dj, dict) and pi in (dj.get("stripe_pi"), dj.get("blocco_pi")):
+                return self._riga(r)
+        return None
 
 
 def crea_pagamenti_pendenti(percorso: str, *, orologio: Any = None) -> PagamentiPendenti:

@@ -154,6 +154,52 @@ class TestDedupPerFatto(unittest.TestCase):
             "la memoria della dedup e' scaduta prima della finestra dei ritentativi di "
             "Stripe: il terzo giorno passerebbe come evento nuovo (METODO 3.3)")
 
+    def test_un_fatto_MAI_ELABORATO_non_fa_da_duplicato_a_nessuno(self):
+        """C53-B1-10 (busta 8): «fatto gia' presente» contava anche un evento ricevuto e
+        MAI elaborato. Il primo evento prende 503 (la rilettura da Stripe non riesce) e resta
+        da elaborare; il secondo evento dello stesso fatto si sentiva dire «duplicato» e veniva
+        segnato elaborato; alla riconsegna del primo, il secondo faceva da duplicato a lui. I
+        due si davano ragione a vicenda e il pagamento NON veniva confermato da nessuno:
+        ospite addebitato, date liberate allo scadere della tenuta.
+        Stripe: «use the ID of the object in data.object along with the event.type» per i
+        duplicati -- un duplicato e' un fatto GIA' GESTITO, non uno solo ricevuto."""
+        rif = self._prenota("2027-03-10", "2027-03-12")
+        rilette = {"n": 0}
+
+        def stato_sessione(cs):
+            rilette["n"] += 1
+            return "" if rilette["n"] == 1 else "paid"     # la PRIMA rilettura non riesce
+        self.sis.stripe.stato_sessione = stato_sessione
+        s1, c1 = self._webhook("evt_uno", rif, "pi_U")
+        self.assertEqual(s1, 503, "PREMESSA NON VALIDA: la prima consegna deve fallire: %r"
+                         % (c1,))
+        self.assertNotEqual(self.sis.pagamenti_pendenti.info(rif)["stato"], "pagato")
+        s2, c2 = self._webhook("evt_due", rif, "pi_U")     # stesso fatto, altro evento
+        self.assertEqual(s2, 200, "%r" % (c2,))
+        self.assertIsNone(c2.get("duplicato"),
+                          "un evento MAI elaborato ha fatto da duplicato al secondo: %r" % (c2,))
+        s3, c3 = self._webhook("evt_uno", rif, "pi_U")     # Stripe riconsegna il primo
+        self.assertEqual(s3, 200, "%r" % (c3,))
+        self.assertEqual(self.sis.pagamenti_pendenti.info(rif)["stato"], "pagato",
+                         "PAGAMENTO PERSO: due eventi dello stesso fatto si sono dati ragione "
+                         "a vicenda e nessuno dei due ha confermato la prenotazione")
+        self.assertEqual(len(self.incassi(rif)), 1, "%r" % (self.incassi(rif),))
+
+    def test_l_archivio_conta_come_gia_presente_SOLO_un_fatto_elaborato(self):
+        archivio = crea_archivio_eventi(":memory:")
+        archivio.inizializza_schema()
+        corpo = json.dumps({"id": "evt_a", "type": "checkout.session.completed",
+                            "data": {"object": {"id": "cs_x"}}})
+        self.assertTrue(archivio.salva("evt_a", tipo="checkout.session.completed",
+                                       corpo_json=corpo, oggetto_id="cs_x"))
+        self.assertIs(False, archivio.fatto_gia_presente(
+            tipo="checkout.session.completed", oggetto_id="cs_x", evt_id="evt_b"),
+            "un evento RICEVUTO e non elaborato conta come fatto gia' presente")
+        archivio.segna_elaborato("evt_a")
+        self.assertIs(True, archivio.fatto_gia_presente(
+            tipo="checkout.session.completed", oggetto_id="cs_x", evt_id="evt_b"),
+            "un fatto ELABORATO non e' piu' riconosciuto come gia' presente")
+
 
 if __name__ == "__main__":
     unittest.main()

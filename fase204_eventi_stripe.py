@@ -214,8 +214,11 @@ class ArchivioEventiStripe:
             return False
         con = self._apri()
         try:
+            # C53-B1-10: conta solo un fatto GIA' ELABORATO. Uno solo ricevuto (503, da
+            # rielaborare) farebbe da duplicato al gemello e nessuno dei due confermerebbe.
             r = con.execute(
-                "SELECT 1 FROM eventi_stripe WHERE tipo=? AND oggetto_id=? AND evt_id<>?",
+                "SELECT 1 FROM eventi_stripe WHERE tipo=? AND oggetto_id=? AND evt_id<>? "
+                "AND stato='elaborato'",
                 (str(tipo or ""), str(oggetto_id), str(evt_id))).fetchone()
             return r is not None
         finally:
