@@ -292,7 +292,7 @@ automatica fa fallire la suite se i due divergono):
 
 # ⚙️ REGOLA FERREA DI OPERATIVITÀ E PRECISIONE
 
-> ## 📌 GLI OBBLIGHI SONO **106**, E SI DIVIDONO IN DUE FAMIGLIE DIVERSE
+> ## 📌 GLI OBBLIGHI SONO **107**, E SI DIVIDONO IN DUE FAMIGLIE DIVERSE
 > **Contati dai file il 2026-08-13, non a memoria** (`python collaudi/regole_avvio.py` li
 > ricontrolla a ogni sessione e **grida** se questi numeri non tornano):
 >
@@ -305,9 +305,9 @@ automatica fa fallire la suite se i due divergono):
 > · **29** stanno nell'appendice di `REGISTRO_INGEGNERIA.md`, con prova e fonte per esteso.
 > Più le **24 uccise** dai revisori ostili **col motivo**: dicono cosa NON vale la pena rifare.
 >
-> ### 🧭 GLI ALTRI **62** — nati dai NOSTRI danni
+> ### 🧭 GLI ALTRI **63** — nati dai NOSTRI danni
 > **IL BLOCCO (6 divieti assoluti, in cima a questo file)** · Regola zero (**5**) ·
-> **26 direttive del fondatore** · modi di rompersi (**11**) ·
+> **27 direttive del fondatore** · modi di rompersi (**11**) ·
 > collaudi (**10**) · direttiva finale (**4**). Non hanno uno studio dietro: hanno una
 > **cicatrice**. Valgono uguale, e da oggi **portano anch'essi il «si verifica così»**.
 >
@@ -317,7 +317,7 @@ automatica fa fallire la suite se i due divergono):
 > che **non viaggia col progetto**: su un altro computer, o in CI, non esistevano.
 > **2026-08-01, sera**: mescolai le due famiglie in un unico numero — e mescolare fa perdere
 > di vista proprio ciò che è stato pagato.
-> **Rimedio definitivo:** le direttive del fondatore sono **entrate nel repository** (D1-D26
+> **Rimedio definitivo:** le direttive del fondatore sono **entrate nel repository** (D1-D27
 > qui sotto), ogni regola dice **come si verifica**, e lo strumento d'avvio conta tutto e
 > **segnala chi non dice come si controlla**. Una regola che non si può controllare non è
 > una regola: è un desiderio.
@@ -449,7 +449,7 @@ solo è il canale principale delle regressioni. Il fondatore se n'è accorto pri
 
 ---
 
-# 🧭 LE 26 DIRETTIVE DEL FONDATORE — nate dai NOSTRI danni, non da uno studio
+# 🧭 LE 27 DIRETTIVE DEL FONDATORE — nate dai NOSTRI danni, non da uno studio
 
 > **Perché stanno qui e non solo in memoria.** Fino al 2026-08-01 vivevano nella memoria di
 > sessione: **non viaggiavano col progetto**. Su un altro computer, o dentro la CI, non
@@ -841,6 +841,32 @@ volte in quattro giorni).
 del Giudice con **data · commit · punti · uccisi · scoperti · rinunce · sorveglianti usati**; e il
 guardiano diventa ROSSO se un «FATTO» non ha la sua prova. Un modulo che è solo passato sotto il
 Giudice si scrive **«giudicato»**, mai «fatto».
+
+**D27. TUTTI GLI ERRORI SI CORREGGONO, CON TUTTI I CONTROLLI CHE SERVONO — E SI FA SOLO
+QUELLO.** Dettata dal fondatore il **2026-10-09**: *«assolutamente tutti gli errori vanno
+corretti»*; *«bisogna fare tutte le regole che servono esclusivamente per arrivare alla
+perfezione o quasi»*; e, alla domanda su quale regola scrivere, *«la migliore»* (scelta
+quindi da Claude, D12).
+1. **Nessun errore trovato resta senza destino.** Ogni difetto — anche trovato per strada,
+   anche basso o dormiente — sta in `RIPRENDI_QUI.md` col suo posto nell'ordine, ed esce
+   dall'elenco solo **riparato** (guardia vista rossa e poi verde, D20) o **chiuso con una
+   misura** che dimostra che non è un difetto. Mai «accettato», mai «basso, quindi mai».
+   L'ordine resta quello della DECISIONE DEL METODO in `RIPRENDI_QUI.md`: questa regola dice
+   *che* si fa tutto, non *quando*.
+2. **Il costo non è un motivo per saltare un controllo.** Il caso che l'ha fatta nascere: la
+   riparazione delle date passate fa cadere 328 prove vecchie in 43 file, che passavano solo
+   grazie al difetto. Non si sceglie la riparazione che rompe meno prove: si sceglie quella
+   giusta e si rendono realistiche le prove, mai allentate.
+3. **Si fa solo ciò che serve a questo.** Ogni lavoro aperto risponde sì a una domanda:
+   *trova un errore, lo corregge, o dimostra che non c'è?* Quello che non risponde sì non si apre.
+4. **Non autorizza niente.** Commit, codice di produzione e deploy restano sotto B1 e B4:
+   questa regola dice cosa va fatto, non chi dà il via.
+
+*Si verifica:* nell'elenco di `RIPRENDI_QUI.md` ogni difetto nominato (buste, trovati per
+strada, cacce) ha uno di tre stati — **aperto col suo posto nell'ordine**, **riparato con la sua
+guardia**, **chiuso con la misura** — e nessuno è «accettato» o senza stato; una rinuncia a un
+controllo motivata dal costo è una violazione. ⚠️ *Limite dichiarato (D18 punto 3):* oggi nessuna
+guardia meccanica conta gli stati dei difetti; si verifica leggendo l'elenco.
 
 ---
 

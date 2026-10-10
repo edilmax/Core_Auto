@@ -88,9 +88,8 @@ import io
 import os
 import re
 import sys
-import time
 
-QUI = os.path.dirname(os.path.abspath(__file__))
+QUI =os.path.dirname(os.path.abspath(__file__))
 RADICE = os.path.dirname(QUI)
 for _p in (RADICE, QUI):
     if _p not in sys.path:
@@ -110,6 +109,9 @@ COMANDO = "python collaudi/esame_prezzi.py --scrivi"
 CASI_DI_SERIE = 300
 SLUG = "casa-esame-prezzi"
 CI = "2026-10-01"
+# L'«adesso» del preventivo sotto esame: il 1 gennaio 2026, PRIMA dell'arrivo (dal lotto D del
+# 2026-10-10 il passato non si vende). La data non entra in nessuna relazione: e' la cornice.
+ADESSO = 1767225600
 # Le commissioni fra cui R5 sceglie: zero (rampa di lancio), link diretto, scaglione, regime.
 # Non sono le NOSTRE tariffe ricopiate (quelle le decide fase98): sono ingressi di prova, e la
 # relazione deve reggere per QUALUNQUE commissione.
@@ -192,12 +194,12 @@ def motore_vero(notte_cents, *, notti, sconto_settimana_bps=0, sconto_mese_bps=0
         catalogo=_Cat(sconto_settimana_bps, sconto_mese_bps,
                       "non_rimborsabile" if non_rimborsabile else "flessibile"),
         commissione=lambda netto: netto * c_bps // 10000,
-        psp_bps=t["psp_bps"], psp_fisso_cents=t["psp_fisso"])
+        psp_bps=t["psp_bps"], psp_fisso_cents=t["psp_fisso"], orologio=lambda: ADESSO)
     richiesta = {"alloggio_id": SLUG, "check_in": CI, "check_out": _co(notti), "party": 2}
     if credito_cents:
         richiesta["credito_token"] = firma.codifica({
             "tipo": "credito_fondatore", "credito_cents": int(credito_cents), "valuta": "EUR",
-            "exp": int(time.time()) + 3600})
+            "exp": ADESSO + 3600})
     r = p.quota(richiesta)
     if r.status != 200:
         raise ValueError("quota non riuscita: %s %s" % (r.status, r.corpo))

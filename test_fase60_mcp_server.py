@@ -22,6 +22,23 @@ from fase60_mcp_server import (
     ERR_INVALID_REQUEST, ERR_METHOD_NOT_FOUND, ERR_PARSE, MCP_PROTOCOL_VERSION,
     ServerMCP, crea_server_mcp,
 )
+from unittest import mock
+
+import fase59_concierge
+
+# IL PREVENTIVO SI CHIEDE PRIMA DEL SOGGIORNO (lotto D, 2026-10-10): il passato non si vende piu',
+# e le date fisse di questo file si quotano con l'orologio del preventivo fermo al 1 gennaio 2026,
+# prima di tutte; il resto del sistema resta sull'ora vera.
+_PREVENTIVO_PRIMA = mock.patch.object(fase59_concierge, "time",
+                                      mock.Mock(time=lambda: 1767225600))
+
+
+def setUpModule():
+    _PREVENTIVO_PRIMA.start()
+
+
+def tearDownModule():
+    _PREVENTIVO_PRIMA.stop()
 
 SEGRETO = b"0123456789abcdef0123456789abcdef"
 GIORNI = ("2026-10-01", "2026-10-02", "2026-10-03")

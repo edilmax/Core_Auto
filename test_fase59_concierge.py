@@ -18,6 +18,24 @@ from fase58_channel_manager import EsitoPrenotazione, crea_channel_manager
 from fase59_concierge import (
     MAX_CENTS, FirmaQuote, ProtocolloConcierge, crea_protocollo,
 )
+from unittest import mock
+
+import fase59_concierge
+
+# IL PREVENTIVO SI CHIEDE PRIMA DEL SOGGIORNO (lotto D, 2026-10-10): il passato non si vende piu',
+# e le date fisse di questo file si quotano con l'orologio del preventivo fermo al 1 gennaio 2026,
+# prima di tutte; il resto del sistema resta sull'ora vera. Le prove che passano un `orologio`
+# loro (scadenze, `TestIlPassatoNonSiVende`) non lo vedono.
+_PREVENTIVO_PRIMA = mock.patch.object(fase59_concierge, "time",
+                                      mock.Mock(time=lambda: 1767225600))
+
+
+def setUpModule():
+    _PREVENTIVO_PRIMA.start()
+
+
+def tearDownModule():
+    _PREVENTIVO_PRIMA.stop()
 
 SEGRETO = b"0123456789abcdef0123456789abcdef"
 GIORNI = ("2026-09-01", "2026-09-02", "2026-09-03")
@@ -212,6 +230,108 @@ class TestQuota(unittest.TestCase):
         for bad in (None, [], "x", {"alloggio_id": "casa|x", "check_in": "2026-09-01",
                                     "check_out": "2026-09-03"}):
             self.assertGreaterEqual(proto.quota(bad).status, 400)
+
+
+def _alle(giorno, ora):
+    """L'orologio del protocollo fermo su `giorno` alle `ora` UTC (secondi, come `time.time`)."""
+    istante = datetime.datetime.fromisoformat(giorno).replace(
+        hour=ora, tzinfo=datetime.timezone.utc)
+    return lambda: int(istante.timestamp())
+
+
+class TestIlPassatoNonSiVende(unittest.TestCase):
+    """📅 Trovato per strada (c) della sessione B, misurato il 2026-10-09: IL PREVENTIVO
+    VENDEVA GIORNI GIA' PASSATI.
+
+    **Il fatto.** `quota` controllava l'ordine delle date, il numero delle notti e il
+    calendario, mai «oggi». Un giorno passato rimasto aperto nel calendario (sul server, il
+    9/10: 10 giorni passati aperti sull'annuncio di prova) si quotava e si prenotava:
+    `test_azione_richiesta` prenota il 10 settembre e passava anche il 9 ottobre.
+
+    **Il contratto.** Un arrivo nel passato si rifiuta con 422 «date_passate» e nessun
+    gettone; oggi e il futuro si vendono come prima. Le prove usano istanti lontani dal
+    confine di mezzanotte in ogni fuso (l'arrivo di ieri alle 12 UTC e' passato ovunque,
+    quello di oggi alle 8 UTC non lo e' da nessuna parte): l'ora esatta del confine la
+    decide la riparazione, con le sue fonti.
+    """
+
+    def _quota(self, oggi, ora):
+        _inv, _cat, proto = _setup(clock=_alle(oggi, ora))
+        return proto.quota({"alloggio_id": "casa", "check_in": "2026-09-01",
+                            "check_out": "2026-09-03"})
+
+    def test_UN_SOGGIORNO_GIA_FINITO_NON_SI_QUOTA(self):
+        r = self._quota("2026-09-10", 12)
+        self.assertEqual((r.status, r.corpo), (422, {"errore": "date_passate"}))
+
+    def test_UN_ARRIVO_DI_IERI_NON_SI_QUOTA(self):
+        r = self._quota("2026-09-02", 12)
+        self.assertEqual((r.status, r.corpo), (422, {"errore": "date_passate"}))
+
+    def test_UN_ARRIVO_DI_OGGI_SI_QUOTA_ANCORA(self):
+        r = self._quota("2026-09-01", 8)
+        self.assertEqual(r.status, 200, r.corpo)
+        self.assertIn("quote_token", r.corpo)
+
+    def test_UN_ARRIVO_FUTURO_SI_QUOTA(self):
+        r = self._quota("2026-08-20", 12)
+        self.assertEqual(r.status, 200, r.corpo)
+        self.assertIn("quote_token", r.corpo)
+
+    def _quota_a_roma(self, istante_utc):
+        inv = crea_channel_manager()
+        for g in GIORNI:
+            inv.imposta_disponibilita("casa", g, unita_totali=1, prezzo_netto_cents=10000)
+        cat = crea_catalogo(disponibilita=inv.disponibile)
+        cat.pubblica(SchedaAlloggio(host_id="h", slug="casa", titolo="Casa", citta="Roma",
+                                    prezzo_notte_cents=10000, capacita=4, fuso="Europe/Rome"))
+        giorno, ora, minuti = istante_utc
+        orologio = _alle(giorno, ora)
+        proto = ProtocolloConcierge(inv, FirmaQuote(SEGRETO), catalogo=cat,
+                                    orologio=lambda: orologio() + minuti * 60)
+        return proto.quota({"alloggio_id": "casa", "check_in": "2026-09-01",
+                            "check_out": "2026-09-03"})
+
+    def test_IL_GIORNO_D_ARRIVO_FINISCE_A_MEZZANOTTE_NEL_FUSO_DELL_ALLOGGIO(self):
+        """A Roma (UTC+2 d'estate) le 23:30 del primo sono ancora il primo: si vende; le 00:30
+        del due non piu', anche se in UTC e' ancora il primo (22:30)."""
+        r = self._quota_a_roma(("2026-09-01", 21, 30))
+        self.assertEqual(r.status, 200, r.corpo)
+        r = self._quota_a_roma(("2026-09-01", 22, 30))
+        self.assertEqual((r.status, r.corpo), (422, {"errore": "date_passate"}))
+
+    def test_A_MEZZANOTTE_IN_PUNTO_IL_GIORNO_D_ARRIVO_E_GIA_FINITO(self):
+        """Il confine esatto (chiuso dalla mutazione sul diff, 2026-10-10: `>=` -> `>`
+        sopravviveva): alle 00:00:00 di Roma del due, l'arrivo del primo non si vende piu'."""
+        r = self._quota_a_roma(("2026-09-01", 22, 0))
+        self.assertEqual((r.status, r.corpo), (422, {"errore": "date_passate"}))
+
+    def test_UN_CATALOGO_IN_AVARIA_NON_RIAPRE_IL_PASSATO(self):
+        """Il fuso non si legge: si ripiega sulla mezzanotte UTC, il registro lo dice con la
+        traccia, e il passato resta chiuso (il resto e' il fail-open dichiarato del catalogo)."""
+        class _CatRotto:
+            def dettaglio(self, slug):
+                raise RuntimeError("catalogo giu'")
+
+        inv = crea_channel_manager()
+        inv.imposta_disponibilita("casa", "2026-09-01", unita_totali=1,
+                                  prezzo_netto_cents=10000)
+        proto = ProtocolloConcierge(inv, FirmaQuote(SEGRETO), catalogo=_CatRotto(),
+                                    orologio=_alle("2026-09-10", 12))
+        with self.assertLogs(LOGGER, level="WARNING") as log:
+            r = proto.quota({"alloggio_id": "casa", "check_in": "2026-09-01",
+                             "check_out": "2026-09-02"})
+        self.assertEqual((r.status, r.corpo), (422, {"errore": "date_passate"}))
+        rec = _traccia(log, "fuso dell'alloggio non letto")
+        self.assertIsNotNone(rec)
+        self.assertIsInstance(rec.exc_info, tuple)
+
+    def test_SENZA_FUSO_IL_GIORNO_FINISCE_A_MEZZANOTTE_UTC(self):
+        """Ripiego dichiarato: alle 23:30 UTC del primo l'arrivo del primo si vende ancora."""
+        _inv, _cat, proto = _setup(clock=lambda: _alle("2026-09-01", 23)() + 30 * 60)
+        r = proto.quota({"alloggio_id": "casa", "check_in": "2026-09-01",
+                         "check_out": "2026-09-03"})
+        self.assertEqual(r.status, 200, r.corpo)
 
 
 class TestPrenota(unittest.TestCase):

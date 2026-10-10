@@ -1468,7 +1468,7 @@ class TestConciergeRamiDErrore(unittest.TestCase):
     def test_credito_fondatore_tutti_i_modi_di_NON_scontare(self):
         from fase59_concierge import FirmaQuote
         f = FirmaQuote(SEG_CONC)
-        ora = [2_000_000_000]
+        ora = [1_800_000_000]          # gennaio 2027: il preventivo si chiede PRIMA del soggiorno (lotto D)
         p = _proto(firma=f, commissione=lambda n: 10000, orologio=lambda: ora[0])
         buono = f.codifica({"tipo": "credito_fondatore", "credito_cents": 500,
                             "valuta": "EUR", "exp": ora[0] + 1000})
@@ -1504,7 +1504,7 @@ class TestConciergeRamiDErrore(unittest.TestCase):
     def test_credito_gia_speso_non_sconta_piu_e_lo_store_rotto_non_toglie_il_diritto(self):
         from fase59_concierge import FirmaQuote
         f = FirmaQuote(SEG_CONC)
-        ora = [2_000_000_000]
+        ora = [1_800_000_000]          # gennaio 2027: il preventivo si chiede PRIMA del soggiorno (lotto D)
         tok = f.codifica({"tipo": "credito_fondatore", "credito_cents": 500,
                           "valuta": "EUR", "exp": ora[0] + 1000})
 

@@ -1852,7 +1852,7 @@ def pagina_azione_html(esito: Dict[str, Any]) -> str:
         col, bg, ic = "#8a5200", "#fff4e5", "⚠️"
         motivo = esito.get("motivo", "")
         if motivo == "link_scaduto":
-            h1, p1 = "Link scaduto", "Questo link non è più valido (oltre le 24h)."
+            h1, p1 = "Link scaduto", "Questo link non è più valido: è scaduto."
         elif motivo == "pagamento_non_disponibile":
             h1 = "Riprova tra qualche minuto"
             p1 = ("Non siamo riusciti a preparare il pagamento per il cliente (servizio "
@@ -2120,31 +2120,6 @@ def _ext_da_magic(raw: bytes) -> Optional[str]:
     if raw[:6] in (b"GIF87a", b"GIF89a"):
         return "gif"
     return None
-
-
-def _ip_host_pubblico(host: str) -> bool:
-    """True SOLO se tutti gli indirizzi risolti dell'host sono PUBBLICI. Blocca loopback/
-    privati/link-local/riservati (anti-SSRF: niente fetch verso servizi interni o metadata
-    cloud). Risoluzione fallita -> False (fail-closed)."""
-    import ipaddress
-    import socket
-    try:
-        infos = socket.getaddrinfo(host, None)
-    except Exception:
-        return False
-    if not infos:
-        return False
-    for info in infos:
-        sockaddr = info[4]
-        ip = sockaddr[0].split("%", 1)[0]            # via eventuale zona IPv6
-        try:
-            addr = ipaddress.ip_address(ip)
-        except ValueError:
-            return False
-        if (addr.is_private or addr.is_loopback or addr.is_link_local
-                or addr.is_reserved or addr.is_multicast or addr.is_unspecified):
-            return False
-    return True
 
 
 # Tetto anti-abuso: quante email di preventivo puo' ricevere UN indirizzo in un'ora.
@@ -11125,12 +11100,14 @@ class RouterHTTP:
 
     def _scarica_immagine(self, url, hop=0):
         """Scarica una foto da un URL (import dai colossi) e la salva su UPLOAD_DIR ->
-        /uploads/<nome>. ANTI-SSRF (solo host pubblici), tetto 5MB, tipo dai MAGIC BYTES,
-        timeout 10s. Redirect seguiti a mano (max 3) ri-validando l'host ogni volta.
-        None se non affidabile (l'import scarta quella foto e prosegue)."""
+        /uploads/<nome>. ANTI-SSRF (solo indirizzi pubblici, controllati al collegamento), tetto
+        5MB, tipo dai MAGIC BYTES, timeout 10s. Redirect seguiti a mano (max 3), ognuno con un
+        collegamento nuovo e controllato. None se non affidabile (l'import scarta la foto)."""
+        import http.client
         import urllib.error
         import urllib.request
         from urllib.parse import urljoin, urlparse
+        from fase203_ical_orologio import _GestoreHTTPSSoloPubblico, _collegamento_pubblico
         if not (isinstance(url, str) and url) or hop > 3:
             return None
         try:
@@ -11139,14 +11116,27 @@ class RouterHTTP:
             return None
         if p.scheme not in ("http", "https") or not p.hostname:
             return None
-        if not _ip_host_pubblico(p.hostname):
-            return None                               # anti-SSRF: niente host interni
 
         class _NoRedirect(urllib.request.HTTPRedirectHandler):
             def redirect_request(self, req, fp, code, msg, headers, newurl):
                 return None                           # non seguire in automatico (TOCTOU)
 
-        opener = urllib.request.build_opener(_NoRedirect)
+        class _HTTPSoloPubblico(http.client.HTTPConnection):
+            def __init__(self, *a, **kw):
+                super().__init__(*a, **kw)
+                self._create_connection = _collegamento_pubblico
+
+        class _GestoreHTTPSoloPubblico(urllib.request.HTTPHandler):
+            def http_open(self, req):
+                return self.do_open(_HTTPSoloPubblico, req)
+
+        # ANTI-SSRF SULL'INDIRIZZO A CUI CI SI COLLEGA DAVVERO (trovato per strada (a), 2026-10-10,
+        # «autorizzato»): prima si controllava il NOME e poi ci si collegava al nome, e fra le due
+        # risoluzioni un DNS ostile (rebinding) portava il server dentro casa. Ora http e https
+        # passano dal collegamento dei feed iCal (V3): una sola risoluzione, solo indirizzi
+        # pubblici. Guardie: `test_fase83_server.TestLImportDelleFotoNonPortaIlServerDentroCasa`.
+        opener = urllib.request.build_opener(_NoRedirect, _GestoreHTTPSoloPubblico(),
+                                             _GestoreHTTPSSoloPubblico())
         req = urllib.request.Request(url, headers={"User-Agent": "BookinVIP-Import/1.0",
                                                    "Accept": "image/*"})
         try:

@@ -275,6 +275,12 @@ class ProtocolloConcierge:
             elenco_notti = notti(ci, co)
             if elenco_notti is None:
                 return RispostaConcierge(422, {"errore": "date_non_valide"})
+            # IL PASSATO NON SI VENDE (2026-10-10, «autorizzato»): un arrivo si vende finche' il
+            # suo giorno non e' finito NEL FUSO DELL'ALLOGGIO -- come Airbnb e i portali, passata
+            # la mezzanotte il giorno prima non si prenota piu'. Prima un giorno passato rimasto
+            # aperto a calendario si quotava e si prenotava. Guardie: `TestIlPassatoNonSiVende`.
+            if self._now() >= self._fine_giorno_arrivo(alloggio, elenco_notti[0]):
+                return RispostaConcierge(422, {"errore": "date_passate"})
             if self._inv.disponibile(alloggio, ci, co) is not True:
                 return RispostaConcierge(409, {"errore": "non_disponibile"})
             netto = 0
@@ -459,6 +465,27 @@ class ProtocolloConcierge:
         except Exception:
             pass
         return self._valuta
+
+    def _fine_giorno_arrivo(self, slug: Any, arrivo: str) -> int:
+        """L'istante (secondi) in cui finisce il giorno d'arrivo nel fuso dell'alloggio. Fuso
+        ignoto o inutilizzabile, o catalogo in avaria -> la mezzanotte UTC, lo stesso ripiego
+        della cancellazione: il passato resta escluso, e un guasto del catalogo non ferma tutte
+        le vendite (la stessa scelta di `_alloggio_vendibile`)."""
+        import datetime as _dt
+        from fase187_fuso_orario import mezzanotte_locale
+        fuso = ""
+        try:
+            d = self._cat.dettaglio(slug) if self._cat is not None else None
+            fuso = d.get("fuso", "") if isinstance(d, dict) else ""
+        except Exception:
+            logger.warning("fuso dell'alloggio non letto: ripiego sulla mezzanotte UTC",
+                           exc_info=True)
+        dopo = _dt.date.fromisoformat(arrivo) + _dt.timedelta(days=1)
+        fine = mezzanotte_locale(dopo.isoformat(), fuso)
+        if fine is None:
+            fine = int(_dt.datetime(dopo.year, dopo.month, dopo.day,
+                                    tzinfo=_dt.timezone.utc).timestamp())
+        return fine
 
     def _sconto_credito(self, token: Any, netto: int, comm: int,
                         valuta: str = "EUR") -> Tuple[int, str]:

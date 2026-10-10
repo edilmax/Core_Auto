@@ -10,23 +10,41 @@ import datetime
 import http.client
 import json
 import os
+import re
 import shutil
 import socket
 import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 from urllib.parse import parse_qs, quote, urlencode, urlparse
 
 import fase83_server
 from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
+from test_fase203_ical_orologio import _PostoInterno
 from test_rimborso_torna_da_ogni_strada import _BancoDelleStrade
 from fase83_server import (
     RouterHTTP, crea_router, percorso_statico_sicuro,
     jsonld_alloggio, pagina_alloggio_html, sitemap_xml, robots_txt, _importo,
     _testo_per_registro,
 )
+import fase59_concierge
+
+# IL PREVENTIVO SI CHIEDE PRIMA DEL SOGGIORNO (lotto D, 2026-10-10): il passato non si vende piu',
+# e le date fisse di questo file si quotano con l'orologio del preventivo fermo al 1 gennaio 2026,
+# prima di tutte; il resto del sistema resta sull'ora vera.
+_PREVENTIVO_PRIMA = mock.patch.object(fase59_concierge, "time",
+                                      mock.Mock(time=lambda: 1767225600))
+
+
+def setUpModule():
+    _PREVENTIVO_PRIMA.start()
+
+
+def tearDownModule():
+    _PREVENTIVO_PRIMA.stop()
 
 SEG = b"0123456789abcdef0123456789abcdef"
 
@@ -1727,6 +1745,90 @@ class TestAprireIlLinkNonDecideNiente(unittest.TestCase):
         s, _, pagina = self._http("GET", "/host/azione?t=" + quote(tok))
         self.assertEqual(400, s)
         self.assertNotIn("<form", pagina)
+
+    def test_LA_PAGINA_DEL_LINK_SCADUTO_NON_PROMETTE_UNA_DURATA_DIVERSA(self):
+        """Trovato per strada (b) della sessione B: la pagina «Link scaduto» diceva «oltre le
+        24h» mentre `_link_azione` firma il link per una durata diversa. Una durata scritta
+        nella pagina deve essere quella del link; una pagina che non ne scrive nessuna non
+        puo' diventare falsa."""
+        tok = parse_qs(urlparse(self.r._link_azione("rif-durata", self.hid, "approva")).query)
+        vita_ore = (self.sis.firma.decodifica(tok["t"][0])["exp"] - time.time()) / 3600
+        pagina = fase83_server.pagina_azione_html({"ok": False, "motivo": "link_scaduto"})
+        _deve("Link scaduto" in pagina, pagina)
+        for n, unita in re.findall(r"(\d+)\s*(h|ore|ora|giorni|giorno|gg)\b", pagina):
+            ore = int(n) * (24 if unita.startswith("g") else 1)
+            self.assertAlmostEqual(vita_ore, ore, delta=1,
+                                   msg="la pagina dice %s%s, il link vale %.0f ore"
+                                       % (n, unita, vita_ore))
+
+
+class TestLImportDelleFotoNonPortaIlServerDentroCasa(unittest.TestCase):
+    """🏠 Trovato per strada (a) della sessione B: LO STESSO DNS REBINDING DI V3, NELL'IMPORT
+    DELLE FOTO.
+
+    **Il fatto.** `_scarica_immagine` (le foto prese da un indirizzo web quando l'host importa
+    un annuncio) controllava il NOME (`_ip_host_pubblico`, tolta) e poi si collegava al NOME: fra
+    le due risoluzioni un DNS ostile poteva cambiare risposta, e il server bussava dentro casa.
+
+    **Il contratto.** Come per il feed iCal (V3): il collegamento va all'indirizzo controllato,
+    mai a una seconda risposta del nome. Fonte (D25): OWASP, «Server-Side Request Forgery
+    Prevention Cheat Sheet» («A second, unchecked DNS lookup between validation and connection
+    can bypass these checks»).
+    """
+
+    def setUp(self):
+        self.posto = _PostoInterno()
+        self.addCleanup(self.posto.chiudi)
+        self.r = crea_router(_sistema())
+
+    def test_UN_INDIRIZZO_INTERNO_NON_SI_TOCCA_NE_IN_HTTP_NE_IN_HTTPS(self):
+        """Il collegamento controllato vale per TUTTI e due gli schemi: senza il gestore http
+        controllato, o senza quello https, il server busserebbe davvero alla porta interna."""
+        for url in ("http://127.0.0.1:%d/x.jpg", "https://127.0.0.1:%d/x.jpg",
+                    "http://localhost:%d/x.jpg", "https://localhost:%d/x.jpg"):
+            with self.subTest(url=url):
+                self.posto.entrati = 0
+                self.assertIsNone(self.r._scarica_immagine(url % self.posto.porta))
+                self.assertEqual(0, self.posto.entrati,
+                                 "il server ha bussato a un servizio interno: e' l'SSRF")
+
+    def test_SI_COLLEGA_ALL_INDIRIZZO_CONTROLLATO_NON_AL_NOME(self):
+        porta, domande, tentati = self.posto.porta, [], []
+        vera_connessione = socket.create_connection
+
+        def risolvi(host, *_a, **_k):
+            if host in ("8.8.8.8", "127.0.0.1"):
+                ip = host
+            else:
+                domande.append(host)
+                ip = "8.8.8.8" if len(domande) == 1 else "127.0.0.1"
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (ip, porta))]
+
+        def collega(indirizzo, *a, **k):
+            ip = risolvi(indirizzo[0])[0][4][0]          # un nome si risolve ADESSO
+            if ip != "127.0.0.1":
+                tentati.append(ip)
+                raise OSError("fermato dal banco: nessuna rete vera")
+            return vera_connessione((ip, indirizzo[1]), *a, **k)
+
+        for schema in ("http", "https"):
+            with self.subTest(schema=schema):
+                domande.clear()
+                del tentati[:]
+                self.posto.entrati = 0
+                with mock.patch.object(socket, "getaddrinfo", risolvi), \
+                        mock.patch.object(socket, "create_connection", collega):
+                    esito = self.r._scarica_immagine(
+                        "%s://foto.esempio.it:%d/x.jpg" % (schema, porta))
+                self.assertIsNone(esito)
+                self.assertEqual(0, self.posto.entrati,
+                                 "il server ha bussato a un servizio interno con la seconda "
+                                 "risposta del nome: e' l'SSRF")
+                if schema == "https":
+                    self.assertEqual(["8.8.8.8"], tentati,
+                                     "il collegamento doveva andare all'indirizzo controllato")
+                else:                                     # http si puo' anche rifiutare
+                    self.assertLessEqual(set(tentati), {"8.8.8.8"}, tentati)
 
 
 class TestIlTestoLiberoRESTALEGGIBILEMaNonPuoFabbricareRIGHE(unittest.TestCase):

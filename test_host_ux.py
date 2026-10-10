@@ -17,6 +17,23 @@ import unittest
 from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import crea_router
 from fase163_accettazioni import doc_sha256, CONTRATTO_HOST_VERSIONE
+from unittest import mock
+
+import fase59_concierge
+
+# IL PREVENTIVO SI CHIEDE PRIMA DEL SOGGIORNO (lotto D, 2026-10-10): il passato non si vende piu',
+# e le date fisse di questo file si quotano con l'orologio del preventivo fermo al 1 gennaio 2026,
+# prima di tutte; il resto del sistema resta sull'ora vera.
+_PREVENTIVO_PRIMA = mock.patch.object(fase59_concierge, "time",
+                                      mock.Mock(time=lambda: 1767225600))
+
+
+def setUpModule():
+    _PREVENTIVO_PRIMA.start()
+
+
+def tearDownModule():
+    _PREVENTIVO_PRIMA.stop()
 
 SEG = b"S" * 32
 PNG1x1 = base64.b64encode(
@@ -286,11 +303,14 @@ class TestHostUX(unittest.TestCase):
 
     # ── RI-OSPITARE le foto importate sui nostri server (anti-SSRF) ────────────
     def test_ssrf_guard_ip_host_pubblico(self):
-        from fase83_server import _ip_host_pubblico
-        for interno in ("127.0.0.1", "localhost", "10.0.0.1", "192.168.1.1",
-                        "169.254.169.254", "::1", "0.0.0.0"):
-            self.assertFalse(_ip_host_pubblico(interno), f"{interno} doveva essere bloccato")
-        self.assertTrue(_ip_host_pubblico("8.8.8.8"))       # pubblico ok (nessuna connessione)
+        # dal 2026-10-10 le foto passano dal collegamento controllato dei feed (fase203): il
+        # controllo e' sull'indirizzo a cui ci si collega, quindi qui si provano indirizzi
+        # (i nomi come «localhost» li prova `test_fase83_server`, col collegamento vero)
+        from fase203_ical_orologio import _indirizzo_pubblico
+        for interno in ("127.0.0.1", "10.0.0.1", "192.168.1.1", "169.254.169.254", "::1",
+                        "0.0.0.0", "100.64.0.1", "::ffff:127.0.0.1"):
+            self.assertFalse(_indirizzo_pubblico(interno), f"{interno} doveva essere bloccato")
+        self.assertTrue(_indirizzo_pubblico("8.8.8.8"))     # pubblico ok (nessuna connessione)
 
     def test_ext_da_magic(self):
         from fase83_server import _ext_da_magic
@@ -301,7 +321,6 @@ class TestHostUX(unittest.TestCase):
     def test_scarica_immagine_salva_da_server_locale(self):
         import http.server
         import threading
-        import fase83_server
         png = base64.b64decode(PNG1x1)
 
         class H(http.server.BaseHTTPRequestHandler):
@@ -317,12 +336,13 @@ class TestHostUX(unittest.TestCase):
         srv = http.server.HTTPServer(("127.0.0.1", 0), H)
         port = srv.server_address[1]
         threading.Thread(target=srv.serve_forever, daemon=True).start()
-        orig = fase83_server._ip_host_pubblico
-        fase83_server._ip_host_pubblico = lambda h: True     # consenti loopback SOLO nel test
+        import fase203_ical_orologio
+        orig = fase203_ical_orologio._indirizzo_pubblico
+        fase203_ical_orologio._indirizzo_pubblico = lambda ip: True  # loopback SOLO nel test
         try:
             u = self.r._scarica_immagine("http://127.0.0.1:%d/x.png" % port)
         finally:
-            fase83_server._ip_host_pubblico = orig
+            fase203_ical_orologio._indirizzo_pubblico = orig
             srv.shutdown()
         self.assertTrue(u and u.startswith("/uploads/"), u)
         nome = u.rsplit("/", 1)[-1]

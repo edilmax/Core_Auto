@@ -25,6 +25,23 @@ from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import crea_router
 from fase87_stripe_webhook import firma_di_test
 from fase163_accettazioni import doc_sha256, CONTRATTO_HOST_VERSIONE
+from unittest import mock
+
+import fase59_concierge
+
+# IL PREVENTIVO SI CHIEDE PRIMA DEL SOGGIORNO (lotto D, 2026-10-10): il passato non si vende piu',
+# e le date fisse di questo file si quotano con l'orologio del preventivo fermo al 1 gennaio 2026,
+# prima di tutte; il resto del sistema resta sull'ora vera.
+_PREVENTIVO_PRIMA = mock.patch.object(fase59_concierge, "time",
+                                      mock.Mock(time=lambda: 1767225600))
+
+
+def setUpModule():
+    _PREVENTIVO_PRIMA.start()
+
+
+def tearDownModule():
+    _PREVENTIVO_PRIMA.stop()
 
 WHSEC = "whsec_simulazione"
 
@@ -179,7 +196,8 @@ class TestSimulazioneTotale(unittest.TestCase):
         self.assertEqual(q["commissione_cents"], 1800)     # 10%
         self.assertEqual(q["costo_pagamento_cents"], _tecnica(18000))   # a carico host
         self.assertEqual(q["netto_host_cents"], 18000 - 1800 - _tecnica(18000))
-        self.assertTrue(q.get("scade_a", 0) > int(time.time()))   # countdown reale
+        # countdown reale, contato sull'«adesso» del preventivo (fermo prima del soggiorno)
+        self.assertTrue(q.get("scade_a", 0) > int(fase59_concierge.time.time()))
         # casa-0 è 'non_rimborsabile' -> sconto onesto -12% all'ospite (14080 invece di 16000)
         s, q0 = self._quote("casa-0")
         self.assertEqual(q0["prezzo_guest_cents"], 14080)
