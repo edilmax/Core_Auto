@@ -338,7 +338,7 @@ class TestIdorFotoElimina(unittest.TestCase):
         import http.server
         import threading
         from unittest import mock
-        import fase83_server
+        import fase203_ical_orologio
         png = base64.b64decode(PNG)
 
         class Servitore(http.server.BaseHTTPRequestHandler):
@@ -354,7 +354,8 @@ class TestIdorFotoElimina(unittest.TestCase):
         srv = http.server.HTTPServer(("127.0.0.1", 0), Servitore)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         try:
-            with mock.patch.object(fase83_server, "_ip_host_pubblico", lambda h: True):
+            # il controllo degli indirizzi e' quello del collegamento (fase203, dal 2026-10-10)
+            with mock.patch.object(fase203_ical_orologio, "_indirizzo_pubblico", lambda ip: True):
                 s, r = self.g("POST", "/api/host/importa", {
                     "sorgente": "canonico",
                     "dati": {"titolo": "Importata", "citta": "Roma", "prezzo_notte": "80.00",

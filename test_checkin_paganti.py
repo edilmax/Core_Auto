@@ -31,8 +31,16 @@ import unittest
 from fase57_vetrina import SchedaAlloggio
 from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import crea_router
+from unittest import mock
+
+import fase59_concierge
 
 GIORNI = ("2026-09-01", "2026-09-02", "2026-09-03")
+# IL PREVENTIVO SI CHIEDE PRIMA DEL SOGGIORNO (lotto D, 2026-10-10): il passato non si vende piu',
+# e le date fisse di questo file si quotano con l'orologio del preventivo fermo al 1 gennaio 2026,
+# prima di tutte; il resto del sistema resta sull'ora vera.
+_PREVENTIVO_PRIMA = mock.patch.object(fase59_concierge, "time",
+                                      mock.Mock(time=lambda: 1767225600))
 
 
 def _ospiti(n):
@@ -45,11 +53,13 @@ def setUpModule():
     # descrivono quello acceso, quindi lo accendono con la sua leva d'ambiente
     import os
     os.environ["CHECKIN_ONLINE_ATTIVO"] = "1"
+    _PREVENTIVO_PRIMA.start()
 
 
 def tearDownModule():
     import os
     os.environ.pop("CHECKIN_ONLINE_ATTIVO", None)
+    _PREVENTIVO_PRIMA.stop()
 
 
 class _Base(unittest.TestCase):
