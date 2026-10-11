@@ -37,6 +37,10 @@ random.seed(1234)
 
 def _rt(tmp):
     sis = crea_sistema(ConfigCasaVIP(abilitato=True, segreto_hmac=SEG, db_payout=tmp + "/p.db"))
+    # IL PREVENTIVO SI CHIEDE PRIMA DEL SOGGIORNO (bombe a tempo del lotto D, 2026-10-10): le date
+    # fisse della batteria (cambio d'ora 2026, capodanno, bisestile) si quotano con l'orologio del
+    # preventivo fermo al 1 gennaio 2026, prima di tutte, e SOLO su questo sistema.
+    sis.concierge._now = lambda: 1767225600
     return sis, crea_router(sis, host_key="hk", admin_key="ak", base_url="http://t")
 
 
@@ -302,7 +306,12 @@ def time_travel():
         st, q = _g(r, "POST", "/api/concierge/quote",
                    {"alloggio_id": "casa-tempo", "check_in": ci, "check_out": co, "party": 2})
         if st != 200:
-            return None                              # orizzonte/indisponibile: informativo, non violazione
+            # ⛔ UN CONTROLLO CHE NON PARTE NON E' VERDE (S7, 2026-10-10). Qui si tornava in
+            # silenzio («informativo»): col passato che non si vende piu', passato il giorno del
+            # cambio d'ora la prova avrebbe smesso di provare senza dirlo (misurato a orologio
+            # spostato: 4 preventivi rifiutati e la batteria verde).
+            viol.append("notti %s->%s NON provate: il preventivo risponde %r %r" % (ci, co, st, q))
+            return None
         listino = q.get("prezzo_listino_cents")
         if listino is not None and listino != attese * 20000:
             viol.append("notti errate %s->%s: listino %r invece di %d (%d notti)"

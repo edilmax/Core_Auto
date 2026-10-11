@@ -21,6 +21,24 @@ from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import crea_router
 from fase87_stripe_webhook import firma_di_test
 from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
+from unittest import mock
+
+import fase59_concierge
+
+# IL PREVENTIVO SI CHIEDE PRIMA DEL SOGGIORNO (bombe a tempo del lotto D, 2026-10-10): il passato
+# non si vende piu', e le date fisse di questo file si quotano con l'orologio del preventivo fermo
+# al 1 gennaio 2026, prima di tutte; il resto del sistema resta sull'ora vera.
+_PREVENTIVO_PRIMA = mock.patch.object(fase59_concierge, "time",
+                                      mock.Mock(time=lambda: 1767225600))
+
+
+def setUpModule():
+    _PREVENTIVO_PRIMA.start()
+
+
+def tearDownModule():
+    _PREVENTIVO_PRIMA.stop()
+
 
 WH = "whsec_cc2"
 
@@ -117,6 +135,11 @@ class TestConcorrenzaDenaro(unittest.TestCase):
                   if r and r.get("stato") == "pagato"]
         self.assertLessEqual(len(pagati), 1,
                              f"piu' di un pagamento confermato sulla stessa stanza: {len(pagati)}")
+        # LA GARA DEVE AVERE UN VINCITORE (2026-10-10): con zero vincitori «al piu' uno» e' vero
+        # e la prova non ha provato niente. Successo davvero: le date del banco erano passate, il
+        # preventivo le rifiutava tutte (date_passate) e la prova restava verde.
+        self.assertEqual(len(pagati), 1,
+                         "nessuno ha vinto la gara: il banco non ha prenotato niente, la prova e' vuota")
         if pagati:
             dj = json.loads(pagati[0].get("corpo_json") or "{}")
             self.assertEqual(maturato, dj.get("netto_host_cents"),

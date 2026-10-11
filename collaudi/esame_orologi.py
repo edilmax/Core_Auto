@@ -200,6 +200,10 @@ class Banco(object):
             stripe_secret_key=chiave, stripe_webhook_secret=self.WH,
             stripe_success_url="https://bookinvip.com/ok", stripe_cancel_url="https://bookinvip.com/no")
         self.sis = crea_sistema(self.cfg)
+        # IL PREVENTIVO SI CHIEDE PRIMA DEL SOGGIORNO (bombe a tempo del lotto D, 2026-10-10): le
+        # date fisse del banco si quotano con l'orologio del preventivo fermo al 1 gennaio 2026,
+        # prima di tutte, e SOLO su questo sistema. Gli orologi NOSTRI qui sotto restano quelli.
+        self.sis.concierge._now = lambda: 1767225600
         # la sessione qui e' simulata: la rilettura (casella 10) chiede a Stripe il pagamento vero
         self.sis.stripe.stato_sessione = e2e.rilettura_dal_pagamento_vero(chiave)
         # GLI OROLOGI NOSTRI: gli stessi archivi, con un orologio che si sposta a mano

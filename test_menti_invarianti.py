@@ -26,6 +26,24 @@ from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import crea_router, sweep_hold_una_passata
 from fase87_stripe_webhook import firma_di_test
 from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
+from unittest import mock
+
+import fase59_concierge
+
+# IL PREVENTIVO SI CHIEDE PRIMA DEL SOGGIORNO (bombe a tempo del lotto D, 2026-10-10): il passato
+# non si vende piu', e le date fisse di questo file si quotano con l'orologio del preventivo fermo
+# al 1 gennaio 2026, prima di tutte; il resto del sistema resta sull'ora vera.
+_PREVENTIVO_PRIMA = mock.patch.object(fase59_concierge, "time",
+                                      mock.Mock(time=lambda: 1767225600))
+
+
+def setUpModule():
+    _PREVENTIVO_PRIMA.start()
+
+
+def tearDownModule():
+    _PREVENTIVO_PRIMA.stop()
+
 
 WH = "whsec_menti"
 AZIONI = ["quote", "book", "pay", "pay2", "cancel", "adminref", "hostcancel",
@@ -118,6 +136,7 @@ class TestMentiInvarianti(unittest.TestCase):
                     "nonce": "pool-%d" % k}) for k in range(10)]
 
             eccezioni = []
+            passate = []   # preventivi rifiutati perche' il banco ha date gia' passate
             for a in range(n_agenti):
                 stt = {"quote": None, "rif": None, "voucher": None, "diritto": None, "slug": None}
                 for _ in range(rnd.randint(1, 6)):
@@ -138,6 +157,8 @@ class TestMentiInvarianti(unittest.TestCase):
                                          "exp": int(time.time()) + 30 * 86400,
                                          "nonce": str(rnd.random())}))
                             s, q = g("POST", "/api/concierge/quote", body)
+                            if q.get("errore") == "date_passate":
+                                passate.append(body["check_in"])
                             if s == 200:
                                 stt["quote"] = q.get("quote_token"); stt["slug"] = slug
                         elif az == "requote" and stt["slug"]:
@@ -146,6 +167,8 @@ class TestMentiInvarianti(unittest.TestCase):
                                       "check_in": (base + datetime.timedelta(days=rnd.randint(0, 100))).isoformat(),
                                       "check_out": (base + datetime.timedelta(days=rnd.randint(101, 110))).isoformat(),
                                       "party": 2})
+                            if q.get("errore") == "date_passate":
+                                passate.append("requote")
                             if s == 200:
                                 stt["quote"] = q.get("quote_token")
                         elif az == "book" and stt["quote"]:
@@ -220,6 +243,10 @@ class TestMentiInvarianti(unittest.TestCase):
                           {"slug": slug, "stato": "pubblicato"}, {"X-Admin-Key": "ak"})
 
             self.assertEqual(eccezioni, [], f"seed={seed}: il router ha SOLLEVATO: {eccezioni[:5]}")
+            # UNA DATA PASSATA NEL BANCO NON E' UN CASO DI PROVA, E' IL BANCO ROTTO (2026-10-10):
+            # quei preventivi tornano 422 e le menti saltano in silenzio i rami che li seguono.
+            self.assertEqual(passate, [], f"seed={seed}: preventivi su date gia' passate: "
+                                          f"{len(passate)} (il banco non prova piu' quei rami)")
             self._invarianti(d, seed, fc.transfers)
         finally:
             shutil.rmtree(d, ignore_errors=True)

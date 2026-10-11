@@ -40,6 +40,24 @@ from fase185_testi_legali import documento
 from fase191_blocco_globale import crea_blocco_globale
 from fase192_admin_accounts import AdminAccounts, crea_admin_accounts
 
+import fase59_concierge
+
+# IL PREVENTIVO SI CHIEDE PRIMA DEL SOGGIORNO (bombe a tempo del lotto D, 2026-10-10): il passato
+# non si vende piu', e le date fisse di questo file si quotano con l'orologio del preventivo fermo
+# al 1 gennaio 2026, prima di tutte; il resto del sistema resta sull'ora vera. Le prove che hanno
+# GIA' un orologio loro (`orologio=`) non lo vedono: il loro resta quello.
+_PREVENTIVO_PRIMA = mock.patch.object(fase59_concierge, "time",
+                                      mock.Mock(time=lambda: 1767225600))
+
+
+def setUpModule():
+    _PREVENTIVO_PRIMA.start()
+
+
+def tearDownModule():
+    _PREVENTIVO_PRIMA.stop()
+
+
 QUI = os.path.dirname(os.path.abspath(__file__))
 
 

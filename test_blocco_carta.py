@@ -23,6 +23,7 @@ LE REGOLE CHE QUESTE GUARDIE PRETENDONO:
 ⛔ D20: queste guardie vanno VISTE ROSSE sul codice di prima, poi si ripara.
 Stripe finto al bordo (`sis.stripe`), rotte vere, webhook firmato.
 """
+import datetime
 import hashlib
 import hmac
 import json
@@ -42,6 +43,21 @@ WHSEC = "whsec_blocco"
 # il cui NOME contiene «secret»/«key» quando riceve un valore letterale (stesso rimedio di
 # test_webhook_evento_archiviato: un rilievo NUOVO si chiude nel codice).
 CHIAVE_FINTA = "sk_test_blocco"
+
+# LE DATE DI QUESTE PROVE SONO ETICHETTE, NON GIORNI DEL CALENDARIO (bombe a tempo, 2026-10-10).
+# Le regole provate qui (48 ore di ripensamento, giro orario, incasso) guardano l'ora VERA: un
+# soggiorno fisso ad aprile 2027 diventava «a due giorni dall'arrivo» l'8 aprile 2027 (cinque prove
+# rosse da sole, schedario del 29/9) e, col passato che non si vende piu' (lotto D), cadevano tutte.
+# Si scrivono come prima («2027-04-10») e valgono lo stesso giorno della finestra contato da oggi
+# + 180: sempre lontano dall'arrivo, sempre nel futuro. Fissato all'import: una prova che passa la
+# mezzanotte non cambia giorno a meta'.
+_ETICHETTA_ZERO = datetime.date(2027, 4, 1)
+_GIORNO_ZERO = datetime.date.today() + datetime.timedelta(days=180)
+
+
+def _vero(etichetta):
+    """L'etichetta «2027-04-10» -> il giorno che sta a nove giorni da `_GIORNO_ZERO`, in ISO."""
+    return (_GIORNO_ZERO + (datetime.date.fromisoformat(etichetta) - _ETICHETTA_ZERO)).isoformat()
 
 
 class StripeColBlocco:
@@ -137,8 +153,9 @@ class _Base(unittest.TestCase):
                "citta": "Roma", "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
                "servizi": [], "immagini": [], "tassa_pp_notte_cents": 200,
                "politica_cancellazione": "non_rimborsabile"}, HK)
-        self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": "casa", "da": "2027-04-01",
-               "a": "2027-05-31", "unita_totali": 1, "prezzo_netto_cents": 10000}, HK)
+        self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": "casa",
+               "da": _vero("2027-04-01"), "a": _vero("2027-05-31"), "unita_totali": 1,
+               "prezzo_netto_cents": 10000}, HK)
 
     def tearDown(self):
         shutil.rmtree(self.dir, ignore_errors=True)
@@ -148,7 +165,8 @@ class _Base(unittest.TestCase):
 
     def prenota(self, ci, co):
         _, q = self.g("POST", "/api/concierge/quote",
-                      {"alloggio_id": "casa", "check_in": ci, "check_out": co, "party": 2})
+                      {"alloggio_id": "casa", "check_in": _vero(ci), "check_out": _vero(co),
+                       "party": 2})
         _, b = self.g("POST", "/api/concierge/book", {"quote_token": q["quote_token"],
                                                       "email": "o@x.it"})
         return b["riferimento"], b.get("voucher_token", ""), int(q["totale_cents"])
@@ -1017,6 +1035,7 @@ class TestIRamiDelBloccoCheNessunoEseguiva(_Base):
         pp = self.sis.pagamenti_pendenti
         rec = pp.info(rif)
         pp.scadi(rif)
+        ci, co = _vero(ci), _vero(co)
         self.sis.inventario.rilascia("casa", ci, co,
                                      idem_key=(rec.get("idem_key") or ("hold_" + rif)))
         self.assertTrue(getattr(self.sis.inventario.blocca("casa", ci, co, idem_key="altro_" + rif),
@@ -1074,8 +1093,8 @@ class _ConLeSpie(_Base):
 
     def rimborsa(self, rif, ci, co):
         idem = self.sis.pagamenti_pendenti.info(rif)["idem_key"]
-        return self.g("POST", "/api/admin/rimborso", {"alloggio_id": "casa", "check_in": ci,
-                                                      "check_out": co, "idem_key": idem}, AK)
+        return self.g("POST", "/api/admin/rimborso", {"alloggio_id": "casa", "check_in": _vero(ci),
+                                                      "check_out": _vero(co), "idem_key": idem}, AK)
 
 
 class TestIlRimborsoDellAdminColBlocco(_ConLeSpie):
@@ -1214,10 +1233,11 @@ class TestLaCancellazioneDellOspiteAiMargini(_ConLeSpie):
         self.g("POST", "/api/host/pubblica", {"host_id": "demo", "slug": "casa0", "titolo": "C0",
                "citta": "Roma", "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
                "servizi": [], "immagini": [], "politica_cancellazione": "non_rimborsabile"}, HK)
-        self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": "casa0", "da": "2027-04-01",
-               "a": "2027-05-31", "unita_totali": 1, "prezzo_netto_cents": 10000}, HK)
+        self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": "casa0",
+               "da": _vero("2027-04-01"), "a": _vero("2027-05-31"), "unita_totali": 1,
+               "prezzo_netto_cents": 10000}, HK)
         _, q = self.g("POST", "/api/concierge/quote", {"alloggio_id": "casa0", "check_in":
-                      "2027-04-22", "check_out": "2027-04-24", "party": 2})
+                      _vero("2027-04-22"), "check_out": _vero("2027-04-24"), "party": 2})
         self.assertEqual(q.get("tassa_soggiorno_cents"), 0, "PREMESSA: annuncio senza tassa")
         _, b = self.g("POST", "/api/concierge/book", {"quote_token": q["quote_token"],
                                                       "email": "o@x.it"})

@@ -209,6 +209,10 @@ class Banco(object):
         from fase162_pagamenti_pendenti import crea_pagamenti_pendenti
         self.d = d
         self.sis = _sistema(d)
+        # IL PREVENTIVO SI CHIEDE PRIMA DEL SOGGIORNO (bombe a tempo del lotto D, 2026-10-10): le
+        # date fisse del banco si quotano con l'orologio del preventivo fermo al 1 gennaio 2026,
+        # prima di tutte, e SOLO su questo sistema (chi carica l'esame nella suite non lo eredita).
+        self.sis.concierge._now = lambda: 1767225600
         self.orologio = Orologio(time.time())
         self.sis.pagamenti_pendenti = crea_pagamenti_pendenti(d + "/p.db", orologio=self.orologio)
         self.router = _router(self.sis)

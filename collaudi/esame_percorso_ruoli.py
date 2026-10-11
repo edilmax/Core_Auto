@@ -290,6 +290,11 @@ class Banco(object):
             stripe_webhook_secret="whsec_x", stripe_success_url="https://x/ok",
             stripe_cancel_url="https://x/no"))
         self.sis.email_provider = _Posta()
+        #  IL PREVENTIVO SI CHIEDE PRIMA DEL SOGGIORNO (bombe a tempo del lotto D, 2026-10-10): il
+        #  passato non si vende piu', e le date fisse del banco si quotano con l'orologio del
+        #  preventivo fermo al 1 gennaio 2026, prima di tutte. SOLO su questo sistema, come il
+        #  gateway qui sotto: chi carica l'esame dentro la suite non se lo ritrova addosso.
+        self.sis.concierge._now = lambda: 1767225600
         #  Il gateway del banco prende il posto di quello vero SOLO su questo sistema (mai
         #  sulla classe): `fase83` lo legge con `getattr(self._sys, "stripe", None)`.
         self.gateway = GatewayDiProva()
