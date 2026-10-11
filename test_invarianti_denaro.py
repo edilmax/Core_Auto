@@ -23,6 +23,24 @@ import unittest
 from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import crea_router
 from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
+from unittest import mock
+
+import fase59_concierge
+
+# IL PREVENTIVO SI CHIEDE PRIMA DEL SOGGIORNO (bombe a tempo del lotto D, 2026-10-10): il passato
+# non si vende piu', e le date fisse di questo file si quotano con l'orologio del preventivo fermo
+# al 1 gennaio 2026, prima di tutte; il resto del sistema resta sull'ora vera.
+_PREVENTIVO_PRIMA = mock.patch.object(fase59_concierge, "time",
+                                      mock.Mock(time=lambda: 1767225600))
+
+
+def setUpModule():
+    _PREVENTIVO_PRIMA.start()
+
+
+def tearDownModule():
+    _PREVENTIVO_PRIMA.stop()
+
 
 _POLITICHE = ("flessibile", "moderata", "rigida", "non_rimborsabile")
 _PREZZI = (1, 50, 999, 10000, 50000, 250000)
@@ -119,6 +137,7 @@ class TestInvariantiDenaro(unittest.TestCase):
         rnd = random.Random(2026)
         base = datetime.date(2026, 9, 1)
         validi = 0
+        passate = []   # preventivi rifiutati perche' il banco ha date gia' passate
         for _ in range(250):
             slug = rnd.choice(self.listings)
             off, notti = rnd.randint(0, 120), rnd.choice([1, 2, 3, 7, 14, 28, 40])
@@ -130,6 +149,8 @@ class TestInvariantiDenaro(unittest.TestCase):
                 body["credito_token"] = self._credito(rnd)
             s, q = self.g("POST", "/api/concierge/quote", body)
             if s != 200:
+                if q.get("errore") == "date_passate":
+                    passate.append(ci)
                 continue
             validi += 1
             v = {k: q[k] for k in _VOCI}
@@ -153,6 +174,10 @@ class TestInvariantiDenaro(unittest.TestCase):
             # I4 niente negativi
             self.assertGreaterEqual(min(v.values()), 0, f"I4 voce negativa: {ctx}")
         self.assertGreater(validi, 100, "troppi pochi preventivi validi: setup rotto?")
+        # UNA DATA PASSATA NEL BANCO NON E' UN CASO DI PROVA, E' IL BANCO ROTTO (2026-10-10): la
+        # soglia qui sopra tollerava un terzo dei casi persi cosi', e con i giorni sarebbero
+        # cresciuti fino a farla cadere da sola.
+        self.assertEqual(passate, [], "preventivi su date gia' passate: %d su 250" % len(passate))
 
 
 if __name__ == "__main__":

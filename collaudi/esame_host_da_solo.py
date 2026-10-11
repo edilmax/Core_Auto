@@ -178,6 +178,10 @@ def percorri(salta=None, chiave_stripe="sk"):
             commissione_bps=1000, psp_bps=0, stripe_secret_key=chiave_stripe,
             stripe_webhook_secret=WH, stripe_success_url="https://x/ok",
             stripe_cancel_url="https://x/no"))
+        # IL PREVENTIVO SI CHIEDE PRIMA DEL SOGGIORNO (bombe a tempo del lotto D, 2026-10-10): le
+        # date fisse dell'esame si quotano con l'orologio del preventivo fermo al 1 gennaio 2026,
+        # prima di tutte, e SOLO su questo sistema.
+        sis.concierge._now = lambda: 1767225600
         r = crea_router(sis, host_key="hk", admin_key="ak", base_url="https://bookinvip.com")
 
         def g(m, path, corpo=None, intest=None, query=None):

@@ -25,6 +25,24 @@ from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import crea_router
 from fase87_stripe_webhook import firma_di_test
 from fase163_accettazioni import doc_sha256, CONTRATTO_HOST_VERSIONE
+from unittest import mock
+
+import fase59_concierge
+
+# IL PREVENTIVO SI CHIEDE PRIMA DEL SOGGIORNO (bombe a tempo del lotto D, 2026-10-10): il passato
+# non si vende piu', e le date fisse di questo file si quotano con l'orologio del preventivo fermo
+# al 1 gennaio 2026, prima di tutte; il resto del sistema resta sull'ora vera.
+_PREVENTIVO_PRIMA = mock.patch.object(fase59_concierge, "time",
+                                      mock.Mock(time=lambda: 1767225600))
+
+
+def setUpModule():
+    _PREVENTIVO_PRIMA.start()
+
+
+def tearDownModule():
+    _PREVENTIVO_PRIMA.stop()
+
 
 N_HOST = int(os.environ.get("SIM_HOST", "60"))   # suite quotidiana: 60; mega-collaudo: SIM_HOST=1000
 N_CLI = int(os.environ.get("SIM_CLI", "60"))
@@ -201,6 +219,14 @@ class TestSimulazioneAnno(unittest.TestCase):
         self.assertEqual(s, 200); self.assertEqual(aa.get("totale"), N_HOST)
         self.assertLessEqual(len(aa.get("alloggi", [])), 20)
 
+        # OGNI RAMO DEL MONEY-PATH DEVE ESSERE STATO PERCORSO (2026-10-10): i rami saltano in
+        # silenzio un preventivo rifiutato, quindi senza questa riga un banco che non prenota
+        # niente passa tutte le invarianti -- e' successo, con le date del banco ormai passate.
+        for nome, quante in (("confermate", confermate), ("contestate", contestate),
+                             ("cancellate", cancellate), ("scadute", scadute),
+                             ("su_richiesta", su_richiesta)):
+            self.assertGreater(quante, 0, "ramo %s mai percorso: la simulazione e' vuota" % nome)
+
         dt = time.time() - t0
         print("\n== 1 ANNO: %d host, %d clienti | conf=%d contest=%d canc=%d scad=%d surichiesta=%d "
               "| controversie=%d | %.1fs ==" % (N_HOST, N_CLI, confermate, contestate, cancellate,
@@ -237,6 +263,9 @@ class TestSimulazioneAnno(unittest.TestCase):
         for x in th:
             x.join(timeout=60)
         self.assertLessEqual(len(vinti), 1, "OVERBOOKING sotto gara: %d vincitori" % len(vinti))
+        # LA GARA DEVE AVERE UN VINCITORE (2026-10-10): con zero, «al piu' uno» e' vero per niente
+        # -- e' successo: date del banco passate, cento preventivi rifiutati, prova verde.
+        self.assertEqual(len(vinti), 1, "nessuno ha vinto la gara: la prova non ha provato niente")
 
 
 if __name__ == "__main__":

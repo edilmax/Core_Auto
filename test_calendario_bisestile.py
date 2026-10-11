@@ -28,6 +28,24 @@ import unittest
 from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import crea_router
 from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
+from unittest import mock
+
+import fase59_concierge
+
+# IL PREVENTIVO SI CHIEDE PRIMA DEL SOGGIORNO (bombe a tempo del lotto D, 2026-10-10): il passato
+# non si vende piu', e le date fisse di questo file si quotano con l'orologio del preventivo fermo
+# al 1 gennaio 2026, prima di tutte; il resto del sistema resta sull'ora vera.
+_PREVENTIVO_PRIMA = mock.patch.object(fase59_concierge, "time",
+                                      mock.Mock(time=lambda: 1767225600))
+
+
+def setUpModule():
+    _PREVENTIVO_PRIMA.start()
+
+
+def tearDownModule():
+    _PREVENTIVO_PRIMA.stop()
+
 
 PREZZO = 15000       # centesimi/notte, senza tasse ne' sconti: totale = notti x PREZZO
 CIN = "IT058091C2X5V0ABCD"
@@ -88,8 +106,13 @@ class TestIlCalendarioNonHaPauraDel29(unittest.TestCase):
         # la "terza" ha unita' UNA anche nel 2026: l'export mostra i giorni PIENI, e con
         # una sola unita' una prenotazione riempie (misurato: con 2 unita' il giorno resta
         # non-pieno e il feed lo omette, giustamente)
+        # ⛔ LA FINESTRA SI CONTA DA OGGI (2026-10-10): era fissa (1/10-31/12 2026) mentre la prova
+        # dell'export prenota oggi+30, quindi da dicembre la prenotazione cadeva fuori e la prova
+        # diventava rossa da sola (bomba nota dello schedario dal 29/9). L'export guarda l'ora vera.
+        oggi = datetime.date.today()
         s, c = g("POST", "/api/host/disponibilita_range",
-                 {"alloggio_id": "terza", "da": "2026-10-01", "a": "2026-12-31",
+                 {"alloggio_id": "terza", "da": oggi.isoformat(),
+                  "a": (oggi + datetime.timedelta(days=60)).isoformat(),
                   "unita_totali": 1, "prezzo_netto_cents": PREZZO},
                  {"X-Host-Token": cls.tok})
         if s != 200:

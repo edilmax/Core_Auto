@@ -22,6 +22,25 @@ import time
 import unittest
 
 from fase162_pagamenti_pendenti import crea_pagamenti_pendenti
+from unittest import mock
+
+import fase59_concierge
+
+# IL PREVENTIVO SI CHIEDE PRIMA DEL SOGGIORNO (bombe a tempo del lotto D, 2026-10-10): il passato
+# non si vende piu', e nelle ultime settimane dell'anno `_banda` guarda INDIETRO -- un soggiorno
+# gia' avvenuto, che il preventivo oggi rifiuta (caccia del 10/10: rosso dal 1 dicembre). Il
+# preventivo vede «oggi» = 1 gennaio 2026, come chi l'aveva prenotato prima; il resto del sistema
+# (giornale, DAC7) resta sull'ora vera.
+_PREVENTIVO_PRIMA = mock.patch.object(fase59_concierge, "time",
+                                      mock.Mock(time=lambda: 1767225600))
+
+
+def setUpModule():
+    _PREVENTIVO_PRIMA.start()
+
+
+def tearDownModule():
+    _PREVENTIVO_PRIMA.stop()
 
 
 class TestNottiPerAlloggio(unittest.TestCase):

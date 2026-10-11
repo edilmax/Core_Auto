@@ -83,6 +83,10 @@ class Mondo:
             bunker_password=PW, stripe_secret_key="sk",
             stripe_webhook_secret="whsec_x",
             stripe_success_url="https://x/ok", stripe_cancel_url="https://x/no"))
+        # IL PREVENTIVO SI CHIEDE PRIMA DEL SOGGIORNO (bombe a tempo del lotto D, 2026-10-10): le
+        # date fisse di questo mondo si quotano con l'orologio del preventivo fermo al 1 gennaio
+        # 2026, prima di tutte, e SOLO su questo sistema.
+        self.sis.concierge._now = lambda: 1767225600
         self.r = crea_router(self.sis, host_key="hk", admin_key="ak",
                              base_url="https://bookinvip.com")
 

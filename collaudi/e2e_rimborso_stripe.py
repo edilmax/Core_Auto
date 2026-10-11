@@ -177,6 +177,10 @@ def main():
             stripe_success_url="https://bookinvip.com/ok",
             stripe_cancel_url="https://bookinvip.com/no"))
         sis.stripe.stato_sessione = rilettura_dal_pagamento_vero(chiave)
+        # IL PREVENTIVO SI CHIEDE PRIMA DEL SOGGIORNO (bombe a tempo del lotto D, 2026-10-10): le
+        # date fisse del giro si quotano con l'orologio del preventivo fermo al 1 gennaio 2026,
+        # prima di tutte, e SOLO su questo sistema.
+        sis.concierge._now = lambda: 1767225600
         r = crea_router(sis, host_key="hk", admin_key="ak",
                         base_url="https://bookinvip.com")
 

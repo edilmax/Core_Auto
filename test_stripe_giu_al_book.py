@@ -34,6 +34,24 @@ import unittest
 from fase57_vetrina import SchedaAlloggio, crea_catalogo
 from fase58_channel_manager import crea_channel_manager
 from fase59_concierge import FirmaQuote, ProtocolloConcierge
+from unittest import mock
+
+import fase59_concierge
+
+# IL PREVENTIVO SI CHIEDE PRIMA DEL SOGGIORNO (bombe a tempo del lotto D, 2026-10-10): il passato
+# non si vende piu', e le date fisse di questo file si quotano con l'orologio del preventivo fermo
+# al 1 gennaio 2026, prima di tutte; il resto del sistema resta sull'ora vera.
+_PREVENTIVO_PRIMA = mock.patch.object(fase59_concierge, "time",
+                                      mock.Mock(time=lambda: 1767225600))
+
+
+def setUpModule():
+    _PREVENTIVO_PRIMA.start()
+
+
+def tearDownModule():
+    _PREVENTIVO_PRIMA.stop()
+
 
 SEGRETO = b"0123456789abcdef0123456789abcdef"
 GIORNI = ("2027-03-01", "2027-03-02", "2027-03-03")

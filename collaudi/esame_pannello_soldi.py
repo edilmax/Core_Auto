@@ -42,6 +42,7 @@ ROSSA, non «non pervenuta» (sbaglio S7).
 ⛔ AMBIENTE INTATTO (lezione della CI del 2026-09-07): il banco imposta `UPLOAD_DIR` e sostituisce il
    fetch di Stripe sulla classe; qui si salvano PRIMA e si rimettono DOPO, sempre (`finally`).
 """
+import datetime
 import json
 import os
 import shutil
@@ -71,6 +72,22 @@ SITUAZIONI = ("mastro", "coerenza", "fantasmi", "stima", "porte")
 STATI_PAGATI = ("maturato", "in_transito", "pagato")
 PASSWORD_DI_PROVA = "password1"          # solo per il banco locale: nessun conto vero
 PASSI = []
+
+# LE DATE DEL BANCO SONO ETICHETTE, NON GIORNI DEL CALENDARIO (bombe a tempo, 2026-10-10). Il
+# mastro matura col calendario VERO: con un soggiorno fisso a giugno 2027, passato il suo arrivo
+# l'esame avrebbe cambiato scenario da solo (misurato a orologio spostato: la prenotazione poi
+# rimborsata era gia' «maturato» e tale restava, 4 rossi su 21). E dopo il lotto D il passato non
+# si vende piu'. Si scrivono come prima («2027-06-05») e valgono lo stesso giorno contato da oggi
+# + 180, fissato all'avvio: lo scenario resta quello che l'esame dichiara. ⚠️ Se un rimborso DOPO
+# la maturazione lasci davvero «maturato» nel prodotto e' un'altra domanda: trovato per strada
+# (m) in RIPRENDI_QUI.md.
+_ETICHETTA_ZERO = datetime.date(2027, 6, 1)
+_GIORNO_ZERO = datetime.date.today() + datetime.timedelta(days=180)
+
+
+def _vero(etichetta):
+    """L'etichetta «2027-06-05» -> il giorno che sta a quattro giorni da `_GIORNO_ZERO`, in ISO."""
+    return (_GIORNO_ZERO + (datetime.date.fromisoformat(etichetta) - _ETICHETTA_ZERO)).isoformat()
 
 NON_GUARDA = (
     "la PAGINA (deploy/host.html): qui si misurano le risposte delle rotte JSON, non cio' che il "
@@ -225,11 +242,11 @@ class Banco(object):
 
     def alloggio(self, tk, slug, unita, da, a):
         from collaudi.gare_estreme import _host_pubblica
-        return _host_pubblica(self.g, tk, slug, unita, 10000, da, a)
+        return _host_pubblica(self.g, tk, slug, unita, 10000, _vero(da), _vero(a))
 
     def prenota(self, slug, ci, co):
         from collaudi.gare_estreme import _quote
-        tok = _quote(self.g, slug, ci, co)
+        tok = _quote(self.g, slug, _vero(ci), _vero(co))
         if not tok:
             return None, None
         s, b = self.g("POST", "/api/concierge/book", {"quote_token": tok, "email": "ospite@esame.it"})
