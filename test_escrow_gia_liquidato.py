@@ -25,8 +25,15 @@ dell'host ('rilasciato'/'risolto' con host_riceve>0), il rimborso viene TAGLIATO
 che abbiamo ancora in cassa (pagato - gia_liquidato). Il Credito Viaggio resta calcolato sul
 trattenuto ORIGINALE (il taglio non conia credito nuovo).
 
-VISTO ROSSO: rimuovendo il taglio, `test_cancella_dopo_conferma_escrow_non_supera_incasso`
-fallisce con rimborso 30000 su 30000 incassati e 27000 gia' dell'host.
+VISTO ROSSO (2026-07-28): rimuovendo il taglio, `test_cancella_dopo_conferma_escrow_non_supera_incasso`
+falliva con rimborso 30000 su 30000 incassati e 27000 gia' dell'host.
+
+DAL 2026-10-11 ((m) in RIPRENDI_QUI, «autorizzato»): il taglio non bastava. La cancellazione
+andava avanti e TOGLIEVA la riga del bonifico dell'host, che senza Stripe collegato non veniva
+pagato mai. Ora una prenotazione PAGATA con l'escrow gia' deciso non si cancella dal voucher
+(409 escrow_gia_liquidato, lo stesso freno dell'host e dell'admin) e niente cambia; il taglio
+resta come seconda difesa per quando l'archivio dei pagamenti non risponde. Guardie viste
+rosse: `test_fase83_server.TestUnSoggiornoGiaIniziatoNonSiCancellaDalVoucher`.
 """
 import json
 import shutil
@@ -129,9 +136,12 @@ class TestEscrowGiaLiquidato(unittest.TestCase):
     # ── IL CAMMINO CHE REFUTAVA LA TESI ───────────────────────────────────────
     def test_cancella_dopo_conferma_escrow_non_supera_incasso(self):
         """Escrow gia' RILASCIATO all'host (l'ospite ha confermato 'tutto ok') e poi
-        cancellazione: il rimborso promesso non puo' MAI superare cio' che resta in cassa."""
+        cancellazione: dal 2026-10-11 ((m), «autorizzato») non passa piu', con lo stesso freno
+        dell'host e dell'admin, e non tocca niente. Prima passava col rimborso tagliato al
+        tetto di cassa, ma la riga del bonifico dell'host SPARIVA: un host senza Stripe
+        collegato (bonifico a mano, come qui) non veniva pagato mai."""
         b = self._prenota_e_paga(self._fra(20), self._fra(22))
-        rif, pagato = b["riferimento"], int(b["prezzo_guest_cents"])
+        rif = b["riferimento"]
 
         s, ok = self.g("POST", "/api/garanzia/conferma", {"voucher_token": b["voucher_token"]})
         self.assertEqual(s, 200, ok)
@@ -139,21 +149,16 @@ class TestEscrowGiaLiquidato(unittest.TestCase):
         self.assertEqual(st["stato"], "rilasciato")
         gia_host = int(st["host_riceve_cents"])
         self.assertGreater(gia_host, 0, "l'escrow deve avere liquidato l'host")
+        bonifico_prima = self.sys.payout.info(rif)
 
         s, canc = self.g("POST", "/api/concierge/cancella",
                          {"voucher_token": b["voucher_token"]})
-        self.assertEqual(s, 200, canc)
-        rimborso = int(canc["rimborso_soggiorno_cents"])
-
-        # INVARIANTE DI CASSA: quello che promettiamo all'ospite + quello che l'host ha gia'
-        # incassato non puo' superare quello che l'ospite ci ha versato.
-        self.assertLessEqual(
-            rimborso + gia_host, pagato,
-            "PERDITA A NOSTRO CARICO: rimborso %d + gia' all'host %d > incassato %d"
-            % (rimborso, gia_host, pagato))
-        # e il taglio non deve coniare Credito Viaggio dal nulla
-        self.assertEqual(int(canc["credito_viaggio_cents"]), 0,
-                         "credito coniato dal taglio anti-perdita")
+        self.assertEqual((s, canc.get("errore")), (409, "escrow_gia_liquidato"), canc)
+        # NIENTE effetti: nessun rimborso promesso, pagamento vivo, bonifico dell'host intatto
+        self.assertNotIn("rimborso_soggiorno_cents", canc)
+        self.assertEqual(self.sys.pagamenti_pendenti.info(rif)["stato"], "pagato")
+        self.assertEqual(self.sys.payout.info(rif), bonifico_prima,
+                         "il bonifico dell'host e' cambiato con la garanzia gia' sua")
 
     def test_cancella_escrow_ancora_in_garanzia_rimborso_pieno_invariato(self):
         """NON-REGRESSIONE: se i soldi sono ANCORA in garanzia (nessuna liquidazione),
@@ -183,13 +188,16 @@ class TestEscrowGiaLiquidato(unittest.TestCase):
         self.assertTrue(out.get("ok"), out)
         gia_host = int(self.sys.garanzia.stato(rif)["host_riceve_cents"])
         self.assertGreater(gia_host, 0)
+        self.assertLessEqual(gia_host, pagato)
+        bonifico_prima = self.sys.payout.info(rif)
 
+        # dal 2026-10-11 ((m)) la cancellazione dopo l'arbitro non passa: l'ha gia' decisa lui
         s, canc = self.g("POST", "/api/concierge/cancella",
                          {"voucher_token": b["voucher_token"]})
-        self.assertEqual(s, 200, canc)
-        self.assertLessEqual(
-            int(canc["rimborso_soggiorno_cents"]) + gia_host, pagato,
-            "PERDITA A NOSTRO CARICO dopo controversia risolta a favore dell'host")
+        self.assertEqual((s, canc.get("errore")), (409, "escrow_gia_liquidato"), canc)
+        self.assertNotIn("rimborso_soggiorno_cents", canc)
+        self.assertEqual(self.sys.pagamenti_pendenti.info(rif)["stato"], "pagato")
+        self.assertEqual(self.sys.payout.info(rif), bonifico_prima)
 
 
     # ── SECONDO CAMMINO: la stessa falla dal lato HOST ────────────────────────

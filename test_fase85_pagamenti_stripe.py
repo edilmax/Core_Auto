@@ -631,5 +631,45 @@ class TestIlBloccoSullaCarta(unittest.TestCase):
                                  "illeggibile")
 
 
+class TestLAddebitoDelPagamentoPerIlBonificoLegato(unittest.TestCase):
+    """COMPITO 41: il bonifico all'host si lega all'ADDEBITO dell'ospite (`source_transaction`),
+    e l'id di quell'addebito si legge dal pagamento: «Get the PaymentIntent's latest_charge
+    attribute» (docs.stripe.com/connect/separate-charges-and-transfers, letto l'11/10/2026).
+    `addebito_di` e' una LETTURA: "" vuol dire «non lo so», mai un id inventato -- e allora il
+    bonifico parte come prima, dal saldo disponibile."""
+
+    def test_legge_latest_charge_sia_come_id_sia_come_oggetto_espanso(self):
+        f = FetchFinto({PAGAMENTI_URL: {"id": "pi_ok", "latest_charge": "ch_3Abc"}})
+        self.assertEqual(_p(f).addebito_di("pi_ok"), "ch_3Abc")
+        self.assertEqual(f.chiamate, [(PAGAMENTI_URL + "/pi_ok", None,
+                                       {"Authorization": "Bearer sk_test_k"})],
+                         "una LETTURA sola: GET del pagamento, con la chiave")
+        f2 = FetchFinto({PAGAMENTI_URL: {"latest_charge": {"id": "py_9", "object": "charge"}}})
+        self.assertEqual(_p(f2).addebito_di("pi_ok"), "py_9")
+
+    def test_quello_che_non_e_un_addebito_e_vuoto(self):
+        for risposta in ({}, {"latest_charge": None}, {"latest_charge": ""},
+                         {"latest_charge": "pi_ok"}, {"latest_charge": "re_1"},
+                         {"latest_charge": {"id": "re_1"}}, {"latest_charge": {}},
+                         {"latest_charge": 7}, {"latest_charge": ["ch_1"]}, "ch_1", None, []):
+            with self.subTest(risposta=risposta):
+                self.assertEqual(_p(FetchFinto({PAGAMENTI_URL: risposta})).addebito_di("pi_ok"), "")
+        for cattivo in (None, "", "ch_1", "cs_1", 123, b"pi_1", ["pi_1"]):
+            with self.subTest(ingresso=cattivo):
+                f = FetchFinto({PAGAMENTI_URL: {"latest_charge": "ch_x"}})
+                self.assertEqual(_p(f).addebito_di(cattivo), "")
+                self.assertEqual(f.chiamate, [], "cio' che non e' un pagamento non si chiede")
+
+    def test_stripe_che_non_risponde_e_un_avviso_col_pagamento_non_un_errore(self):
+        # un AVVISO: il bonifico parte lo stesso (non legato) e lo grida fase83; un ERROR qui
+        # diventerebbe posta del Guardiano a ogni interruzione di Stripe (ferrea 10)
+        with self.assertLogs("core_auto.pagamenti_stripe", level="DEBUG") as reg:
+            self.assertEqual(_p(FetchFinto(solleva=RuntimeError("stripe giu"))).addebito_di(
+                "pi_ok"), "")
+        self.assertEqual([r.levelname for r in reg.records], ["WARNING"], reg.output)
+        self.assertIn("pi_ok", reg.output[0])
+        self.assertIn("RuntimeError", reg.output[0])
+
+
 if __name__ == "__main__":
     unittest.main()

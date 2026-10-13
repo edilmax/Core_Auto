@@ -218,18 +218,21 @@ class TestSplitPenalePayout(unittest.TestCase):
         self.assertEqual(self.sis.payout.stato_di(ref), "")
         self.assertEqual(self.sis.payout.riepilogo(self.hid), {})
 
-    def test_un_bonifico_GIA_IN_VIAGGIO_resta_visibile_trattenuto(self):
-        """L'altra direzione: se il bonifico e' gia' partito ('in_transito') e poi la prenotazione
-        viene rimborsata, i soldi sono gia' usciti verso l'host. Quella riga NON si toglie: resta
-        'trattenuto' e visibile, perche' la deve guardare una persona."""
+    def test_un_bonifico_GIA_IN_VIAGGIO_ferma_la_cancellazione_e_resta_visibile(self):
+        """L'altra direzione: se il bonifico e' gia' partito ('in_transito') i soldi sono gia'
+        usciti verso l'host. Quella riga NON si toglie e resta visibile. E dal 2026-10-11 ((m),
+        «autorizzato») la cancellazione dal voucher non passa piu': prima rispondeva 200 col
+        rimborso PIENO all'ospite e il bonifico gia' in viaggio, cioe' una perdita nostra. E' il
+        freno dell'admin e dell'host: decide l'assistenza."""
         self._pubblica("casa-i", politica="flessibile")
         b = self._book_paga("casa-i", giorni_all_arrivo=30)
         ref = b["riferimento"]
         self.assertTrue(self.sis.payout.aggiorna_stato(ref, "in_transito"),
                         "premessa: la riga dev'essere 'maturato' e poter partire")
         s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": b["voucher_token"]})
-        self.assertEqual(s, 200, c)
-        self.assertEqual(self.sis.payout.stato_di(ref), "trattenuto")
+        self.assertEqual((s, c.get("errore")), (409, "escrow_gia_liquidato"), c)
+        self.assertEqual(self.sis.payout.stato_di(ref), "in_transito")
+        self.assertEqual(self.sis.pagamenti_pendenti.info(ref)["stato"], "pagato")
 
     def test_disputa_aperta_payout_fuori_dal_giro(self):
         # BUG #21: con la disputa APERTA il payout restava 'maturato' -> `da_pagare`

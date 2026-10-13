@@ -7090,7 +7090,22 @@ class RouterHTTP:
                     and importo_cents > 0):
                 return
             rec = pp.info(rif)
-            if rec is None or rec.get("stato") != "pagato":
+            tetto_penale = None
+            if rec is not None and rec.get("stato") == "rimborsato":
+                # D2 (giro lungo della macchina, 12/10): la quota-penale di una cancellazione e'
+                # dell'host anche dopo che la prenotazione passa a 'rimborsato'. Partiva solo
+                # dentro la cancellazione: se li' era ferma (dati fiscali, verifica,
+                # interruttore), i giri che la ritentano uscivano qui, muti. Si paga solo con la
+                # garanzia divisa dalla penale ('risolto': l'arbitro non rimborsa la
+                # prenotazione, e dopo una divisione cancellare o rimborsare e' gia' fermato),
+                # mai oltre la quota che le assegna, e come penale: niente ritenuta.
+                gz = getattr(self._sys, "garanzia", None)
+                st = gz.stato(rif) if gz is not None else None
+                if not (isinstance(st, dict) and st.get("stato") == "risolto"):
+                    return                            # rimborso pieno: niente all'host
+                tetto_penale = int(st.get("host_riceve_cents", 0) or 0)
+                penale = True
+            elif rec is None or rec.get("stato") != "pagato":
                 return                                # nessun incasso online -> niente transfer
             # ⛔ BLOCCO SULLA CARTA: se i soldi dell'ospite sono solo AUTORIZZATI (o
             # l'autorizzazione e' finita senza incasso), il bonifico partirebbe dal NOSTRO saldo.
@@ -7150,6 +7165,11 @@ class RouterHTTP:
                                    _rif_per_registro(rif),
                                    int(importo_cents), int(_rp["minori"]))
                 importo_cents = int(_rp["minori"])
+            if tetto_penale is not None and int(importo_cents) > tetto_penale:
+                logger.error("BONIFICO FERMATO | RIF: %s | il registro chiede %d, oltre la quota "
+                             "della penale che la garanzia assegna all'host (%d): decide una "
+                             "persona", _rif_per_registro(rif), int(importo_cents), tetto_penale)
+                return
             if self._verifica_payout_bloccato(host_id):
                 import datetime as _dtv
                 logger.warning("PAYOUT_HOLD_TRIGGERED | HOST_ID: %s | RIF: %s | IMPORTO: %d"
@@ -7177,7 +7197,17 @@ class RouterHTTP:
                 valuta = _jt.loads(rec.get("corpo_json") or "{}").get("valuta") or "EUR"
             except Exception:
                 valuta = "EUR"
-            tid = connect.trasferisci(acct, int(importo_cents), valuta, str(rif))
+            # COMPITO 41: il bonifico si LEGA all'addebito dell'ospite (`source_transaction`),
+            # cosi' non esce dal saldo DISPONIBILE (il 4/10 -0,27 EUR, e per giorni senza i soldi
+            # appena incassati): Stripe lo esegue quando quei soldi ci sono. Addebito non letto
+            # -> come prima, dal saldo disponibile, e il registro lo dice.
+            addebito = self._addebito_del_pagamento(rec)
+            if not addebito:
+                logger.warning("BONIFICO NON LEGATO AL PAGAMENTO | RIF: %s | addebito "
+                               "dell'ospite non letto: il bonifico esce dal saldo disponibile e "
+                               "fallisce se non basta", _rif_per_registro(rif))
+            legame = {"source_transaction": addebito} if addebito else {}
+            tid = connect.trasferisci(acct, int(importo_cents), valuta, str(rif), **legame)
             if tid:
                 if pd is not None:
                     pd.aggiorna_stato(rif, "in_transito")     # soldi partiti verso l'host
@@ -7209,6 +7239,25 @@ class RouterHTTP:
                                valuta=valuta, causale="transfer Connect FALLITO: bonifico manuale richiesto")
         except Exception:
             logger.warning("trasferimento automatico host fallito (ISOLATO)", exc_info=True)
+
+    def _addebito_del_pagamento(self, rec):
+        """L'id dell'addebito dell'ospite (ch_/py_) per il bonifico legato, letto da Stripe dal
+        pagamento salvato sulla prenotazione (`stripe_pi`, anche quello del blocco sulla carta).
+        "" se non si sa: il fornitore non lo legge, il record e' rotto, o la risposta non e' un
+        addebito."""
+        fornitore = getattr(self._sys, "stripe", None)
+        leggi = getattr(fornitore, "addebito_di", None) if fornitore is not None else None
+        if leggi is None:
+            return ""
+        try:
+            addebito = leggi(str(json.loads(rec.get("corpo_json") or "{}").get("stripe_pi")
+                                 or ""))
+        except Exception:
+            logger.warning("addebito dell'ospite non letto (ISOLATO): il bonifico non si lega",
+                           exc_info=True)
+            return ""
+        return addebito if isinstance(addebito, str) and addebito.startswith(("ch_", "py_")) \
+            else ""
 
     def _host_stripe_link(self, headers):
         """L'host collega il suo conto Stripe (Connect standard, GRATIS): da lì i suoi
@@ -7372,18 +7421,37 @@ class RouterHTTP:
         'trattenuto', il pannello host la contava per sempre fra i soldi «Fermi» (D13 della
         prova vera, 29/9: 0,70 + 0,23 EUR mai dovuti). Un bonifico gia' in viaggio
         ('in_transito') resta 'trattenuto' e visibile: quello lo guarda una persona.
+        D1 (giro lungo della macchina, 12/10): si toglie anche una riga gia' 'trattenuto' (la
+        ferma una contestazione della carta o dell'ospite) se nessun bonifico e' partito; prima
+        restava all'importo pieno su una prenotazione rimborsata, per sempre.
         Isolato. Ritorna True se fatto (o niente da fare), False se e' FALLITO: chi chiama
         deve poterlo DIRE invece di dichiarare 'fatto'."""
         try:
             pd = getattr(self._sys, "payout", None)
             if pd is not None and isinstance(rif, str) and rif:
-                if pd.stato_di(rif) in ("in_attesa", "maturato"):
+                stato = pd.stato_di(rif)
+                if stato in ("in_attesa", "maturato") or (
+                        stato == "trattenuto" and not self._bonifico_partito(rif)):
                     return pd.rimuovi(rif) is True
                 pd.aggiorna_stato(rif, "trattenuto")
             return True
         except Exception:
             logger.warning("payout trattieni fallito (ignorato)", exc_info=True)
             return False
+
+    def _bonifico_partito(self, rif):
+        """Il bonifico dell'host e' partito? La prova e' la riga `payout_host` del giornale, che
+        il bonifico Connect scrive insieme a 'in_transito' (l'unico passo che porta li').
+        Giornale assente o illeggibile -> True: nel dubbio la riga resta visibile."""
+        fc = getattr(self._sys, "finanza", None)
+        if fc is None:
+            return True
+        try:
+            return any((m.get("tipo") or "") == "payout_host" for m in fc.movimenti(rif))
+        except Exception:
+            logger.warning("bonifico partito? giornale illeggibile per %s: la riga del bonifico "
+                           "resta", _rif_per_registro(rif), exc_info=True)
+            return True
 
     def _storna_tassa(self, rif):
         """Prenotazione rimborsata -> storna la tassa di soggiorno dal ledger citta' (pass-through
@@ -7713,6 +7781,21 @@ class RouterHTTP:
             pagato_davvero = True     # in dubbio, comportamento storico (il voucher fa fede)
         if not pagato_davvero:
             pagato = 0
+        # ⛔ DUE FRENI PRIMA DI TOCCARE DATE E SOLDI ((m), 2026-10-11, «autorizzato»), solo su una
+        # prenotazione PAGATA e viva: una non pagata si cancella sempre (uccide il link di
+        # pagamento) e un replay non e' piu' 'pagato'. Misurato sul prodotto: (1) con la garanzia
+        # gia' chiusa a favore dell'host la cancellazione TOGLIEVA la riga del suo bonifico, e un
+        # host senza Stripe non veniva pagato mai: e' lo stesso freno dell'admin e dell'host;
+        # (2) un soggiorno gia' FINITO si cancellava, perche' i giorni negativi diventano 0 qui
+        # sopra. Regola e orologio sono quelli del preventivo: «il passato non si vende» e «il
+        # passato non si cancella» stanno in un posto solo. Dopo l'arrivo c'e' «segnala un
+        # problema». Guardie: `test_fase83_server.TestUnSoggiornoGiaIniziatoNonSiCancellaDalVoucher`.
+        if _rec is not None and _rec.get("stato") == "pagato":
+            if self._garanzia_gia_divisa(rif):
+                return 409, {"errore": "escrow_gia_liquidato"}
+            _conc = self._sys.concierge
+            if _conc._now() >= _conc._fine_giorno_arrivo(allog, ci):
+                return 409, {"errore": "soggiorno_iniziato"}
         # POLITICA dal VOUCHER FIRMATO (scelta dall'host, anti-furbata) - NON dalla richiesta
         politica = v.get("politica") or self._politica_alloggio(allog)
         # PAGA IN STRUTTURA (FASE 3): online abbiamo incassato solo l'ANTICIPO (fee di servizio
@@ -9616,6 +9699,18 @@ class RouterHTTP:
             self._riasserisci_incasso(pp.info(rif), rif)
             logger.info("BLOCCO SULLA CARTA | INCASSATO | rif %s | pi %s",
                         _rif_per_registro(rif), pi)
+            # DIFETTO A (macchina delle combinazioni dei soldi, 11/10): «tutto ok» o l'arbitro
+            # PRIMA dell'incasso danno la garanzia all'host e il bonifico si ferma (soldi solo
+            # autorizzati); nessun altro giro lo ritenta, quindi parte ADESSO. Anti-doppio e
+            # importo sono quelli di `_trasferisci_all_host`, che rilegge tutto.
+            try:
+                gz = getattr(self._sys, "garanzia", None)
+                st = gz.stato(rif) if gz is not None else None
+                if isinstance(st, dict) and st.get("stato") in ("rilasciato", "risolto"):
+                    self._trasferisci_all_host(rif, int(st.get("host_riceve_cents", 0) or 0))
+            except Exception:
+                logger.warning("bonifico dopo l'incasso non ripartito (ISOLATO): resta "
+                               "'maturato' | rif %s", _rif_per_registro(rif), exc_info=True)
             return "incassato"
         if stato == "canceled":
             pp.segna_blocco(rif, blocco_annullato_ts=int(_t.time()))
