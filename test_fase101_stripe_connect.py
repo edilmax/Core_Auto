@@ -385,5 +385,46 @@ class TestCollegaStripe_IlContoDellHostNasceComeLoAccettaStripe(unittest.TestCas
             "email": "h@x.it"})
 
 
+class TestIlBonificoSiLegaAlPagamentoDellOspite(unittest.TestCase):
+    """COMPITO 41 (busta 4 di GML, 4/10). Senza legame il bonifico all'host esce dal saldo
+    DISPONIBILE della piattaforma: il 4/10 era -0,27 EUR, e i soldi appena incassati ci entrano
+    solo dopo giorni, quindi il bonifico fallisce e Stripe non lo ritenta. Con l'ADDEBITO
+    dell'ospite come `source_transaction` Stripe lo accetta lo stesso e lo esegue quando quei
+    soldi diventano disponibili (docs.stripe.com/connect/separate-charges-and-transfers,
+    «Transfer availability», letto l'11/10/2026). L'esempio ufficiale col legame NON manda
+    `transfer_group` («Stripe automatically creates a transfer_group for you»): mandarli insieme
+    non e' documentato, quindi col legame il gruppo lo fa Stripe e il riferimento resta nei
+    metadata. Si manda solo un id d'addebito (`ch_...`, o `py_...` per i metodi non a carta)."""
+
+    def test_con_l_addebito_il_bonifico_porta_source_transaction(self):
+        for addebito in ("ch_3Abc", "py_9"):
+            with self.subTest(addebito=addebito):
+                spy = PostFinto({ProviderConnect.TRANSFERS: {"id": "tr_1"}})
+                self.assertEqual(ProviderConnect("sk", fetch=spy).trasferisci(
+                    "acct_1", 8700, "EUR", "R1", source_transaction=addebito), "tr_1")
+                url, body, headers = spy.chiamate[0]
+                self.assertEqual(url, ProviderConnect.TRANSFERS)
+                self.assertEqual(_decodifica(body), {
+                    "amount": "8700", "currency": "eur", "destination": "acct_1",
+                    "source_transaction": addebito, "metadata[riferimento]": "R1"})
+                self.assertEqual(headers["Idempotency-Key"], "transfer_R1")
+
+    def test_senza_un_addebito_vero_il_bonifico_e_quello_di_prima(self):
+        for addebito in ("", None, "pi_1", "cs_1", "re_1", "tr_1", 123, b"ch_1", ["ch_1"]):
+            with self.subTest(addebito=addebito):
+                spy = PostFinto({ProviderConnect.TRANSFERS: {"id": "tr_1"}})
+                self.assertEqual(ProviderConnect("sk", fetch=spy).trasferisci(
+                    "acct_1", 100, "eur", "R", source_transaction=addebito), "tr_1")
+                d = _decodifica(spy.chiamate[0][1])
+                self.assertNotIn("source_transaction", d, "un legame con cio' che non e' un "
+                                                          "addebito: %r" % (d,))
+                self.assertEqual(d.get("transfer_group"), "R")
+        spy = PostFinto({ProviderConnect.TRANSFERS: {"id": "tr_1"}})
+        ProviderConnect("sk", fetch=spy).trasferisci("acct_1", 100, "eur", "R")
+        self.assertEqual(_decodifica(spy.chiamate[0][1]), {
+            "amount": "100", "currency": "eur", "destination": "acct_1", "transfer_group": "R",
+            "metadata[riferimento]": "R"})
+
+
 if __name__ == "__main__":
     unittest.main()

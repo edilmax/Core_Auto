@@ -231,21 +231,29 @@ class ProviderConnect:
             return json.loads(resp.read())
 
     def trasferisci(self, account_id: str, amount_cents: Any, currency: str,
-                    riferimento: str) -> Optional[str]:
+                    riferimento: str, source_transaction: str = "") -> Optional[str]:
         """Sposta il netto host sul suo conto. IDEMPOTENTE per riferimento (Stripe dedupa
-        con la stessa Idempotency-Key: mai doppio bonifico). -> tr_... o None."""
+        con la stessa Idempotency-Key: mai doppio bonifico). -> tr_... o None.
+        COMPITO 41: con l'ADDEBITO dell'ospite (`source_transaction`, ch_/py_) il bonifico non
+        esce dal saldo DISPONIBILE (il 4/10 -0,27 EUR): Stripe lo accetta e lo esegue quando quei
+        soldi sono disponibili. Col legame il gruppo lo crea Stripe (come nell'esempio ufficiale:
+        mandarli insieme non e' documentato) e il riferimento resta nei metadata
+        (docs.stripe.com/connect/separate-charges-and-transfers, letto l'11/10/2026)."""
         if not (self._key and isinstance(account_id, str) and account_id.startswith("acct_")):
             return None
         if not (isinstance(amount_cents, int) and not isinstance(amount_cents, bool)
                 and amount_cents > 0):
             return None
-        r = self._post(self.TRANSFERS, {
-            "amount": str(amount_cents),
-            "currency": (currency or "eur").lower(),
-            "destination": account_id,
-            "transfer_group": str(riferimento or ""),
-            "metadata[riferimento]": str(riferimento or "")},
-            idem_key="transfer_" + str(riferimento or account_id))
+        params = {"amount": str(amount_cents),
+                  "currency": (currency or "eur").lower(),
+                  "destination": account_id,
+                  "metadata[riferimento]": str(riferimento or "")}
+        if isinstance(source_transaction, str) and source_transaction.startswith(("ch_", "py_")):
+            params["source_transaction"] = source_transaction
+        else:
+            params["transfer_group"] = str(riferimento or "")
+        r = self._post(self.TRANSFERS, params,
+                       idem_key="transfer_" + str(riferimento or account_id))
         tid = r.get("id") if r else None
         return tid if isinstance(tid, str) and tid.startswith("tr_") else None
 

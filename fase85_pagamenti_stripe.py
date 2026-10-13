@@ -376,6 +376,29 @@ class ProviderStripe:
                            payment_intent, exc.__class__.__name__, exc)
             return ""
 
+    def addebito_di(self, payment_intent: Any) -> str:
+        """L'ADDEBITO dietro un pagamento (`latest_charge`: ch_..., o py_... per i metodi non a
+        carta), che il bonifico all'host usa come `source_transaction` (Compito 41: «Get the
+        PaymentIntent's latest_charge attribute», docs.stripe.com/connect/separate-charges-and-
+        transfers, letto l'11/10/2026). LETTURA SOLA. "" = «non lo so», mai un id inventato: il
+        bonifico allora parte come prima, dal saldo disponibile, e fase83 lo dice. Un AVVISO e
+        non un ERROR, come `impronta_carta`: a ogni interruzione di Stripe sarebbe posta del
+        Guardiano che nessuno legge piu' (ferrea 10)."""
+        if not (isinstance(payment_intent, str) and payment_intent.startswith("pi_")):
+            return ""
+        try:
+            resp = self._fetch(PAGAMENTI_URL + "/" + payment_intent, None,
+                               {"Authorization": "Bearer " + self._key})
+            addebito = resp.get("latest_charge") if isinstance(resp, dict) else None
+            if isinstance(addebito, dict):              # risposta con `expand`
+                addebito = addebito.get("id")
+            return addebito if isinstance(addebito, str) and addebito.startswith(("ch_", "py_")) \
+                else ""
+        except Exception as exc:
+            logger.warning("Stripe: addebito non letto pi=%s -> %s: %s",
+                           payment_intent, exc.__class__.__name__, exc)
+            return ""
+
     # I tre valori che Stripe dichiara per `payment_status` della Checkout Session.
     STATI_SESSIONE = ("paid", "unpaid", "no_payment_required")
 
