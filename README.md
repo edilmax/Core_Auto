@@ -15,6 +15,12 @@
 > | `CLAUDE.md` | regole ferree per chi (umano o IA) mette le mani sul progetto |
 >
 > ⛔ **Non si creano altri file `.md`.** Ogni aggiornamento modifica uno di questi cinque.
+>
+> 📕 **Dal 2026-10-13 questo file è anche IL LIBRO DI BOOKINVIP** (decisione del fondatore):
+> in fondo, dopo il §9, un capitolo per ognuno dei 10 blocchi di `collaudi/piano.py`, nello
+> stesso ordine, e il **Registro delle decisioni**. Ogni regola porta il `file:riga` del
+> codice da cui è stata letta. Se il libro e il codice dicono cose diverse, **ha ragione il
+> codice** e il libro va corretto.
 
 ---
 
@@ -282,3 +288,229 @@ vera e durano minuti). Il `Dockerfile.casavip` non li copia: restano strumenti d
 **Una modifica alla volta.** Ogni bug corretto lascia un **test-guardia** che è **rosso sul
 codice vecchio e verde sul nuovo**. A lavoro finito si salva **in tutti e tre i posti**:
 computer → GitHub → VPS. La procedura di deploy è in `DEPLOY.md`.
+
+---
+
+# 📕 IL LIBRO DI BOOKINVIP
+
+> **Come si legge.** Ogni capitolo dice **cosa fa** la macchina, **perché**, **come**, le
+> **regole decise** (con data e chi) e **cosa NON fa o NON è provato**. Accanto a ogni regola
+> c'è il `file:riga` da cui è stata letta, il 2026-10-13, sul commit `74ca4da`. Quando il
+> codice cambia i numeri di riga si spostano: se non tornano, si cerca il nome della funzione.
+>
+> Capitoli scritti: **1 su 10**. Gli altri seguono l'ordine dei blocchi di `collaudi/piano.py`.
+>
+> **Il PDF** si stampa da questo file con un comando solo: `python collaudi/stampa_libro.py`
+> (scrive `IL LIBRO DI BOOKINVIP.pdf` sul Desktop, con commit e data in copertina). Se il
+> README ha modifiche non ancora salvate in un commit, il file si chiama «… - PROVA.pdf».
+
+## Capitolo 1 — SOLDI E PAGAMENTI
+
+### 1.1 In una frase
+
+L'ospite paga con la carta e i soldi dell'host restano **fermi in garanzia**. Da quando
+l'ospite **arriva** ha **24 ore** per dire «tutto ok» oppure «c'è un problema». Se dice «tutto
+ok», o se le 24 ore passano senza problemi, i soldi partono **da soli** verso l'host: dopo le
+24 ore l'ospite **non può più bloccarli**. Se qualcosa va storto (una cancellazione, un
+problema, una contestazione della banca) decide una regola scritta nel codice, **in centesimi
+interi**. *(Regola ridetta dal fondatore il 2026-10-13: vedi D-10. Il codice la rispetta solo in
+parte: vedi (ad) nel §1.10.)*
+
+### 1.2 Il viaggio dei soldi, passo per passo
+
+**Prima un esempio: la storia di Anna e Luca.** Anna prenota la casa di Luca per sabato, fra
+10 giorni. Costa **100 €**.
+1. **Anna paga.** Mancano più di 6 giorni, quindi i 100 € restano solo **fermi sulla sua
+   carta**: la banca non li toglie ancora.
+2. **Passano 48 ore** e Anna non ha cancellato: adesso i 100 € si prendono davvero.
+3. I soldi vanno in una **cassaforte** (la garanzia). Dentro ci sono **94,75 €** per Luca; il
+   resto (5,25 €) è la tariffa tecnica. Luca è nei primi 90 giorni, quindi niente commissione
+   (i conti sono quelli del §5).
+4. **Sabato alle 15 Anna arriva.** Da lì ha 24 ore. Se preme «tutto ok», Luca riceve i suoi
+   soldi **subito**. Se non preme niente, **domenica alle 15** (al massimo un'ora dopo) li riceve
+   da solo. Se preme «c'è un problema», i soldi restano nella cassaforte e **decide una persona**.
+5. Se Luca ha collegato Stripe, i soldi gli arrivano **da soli**; se no, glieli mandiamo **a mano**.
+
+Gli stessi passi, con il punto del codice dove stanno:
+
+| # | Cosa succede | Dove sta nel codice |
+|---|---|---|
+| 1 | L'ospite prenota: le date si bloccano e la stanza resta sua per **30 minuti**, quanto resta aperta la pagina di pagamento di Stripe | `fase162_pagamenti_pendenti.py:32` |
+| 2 | **Arrivo fra 6 giorni o più**: i soldi vengono solo **bloccati sulla carta**, non presi. Si prendono davvero alla fine delle 48 ore di ripensamento | `fase85_pagamenti_stripe.py:48`, `:62-73`, `:170-174`; fine delle 48 ore `fase83_server.py:9665` |
+| 3 | **Arrivo fra meno di 6 giorni**: i soldi si prendono subito | `fase85_pagamenti_stripe.py:73` |
+| 4 | Il blocco vale solo coi metodi che lo reggono: carta (con dentro Apple Pay e Google Pay), Link, Klarna, Amazon Pay, Satispay | `fase85_pagamenti_stripe.py:59` |
+| 5 | Pagato: si apre la **garanzia** con la quota dell'host (il suo netto più la tassa di soggiorno, che poi gira lui al Comune) | `fase83_server.py:6682`, `:6712` |
+| 6 | La garanzia si sblocca da sola **24 ore dopo l'arrivo**; l'arrivo si conta alle **15:00 ora del posto** | `fase160_escrow_garanzia.py:22`, `:90`; `fase83_server.py:573` |
+| 7 | Nelle 24 ore l'ospite può premere **«tutto ok»** (soldi subito all'host) o **«segnala un problema»** (soldi fermi, decide una persona). Il giro che sblocca le garanzie scadute passa **ogni ora** | `fase83_server.py:7639`, `:7653`, `:13512` |
+| 8 | Il **bonifico** all'host parte da solo, con Stripe Connect | `fase83_server.py:7069` |
+
+Il bonifico **non parte** — e la quota resta scritta come «da pagare», mai persa — quando:
+- è acceso l'interruttore d'emergenza che ferma tutti i movimenti (`fase83_server.py:7081`);
+- i soldi dell'ospite sono ancora solo bloccati sulla carta, non presi (`fase83_server.py:7114`);
+- la ritenuta fiscale non è stata fatta, o mancano i dati fiscali DAC7 (`fase83_server.py:7122`, spiegato in `fase83_server.py:7075-7079`);
+- l'host **non ha collegato Stripe**: allora il bonifico si fa **a mano** (`fase83_server.py:7125`);
+- è già partito una volta (guardia contro il doppio pagamento).
+
+Prima di pagare, i debiti aperti dell'host vengono scalati dal bonifico (`fase83_server.py:7142`).
+
+### 1.3 Le 4 politiche di cancellazione (le sceglie l'host)
+
+Lette da `fase111_cancellazione.py:25-28`. «Giorni» vuol dire: data d'arrivo meno la data di
+oggi **nel fuso dell'alloggio** (`fase83_server.py:7765`). Sono giorni di calendario, non ore.
+
+Nella tabella, i numeri sono **i giorni che mancano all'arrivo** (0 = il giorno stesso dell'arrivo):
+
+| Politica | Rimborso pieno | Rimborso a metà | Nessun rimborso |
+|---|---|---|---|
+| **Flessibile** | 1 giorno o più | 0 giorni | — |
+| **Moderata** | 5 giorni o più | da 1 a 4 giorni | 0 giorni |
+| **Rigida** | 30 giorni o più | da 7 a 29 giorni | da 0 a 6 giorni |
+| **Non rimborsabile** | — | — | sempre |
+
+Una guardia confronta questa tabella col codice e diventa rossa se non coincidono
+(`test_trasparenza_costi.TestIlLibroDiceLeRegoleDelMotore`).
+
+Regole che valgono per tutte e quattro:
+- la **pulizia** si rende sempre per intero: senza soggiorno non è stata fatta (`fase111_cancellazione.py:73-77`);
+- la **tassa di soggiorno** si rende sempre per intero (`fase83_server.py:7967`);
+- la politica si legge dal **voucher firmato**, mai da quello che manda il browser (`fase83_server.py:7800`);
+- non si rende mai più di quanto pagato, e un dato strano dà rimborso zero, mai di più (`fase111_cancellazione.py:63`);
+- la parte trattenuta si divide: all'host la sua quota in proporzione, a noi commissione e tariffa tecnica in proporzione (`fase83_server.py:7932`; contratto dell'host, ART. 6-TER, `fase163_accettazioni.py:129-135`);
+- dal voucher **non si cancella** un soggiorno già iniziato, né una prenotazione la cui garanzia è già stata divisa: risposta `409` (`fase83_server.py:7784-7798`). Dopo l'arrivo si usa «segnala un problema»;
+- se una parte dei soldi è già uscita verso l'host, il rimborso si **taglia** a quello che c'è ancora in cassa (`fase83_server.py:7900`);
+- il rimborso all'ospite **non parte da solo**: compare in una lista del pannello e una persona preme il pulsante (`GET /api/admin/rimborsi_dovuti` → `POST /api/admin/rimborsa_dovuto`; `fase83_server.py:7720`, `:2470-2472`).
+
+### 1.4 Le 48 ore di ripensamento
+
+Se l'ospite cancella **entro 48 ore vere** (172.800 secondi) dalla prenotazione e mancano
+**almeno 3 giorni** all'arrivo, riprende **tutto**, qualunque sia la politica
+(`fase83_server.py:621`, `:631`, `:7817`; `fase111_cancellazione.py:67-69`).
+Se i soldi erano solo bloccati sulla carta (arrivo a 6 giorni o più), il blocco si **annulla**:
+nessuno paga niente, nemmeno Stripe (`fase83_server.py:9767`).
+L'ospite lo legge nei Termini (`fase185_testi_legali.py:181-182`).
+
+### 1.5 Quando cancella l'host
+
+L'ospite riprende **tutto**. L'host paga una **penale del 15%** dell'importo
+(`PENALE_HOST_BPS = 1500`, `fase83_server.py:1080`; la funzione è `_host_cancella`, `:7288`),
+tolta dai suoi incassi futuri o scritta come debito (`fase185_testi_legali.py:175-178`).
+
+### 1.6 Il Credito Viaggio («anti-rimpianto»)
+
+Quando l'ospite perde dei soldi per una penale, **metà della penale** torna come Credito
+Viaggio: al massimo **50 €** (5.000 centesimi, nella valuta della prenotazione), vale
+**365 giorni**, si usa **una volta sola** (`fase83_server.py:8303`, `:8311`;
+`fase167_credito_single_use.py:140`). Non sono soldi: è uno sconto su una prenotazione futura,
+e al riscatto non può superare il nostro margine su quella prenotazione
+(`fase59_concierge.py:535-536`).
+
+### 1.7 Paga in struttura — ACCESO in produzione
+
+Misurato il 2026-10-13 sul server: `PAGA_STRUTTURA_ATTIVO=1`.
+L'ospite sceglie se pagare **online** (prezzo pulito, soldi in garanzia) o **in struttura**.
+In struttura, online paga solo un **anticipo**: la nostra commissione, un servizio di
+**1,50 € a notte** a suo carico e la copertura della carta. Il resto lo dà all'host di persona
+(`fase188_paga_struttura.py:4-31`, `:41`).
+- Cancellazione normale: l'anticipo **non si rende**, tranne nelle 48 ore (`fase83_server.py:7809-7813`).
+- Cancellazione a **meno di 24 ore** dall'arrivo (ore vere, dalle 15:00 del posto): si addebita la **prima notte** sulla carta salvata (`fase83_server.py:8068`, `:8075`).
+- Il saldo pagato in struttura non passa da noi: se c'è un problema, **non possiamo renderlo**.
+
+### 1.8 Chi paga Stripe e il cambio
+
+- La **tariffa tecnica** la paga l'host e copre Stripe e il cambio di valuta: è spiegata nel §5, e lì una guardia diventa rossa se il testo e il codice non coincidono.
+- Su un pagamento preso e poi rimborsato, Stripe **non restituisce** il suo costo. Misurato sul conto vero: addebito 1,00 €, costo 0,27 €; dopo il rimborso il costo restituito è 0 (`REGISTRO_INGEGNERIA.md:7196-7201`). Il contratto dell'host lo dice: quel costo «non torna a nessuna delle parti» (`fase163_accettazioni.py:133-135`).
+- Per questo, quando l'arrivo è lontano, i soldi si **bloccano** invece di prenderli (§1.2, punto 2): annullare un blocco non costa niente a nessuno.
+
+### 1.9 Le contestazioni: la nostra e quella della banca
+
+- **«Segnala un problema»** (l'ospite, entro 24 ore dall'arrivo) o un disaccordo in chat: la garanzia diventa «contestata» e il bonifico si ferma (`fase83_server.py:7653`, `:12889`).
+- Decide l'**arbitro**, cioè un admin entrato nel Bunker (il ruolo «supporto» non può): sceglie quanto rendere all'ospite, il resto va all'host (`fase83_server.py:5588`, `:5631`, `:5652`). Anche qui il rimborso vero si fa dal pulsante del pannello.
+- **Contestazione della banca** (chargeback): Stripe toglie i soldi dal nostro saldo; la garanzia si ferma, il bonifico non ancora partito viene trattenuto e un allarme lo dice (`fase83_server.py:9410`, `:9451`, `:9474`). Finché la contestazione è aperta Stripe **non permette** rimborsi fuori dalla sua procedura.
+
+### 1.10 Cosa NON funziona ancora, e cosa NON è provato
+
+Misurato, non ricordato. Il dettaglio di ognuno sta in `RIPRENDI_QUI.md`.
+- **F1** — «segnala un problema», poi cancellazione, poi arbitro: l'host collegato a Stripe **non viene mai pagato** e la sua quota resta alla piattaforma; all'ospite si dice una cifra e il registro ne scrive un'altra (causa: `fase83_server.py:5640-5652` e `:7158`). Trovato il 2026-10-13, non riparato.
+- **F2** — con una contestazione della banca aperta, cancellare e arbitrare **scrivono numeri** su soldi che la banca ha già ripreso, e il pulsante del rimborso risponde `502`. Nessun soldo esce due volte (lo impedisce Stripe), ma host, ospite e admin vedono cifre false. Non riparato.
+- **(aa)** Il menu dell'host dice «Gratuita fino a **24h** prima» (`deploy/host.html:381`), ma il motore conta **giorni di calendario** (`fase83_server.py:7765`): chi cancella alle 23 del giorno prima riprende tutto.
+- **(ab)** Nello stesso prodotto ci sono **due penali diverse**: online metà del totale (§1.3), in struttura la prima notte (§1.7).
+- **(ad)** La regola è «24 ore **da quando arriva**» (D-10), ma il codice accetta «tutto ok» e «segnala un problema» **in qualunque momento dopo il pagamento**, anche settimane prima dell'arrivo: controlla solo che la garanzia sia ancora ferma, non l'ora (`fase160_escrow_garanzia.py:137-148`; `fase83_server.py:7653`; i due pulsanti stanno sempre sulla pagina del voucher, `fase83_server.py:1297-1306`). E dopo le 24 ore i soldi partono al giro orario (`fase83_server.py:13512`): l'ospite ha fino a **un'ora in più** per segnalare. Trovato il 2026-10-13, non riparato.
+- **B9** — al riscatto il Credito Viaggio non supera il nostro margine: con un host nei primi 90 giorni (commissione zero) vale **zero**, mentre l'email all'ospite annuncia la cifra piena, fino a 50 € (`fase59_concierge.py:535-536`).
+- **B10** — il Credito Viaggio è **al portatore**: non porta l'email di nessuno (`fase83_server.py:8309`), quindi chi ha il codice lo spende.
+- Il **contratto dell'host** non nomina le 48 ore (ART. 6-TER, `fase163_accettazioni.py:129-135`): chi sceglie «non rimborsabile» rende comunque tutto nelle 48 ore, e il contratto non glielo dice. I Termini dell'ospite invece lo dicono.
+- **Paga in struttura**: per l'ospite che **non si presenta e non cancella** non c'è penale, perché manca chi la faccia partire.
+- **Non guardato**: il primo bonifico vero legato al suo pagamento (`source_transaction`) sul pannello di Stripe. I pagamenti veri non girano nella CI (§9).
+
+## 📜 Registro delle decisioni
+
+> Il metodo è quello di Michael Nygard, *Documenting Architecture Decisions* (2011): una voce
+> per ogni decisione importante. Una decisione cambiata **non si cancella**: si scrive
+> «SOSTITUITA DA» e resta qui, così nessuno la scambia per una regola valida e nessuno la
+> deve riscoprire.
+
+**D-01 · 2026-07-10 · Le regole di cancellazione** — ✅ VALIDA
+- *Chi:* il fondatore (la ricordava il 2026-10-13, quando è stata ritrovata).
+- *Decisione:* 4 politiche scelte dall'host; soglie come Airbnb (24 ore, 5 giorni, 30 giorni); rimborso pieno → metà → niente; 48 ore di ripensamento per tutti; metà della penale torna come Credito Viaggio.
+- *Perché:* penali proporzionate sono legali ovunque; il ripensamento e il credito ci mettono sopra ai colossi.
+- *Stato:* lo sconto per il «non rimborsabile» scritto lì non è mai stato acceso. Le 48 ore sono precisate dalla D-06.
+- *Fonte:* il documento del 10/07, tolto dalla cartella il 2026-10-13 perché questo capitolo lo sostituisce: si rilegge con `git show 74ca4da:_archivio/STRATEGIA_CANCELLAZIONE.md`; nel codice `fase111_cancellazione.py:25-28`.
+
+**D-02 · 2026-07-22 · Paga in struttura** — ✅ VALIDA, accesa in produzione
+- *Chi:* il fondatore, dopo l'analisi dei colossi.
+- *Decisione:* due modi di pagare; in struttura l'ospite paga 1,50 € a notte in più e online solo un anticipo.
+- *Fonte:* `fase188_paga_struttura.py:4-31`.
+
+**D-03 · 2026-07-23 · Paga in struttura: la penale è la prima notte** — ✅ VALIDA (vedi domanda (ab))
+- *Chi:* il fondatore («regola DECISA dal fondatore»).
+- *Decisione:* cancellazione normale = si tiene solo l'anticipo; a meno di 24 ore dall'arrivo si addebita la prima notte.
+- *Fonte:* `REGISTRO_INGEGNERIA.md:14228`; nel codice `fase83_server.py:8068`, `:8075`.
+
+**D-04 · 2026-08-10 · Tariffa tecnica 5% + 0,25 € (7% + 0,25 € fuori euro)** — ✅ VALIDA
+- *Chi:* il fondatore.
+- *Perché:* la tariffa di prima era sotto costo, misurato il 2026-08-09 sul conto vero.
+- *Fonte:* §5 di questo file, sorvegliato da una guardia.
+
+**D-05 · 2026-08-16 · I rimborsi all'ospite si fanno a mano, dal pannello** — ✅ VALIDA
+- *Chi:* il fondatore: «se la macchina sbaglia ci rimetto conti, fiducia, credibilità».
+- *Decisione:* la lista dei rimborsi dovuti si calcola da sola; il pulsante lo preme una persona. L'automatico si accende dopo, quando la lista avrà funzionato molte volte di fila.
+- *Fonte:* `fase83_server.py:7720`.
+
+**D-06 · 2026-08-20 · «Entro 48 ore cambi idea e non paga nessuno. Dopo, valgono le regole dell'host.»** — ✅ VALIDA
+- *Chi:* il fondatore con Claude («decisa col fondatore»).
+- *Decisione:* i soldi non si prendono subito; se l'ospite cambia idea nelle 48 ore il blocco si annulla e nessuno paga, nemmeno Stripe.
+- *Stato:* fatto con il blocco sulla carta, ma solo per gli arrivi a 6 giorni o più (`fase85_pagamenti_stripe.py:48`). Sotto i 6 giorni si prende e si rimborsa, e il costo di Stripe si perde (§1.8).
+- *Fonte:* la frase è in `git show 9adb0ee:RIPRENDI_QUI.md`, riga 128; la ricerca legale in `REGISTRO_INGEGNERIA.md:7189`.
+
+**D-07 · 2026-09-14 · La stanza resta ferma 30 minuti** — ✅ VALIDA
+- *Chi:* il fondatore («la cosa giusta»).
+- *Decisione:* la stanza resta ferma almeno quanto la pagina di pagamento di Stripe, così nessuno paga una stanza già liberata.
+- *Fonte:* `fase162_pagamenti_pendenti.py:26-32`.
+
+**D-08 · 2026-10-03 · Il blocco su ogni metodo che lo regge** — ✅ VALIDA
+- *Chi:* il fondatore («autorizzato»), dopo aver pagato con Link ed essere stato addebitato subito.
+- *Decisione:* nelle 48 ore la cancellazione dev'essere immediata con ogni metodo di pagamento; la cassa propone solo i metodi che reggono il blocco.
+- *Fonte:* `fase85_pagamenti_stripe.py:50-59`.
+
+**D-09 · 2026-10-11 · I due freni sulla cancellazione** — ✅ VALIDA
+- *Chi:* il fondatore («autorizzato»).
+- *Decisione:* non si cancella una prenotazione la cui garanzia è già stata divisa, né un soggiorno già iniziato.
+- *Fonte:* `fase83_server.py:7784-7798`.
+
+**D-10 · ridetta il 2026-10-13 · 24 ore dall'arrivo, poi l'host incassa** — ✅ VALIDA (il codice la rispetta solo in parte: (ad))
+- *Chi:* il fondatore: «da quando arriva [...] 24 ore per dire se va bene o se ci sono problemi. Dopo le 24 ore non può fare più niente e l'host incassa i soldi».
+- *Decisione:* la finestra per «tutto ok» o «c'è un problema» comincia all'arrivo e dura 24 ore; dopo, i soldi sono dell'host.
+- *Fonte:* le parole del fondatore in questa sessione; nel codice la finestra è `fase160_escrow_garanzia.py:22`. La data della decisione originale non è stata trovata.
+
+**D-11 · 2026-07-11 · Paga in struttura, il primo progetto** — ⛔ SOSTITUITA DA D-02 e D-03
+- *Chi:* proposta scritta l'11/07; le scelte erano lasciate al fondatore («decisione fondatore»).
+- *Cosa diceva:* niente pagamento online, solo la carta a garanzia; penale per chi non si presenta o cancella tardi = la politica dell'alloggio; una «tariffa Sicuro» di circa il 5% a carico dell'ospite.
+- *Perché è sostituita:* il 22/07 e il 23/07 si è scelto un anticipo online (commissione, 1,50 € a notte, copertura della carta) e la prima notte come penale. Resta valida un'idea non ancora fatta: per chi non si presenta senza cancellare manca chi faccia partire la penale (§1.10).
+- *Fonte:* tolto dalla cartella il 2026-10-13; si rilegge con `git show 74ca4da:_archivio/STRATEGIA_PAGA_IN_STRUTTURA.md`.
+
+### Domande aperte — le decide il fondatore (soldi e strategia)
+
+- **(aa)** 24 ore o giorni di calendario? Si corregge la scritta del menu o il motore?
+- **(ab)** Una penale sola (la prima notte per tutti, come fanno Airbnb e Booking) o le due di oggi?
+- **(r)** Il Credito Viaggio: oggi vale zero con gli host nei primi 90 giorni (B9) ed è al portatore (B10). Come deve funzionare?
+- **Le 48 ore**: uguali in tutto il mondo o legate al luogo dell'alloggio? La ricerca del 2026-08-20 dice: troppe per l'Europa, il doppio di quanto chiede la California, forse poche per il Brasile (`REGISTRO_INGEGNERIA.md:7189`).
+- **Il contratto dell'host** deve nominare le 48 ore? Cambiarlo prima che firmino host veri costa poco; dopo, vorrà dire farlo riaccettare a ognuno.
