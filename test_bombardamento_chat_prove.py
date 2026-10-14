@@ -35,6 +35,7 @@ from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import crea_router
 from fase87_stripe_webhook import firma_di_test
 from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
+from test_fase160_escrow_garanzia import nella_finestra
 
 _PNG = base64.b64encode(bytes.fromhex(
     "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4"
@@ -95,7 +96,12 @@ class TestBombardamentoChatProve(unittest.TestCase):
                          "data": {"object": {"id": "cs_" + self.rif, "metadata": {"riferimento": self.rif}}}})
         self.r.gestisci("POST", "/api/payments/webhook", {}, pl,
                         {"Stripe-Signature": firma_di_test(pl, "whsec_x", int(time.time()))})
-        self.g("POST", "/api/garanzia/contesta", {"voucher_token": self.vt, "motivo": "muffa"})
+        # la controversia si apre dentro le 24 ore dell'ospite (dal 14/10, (ad)): fuori, la
+        # rotta la rifiuta e le prove qui sotto finivano su una prenotazione SENZA controversia
+        with nella_finestra(self.sis, self.vt):
+            s, c = self.g("POST", "/api/garanzia/contesta",
+                          {"voucher_token": self.vt, "motivo": "muffa"})
+        self.assertEqual(s, 200, "PREMESSA: la controversia doveva aprirsi: %r" % (c,))
 
     def tearDown(self):
         shutil.rmtree(self.dir, ignore_errors=True)

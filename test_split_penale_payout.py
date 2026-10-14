@@ -27,6 +27,7 @@ from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import crea_router
 from fase87_stripe_webhook import firma_di_test
 from fase163_accettazioni import doc_sha256, CONTRATTO_HOST_VERSIONE
+from test_fase160_escrow_garanzia import nella_finestra
 
 AK = {"X-Admin-Key": "ak"}
 
@@ -114,13 +115,18 @@ class TestSplitPenalePayout(unittest.TestCase):
     def _netto(self, ref):
         return self.sis.garanzia.stato(ref)["importo_host_cents"]
 
+    def _premi(self, b, pulsante, motivo="x"):
+        """«tutto ok» (conferma) o «c'e' un problema» (contesta), dentro le 24 ore dell'ospite."""
+        with nella_finestra(self.sis, b["voucher_token"]):
+            return self.g("POST", "/api/garanzia/" + pulsante,
+                          {"voucher_token": b["voucher_token"], "motivo": motivo})
+
     def test_split_parziale_ledger_e_transfer_alla_quota_host(self):
         self._pubblica("casa-a")
         b = self._book_paga("casa-a")
         ref, netto = b["riferimento"], self._netto(b["riferimento"])
-        s, _ = self.g("POST", "/api/garanzia/contesta",
-                      {"voucher_token": b["voucher_token"], "motivo": "muffa"})
-        self.assertEqual(s, 200)
+        s, c = self._premi(b, "contesta", "muffa")
+        self.assertEqual(s, 200, c)
         s, c = self.g("POST", "/api/admin/controversia/risolvi",
                       {"riferimento": ref, "percentuale_ospite": 40}, AK)
         self.assertEqual(s, 200, c)
@@ -140,8 +146,8 @@ class TestSplitPenalePayout(unittest.TestCase):
         self._pubblica("casa-b")
         b = self._book_paga("casa-b")
         ref, netto = b["riferimento"], self._netto(b["riferimento"])
-        self.g("POST", "/api/garanzia/contesta",
-               {"voucher_token": b["voucher_token"], "motivo": "x"})
+        s, c = self._premi(b, "contesta")
+        self.assertEqual(s, 200, c)
         s, _ = self.g("POST", "/api/admin/controversia/risolvi",
                       {"riferimento": ref, "percentuale_ospite": 40}, AK)
         self.assertEqual(s, 200)
@@ -153,8 +159,8 @@ class TestSplitPenalePayout(unittest.TestCase):
         self._pubblica("casa-c")
         b = self._book_paga("casa-c")
         ref = b["riferimento"]
-        self.g("POST", "/api/garanzia/contesta",
-               {"voucher_token": b["voucher_token"], "motivo": "x"})
+        s, c = self._premi(b, "contesta")
+        self.assertEqual(s, 200, c)
         s, _ = self.g("POST", "/api/admin/controversia/risolvi",
                       {"riferimento": ref, "percentuale_ospite": 100}, AK)
         self.assertEqual(s, 200)
@@ -241,9 +247,8 @@ class TestSplitPenalePayout(unittest.TestCase):
         b = self._book_paga("casa-g")
         ref = b["riferimento"]
         self.assertGreater(self.sis.payout.da_pagare(self.hid, "EUR"), 0)
-        s, _ = self.g("POST", "/api/garanzia/contesta",
-                      {"voucher_token": b["voucher_token"], "motivo": "muffa"})
-        self.assertEqual(s, 200)
+        s, c = self._premi(b, "contesta", "muffa")
+        self.assertEqual(s, 200, c)
         self.assertEqual(self.sis.payout.stato_di(ref), "trattenuto")
         self.assertEqual(self.sis.payout.da_pagare(self.hid, "EUR"), 0)
         # l'arbitro decide 60/40 -> la quota host torna PAGABILE (e parte il transfer)
@@ -288,7 +293,7 @@ class TestSplitPenalePayout(unittest.TestCase):
         st = self.sis.garanzia.stato(ref)
         self.assertEqual(st["stato"], "in_garanzia", "la garanzia DEVE risorgere")
         # e le tutele rivivono: l'ospite puo' confermare -> transfer all'host
-        s, c = self.g("POST", "/api/garanzia/conferma", {"voucher_token": bk["voucher_token"]})
+        s, c = self._premi(bk, "conferma")
         self.assertEqual(s, 200, c)
         self.assertEqual(self.fc.transfers[-1][3], ref)
 

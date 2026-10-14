@@ -49,6 +49,7 @@ from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import crea_router
 from fase87_stripe_webhook import firma_di_test
 from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
+from test_fase160_escrow_garanzia import nella_finestra
 
 WH = "whsec_ostile"
 BASE = datetime.date.today() + datetime.timedelta(days=30)
@@ -458,14 +459,17 @@ class TestGiroOstileTutteLeRotte(unittest.TestCase):
                          [("stato", str), ("importo_host_cents", int)],
                          query={"ref": rif}, headers=ADM, valore={"stato": "in_garanzia"})
         self.assertGreater(gs["importo_host_cents"], 0, "escrow aperto a zero")
-        self.chiama("POST", "/api/garanzia/conferma", 200,
-                    [("host_riceve_cents", int)],
-                    body={"voucher_token": b_conf["voucher_token"]},
-                    valore={"ok": True, "stato": "rilasciato"})
-        self.chiama("POST", "/api/garanzia/contesta", 200, [("stato", str)],
-                    body={"voucher_token": b_cont["voucher_token"],
-                          "motivo": "riscaldamento non funzionante"},
-                    valore={"ok": True, "stato": "contestato"})
+        # i due pulsanti dell'ospite valgono dall'arrivo (dal 14/10, (ad)): dentro le 24 ore
+        with nella_finestra(self.sis, b_conf["voucher_token"]):
+            self.chiama("POST", "/api/garanzia/conferma", 200,
+                        [("host_riceve_cents", int)],
+                        body={"voucher_token": b_conf["voucher_token"]},
+                        valore={"ok": True, "stato": "rilasciato"})
+        with nella_finestra(self.sis, b_cont["voucher_token"]):
+            self.chiama("POST", "/api/garanzia/contesta", 200, [("stato", str)],
+                        body={"voucher_token": b_cont["voucher_token"],
+                              "motivo": "riscaldamento non funzionante"},
+                        valore={"ok": True, "stato": "contestato"})
 
         # ── RECENSIONI (il diritto si spende DOPO il check-out) ──────────────────────
         co = datetime.date.fromisoformat(b_rec["check_out"])

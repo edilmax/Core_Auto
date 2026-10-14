@@ -38,6 +38,7 @@ from fase83_server import crea_router
 from fase87_stripe_webhook import firma_di_test
 from fase99_multicurrency import crea_provider_tassi
 from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
+from test_fase160_escrow_garanzia import nella_finestra
 
 WH = "whsec_happy_admin"
 BUNKER_PW = "SuperPw@1"
@@ -533,8 +534,9 @@ class HappyAdmin(unittest.TestCase):
 
     def test_admin_controversia_elenco_e_risoluzione_split(self):
         """L'ospite contesta; l'arbitro decide il 40% e i due ledger si riallineano."""
-        st, out = self.g("POST", "/api/garanzia/contesta",
-                         {"voucher_token": self.vt, "motivo": "casa non conforme"})
+        with nella_finestra(self.sis, self.vt):            # dall'arrivo, come l'ospite vero
+            st, out = self.g("POST", "/api/garanzia/contesta",
+                             {"voucher_token": self.vt, "motivo": "casa non conforme"})
         self.assertEqual(st, 200, out)
 
         el = self.rotta("GET", "/api/admin/controversie", 200, headers=self.AK)

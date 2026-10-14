@@ -30,6 +30,7 @@ from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import crea_router, sweep_hold_una_passata
 from fase87_stripe_webhook import firma_di_test
 from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
+from test_fase160_escrow_garanzia import nella_finestra
 
 WH = "whsec_ghost"
 VAL_CITTA = [("EUR", "Roma"), ("USD", "New York"), ("JPY", "Tokyo")]
@@ -120,16 +121,18 @@ class TestFantasmiTerminali(unittest.TestCase):
             if not (rec and rec.get("stato") == "pagato"):
                 continue
             info["dj"] = json.loads(rec.get("corpo_json") or "{}")
+            # i due pulsanti dell'ospite dentro le sue 24 ore (dal 14/10, (ad)): fuori, la rotta
+            # li rifiuta e i rami A, C e D finivano tutti nel ramo B senza che nessuno lo vedesse
             if ramo == "A":
-                g("POST", "/api/garanzia/conferma", {"voucher_token": vt})
-            elif ramo == "C":
-                g("POST", "/api/garanzia/contesta", {"voucher_token": vt})
+                with nella_finestra(sis, vt):
+                    s, o = g("POST", "/api/garanzia/conferma", {"voucher_token": vt})
+                self.assertEqual(s, 200, "ramo A: %r" % (o,))
+            elif ramo in ("C", "D"):
+                with nella_finestra(sis, vt):
+                    s, o = g("POST", "/api/garanzia/contesta", {"voucher_token": vt})
+                self.assertEqual(s, 200, "ramo %s: %r" % (ramo, o))
                 g("POST", "/api/admin/controversia/risolvi",
-                  {"riferimento": rif, "percentuale_ospite": 100}, AK)
-            elif ramo == "D":
-                g("POST", "/api/garanzia/contesta", {"voucher_token": vt})
-                g("POST", "/api/admin/controversia/risolvi",
-                  {"riferimento": rif, "percentuale_ospite": 40}, AK)
+                  {"riferimento": rif, "percentuale_ospite": 100 if ramo == "C" else 40}, AK)
             elif ramo == "E":
                 g("POST", "/api/concierge/cancella", {"voucher_token": vt})
             prenote[rif] = info

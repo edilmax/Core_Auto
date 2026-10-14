@@ -433,8 +433,13 @@ def giro_admin_prima_meta(b, sc):
           "prima=%d dopo=%d agganciate=%d" % (len(prima), len(dopo), len(agganciata)))
 
     c_prima = b.controversie_admin()
-    s_cont, _corpo = b.g("POST", "/api/garanzia/contesta",
-                         {"voucher_token": sc["vt"], "motivo": "la stanza non era quella"})
+    # dal 14/10 ((ad), «autorizzato») «c'e' un problema» vale solo dall'arrivo allo sblocco
+    # della garanzia: l'ospite lo preme un'ora prima dello sblocco, come quello vero
+    from unittest import mock
+    sblocco = int((b.sis.garanzia.stato(sc["rif"]) or {}).get("sblocco_auto_ts") or 0)
+    with mock.patch("time.time", return_value=float(sblocco - 3600)):
+        s_cont, _corpo = b.g("POST", "/api/garanzia/contesta",
+                             {"voucher_token": sc["vt"], "motivo": "la stanza non era quella"})
     c_dopo = b.controversie_admin()
     passo("controversia", "l'ospite contesta e la controversia COMPARE nell'elenco dell'admin",
           s_cont == 200 and len(c_prima) == 0 and len(c_dopo) == 1,

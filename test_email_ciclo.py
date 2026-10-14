@@ -35,6 +35,7 @@ from fase86_email import (corpo_cancellazione_html, corpo_esito_controversia_htm
 from fase87_stripe_webhook import firma_di_test
 from fase162_pagamenti_pendenti import crea_pagamenti_pendenti
 from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
+from test_fase160_escrow_garanzia import nella_finestra
 
 
 def _fake_fetch(url, body, headers):
@@ -181,7 +182,8 @@ class TestEmailCiclo(unittest.TestCase):
     # ── 3. esito controversia all'ospite ─────────────────────────────────────────
     def test_email_esito_controversia(self):
         self._webhook(self.rif)
-        s, c = self.g("POST", "/api/garanzia/contesta", {"voucher_token": self.vt})
+        with nella_finestra(self.sis, self.vt):
+            s, c = self.g("POST", "/api/garanzia/contesta", {"voucher_token": self.vt})
         self.assertEqual(s, 200, c)
         s, c = self.g("POST", "/api/admin/controversia/risolvi",
                       {"riferimento": self.rif, "percentuale_ospite": 100},
@@ -342,11 +344,13 @@ class TestEmailCiclo(unittest.TestCase):
             self.assertEqual(sorted(ETICHETTE_UI.get(chiave, {})),
                              sorted(("it", "en", "es", "fr", "de", "pt", "ja", "zh")), chiave)
         # il server riceve e conserva il motivo che la pagina manda
-        s, c = self.g("POST", "/api/garanzia/contesta",
-                      {"voucher_token": self.vt, "motivo": "muffa in bagno"})
+        with nella_finestra(self.sis, self.vt):
+            s, c = self.g("POST", "/api/garanzia/contesta",
+                          {"voucher_token": self.vt, "motivo": "muffa in bagno"})
         self.assertEqual(s, 200, c)
-        s, c = self.g("POST", "/api/garanzia/contesta",
-                      {"voucher_token": self.vt, "motivo": "di nuovo"})
+        with nella_finestra(self.sis, self.vt):
+            s, c = self.g("POST", "/api/garanzia/contesta",
+                          {"voucher_token": self.vt, "motivo": "di nuovo"})
         self.assertEqual((s, c.get("stato")), (409, "contestato"),
                          "la pagina riconosce il «gia' segnalato» da questa risposta")
 

@@ -344,7 +344,13 @@ def main():
             return 1
         pi2 = pag2.get("id") or ""
         webhook(rif2, pi2)
-        st, cst = g("POST", "/api/garanzia/contesta", {"voucher_token": vt2})
+        # dal 14/10 ((ad), «autorizzato») «c'e' un problema» vale solo dall'arrivo allo sblocco
+        # della garanzia: l'ospite lo preme un'ora prima dello sblocco (solo la rotta, in
+        # memoria: a Stripe in quell'istante non si chiede niente)
+        from unittest import mock
+        _sbl = int((sis.garanzia.stato(rif2) or {}).get("sblocco_auto_ts") or 0)
+        with mock.patch("time.time", return_value=float(_sbl - 3600)):
+            st, cst = g("POST", "/api/garanzia/contesta", {"voucher_token": vt2})
         passo("l'ospite riesce ad aprire la controversia", st == 200, str(cst)[:100])
         stato_g = sis.garanzia.stato(rif2) or {}
         in_garanzia = int(stato_g.get("importo_host_cents") or 0)

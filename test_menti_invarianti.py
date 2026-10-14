@@ -13,6 +13,7 @@ INVARIANTI: no overbooking, no occupate negative, no doppio payout, no payout ne
 'maturato' su prenotazione rimborsata/cancellata, escrow conserva, e CONSERVAZIONE del record:
 totale == netto_host + (commissione - sconto) + tassa + costo_pagamento.
 """
+import contextlib
 import datetime
 import json
 import shutil
@@ -26,6 +27,7 @@ from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import crea_router, sweep_hold_una_passata
 from fase87_stripe_webhook import firma_di_test
 from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
+from test_fase160_escrow_garanzia import nella_finestra
 from unittest import mock
 
 import fase59_concierge
@@ -196,11 +198,16 @@ class TestMentiInvarianti(unittest.TestCase):
                         elif az == "hostcancel" and stt["rif"]:
                             g("POST", "/api/host/cancella", {"riferimento": stt["rif"]},
                               {"X-Host-Token": tok})
-                        elif az == "conferma" and stt["voucher"]:
-                            g("POST", "/api/garanzia/conferma", {"voucher_token": stt["voucher"]})
-                        elif az == "contesta" and stt["voucher"]:
-                            g("POST", "/api/garanzia/contesta",
-                              {"voucher_token": stt["voucher"], "motivo": "x"})
+                        elif az in ("conferma", "contesta") and stt["voucher"]:
+                            # dentro le 24 ore dell'ospite (dal 14/10, (ad)): fuori, la rotta
+                            # rifiuta sempre e le menti non provavano piu' ne' rilasci ne'
+                            # controversie. Senza garanzia decide la rotta, all'ora vera.
+                            dentro = (nella_finestra(sysx, stt["voucher"])
+                                      if sysx.garanzia.stato(stt["rif"]) else
+                                      contextlib.nullcontext())
+                            with dentro:
+                                g("POST", "/api/garanzia/" + az,
+                                  {"voucher_token": stt["voucher"], "motivo": "x"})
                         elif az == "review" and stt["diritto"]:
                             g("POST", "/api/recensioni",
                               {"token": stt["diritto"], "voto": rnd.randint(1, 5), "testo": "ok"})

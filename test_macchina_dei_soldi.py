@@ -935,10 +935,12 @@ def _guasti():
     Ogni guasto e' un difetto VERO, gia' visto o plausibile, non un'astrazione: togliere un
     freno, saltare un passo di sicurezza, spegnere la lista, fermare l'incasso."""
     return [
+        # «tutto ok» al giorno d'arrivo: dal 14/10 ((ad)) prima dell'arrivo la rotta lo
+        # rifiuta, e con «subito» l'host non veniva piu' pagato e il guasto non si vedeva
         ("il freno «garanzia gia' divisa» tolto: l'admin rimborsa tutto a host gia' pagato",
          "_garanzia_gia_divisa", lambda self, idem: False,
          ("vicino", "flessibile", "si", "piccolo"),
-         (("subito", "tutto_ok"), ("subito", "admin_rimborso")), "PIATTAFORMA"),
+         (("giorno_arrivo", "tutto_ok"), ("giorno_arrivo", "admin_rimborso")), "PIATTAFORMA"),
         ("la trattenuta del bonifico tolta: l'host resta 'maturato' su una prenotazione cancellata",
          "_payout_trattieni", lambda self, rif: True,
          ("vicino", "flessibile", "no", "piccolo"), (("subito", "ospite_cancella"),), "HOST"),

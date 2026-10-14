@@ -50,6 +50,7 @@ from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import crea_router
 from fase87_stripe_webhook import firma_di_test
 from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
+from test_fase160_escrow_garanzia import nella_finestra
 
 WH = "whsec_ogni_strada"
 CHIAVE_FINTA = "sk"          # come negli altri banchi: la rete e' finta, la chiave non conta
@@ -200,6 +201,11 @@ class _BancoDelleStrade(unittest.TestCase):
     def premi(self, rif):
         return self.g("POST", "/api/admin/rimborsa_dovuto", {"riferimento": rif},
                       {"X-Admin-Key": "ak"})
+
+    def segnala(self, b):
+        """«C'e' un problema» premuto dall'ospite dentro le sue 24 ore (`nella_finestra`)."""
+        with nella_finestra(self.sis, b["voucher_token"]):
+            return self.g("POST", "/api/garanzia/contesta", {"voucher_token": b["voucher_token"]})
 
     def idem_key_vera(self, rif):
         _, adm = self.g("GET", "/api/admin/prenotazioni", None, {"X-Admin-Key": "ak"})
@@ -395,7 +401,7 @@ class TestISoldiTornanoDaOgniStrada(_BancoDelleStrade):
         b, totale = self.prenota(ci, co, "ctr@os.it")
         rif, pi = b["riferimento"], "pi_ctr"
         self.paga(rif, pi)
-        s, c = self.g("POST", "/api/garanzia/contesta", {"voucher_token": b["voucher_token"]})
+        s, c = self.segnala(b)
         self.assertEqual(s, 200, "PREMESSA NON VALIDA: la contestazione non riesce: %r" % (c,))
         in_garanzia = int((self.sis.garanzia.stato(rif) or {}).get("importo_host_cents") or 0)
         self.assertGreater(in_garanzia, 0, "PREMESSA NON VALIDA: niente in garanzia")
@@ -425,8 +431,8 @@ class TestISoldiTornanoDaOgniStrada(_BancoDelleStrade):
         b, _totale = self.prenota(ci, co, "ctr2@os.it")
         rif, pi = b["riferimento"], "pi_ctr2"
         self.paga(rif, pi)
-        s, _c = self.g("POST", "/api/garanzia/contesta", {"voucher_token": b["voucher_token"]})
-        self.assertEqual(s, 200)
+        s, _c = self.segnala(b)
+        self.assertEqual(s, 200, _c)
         in_garanzia = int((self.sis.garanzia.stato(rif) or {}).get("importo_host_cents") or 0)
         deciso = in_garanzia // 4 + 3
         s, out = self.g("POST", "/api/admin/controversia/risolvi",
@@ -464,8 +470,8 @@ class TestISoldiTornanoDaOgniStrada(_BancoDelleStrade):
         b, _totale = self.prenota(ci, co, "ctr3@os.it")
         rif, pi = b["riferimento"], "pi_ctr3"
         self.paga(rif, pi)
-        s, _c = self.g("POST", "/api/garanzia/contesta", {"voucher_token": b["voucher_token"]})
-        self.assertEqual(s, 200)
+        s, _c = self.segnala(b)
+        self.assertEqual(s, 200, _c)
         in_garanzia = int((self.sis.garanzia.stato(rif) or {}).get("importo_host_cents") or 0)
         deciso = in_garanzia // 2
         s, out = self.g("POST", "/api/admin/controversia/risolvi",

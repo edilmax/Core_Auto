@@ -87,6 +87,7 @@ from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import crea_router, sweep_hold_una_passata
 from fase87_stripe_webhook import firma_di_test
 from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
+from test_fase160_escrow_garanzia import nella_finestra
 
 WHSEC = "whsec_idem_profondo"
 SLUG = "casa-idem"
@@ -407,8 +408,9 @@ class TestDoppioClicDenaro(_Base):
     def test_garanzia_conferma_doppia_un_solo_rilascio(self):
         """POST /api/garanzia/conferma ×2: il 2o e' 409, l'host non incassa due volte."""
         b = self.prenotazione_pagata()
-        (s1, o1), (s2, o2) = self.due_volte("POST", "/api/garanzia/conferma",
-                                            {"voucher_token": b["voucher_token"]})
+        with nella_finestra(self.sis, b["voucher_token"]):   # dall'arrivo, come l'ospite vero
+            (s1, o1), (s2, o2) = self.due_volte("POST", "/api/garanzia/conferma",
+                                                {"voucher_token": b["voucher_token"]})
         self.assertEqual((s1, o1), (200, {"ok": True, "stato": "rilasciato",
                                           "host_riceve_cents": VERSATO_HOST,
                                           "ospite_rimborso_cents": 0}))
@@ -421,9 +423,10 @@ class TestDoppioClicDenaro(_Base):
     def test_garanzia_contesta_doppia_una_sola_disputa(self):
         """POST /api/garanzia/contesta ×2: il 2o e' 409, il payout resta trattenuto UNA volta."""
         b = self.prenotazione_pagata()
-        (s1, o1), (s2, o2) = self.due_volte("POST", "/api/garanzia/contesta",
-                                            {"voucher_token": b["voucher_token"],
-                                             "motivo": "muffa in bagno"})
+        with nella_finestra(self.sis, b["voucher_token"]):   # dall'arrivo, come l'ospite vero
+            (s1, o1), (s2, o2) = self.due_volte("POST", "/api/garanzia/contesta",
+                                                {"voucher_token": b["voucher_token"],
+                                                 "motivo": "muffa in bagno"})
         self.assertEqual((s1, o1), (200, {"ok": True, "stato": "contestato",
                                           "host_riceve_cents": 0,
                                           "ospite_rimborso_cents": 0}))
@@ -435,9 +438,10 @@ class TestDoppioClicDenaro(_Base):
     def test_controversia_risolvi_doppia_uno_solo_split(self):
         """POST /api/admin/controversia/risolvi ×2: il 2o e' 409, il payout non raddoppia."""
         b = self.prenotazione_pagata()
-        self.assertEqual(self.g("POST", "/api/garanzia/contesta",
-                                {"voucher_token": b["voucher_token"],
-                                 "motivo": "rumore"})[0], 200)
+        with nella_finestra(self.sis, b["voucher_token"]):   # dall'arrivo, come l'ospite vero
+            s, c = self.g("POST", "/api/garanzia/contesta",
+                          {"voucher_token": b["voucher_token"], "motivo": "rumore"})
+        self.assertEqual(s, 200, c)
         corpo = {"riferimento": b["riferimento"], "percentuale_ospite": 50}
         (s1, o1), (s2, o2) = self.due_volte("POST", "/api/admin/controversia/risolvi",
                                             corpo, self.admin)

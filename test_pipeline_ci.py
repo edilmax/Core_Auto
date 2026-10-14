@@ -13139,7 +13139,12 @@ class TestOgniGestoDellAdminLasciaLaSuaRiga(_GuardieSugliAttrezziDelLavoro):
         slug = b.alloggio("casa-traccia-2", 2, "2027-09-01", "2027-09-10")
         rif, voucher = b.pagata(slug, "2027-09-03", "2027-09-05")
         self.assertTrue(rif and voucher, "il banco non ha prodotto una prenotazione pagata")
-        b.g("POST", "/api/garanzia/contesta", {"voucher_token": voucher, "motivo": "prova"})
+        # dentro le 24 ore dell'ospite (dal 14/10, (ad)): fuori la rotta rifiuta e non c'e'
+        # nessuna controversia da risolvere
+        from test_fase160_escrow_garanzia import nella_finestra
+        with nella_finestra(b.sis, voucher):
+            s, c = b.g("POST", "/api/garanzia/contesta", {"voucher_token": voucher, "motivo": "prova"})
+        self.assertEqual(s, 200, "PREMESSA: la controversia doveva aprirsi: %r" % (c,))
         esito, righe = self._registro_del_gesto(
             lambda: b.g("POST", "/api/admin/controversia/risolvi",
                         {"riferimento": rif, "rimborso_ospite_cents": 1000}, BH))
