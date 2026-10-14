@@ -10,6 +10,7 @@ sequenze PIU' PERICOLOSE (comprese le assurde che nessun cliente sano farebbe), 
   - stati pendenti LEGALI + assorbenti (rimborsato/cancellata_host non "resuscitano");
   - al piu' UNA riga 'incasso' a giornale per prenotazione; catena hash integra.
 """
+import contextlib
 import datetime
 import json
 import os
@@ -23,6 +24,7 @@ from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import crea_router, sweep_hold_una_passata
 from fase87_stripe_webhook import firma_di_test
 from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
+from test_fase160_escrow_garanzia import nella_finestra
 
 STATI_LEGALI = {"in_attesa", "in_attesa_host", "pagato", "scaduto",
                 "rimborsato", "cancellata_host", "annullato", None}
@@ -146,10 +148,15 @@ class TestSequenzeAvverse(unittest.TestCase):
                             (int(time.time()) - 5,))
                 con.commit(); con.close()
                 sweep_hold_una_passata(sis, r)
-            elif ev == "CONTESTA_A" and "A" in pren:
-                g("POST", "/api/garanzia/contesta", {"voucher_token": pren["A"]["vt"], "motivo": "x"})
-            elif ev == "CONFERMA_A" and "A" in pren:
-                g("POST", "/api/garanzia/conferma", {"voucher_token": pren["A"]["vt"]})
+            elif ev in ("CONTESTA_A", "CONFERMA_A") and "A" in pren:
+                # dentro le 24 ore dell'ospite (dal 14/10, (ad)): fuori, la rotta rifiuta sempre
+                # e le sequenze con la controversia non provavano piu' niente. Senza garanzia
+                # decide la rotta, all'ora vera.
+                dentro = (nella_finestra(sis, pren["A"]["vt"])
+                          if sis.garanzia.stato(pren["A"]["rif"]) else contextlib.nullcontext())
+                with dentro:
+                    g("POST", "/api/garanzia/" + ("contesta" if ev == "CONTESTA_A" else "conferma"),
+                      {"voucher_token": pren["A"]["vt"], "motivo": "x"})
             elif ev == "RISOLVI_A" and "A" in pren:
                 g("POST", "/api/admin/controversia/risolvi",
                   {"riferimento": pren["A"]["rif"], "percentuale_ospite": 50}, AK)

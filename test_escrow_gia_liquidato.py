@@ -46,6 +46,7 @@ from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import crea_router
 from fase87_stripe_webhook import firma_di_test
 from fase163_accettazioni import doc_sha256, CONTRATTO_HOST_VERSIONE
+from test_fase160_escrow_garanzia import nella_finestra
 
 WHSEC = "whsec_escrow_liq"
 
@@ -143,16 +144,19 @@ class TestEscrowGiaLiquidato(unittest.TestCase):
         b = self._prenota_e_paga(self._fra(20), self._fra(22))
         rif = b["riferimento"]
 
-        s, ok = self.g("POST", "/api/garanzia/conferma", {"voucher_token": b["voucher_token"]})
-        self.assertEqual(s, 200, ok)
-        st = self.sys.garanzia.stato(rif)
-        self.assertEqual(st["stato"], "rilasciato")
-        gia_host = int(st["host_riceve_cents"])
-        self.assertGreater(gia_host, 0, "l'escrow deve avere liquidato l'host")
-        bonifico_prima = self.sys.payout.info(rif)
+        # dal 14/10 ((ad)) «tutto ok» vale solo dall'arrivo: l'ospite lo preme durante il
+        # soggiorno e subito dopo prova a cancellare, tutto dentro le sue 24 ore
+        with nella_finestra(self.sys, b["voucher_token"]):
+            s, ok = self.g("POST", "/api/garanzia/conferma", {"voucher_token": b["voucher_token"]})
+            self.assertEqual(s, 200, ok)
+            st = self.sys.garanzia.stato(rif)
+            self.assertEqual(st["stato"], "rilasciato")
+            gia_host = int(st["host_riceve_cents"])
+            self.assertGreater(gia_host, 0, "l'escrow deve avere liquidato l'host")
+            bonifico_prima = self.sys.payout.info(rif)
 
-        s, canc = self.g("POST", "/api/concierge/cancella",
-                         {"voucher_token": b["voucher_token"]})
+            s, canc = self.g("POST", "/api/concierge/cancella",
+                             {"voucher_token": b["voucher_token"]})
         self.assertEqual((s, canc.get("errore")), (409, "escrow_gia_liquidato"), canc)
         # NIENTE effetti: nessun rimborso promesso, pagamento vivo, bonifico dell'host intatto
         self.assertNotIn("rimborso_soggiorno_cents", canc)
@@ -180,20 +184,22 @@ class TestEscrowGiaLiquidato(unittest.TestCase):
         sommarsi alla quota gia' liquidata all'host."""
         b = self._prenota_e_paga(self._fra(60), self._fra(62))
         rif, pagato = b["riferimento"], int(b["prezzo_guest_cents"])
-        s, _ = self.g("POST", "/api/garanzia/contesta",
-                      {"voucher_token": b["voucher_token"], "motivo": "wifi assente"})
-        self.assertEqual(s, 200)
-        # l'arbitro rimborsa 0 all'ospite: tutto all'host
-        out = self.sys.garanzia.risolvi(rif, rimborso_ospite_cents=0)
-        self.assertTrue(out.get("ok"), out)
-        gia_host = int(self.sys.garanzia.stato(rif)["host_riceve_cents"])
-        self.assertGreater(gia_host, 0)
-        self.assertLessEqual(gia_host, pagato)
-        bonifico_prima = self.sys.payout.info(rif)
+        # dal 14/10 ((ad)) la segnalazione vale solo dall'arrivo: tutto dentro le 24 ore
+        with nella_finestra(self.sys, b["voucher_token"]):
+            s, c = self.g("POST", "/api/garanzia/contesta",
+                          {"voucher_token": b["voucher_token"], "motivo": "wifi assente"})
+            self.assertEqual(s, 200, c)
+            # l'arbitro rimborsa 0 all'ospite: tutto all'host
+            out = self.sys.garanzia.risolvi(rif, rimborso_ospite_cents=0)
+            self.assertTrue(out.get("ok"), out)
+            gia_host = int(self.sys.garanzia.stato(rif)["host_riceve_cents"])
+            self.assertGreater(gia_host, 0)
+            self.assertLessEqual(gia_host, pagato)
+            bonifico_prima = self.sys.payout.info(rif)
 
-        # dal 2026-10-11 ((m)) la cancellazione dopo l'arbitro non passa: l'ha gia' decisa lui
-        s, canc = self.g("POST", "/api/concierge/cancella",
-                         {"voucher_token": b["voucher_token"]})
+            # dal 2026-10-11 ((m)) la cancellazione dopo l'arbitro non passa: l'ha gia' decisa lui
+            s, canc = self.g("POST", "/api/concierge/cancella",
+                             {"voucher_token": b["voucher_token"]})
         self.assertEqual((s, canc.get("errore")), (409, "escrow_gia_liquidato"), canc)
         self.assertNotIn("rimborso_soggiorno_cents", canc)
         self.assertEqual(self.sys.pagamenti_pendenti.info(rif)["stato"], "pagato")
@@ -207,13 +213,19 @@ class TestEscrowGiaLiquidato(unittest.TestCase):
         farmabile da una coppia host+ospite complice."""
         b = self._prenota_e_paga(self._fra(80), self._fra(82))
         rif = b["riferimento"]
-        s, _ = self.g("POST", "/api/garanzia/conferma", {"voucher_token": b["voucher_token"]})
-        self.assertEqual(s, 200)
-        gia_host = int(self.sys.garanzia.stato(rif)["host_riceve_cents"])
-        self.assertGreater(gia_host, 0)
+        # dal 14/10 ((ad)) «tutto ok» vale solo dall'arrivo: tutto dentro le 24 ore dell'ospite
+        with nella_finestra(self.sys, b["voucher_token"]):
+            s, c = self.g("POST", "/api/garanzia/conferma", {"voucher_token": b["voucher_token"]})
+            self.assertEqual(s, 200, c)
+            gia_host = int(self.sys.garanzia.stato(rif)["host_riceve_cents"])
+            self.assertGreater(gia_host, 0)
 
-        s, out = self.g("POST", "/api/host/cancella", {"riferimento": rif},
-                        {"X-Host-Token": self.tok})
+            # a quasi tre mesi dalla registrazione la sessione dell'host e' scaduta: rientra
+            s, acc = self.g("POST", "/api/host/login",
+                            {"email": "h@liq.it", "password": "password1"})
+            self.assertEqual(s, 200, acc)
+            s, out = self.g("POST", "/api/host/cancella", {"riferimento": rif},
+                            {"X-Host-Token": acc["token"]})
         self.assertEqual(s, 409, out)
         self.assertEqual(out.get("errore"), "escrow_gia_liquidato")
         # e NIENTE effetti: niente penale, record ancora 'pagato', date ancora bloccate

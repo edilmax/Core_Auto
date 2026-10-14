@@ -25,6 +25,7 @@ from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import crea_router
 from fase87_stripe_webhook import firma_di_test
 from fase163_accettazioni import doc_sha256, CONTRATTO_HOST_VERSIONE
+from test_fase160_escrow_garanzia import nella_finestra
 from unittest import mock
 
 import fase59_concierge
@@ -165,20 +166,27 @@ class TestSimulazioneAnno(unittest.TestCase):
                 self.g("POST", "/api/concierge/cancella", {"voucher_token": vt}); cancellate += 1
             elif ramo == 3 and vt:                          # paga + contesta + chat/prova
                 self._paga(rif)
-                self.g("POST", "/api/garanzia/contesta",
-                       {"voucher_token": vt, "motivo": "problema %d" % j})
+                # i due pulsanti dentro le 24 ore dell'ospite (dal 14/10, (ad)): fuori la rotta
+                # li rifiuta, e qui si contava «contestate» senza nessuna controversia aperta
+                with nella_finestra(self.sys, vt):
+                    s, c = self.g("POST", "/api/garanzia/contesta",
+                                  {"voucher_token": vt, "motivo": "problema %d" % j})
+                self.assertEqual(s, 200, c)
                 self.g("POST", "/api/voucher/messaggio", {"voucher_token": vt, "testo": "chiarimento"})
                 contestate += 1
             elif ramo == 4:                                 # paga + conferma "tutto ok"
                 self._paga(rif)
                 if vt:
-                    self.g("POST", "/api/garanzia/conferma", {"voucher_token": vt})
+                    with nella_finestra(self.sys, vt):
+                        s, c = self.g("POST", "/api/garanzia/conferma", {"voucher_token": vt})
+                    self.assertEqual(s, 200, c)
                 confermate += 1
 
         # ── ADMIN: risolve METÀ delle controversie (arbitro) ──
         s, dc = self.g("GET", "/api/admin/controversie", h={"X-Admin-Key": "ak"})
         self.assertEqual(s, 200)
         aperte = dc.get("controversie", [])
+        self.assertTrue(aperte, "nessuna controversia aperta: l'arbitro non ha niente da decidere")
         for k, c in enumerate(aperte):
             if k % 2 == 0:
                 st = c["importo_host_cents"]

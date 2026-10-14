@@ -286,7 +286,9 @@ for i in range(QUANTE):
     if idx_alloggio >= len(host):
         continue
     slug = host[idx_alloggio][2]
-    giorno = 10 + (2 if doppia else i) * 4
+    # la n.2 arriva OGGI: dal 14/10 ((ad)) «c'e' un problema» vale solo dall'arrivo (le 15:00
+    # a Milano) allo sblocco della garanzia, e l'orologio di un server vero non si sposta da qui
+    giorno = 0 if i == 1 else 10 + (2 if doppia else i) * 4
     ci = (oggi + datetime.timedelta(days=giorno)).isoformat()
     co = (oggi + datetime.timedelta(days=giorno + NOTTI)).isoformat()
     s, q = chiama("POST", "/api/concierge/quote",
@@ -431,25 +433,34 @@ if contesa:
     _, rif_contesa, vt_c, slug_c, _, _ = contesa[0]
     s, out = chiama("POST", "/api/garanzia/contesta",
                     {"voucher_token": vt_c, "motivo": "la stanza non e' come nell'annuncio"})
-    passo("l'ospite apre la contestazione", s == 200, 200, "%s %s" % (s, out))
-    c = db("payout")
-    if c is None:
-        # Stesso caso del libro giornale: senza il database, questo controllo non e' rosso
-        # -- e' NON ESEGUITO. Segnarlo rosso insegnerebbe a ignorare i rossi, che e' il modo
-        # di perdere quello vero.
-        saltato("i soldi dell'host si FERMANO (payout trattenuto)",
-                "nessun payout.db in BANCO_DATI (la cartella che il banco dichiara "
-                "all'avvio) ne' in /data: non c'e' niente da leggere, quindi NON si misura")
+    prima_delle_15 = (s == 409 and isinstance(out, dict)
+                      and out.get("errore") == "non_ancora_arrivato")
+    if prima_delle_15:
+        # NON un rosso: la n.2 arriva oggi alle 15:00 ora di Milano e prima di allora l'ospite
+        # non puo' segnalare (regola dell'arrivo, 14/10). Si rilancia il giro dopo le 15.
+        saltato("controversia", "la n.2 arriva oggi alle 15:00 ora di Milano: prima di allora "
+                "«c'e' un problema» non vale ancora (409 non_ancora_arrivato). Rilancia il "
+                "giro dopo le 15")
     else:
-        stato = None
-        try:
-            r = c.execute("SELECT stato FROM payout WHERE prenotazione_id=?",
-                          (rif_contesa,)).fetchone()
-            stato = r[0] if r else None
-        finally:
-            c.close()
-        passo("i soldi dell'host si FERMANO (payout trattenuto)", stato == "trattenuto",
-              "trattenuto", stato)
+        passo("l'ospite apre la contestazione", s == 200, 200, "%s %s" % (s, out))
+        c = db("payout")
+        if c is None:
+            # Stesso caso del libro giornale: senza il database, questo controllo non e' rosso
+            # -- e' NON ESEGUITO. Segnarlo rosso insegnerebbe a ignorare i rossi, che e' il modo
+            # di perdere quello vero.
+            saltato("i soldi dell'host si FERMANO (payout trattenuto)",
+                    "nessun payout.db in BANCO_DATI (la cartella che il banco dichiara "
+                    "all'avvio) ne' in /data: non c'e' niente da leggere, quindi NON si misura")
+        else:
+            stato = None
+            try:
+                r = c.execute("SELECT stato FROM payout WHERE prenotazione_id=?",
+                              (rif_contesa,)).fetchone()
+                stato = r[0] if r else None
+            finally:
+                c.close()
+            passo("i soldi dell'host si FERMANO (payout trattenuto)", stato == "trattenuto",
+                  "trattenuto", stato)
 else:
     saltato("controversia", "la prenotazione n.2 non e' pagata e viva")
 

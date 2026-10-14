@@ -25,6 +25,7 @@ from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import crea_router
 from fase87_stripe_webhook import firma_di_test
 from fase163_accettazioni import doc_sha256, CONTRATTO_HOST_VERSIONE
+from test_fase160_escrow_garanzia import nella_finestra
 from unittest import mock
 
 import fase59_concierge
@@ -421,8 +422,9 @@ class TestSimulazioneTotale(unittest.TestCase):
                       {"quote_token": q["quote_token"], "email": "cliente10@sim.it"})
         rif = b["riferimento"]; vt = b["voucher_token"]
         self._webhook_pagato(rif)
-        # il cliente contesta
-        s, c = self.g("POST", "/api/garanzia/contesta", {"voucher_token": vt})
+        # il cliente contesta, entrato: dentro le sue 24 ore (dal 14/10, (ad))
+        with nella_finestra(self.sis, vt):
+            s, c = self.g("POST", "/api/garanzia/contesta", {"voucher_token": vt})
         self.assertEqual(s, 200, c)
         # l'admin vede la controversia
         s, lst = self.g("GET", "/api/admin/controversie", headers=self.AK)

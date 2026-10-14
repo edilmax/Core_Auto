@@ -29,6 +29,7 @@ from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import crea_router
 from fase87_stripe_webhook import firma_di_test
 from fase163_accettazioni import doc_sha256, CONTRATTO_HOST_VERSIONE
+from test_fase160_escrow_garanzia import nella_finestra
 
 
 class ConnectFinto:
@@ -192,8 +193,9 @@ class TestDebtStatus(unittest.TestCase):
         self.assertGreater(penale, 0)
         # ospite di A conferma il check-in: la garanzia passa l'importo PIENO,
         # ma il bonifico DEVE partire per il residuo del ledger (fix overpay)
-        s, c = self.g("POST", "/api/garanzia/conferma",
-                      {"voucher_token": a["voucher_token"]})
+        with nella_finestra(self.sis, a["voucher_token"]):
+            s, c = self.g("POST", "/api/garanzia/conferma",
+                          {"voucher_token": a["voucher_token"]})
         self.assertEqual(s, 200, c)
         self.assertEqual(len(self.fcn.transfers), 1)
         self.assertEqual(self.fcn.transfers[-1][1], ridotto)       # MAI il pieno
@@ -215,8 +217,9 @@ class TestDebtStatus(unittest.TestCase):
         # nuova prenotazione pagata -> alla conferma il debito si riscuote ALLA FONTE
         a = self._book_paga("casa-a", giorni=30)
         netto_a = self.pd.info(a["riferimento"])["minori"]
-        s, c = self.g("POST", "/api/garanzia/conferma",
-                      {"voucher_token": a["voucher_token"]})
+        with nella_finestra(self.sis, a["voucher_token"]):
+            s, c = self.g("POST", "/api/garanzia/conferma",
+                          {"voucher_token": a["voucher_token"]})
         self.assertEqual(s, 200, c)
         self.assertEqual(self.fcn.transfers[-1][1], netto_a - debito)
         self.assertEqual(self.fc.debiti_host(self.hid, stato="aperto"), [])

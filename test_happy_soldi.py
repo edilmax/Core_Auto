@@ -64,6 +64,7 @@ from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import crea_router, pagina_voucher_html
 from fase87_stripe_webhook import firma_di_test
 from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
+from test_fase160_escrow_garanzia import nella_finestra
 
 WHSEC = "whsec_happy_soldi"
 SLUG = "casa-soldi"
@@ -447,7 +448,8 @@ class TestCamminoSoldi(_BaseSoldi):
         lui deve girare al suo Comune (decisione del fondatore). Prima restava a noi, e il
         libro contabile dichiarava un debito verso il Comune che non ci compete."""
         rif, vt = self.prenotazione_pagata()
-        s, out = self.g("POST", "/api/garanzia/conferma", {"voucher_token": vt})
+        with nella_finestra(self.sis, vt):                 # dall'arrivo, come l'ospite vero
+            s, out = self.g("POST", "/api/garanzia/conferma", {"voucher_token": vt})
         self.assertEqual(s, 200, out)
         self.assertEqual(out, {"ok": True, "stato": "rilasciato",
                                "host_riceve_cents": VERSATO_HOST, "ospite_rimborso_cents": 0})
@@ -459,8 +461,9 @@ class TestCamminoSoldi(_BaseSoldi):
         """POST /api/garanzia/contesta -> 200 e il payout dell'host va 'trattenuto'."""
         rif, vt = self.prenotazione_pagata()
         self.assertEqual(self.sis.payout.stato_di(rif), "maturato")
-        s, out = self.g("POST", "/api/garanzia/contesta",
-                        {"voucher_token": vt, "motivo": "muffa in bagno"})
+        with nella_finestra(self.sis, vt):                 # dall'arrivo, come l'ospite vero
+            s, out = self.g("POST", "/api/garanzia/contesta",
+                            {"voucher_token": vt, "motivo": "muffa in bagno"})
         self.assertEqual(s, 200, out)
         self.assertEqual(out, {"ok": True, "stato": "contestato",
                                "host_riceve_cents": 0, "ospite_rimborso_cents": 0})

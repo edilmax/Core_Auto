@@ -3075,6 +3075,57 @@ class RouterHTTP:
         return 200, {"prenotazioni": el, "totale": totale, "pagina": pagina,
                      "per_pagina": per_pagina}
 
+    def _controversia_aperta(self, rif):
+        """F1 e F2 (RIPRENDI_QUI, 13/10): con una controversia aperta -- la segnalazione
+        dell'ospite o la contestazione della banca, garanzia 'contestato' -- cancellare non
+        muove soldi: decide l'arbitro, o la banca. F1: la cancellazione toglieva la riga del
+        bonifico e l'arbitro poi non pagava l'host collegato. Una garanzia illeggibile non
+        ferma la cancellazione (come gli altri freni: mai bloccare una cancellazione legittima
+        per un guasto nostro), ma lo grida. Guardie:
+        `test_fase83_server.TestUnaControversiaApertaFermaISoldi`."""
+        try:
+            gz = getattr(self._sys, "garanzia", None)
+            st = gz.stato(rif) if gz is not None else None
+        except Exception:
+            logger.error("CONTROVERSIA NON LETTA | RIF: %s | la cancellazione prosegue senza "
+                         "sapere se c'e' una controversia aperta", _rif_per_registro(rif),
+                         exc_info=True)
+            return False
+        return isinstance(st, dict) and st.get("stato") == "contestato"
+
+    def _fuori_dalla_finestra(self, g, rif, dati=None):
+        """(ad), regola del fondatore (D-10 nel libro, 14/10): «da quando arriva [...] 24 ore
+        per dire se va bene o se ci sono problemi. Dopo le 24 ore non puo' fare piu' niente».
+        Prima i due pulsanti valevano in qualunque momento dopo il pagamento, anche settimane
+        prima dell'arrivo: e' la strada da cui nasce F1. La garanzia conosce solo lo sblocco;
+        l'arrivo e' lo sblocco meno la finestra con cui `_apri_garanzia` la apre (sempre quella
+        predefinita). Garanzia assente o illeggibile: "" e decide la garanzia, come prima.
+        SENZA FUSO (trovato il 14/10 rendendo realistiche le prove): la garanzia e' ancorata
+        all'ULTIMO arrivo possibile al mondo (`_istante_checkin_prudente`), giusto per la
+        chiusura, ma l'arrivo vero puo' cadere fino a ORE_FUSO_MAX - ORE_FUSO_MIN ore prima
+        (Cebu: 20). L'apertura si prende dal giorno d'arrivo del voucher, al PRIMO arrivo
+        possibile: mai una tutela piu' stretta del giusto. Guardia:
+        `test_ad_SENZA_FUSO_la_segnalazione_vale_dall_arrivo_VERO`."""
+        import time as _t
+        from fase160_escrow_garanzia import FINESTRA_ORE_DEFAULT
+        try:
+            sblocco = int(g.stato(rif)["sblocco_auto_ts"])
+        except Exception:
+            return ""
+        arrivo = sblocco - FINESTRA_ORE_DEFAULT * 3600
+        v = self._voucher_valido((dati or {}).get("voucher_token")) or {}
+        fuso = self._fuso_alloggio(v.get("alloggio_id", ""))
+        primo = (_istante_checkin(v.get("check_in", ""), fuso) if fuso
+                 else _istante_checkin_prudente(v.get("check_in", "")))
+        if primo is not None:
+            arrivo = min(arrivo, primo - (0 if fuso else (ORE_FUSO_MAX - ORE_FUSO_MIN) * 3600))
+        adesso = int(_t.time())
+        if adesso < arrivo:
+            return "non_ancora_arrivato"
+        if adesso >= sblocco:
+            return "finestra_chiusa"
+        return ""
+
     def _garanzia_gia_divisa(self, idem):
         """La garanzia di questa prenotazione e' gia' stata divisa ('risolto') o data all'host
         ('rilasciato'), oppure il bonifico all'host e' gia' partito ('in_transito'/'pagato')?
@@ -5611,6 +5662,14 @@ class RouterHTTP:
             return 404, {"errore": "controversia_non_trovata"}
         if st.get("stato") != "contestato":
             return 409, {"errore": "non_in_controversia", "stato": st.get("stato")}
+        # F2 (13/10): con la contestazione della BANCA decide la banca. Stripe: «Non puoi
+        # emettere un rimborso al di fuori della procedura di contestazione quando ce n'e'
+        # una» (docs.stripe.com/disputes/how-disputes-work). Quando la banca l'ha chiusa (si
+        # guarda sul pannello di Stripe) l'arbitro decide dicendolo apposta, cosi' i soldi
+        # non restano fermi per sempre: `la_banca_ha_deciso`.
+        if (str(st.get("motivo") or "").startswith("chargeback:")
+                and dati.get("la_banca_ha_deciso") is not True):
+            return 409, {"errore": "decide_la_banca"}
         importo = int(st.get("importo_host_cents", 0))
         # calcolo il rimborso: da percentuale (0-100) oppure importo esatto
         rimborso = dati.get("rimborso_ospite_cents")
@@ -7333,6 +7392,8 @@ class RouterHTTP:
         except Exception:
             logger.warning("guardia escrow su cancellazione host fallita (ignorata)",
                            exc_info=True)
+        if self._controversia_aperta(ref):
+            return 409, {"errore": "controversia_aperta"}
         import json as _j
         try:
             dj = _j.loads(rec.get("corpo_json") or "{}")
@@ -7644,6 +7705,9 @@ class RouterHTTP:
         g = getattr(self._sys, "garanzia", None)
         if g is None:
             return 503, {"errore": "garanzia_non_attiva"}
+        fuori = self._fuori_dalla_finestra(g, res[0], res[1])
+        if fuori:
+            return 409, {"errore": fuori}
         out = g.conferma_ospite(res[0])
         if out.get("ok"):
             # sblocco confermato dal cliente -> il netto parte da solo verso l'host (Connect)
@@ -7658,6 +7722,9 @@ class RouterHTTP:
         g = getattr(self._sys, "garanzia", None)
         if g is None:
             return 503, {"errore": "garanzia_non_attiva"}
+        fuori = self._fuori_dalla_finestra(g, res[0], res[1])
+        if fuori:
+            return 409, {"errore": fuori}
         out = g.contesta(res[0], str(res[1].get("motivo", "")))
         if out.get("ok"):
             # DISPUTA APERTA -> il payout esce dal giro pagamenti ('trattenuto'). BUG
@@ -7796,6 +7863,8 @@ class RouterHTTP:
             _conc = self._sys.concierge
             if _conc._now() >= _conc._fine_giorno_arrivo(allog, ci):
                 return 409, {"errore": "soggiorno_iniziato"}
+            if self._controversia_aperta(rif):
+                return 409, {"errore": "controversia_aperta"}
         # POLITICA dal VOUCHER FIRMATO (scelta dall'host, anti-furbata) - NON dalla richiesta
         politica = v.get("politica") or self._politica_alloggio(allog)
         # PAGA IN STRUTTURA (FASE 3): online abbiamo incassato solo l'ANTICIPO (fee di servizio

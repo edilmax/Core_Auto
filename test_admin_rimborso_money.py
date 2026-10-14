@@ -18,6 +18,7 @@ from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import crea_router
 from fase87_stripe_webhook import firma_di_test
 from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
+from test_fase160_escrow_garanzia import nella_finestra
 from unittest import mock
 
 import fase59_concierge
@@ -662,6 +663,11 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
                         {"Stripe-Signature": firma_di_test(pl, WH, int(time.time()))})
         return b["riferimento"], b["voucher_token"]
 
+    def _segnala(self, vt):
+        """«C'e' un problema» premuto dall'ospite dentro le sue 24 ore (`nella_finestra`)."""
+        with nella_finestra(self.sys, vt):
+            return self.g("POST", "/api/garanzia/contesta", {"voucher_token": vt})
+
     def _cancella_da_ospite(self, ci, co, pi_id):
         """La strada che NON restituisce i soldi: `POST /api/concierge/cancella`."""
         rif, vt = self._prenota_e_paga(ci, co, pi_id)
@@ -847,7 +853,7 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
     # garanzia 'risolto'). Due prove: il pannello non lo offre, la rotta non lo esegue.
     def _arbitro_ha_deciso(self, ci, co, pi_id):
         rif, vt = self._prenota_e_paga(ci, co, pi_id)
-        s, c = self.g("POST", "/api/garanzia/contesta", {"voucher_token": vt})
+        s, c = self._segnala(vt)
         self.assertEqual(s, 200, "setup: la contestazione deve riuscire: %r" % (c,))
         s, out = self.g("POST", "/api/admin/controversia/risolvi",
                         {"riferimento": rif, "percentuale_ospite": 50}, {"X-Admin-Key": "ak"})
@@ -978,7 +984,7 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
 
         VISTO ROSSO sul codice di produzione: la riga in lista non c'e'."""
         rif, vt = self._prenota_e_paga("2026-09-28", "2026-09-30", "pi_controversia")
-        s, c = self.g("POST", "/api/garanzia/contesta", {"voucher_token": vt})
+        s, c = self._segnala(vt)
         self.assertEqual(s, 200, "setup: la contestazione deve riuscire: %r" % (c,))
         s, out = self.g("POST", "/api/admin/controversia/risolvi",
                         {"riferimento": rif, "percentuale_ospite": 100},
@@ -1072,7 +1078,7 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
         # ── STRADA 4: controversia risolta, in dollari ──
         rif4, vt4 = prenota("2026-10-16", "2026-10-18")
         paga(rif4, "pi_usd_4")
-        s, cst = self.g("POST", "/api/garanzia/contesta", {"voucher_token": vt4})
+        s, cst = self._segnala(vt4)
         self.assertEqual(s, 200, "setup: contestazione non aperta: %r" % (cst,))
         s, out = self.g("POST", "/api/admin/controversia/risolvi",
                         {"riferimento": rif4, "percentuale_ospite": 100},
@@ -1367,7 +1373,7 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
         nessun allarme; Stripe restituisce PIU' di quanto deciso -> allarme."""
         import logging
         rif, vt = self._prenota_e_paga("2026-09-25", "2026-09-27", "pi_arbitrato_15_9")
-        s, c = self.g("POST", "/api/garanzia/contesta", {"voucher_token": vt})
+        s, c = self._segnala(vt)
         self.assertEqual(s, 200, "setup: la contestazione deve riuscire: %r" % (c,))
         s, out = self.g("POST", "/api/admin/controversia/risolvi",
                         {"riferimento": rif, "percentuale_ospite": 50}, {"X-Admin-Key": "ak"})

@@ -32,6 +32,20 @@ HK = {"X-Host-Key": "hk"}
 AK = {"X-Admin-Key": "ak"}
 
 
+def nella_finestra(sis, voucher_token):
+    """L'OROLOGIO DENTRO LE 24 ORE, per premere «tutto ok» o «c'e' un problema» quando lo puo'
+    fare l'ospite vero. Regola del fondatore (D-10 nel libro, riparazione (ad) del 14/10): i due
+    pulsanti valgono solo fra l'arrivo e lo sblocco della garanzia; prima rispondono
+    `non_ancora_arrivato`, dopo `finestra_chiusa`. Le prove scritte prima premevano settimane
+    prima dell'arrivo, o a soggiorno finito: proprio i momenti che la regola vieta. D27 punto 2:
+    la prova si rende realistica, la regola non si allenta. L'istante e' un'ora prima dello
+    sblocco (23 ore dopo l'arrivo), lo stesso di `test_ad_DENTRO_le_24_ore_la_segnalazione_vale`.
+    Si ferma solo `time.time`: chi ha un orologio suo (il preventivo) resta dov'e'."""
+    rif = sis.firma.decodifica(voucher_token)["riferimento"]
+    sblocco = int(sis.garanzia.stato(rif)["sblocco_auto_ts"])
+    return mock.patch("time.time", return_value=float(sblocco - 3600))
+
+
 class TestModulo(unittest.TestCase):
     def setUp(self):
         self.clock = {"t": 1000}
@@ -134,11 +148,15 @@ class TestE2E(unittest.TestCase):
         self.assertEqual(st["stato"], "in_garanzia")
         self.assertEqual(st["importo_host_cents"], 17000)
         # l'ospite conferma "tutto ok" col voucher -> rilasciato all'host
-        s, c = g("POST", "/api/garanzia/conferma", {"voucher_token": b["voucher_token"]})
+        with nella_finestra(sis, b["voucher_token"]):
+            s, c = g("POST", "/api/garanzia/conferma", {"voucher_token": b["voucher_token"]})
         self.assertEqual(s, 200); self.assertEqual(c["stato"], "rilasciato")
-        # contestazione su una gia' rilasciata -> rifiutata
-        s2, _ = g("POST", "/api/garanzia/contesta", {"voucher_token": b["voucher_token"]})
-        self.assertEqual(s2, 409)
+        # contestazione su una gia' rilasciata -> rifiutata. Dentro la finestra anche lei e col
+        # motivo letto: fuori, il 409 verrebbe dall'orologio e non dalla garanzia gia' rilasciata
+        with nella_finestra(sis, b["voucher_token"]):
+            s2, c2 = g("POST", "/api/garanzia/contesta", {"voucher_token": b["voucher_token"]})
+        self.assertEqual((s2, c2.get("motivo"), c2.get("stato")),
+                         (409, "stato_non_valido", "rilasciato"), c2)
 
 
 class TestCassaforteNonApertaDeveGRIDARE(unittest.TestCase):

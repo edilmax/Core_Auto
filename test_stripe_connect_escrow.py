@@ -23,6 +23,7 @@ from fase83_server import crea_router
 from fase87_stripe_webhook import firma_di_test
 from fase101_stripe_connect import ProviderConnect
 from fase163_accettazioni import doc_sha256, CONTRATTO_HOST_VERSIONE
+from test_fase160_escrow_garanzia import nella_finestra
 from unittest import mock
 
 import fase59_concierge
@@ -129,6 +130,12 @@ class TestConnectEscrow(unittest.TestCase):
         return self.r.gestisci(metodo, path, query or {},
                                json.dumps(body) if body is not None else None, headers or {})
 
+    def premi(self, b, pulsante):
+        """«tutto ok» (conferma) o «c'e' un problema» (contesta), dentro le 24 ore dell'ospite."""
+        with nella_finestra(self.sys, b["voucher_token"]):
+            return self.g("POST", "/api/garanzia/" + pulsante,
+                          {"voucher_token": b["voucher_token"]})
+
     def _collega_stripe(self):
         s, d = self.g("GET", "/api/host/stripe_link", headers={"X-Host-Token": self.tok})
         self.assertEqual(s, 200, d)
@@ -172,7 +179,7 @@ class TestConnectEscrow(unittest.TestCase):
         self._collega_stripe()
         b = self._prenota_e_paga("2026-09-05", "2026-09-07")
         netto = self.sys.payout.riepilogo(self.hid)["EUR"]["maturato"]
-        s, out = self.g("POST", "/api/garanzia/conferma", {"voucher_token": b["voucher_token"]})
+        s, out = self.premi(b, "conferma")
         self.assertEqual(s, 200, out)
         trs = self.rete.transfers()
         self.assertEqual(len(trs), 1, "doveva partire UN transfer")
@@ -190,8 +197,10 @@ class TestConnectEscrow(unittest.TestCase):
     def test_doppia_conferma_un_solo_transfer(self):
         self._collega_stripe()
         b = self._prenota_e_paga("2026-09-10", "2026-09-12")
-        self.g("POST", "/api/garanzia/conferma", {"voucher_token": b["voucher_token"]})
-        self.g("POST", "/api/garanzia/conferma", {"voucher_token": b["voucher_token"]})
+        primo, secondo = self.premi(b, "conferma"), self.premi(b, "conferma")
+        # il secondo e' rifiutato dalla garanzia gia' rilasciata, non dall'orologio
+        self.assertEqual((200, 409, "stato_non_valido"),
+                         (primo[0], secondo[0], secondo[1].get("motivo")), (primo, secondo))
         self.assertEqual(len(self.rete.transfers()), 1, "doppio bonifico!")
 
     def test_auto_rilascio_24h_fa_partire_il_bonifico(self):
@@ -215,8 +224,8 @@ class TestConnectEscrow(unittest.TestCase):
     def test_controversia_risolta_manda_la_parte_host(self):
         self._collega_stripe()
         b = self._prenota_e_paga("2026-09-20", "2026-09-22")
-        s, _ = self.g("POST", "/api/garanzia/contesta", {"voucher_token": b["voucher_token"]})
-        self.assertEqual(s, 200)
+        s, c = self.premi(b, "contesta")
+        self.assertEqual(s, 200, c)
         self.assertEqual(len(self.rete.transfers()), 0)        # bloccati durante la disputa
         s, out = self.g("POST", "/api/admin/controversia/risolvi",
                         {"riferimento": b["riferimento"], "percentuale_ospite": 40},
@@ -232,8 +241,8 @@ class TestConnectEscrow(unittest.TestCase):
     def test_host_senza_stripe_resta_manuale(self):
         b = self._prenota_e_paga("2026-09-25", "2026-09-27")   # NESSUN collegamento Stripe
         netto = self.sys.payout.riepilogo(self.hid)["EUR"]["maturato"]
-        s, _ = self.g("POST", "/api/garanzia/conferma", {"voucher_token": b["voucher_token"]})
-        self.assertEqual(s, 200)
+        s, c = self.premi(b, "conferma")
+        self.assertEqual(s, 200, c)
         self.assertEqual(len(self.rete.transfers()), 0, "transfer senza conto collegato!")
         rie = self.sys.payout.riepilogo(self.hid)["EUR"]
         self.assertEqual(rie.get("maturato", 0), netto)        # resta tracciato per il manuale
@@ -249,8 +258,8 @@ class TestConnectEscrow(unittest.TestCase):
         Si percorre la strada di produzione: contestazione, decisione dell'arbitro, bonifico."""
         b = self._prenota_e_paga("2026-11-05", "2026-11-07")   # NESSUN collegamento Stripe
         rif = b["riferimento"]
-        s, _ = self.g("POST", "/api/garanzia/contesta", {"voucher_token": b["voucher_token"]})
-        self.assertEqual(s, 200, "setup: la contestazione deve riuscire")
+        s, c = self.premi(b, "contesta")
+        self.assertEqual(s, 200, "setup: la contestazione deve riuscire: %r" % (c,))
         with self.assertLogs("core_auto.server", level="WARNING") as reg:
             s, out = self.g("POST", "/api/admin/controversia/risolvi",
                             {"riferimento": rif, "percentuale_ospite": 50},
@@ -275,7 +284,7 @@ class TestConnectEscrow(unittest.TestCase):
         b = self._prenota_e_paga("2026-10-01", "2026-10-03")
         netto = self.sys.payout.riepilogo(self.hid)["EUR"]["maturato"]
         self.rete.fallisci_transfer = True
-        s, out = self.g("POST", "/api/garanzia/conferma", {"voucher_token": b["voucher_token"]})
+        s, out = self.premi(b, "conferma")
         self.assertEqual(s, 200, out)                          # il rilascio NON si blocca
         rie = self.sys.payout.riepilogo(self.hid)["EUR"]
         self.assertEqual(rie.get("maturato", 0), netto)        # payout resta (bonifico manuale)

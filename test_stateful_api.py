@@ -28,6 +28,7 @@ Vista ROSSA (regola aurea, provata il 2026-07-27 e ripristinata):
 Stripe/email FINTI come in test_sequenze_avverse/test_quote_coerenza (nessuna rete);
 DB su file temporanei; deadline=None + max_examples calibrato per stare sotto ~60s.
 """
+import contextlib
 import datetime
 import json
 import shutil
@@ -47,6 +48,7 @@ from fase83_server import (crea_router, pagina_voucher_html, riga_pin_voucher,
                            sweep_hold_una_passata)
 from fase87_stripe_webhook import firma_di_test
 from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
+from test_fase160_escrow_garanzia import nella_finestra
 
 WH = "whsec_stateful"
 _BASE = datetime.date.today() + datetime.timedelta(days=30)   # finestra futura, mai "oggi"
@@ -328,8 +330,14 @@ class MacchinaBookinVIP(RuleBasedStateMachine):
     def apri_controversia(self, rif):
         self._passo()
         p = self._pren[rif]
-        s, o = self._g("POST", "/api/garanzia/contesta",
-                       {"voucher_token": p["vt"], "motivo": "problema segnalato"})
+        # «c'e' un problema» vale dall'arrivo (dal 14/10, (ad)): l'orologio dentro le 24 ore
+        # dell'ospite, o la macchina non aprirebbe piu' nessuna controversia e gli incroci con
+        # cancellazioni e rimborsi sparirebbero in silenzio. Senza garanzia decide la rotta.
+        dentro = (nella_finestra(self.sis, p["vt"]) if self.sis.garanzia.stato(rif)
+                  else contextlib.nullcontext())
+        with dentro:
+            s, o = self._g("POST", "/api/garanzia/contesta",
+                           {"voucher_token": p["vt"], "motivo": "problema segnalato"})
         assert s in (200, 400, 403, 404, 409, 410, 422), "contesta status: %d %r" % (s, o)
         if not p["visto_pagato"]:
             # gate del viaggio cliente: la controversia si apre SOLO a pagamento avvenuto
@@ -563,11 +571,15 @@ class TestSequenzePilota(unittest.TestCase):
         rif = m.prenota(pv=pv)
         self.assertIsInstance(rif, str)
         vt = m._pren[rif]["vt"]
-        # PRIMA del pagamento: contesta E conferma rifiutate (409), garanzia intatta
-        s, o = m._g("POST", "/api/garanzia/contesta",
-                    {"voucher_token": vt, "motivo": "griefing"})
+        # PRIMA del pagamento: contesta E conferma rifiutate (409), garanzia intatta. Dentro
+        # le 24 ore dell'ospite (dal 14/10, (ad)): a rifiutare dev'essere il pagamento, non
+        # l'orologio
+        with nella_finestra(m.sis, vt):
+            s, o = m._g("POST", "/api/garanzia/contesta",
+                        {"voucher_token": vt, "motivo": "griefing"})
         self.assertEqual((s, o.get("errore")), (409, "pagamento_non_confermato"), o)
-        s, o = m._g("POST", "/api/garanzia/conferma", {"voucher_token": vt})
+        with nella_finestra(m.sis, vt):
+            s, o = m._g("POST", "/api/garanzia/conferma", {"voucher_token": vt})
         self.assertEqual((s, o.get("errore")), (409, "pagamento_non_confermato"), o)
         self.assertEqual((m.sis.garanzia.stato(rif) or {}).get("stato"), "in_garanzia",
                          "l'escrow non deve muoversi senza pagamento")
@@ -575,8 +587,9 @@ class TestSequenzePilota(unittest.TestCase):
                             "payout host 'trattenuto' da una controversia mai pagata")
         # DOPO il pagamento: il flusso legittimo resta intatto (controllo positivo)
         m.webhook_pagamento(rif=rif, doppio=False)
-        s, o = m._g("POST", "/api/garanzia/contesta",
-                    {"voucher_token": vt, "motivo": "problema vero"})
+        with nella_finestra(m.sis, vt):
+            s, o = m._g("POST", "/api/garanzia/contesta",
+                        {"voucher_token": vt, "motivo": "problema vero"})
         self.assertEqual(s, 200, ("contesta legittima bloccata dopo il pagamento", o))
         m.invarianti_globali()
 

@@ -54,6 +54,7 @@ from fase101_stripe_connect import (crea_provider_connect,
 from fase152_notifiche_prenotazione import CanaleTelegram as CanaleTelegramHost
 from fase152_notifiche_prenotazione import CanaleWhatsApp
 from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
+from test_fase160_escrow_garanzia import nella_finestra
 from fase164_pool_ai import ProviderAI, QuotaEsaurita, crea_pool_ai
 from fase165_adattatori_esterni import (AdattatoreGemini, AdattatoreGroq,
                                         AdattatorePollinations)
@@ -1993,8 +1994,11 @@ class TestApiDbStripeCheckout(_BaseIntegrazione):
         # e se qualcuno prova a sbloccare l'escrow: NESSUN transfer verso l'host, mai
         self.sis.registro_host.imposta_stripe_account(self.host_id, "acct_HOST1")
         if b.get("voucher_token"):
-            self.g("POST", "/api/garanzia/conferma",
-                   {"voucher_token": b["voucher_token"]})
+            # dentro le 24 ore dell'ospite: fuori, dal 14/10 ((ad)) lo fermerebbe gia'
+            # l'orologio e questa riga non proverebbe piu' niente sul pagamento mancato
+            with nella_finestra(self.sis, b["voucher_token"]):
+                self.g("POST", "/api/garanzia/conferma",
+                       {"voucher_token": b["voucher_token"]})
         self.assertEqual([r for r in self.connect.richieste
                           if r["url"].endswith("/transfers")], [],
                          "BONIFICO ALL'HOST su una prenotazione mai pagata")
@@ -2211,9 +2215,14 @@ class TestApiDbConnectPayout(_BaseIntegrazione):
         self.assertEqual(self.webhook(self.rif)[0], 200)
         self.sis.registro_host.imposta_stripe_account(self.host_id, "acct_HOST1")
 
+    def conferma(self):
+        """«tutto ok» premuto dall'ospite dentro le sue 24 ore (`nella_finestra`)."""
+        with nella_finestra(self.sis, self.b["voucher_token"]):
+            return self.g("POST", "/api/garanzia/conferma",
+                          {"voucher_token": self.b["voucher_token"]})
+
     def test_sblocco_escrow_manda_il_transfer_e_aggiorna_il_disco(self):
-        s, out = self.g("POST", "/api/garanzia/conferma",
-                        {"voucher_token": self.b["voucher_token"]})
+        s, out = self.conferma()
         self.assertEqual(s, 200, out)
         # 1) la richiesta a Stripe: transfer con Idempotency-Key per riferimento
         tr = [r for r in self.connect.richieste if r["url"].endswith("/transfers")]
@@ -2233,8 +2242,7 @@ class TestApiDbConnectPayout(_BaseIntegrazione):
         (visibile, ripagabile) e a giornale resta la prova che serve il bonifico manuale."""
         self.sis.connect._fetch = FintoStripeForm(guasto=urllib.error.HTTPError(
             "https://api.stripe.com", 500, "boom", {}, None))
-        s, out = self.g("POST", "/api/garanzia/conferma",
-                        {"voucher_token": self.b["voucher_token"]})
+        s, out = self.conferma()
         self.assertEqual(s, 200, out)
         pay = self.sql("payout", "SELECT * FROM payout WHERE prenotazione_id=?", (self.rif,))
         self.assertEqual(pay[0]["stato"], "maturato", "payout dato per partito senza transfer")
@@ -2247,8 +2255,10 @@ class TestApiDbConnectPayout(_BaseIntegrazione):
         self.assertEqual(len(manuale), 1, "nessuna traccia del bonifico da fare a mano")
 
     def test_secondo_sblocco_non_manda_un_secondo_bonifico(self):
-        self.g("POST", "/api/garanzia/conferma", {"voucher_token": self.b["voucher_token"]})
-        self.g("POST", "/api/garanzia/conferma", {"voucher_token": self.b["voucher_token"]})
+        primo, secondo = self.conferma(), self.conferma()
+        # il secondo e' rifiutato dalla garanzia gia' rilasciata, non dall'orologio
+        self.assertEqual((200, 409, "stato_non_valido"),
+                         (primo[0], secondo[0], secondo[1].get("motivo")), (primo, secondo))
         tr = [r for r in self.connect.richieste if r["url"].endswith("/transfers")]
         self.assertEqual(len(tr), 1, "DOPPIO BONIFICO")
         self.assertEqual(len(self.sql("payout", "SELECT * FROM payout WHERE prenotazione_id=?",
@@ -2257,7 +2267,8 @@ class TestApiDbConnectPayout(_BaseIntegrazione):
     def test_transfer_nella_valuta_incassata_e_mai_piu_del_netto(self):
         """Il bonifico all'host deve partire nella STESSA valuta incassata dall'ospite e non
         superare MAI il netto host: una valuta diversa qui = perdita secca sul cambio."""
-        self.g("POST", "/api/garanzia/conferma", {"voucher_token": self.b["voucher_token"]})
+        s, out = self.conferma()
+        self.assertEqual(s, 200, out)
         tr = [r for r in self.connect.richieste if r["url"].endswith("/transfers")]
         self.assertEqual(len(tr), 1)
         incassato = self.sql("finanza",
@@ -2271,9 +2282,8 @@ class TestApiDbConnectPayout(_BaseIntegrazione):
 
     def test_host_senza_conto_stripe_nessun_transfer_ma_payout_tracciato(self):
         self.sis.registro_host.imposta_stripe_account(self.host_id, "")
-        s, _ = self.g("POST", "/api/garanzia/conferma",
-                      {"voucher_token": self.b["voucher_token"]})
-        self.assertEqual(s, 200)
+        s, out = self.conferma()
+        self.assertEqual(s, 200, out)
         self.assertEqual([r for r in self.connect.richieste
                           if r["url"].endswith("/transfers")], [])
         pay = self.sql("payout", "SELECT * FROM payout WHERE prenotazione_id=?", (self.rif,))
@@ -2702,7 +2712,15 @@ class TestApiDbSegretiFuoriDaiLog(_BaseIntegrazione):
             self.webhook(b["riferimento"])
             self.webhook(b["riferimento"], firma_valida=False)   # anche il caso d'errore
             self.sis.registro_host.imposta_stripe_account(self.host_id, "acct_HOST1")
-            self.g("POST", "/api/garanzia/conferma", {"voucher_token": b["voucher_token"]})
+            # dentro le 24 ore dell'ospite, o dal 14/10 ((ad)) il bonifico non parte e il
+            # giro «completo» salterebbe proprio la chiamata che porta la chiave
+            with nella_finestra(self.sis, b["voucher_token"]):
+                s, out = self.g("POST", "/api/garanzia/conferma",
+                                {"voucher_token": b["voucher_token"]})
+            self.assertEqual(s, 200, out)
+            self.assertEqual(1, len([r for r in self.connect.richieste
+                                     if r["url"].endswith("/transfers")]),
+                             "il giro non e' passato dal bonifico all'host")
         testo = log.come_testo()
         self.assertNotIn("sk_test_x", testo, "CHIAVE STRIPE NEI LOG")
         self.assertNotIn(WH, testo, "SEGRETO DEL WEBHOOK NEI LOG")

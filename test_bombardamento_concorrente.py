@@ -23,6 +23,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 
 import fase85_pagamenti_stripe as _stripe
 from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
@@ -130,6 +131,18 @@ class TestBombardamentoConcorrente(unittest.TestCase):
 
             KINDS = ["guest_cancel", "host_cancel", "admin_refund", "contesta", "risolvi",
                      "webhook_dup", "webhook_dup", "tick"]
+            # L'ISTANTE DELLA TEMPESTA (dal 14/10, (ad)): «c'e' un problema» vale solo dall'arrivo
+            # allo sblocco della garanzia. All'ora vera, 2-6 giorni prima di ogni arrivo, la
+            # contestazione era sempre rifiutata e l'arbitro non aveva niente da decidere: la
+            # disputa spariva dalla tempesta in silenzio. Si scatena un'ora dopo il check-in del
+            # terzo giorno: chi arriva quel giorno e' DENTRO le sue 24 ore (e puo' ancora
+            # cancellare fino a mezzanotte: l'incrocio di F1), chi e' arrivato il giorno prima e'
+            # FUORI, gli altri devono ancora arrivare. Un orologio solo, fermato prima di
+            # liberare i thread e rimesso dopo l'ultimo: nessun thread lo tocca.
+            terzo = (oggi + datetime.timedelta(days=3)).isoformat()
+            dentro = [rif for (_s, rif, _v, ci, _c) in vouchers if ci == terzo]
+            self.assertTrue(dentro, "setup: nessuna prenotazione arriva il terzo giorno")
+            istante = int(sis.garanzia.stato(dentro[0])["sblocco_auto_ts"]) - 23 * 3600
             errs = []
             threads = []
             total = len(vouchers) * agenti_per_voucher
@@ -161,7 +174,11 @@ class TestBombardamentoConcorrente(unittest.TestCase):
                             r.gestisci("POST", "/api/payments/webhook", {}, pl,
                                        {"Stripe-Signature": firma_di_test(pl, WH, int(time.time()))})
                         elif kind == "tick":
-                            sis.garanzia.auto_rilascia(ora_ts=int(time.time()) + 30 * 3600)
+                            # il giro orario allo STESSO istante della tempesta: rilascia chi e'
+                            # gia' fuori dalle sue 24 ore. Con l'ora di 30 ore dopo (com'era
+                            # quando la tempesta cadeva giorni prima degli arrivi) rilasciava
+                            # anche chi era dentro, e nessuna contestazione passava piu'
+                            sis.garanzia.auto_rilascia()
                     except Exception as e:  # un'eccezione qui e' un bug
                         errs.append((kind, rif, type(e).__name__, str(e)[:80]))
                 return f
@@ -172,11 +189,12 @@ class TestBombardamentoConcorrente(unittest.TestCase):
                     kind = rnd.choice(KINDS)
                     threads.append(threading.Thread(
                         target=make(kind, slug, rif, vt, ci, co, real_idem)))
-            for t in threads:
-                t.start()
-            for t in threads:
-                t.join(60)
-            sis.garanzia.auto_rilascia(ora_ts=int(time.time()) + 30 * 3600)
+            with mock.patch("time.time", return_value=float(istante)):
+                for t in threads:
+                    t.start()
+                for t in threads:
+                    t.join(60)
+                sis.garanzia.auto_rilascia(ora_ts=int(time.time()) + 30 * 3600)
 
             # ---- INVARIANTE ECONOMICA per voucher ----
             viol = []

@@ -43,6 +43,7 @@ import sys
 import tempfile
 import threading
 import time
+from unittest import mock
 
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -324,8 +325,13 @@ def g2_controversia_vs_rilascio(d, sis, r, g, tk, oggi):
             for x in rel:                                   # stessa forma del server
                 r._trasferisci_all_host(x["prenotazione_id"], x["host_riceve_cents"])
 
-        t1, t2 = threading.Thread(target=contesta), threading.Thread(target=rilascia)
-        t1.start(); t2.start(); t1.join(); t2.join()
+        # la gara vera e' all'ultimo secondo delle 24 ore dell'ospite (dal 14/10, (ad)): prima
+        # dell'arrivo l'orologio rifiuta la contestazione e il rilascio vinceva sempre da solo,
+        # una gara senza avversario. Un orologio solo, fermato prima dei due thread.
+        sbl = int((gz.stato(rif) or {}).get("sblocco_auto_ts") or 0)
+        with mock.patch("time.time", return_value=float(sbl - 1)):
+            t1, t2 = threading.Thread(target=contesta), threading.Thread(target=rilascia)
+            t1.start(); t2.start(); t1.join(); t2.join()
         st = (gz.stato(rif) or {}).get("stato")
         pay = sis.payout.stato_di(rif)
         vinta_c = out.get("s_api") == 200 and (out.get("b_api") or {}).get("ok") is True

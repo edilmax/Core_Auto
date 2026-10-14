@@ -271,8 +271,14 @@ def percorri(salta=None, chiave_stripe="sk"):
         p("8-bis dopo il pagamento il maturato e' > 0",
           any((v or {}).get("maturato") for v in (dopo or {}).values()), json.dumps(dopo))
 
-        s, c = g("POST", "/api/garanzia/conferma",
-                 {"voucher_token": (b or {}).get("voucher_token")})
+        # dal 14/10 ((ad), «autorizzato») «tutto ok» vale solo dall'arrivo allo sblocco della
+        # garanzia: l'ospite lo preme un'ora prima dello sblocco, come quello vero. Fuori da
+        # quella finestra la rotta risponde 409 e questo passo diventerebbe rosso per l'orologio
+        from unittest import mock
+        sblocco_1 = int((sis.garanzia.stato(rif) or {}).get("sblocco_auto_ts") or 0)
+        with mock.patch("time.time", return_value=float(sblocco_1 - 3600)):
+            s, c = g("POST", "/api/garanzia/conferma",
+                     {"voucher_token": (b or {}).get("voucher_token")})
         p("9 l'ospite conferma il soggiorno", s == 200 and c.get("stato") == "rilasciato",
           "http %s %s" % (s, (c or {}).get("stato")))
 

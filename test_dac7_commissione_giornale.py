@@ -25,6 +25,7 @@ from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import crea_router
 from fase87_stripe_webhook import firma_di_test
 from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
+from test_fase160_escrow_garanzia import nella_finestra
 
 WH = "whsec_dc"
 
@@ -103,7 +104,11 @@ class TestDac7CommissioneGiornale(unittest.TestCase):
                              "data": {"object": {"id": "cs_" + rif, "metadata": {"riferimento": rif}}}})
             r.gestisci("POST", "/api/payments/webhook", {}, pl,
                        {"Stripe-Signature": firma_di_test(pl, WH, int(time.time()))})
-            g("POST", "/api/garanzia/conferma", {"voucher_token": vt})
+            # «tutto ok» dentro le 24 ore dell'ospite (dal 14/10, (ad)): fuori la rotta lo
+            # rifiuta, nessun bonifico parte, e «con o senza hold» confrontava due casi uguali
+            with nella_finestra(sis, vt):
+                s, ok = g("POST", "/api/garanzia/conferma", {"voucher_token": vt})
+            self.assertEqual(s, 200, ok)
             dj = json.loads(sis.pagamenti_pendenti.info(rif).get("corpo_json") or "{}")
             comm_vero += int(dj["commissione_cents"]) + int(dj["costo_pagamento_cents"])
             netto_vero += int(dj["netto_host_cents"])
