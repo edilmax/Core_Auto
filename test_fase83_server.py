@@ -3006,6 +3006,72 @@ class TestUnaControversiaApertaFermaISoldi(_BancoDeiSoldiDelServer):
                          % (c,))
         self.assertEqual("contestato", self.sis.garanzia.stato(rif)["stato"])
 
+    # ⛔ LE QUATTRO PROVE QUI SOTTO LE HA CHIESTE LA MUTAZIONE SUL DIFF DELLA CI (commit a8a2e28,
+    # job `caselle`, 14/10): quattro punti di `_controversia_aperta` e `_fuori_dalla_finestra`
+    # si potevano rompere senza che nessuna prova se ne accorgesse.
+
+    def test_ad_al_SECONDO_dell_arrivo_si_puo_gia_premere(self):
+        """Il confine dell'arrivo (`<` -> `<=` sopravvissuto). Le due direzioni: un secondo
+        prima no, al secondo dell'arrivo si'. Cosi' la prova fissa il confine DOVE sta, non
+        solo da che parte."""
+        from fase160_escrow_garanzia import FINESTRA_ORE_DEFAULT
+        arrivo = -FINESTRA_ORE_DEFAULT * 3600
+        for rotta in ("/api/garanzia/contesta", "/api/garanzia/conferma"):
+            with self.subTest(rotta=rotta):
+                b = self._pagata("casa-arr" + rotta[-4:], 2, "pi_arr" + rotta[-4:])
+                s, c = self._all_istante(b, arrivo - 1, rotta)
+                self.assertEqual((409, "non_ancora_arrivato"), (s, (c or {}).get("errore")),
+                                 "%s UN SECONDO PRIMA DELL'ARRIVO: %s %r" % (rotta, s, c))
+                s, c = self._all_istante(b, arrivo, rotta)
+                self.assertEqual(200, s, "%s AL SECONDO DELL'ARRIVO L'OSPITE NON PUO' PREMERE: %r"
+                                 % (rotta, c))
+
+    def test_ad_al_SECONDO_dello_sblocco_la_finestra_e_gia_chiusa(self):
+        """Il confine dello sblocco (`>=` -> `>` sopravvissuto): allo sblocco i soldi sono
+        dell'host e l'ospite non li ferma piu'; un secondo prima si'. Il rifiuto viene PRIMA,
+        cosi' la garanzia e' ancora aperta quando si prova il secondo prima."""
+        for rotta in ("/api/garanzia/contesta", "/api/garanzia/conferma"):
+            with self.subTest(rotta=rotta):
+                b = self._pagata("casa-sbl" + rotta[-4:], 2, "pi_sbl" + rotta[-4:])
+                rif = b["riferimento"]
+                prima = self._fotografia(rif)
+                s, c = self._all_istante(b, 0, rotta)
+                self.assertEqual((409, "finestra_chiusa"), (s, (c or {}).get("errore")),
+                                 "%s ACCETTATO AL SECONDO DELLO SBLOCCO: %s %r" % (rotta, s, c))
+                self.assertEqual(prima, self._fotografia(rif), "un rifiuto ha mosso soldi")
+                s, c = self._all_istante(b, -1, rotta)
+                self.assertEqual(200, s, "%s UN SECONDO PRIMA DELLO SBLOCCO L'OSPITE NON PUO' "
+                                         "PREMERE: %r" % (rotta, c))
+
+    def _garanzia_illeggibile(self):
+        import sqlite3
+
+        def esplode(*a, **k):
+            raise sqlite3.OperationalError("database is locked")
+        self.sis.garanzia.stato = esplode
+
+    def test_garanzia_ILLEGGIBILE_la_cancellazione_dell_host_PROSEGUE(self):
+        """Il freno di F1 legge la garanzia; se non si legge (un guasto nostro) la cancellazione
+        va avanti, come gli altri freni: mai bloccare una cancellazione legittima per un guasto
+        nostro (`return False` -> `True` sopravvissuto). Dall'HOST perche' la cancellazione
+        dell'ospite legge la garanzia gia' prima (`_garanzia_gia_divisa`, che su un guasto
+        solleva apposta) e non arriverebbe mai a questo freno."""
+        b = self._pagata("casa-gz-rotta", 2, "pi_gz_rotta")
+        self._garanzia_illeggibile()
+        s, c = self._cancella_host(b["riferimento"])
+        self.assertEqual((200, "cancellata_host"), (s, (c or {}).get("stato")),
+                         "UNA GARANZIA ILLEGGIBILE HA FERMATO LA CANCELLAZIONE: %s %r" % (s, c))
+
+    def test_garanzia_ILLEGGIBILE_il_registro_porta_l_ERRORE_vero(self):
+        """L'altra meta' dello stesso guasto (`exc_info=True` -> `False` sopravvissuto): chi
+        legge il registro deve trovare l'errore vero, del tipo giusto, non solo la frase."""
+        b = self._pagata("casa-gz-registro", 2, "pi_gz_registro")
+        self._garanzia_illeggibile()
+        with self.ascolta() as righe:
+            self._cancella_host(b["riferimento"])
+        self.assertTrue(self.errori_con(righe, "CONTROVERSIA NON LETTA",
+                                        "|exc_info:OperationalError"), "%r" % (righe,))
+
 
 class _StripeCheConosceLAddebito(StripeColBlocco):
     """Il fornitore finto del blocco sulla carta (`test_blocco_carta`), piu' la lettura
