@@ -291,6 +291,115 @@ class TestNessunaCifraOrfana(unittest.TestCase):
             self.assertIn(atteso, r, "README: manca '%s' nella sezione consensi" % atteso)
 
 
+class TestIlLibroDiceLeRegoleDelMotore(unittest.TestCase):
+    """📕 IL LIBRO (capitolo 1 del README, deciso dal fondatore il 2026-10-13) contro il motore.
+
+    Perche' esiste: il 13/10 le regole di cancellazione stavano in sei posti e nel README in
+    zero righe, e il fondatore non le ritrovava. Il libro ora le scrive; ogni cifra che queste
+    prove pretendono nel libro si LEGGE dal codice, mai scritta qui a mano. Se il motore cambia
+    e il libro no, diventa rosso lo stesso giorno.
+
+    ⚠️ COSA NON GUARDA (D18 punto 3): solo le cifre qui sotto. Non le frasi intorno, non i
+    `file:riga` citati (si spostano a ogni modifica: li ricontrolla chi rilegge), non l'esempio
+    di Anna e Luca, non i capitoli che ancora non esistono.
+    """
+
+    TETTO_GIORNI = 400              # oltre, nessuna politica distingue piu' niente
+
+    @staticmethod
+    def _giorni(n):
+        return "%d %s" % (n, "giorno" if n == 1 else "giorni")
+
+    def _fascia(self, scaglioni, bps):
+        """La cella del libro per una fascia di rimborso, scritta dagli scaglioni del motore."""
+        from fase111_cancellazione import _bps_per_giorni
+        giorni = [g for g in range(self.TETTO_GIORNI + 1)
+                  if _bps_per_giorni(g, scaglioni) == bps]
+        if not giorni:
+            return "—"
+        lo, hi = giorni[0], giorni[-1]
+        self.assertEqual(giorni, list(range(lo, hi + 1)),
+                         "una fascia a buchi: la tabella del libro non sa scriverla, va rifatta")
+        if hi == self.TETTO_GIORNI:
+            return "sempre" if lo == 0 else self._giorni(lo) + " o più"
+        if lo == hi:
+            return self._giorni(lo)
+        return "da %d a %s" % (lo, self._giorni(hi))
+
+    def test_la_tabella_delle_politiche_e_quella_del_motore(self):
+        from fase111_cancellazione import POLITICHE
+        r = _leggi("README.md")
+        self.assertIn("### 1.3 Le %d politiche di cancellazione" % len(POLITICHE), r)
+        for chiave, pol in POLITICHE.items():
+            usati = {bps for _, bps in pol.scaglioni}
+            self.assertLessEqual(usati, {10000, 5000, 0},
+                                 "%s rende una quota che la tabella del libro non ha: va "
+                                 "aggiunta una colonna" % chiave)
+            riga = "| **%s** | %s | %s | %s |" % (
+                chiave.replace("_", " ").capitalize(), self._fascia(pol.scaglioni, 10000),
+                self._fascia(pol.scaglioni, 5000), self._fascia(pol.scaglioni, 0))
+            self.assertIn(riga, r, "README §1.3 non dice cio' che fa il motore. Atteso: %s"
+                          % riga)
+
+    def test_il_ripensamento_e_quello_del_motore(self):
+        import fase83_server as S
+        r = _leggi("README.md")
+        sec = S.SECONDI_RIPENSAMENTO
+        self.assertIn("**entro %d ore vere** (%s secondi)"
+                      % (sec // 3600, "{:,}".format(sec).replace(",", ".")), r)
+        # i giorni minimi all'arrivo non hanno una costante: si leggono dalla riga ESEGUIBILE
+        m = re.search(r"ripensamento = _entro_ripensamento\(v\) and \(giorni >= (\d+)\)",
+                      _leggi("fase83_server.py"))
+        self.assertIsNotNone(m, "la regola dei giorni minimi non e' piu' scritta cosi' in "
+                                "_cancella_prenotazione: rileggerla e aggiornare questa prova")
+        self.assertIn("**almeno %s giorni** all'arrivo" % m.group(1), r)
+
+    def test_blocco_sulla_carta_stanza_ferma_e_garanzia(self):
+        from fase85_pagamenti_stripe import GIORNI_MINIMI_BLOCCO
+        from fase160_escrow_garanzia import FINESTRA_ORE_DEFAULT
+        from fase162_pagamenti_pendenti import HOLD_SECONDI_DEFAULT
+        r = _leggi("README.md")
+        self.assertIn("**Arrivo fra %d giorni o più**" % GIORNI_MINIMI_BLOCCO, r)
+        self.assertIn("**Arrivo fra meno di %d giorni**" % GIORNI_MINIMI_BLOCCO, r)
+        self.assertIn("per **%d minuti**" % (HOLD_SECONDI_DEFAULT // 60), r)
+        self.assertIn("**%d ore dopo l'arrivo**" % FINESTRA_ORE_DEFAULT, r)
+
+    def test_la_penale_dell_host_e_quella_del_motore(self):
+        import fase83_server as S
+        self.assertIn("**penale del %d%%**" % (S.PENALE_HOST_BPS // 100), _leggi("README.md"))
+
+    def test_il_credito_viaggio_e_quello_del_motore(self):
+        """Si chiama la funzione VERA che conia il credito: tetto, quota e durata sono scritti
+        dentro di lei, non in costanti, e una lettura del sorgente li vedrebbe anche in un
+        commento (sbaglio S6)."""
+        import time
+        import types
+        import fase83_server as S
+        coniati = []
+
+        class _Firma:
+            def codifica(self, dati):
+                coniati.append(dati)
+                return "gettone"
+
+        finto = types.SimpleNamespace(_sys=types.SimpleNamespace(firma=_Firma()))
+        prima = int(time.time())
+        tetto, _ = S.RouterHTTP._credito_anti_rimpianto(finto, 10 ** 9)
+        durata = (coniati[-1]["exp"] - prima) // 86400
+        meta, _ = S.RouterHTTP._credito_anti_rimpianto(finto, 1000)
+        self.assertEqual(meta * 2, 1000, "il libro dice «metà della penale»")
+        r = _leggi("README.md")
+        self.assertIn("**metà della penale**", r)
+        self.assertIn("al massimo **%d €** (%s centesimi"
+                      % (tetto // 100, "{:,}".format(tetto).replace(",", ".")), r)
+        self.assertIn("**%d giorni**, si usa" % durata, r)
+
+    def test_il_servizio_del_paga_in_struttura(self):
+        from fase188_paga_struttura import FEE_PER_NOTTE_CENTS
+        self.assertIn("**%d,%02d € a notte**" % divmod(FEE_PER_NOTTE_CENTS, 100),
+                      _leggi("README.md"))
+
+
 class TestTerminiPubblici(unittest.TestCase):
     def test_termini_dichiarano_la_tariffa(self):
         """Il testo italiano che fa fede deve dire le quattro cose che contano.
