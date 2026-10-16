@@ -311,6 +311,40 @@ REGISTRO = [
         "test": "test_se_il_salvataggio_dice_di_non_aver_salvato_non_si_risponde_2xx",
         "gravita": "critica", "area": "soldi",
     },
+    {
+        "codice": "MONEY-28",
+        "descrizione": "(aq), 16/10: il rimborso dell'admin su un blocco carta gia' tolto "
+                       "dall'host (stato 'cancellata_host', nessun soldo entrato) rispondeva "
+                       "«nessun incasso da restituire» ma scriveva nel giornale un «rimborso» "
+                       "pari al totale: nella lista nasceva un debito col bottone verso chi "
+                       "non aveva pagato niente. Ora la riga si scrive solo se lo stato era "
+                       "'pagato'.",
+        "file": "test_macchina_dei_soldi.py",
+        "test": "test_S18_aq_il_rimborso_dell_admin_su_un_blocco_gia_tolto_non_scrive_un_debito",
+        "gravita": "media", "area": "soldi",
+    },
+    {
+        "codice": "MONEY-29",
+        "descrizione": "S4 (causa 1 di S18), 16/10: con la banca che contesta il pagamento "
+                       "la riga del rimborso dovuto restava col bottone acceso e il pulsante "
+                       "finiva in 502 (Stripe rifiuta: `charge_disputed`). Ora la scheda chiede "
+                       "a Stripe `latest_charge.disputed`: contestato o «non lo so» -> niente "
+                       "bottone, il pulsante risponde 409 col motivo.",
+        "file": "test_macchina_dei_soldi.py",
+        "test": "test_S18_con_la_contestazione_della_banca_il_pulsante_e_spento_e_non_da_5xx",
+        "gravita": "media", "area": "soldi",
+    },
+    {
+        "codice": "MONEY-30",
+        "descrizione": "(al), 16/10: dopo la decisione dell'arbitro con zero all'host, la "
+                       "cancellazione dell'host dopo la partenza passava (il freno guardava solo "
+                       "`host_riceve_cents > 0`) e riscriveva la cifra dell'arbitro col 100% per "
+                       "cancellazione host. Ora con la garanzia 'risolto' l'host non cancella "
+                       "piu' (regola del fondatore, 16/10).",
+        "file": "test_escrow_gia_liquidato.py",
+        "test": "test_al_dopo_la_partenza_l_host_non_cambia_il_rimborso_deciso_dall_arbitro",
+        "gravita": "alta", "area": "soldi",
+    },
 
     # ---------------------------- SICUREZZA --------------------------------
     {

@@ -136,6 +136,11 @@ def _rete_finta(u, b, h):
     sessione di comodo, come prima."""
     if not b and "/checkout/sessions/" in u:
         return {"id": u.rsplit("/", 1)[-1], "payment_status": "paid"}
+    if not b and "/payment_intents/" in u:
+        # «la banca ha contestato?» (S4, 16/10): `disputed` c'e' sempre nell'oggetto Charge
+        # vero (docs.stripe.com/api/charges/object); qui nessuna contestazione.
+        pi = u.split("?", 1)[0].rstrip("/").rsplit("/", 1)[-1]
+        return {"id": pi, "latest_charge": {"id": "ch_" + pi[3:], "disputed": False}}
     return {"url": "https://x/cs", "id": "cs_" + str(time.time_ns())}
 
 

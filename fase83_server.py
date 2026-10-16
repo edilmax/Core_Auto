@@ -5208,7 +5208,14 @@ class RouterHTTP:
                     _pi = str(dj.get("stripe_pi") or "")
                     # BLOCCO SULLA CARTA: soldi mai entrati -> si ANNULLA, niente riga
                     _senza_incasso = _era_pagato and self._chiudi_blocco(rif, rec)
-                    if tot > 0 and not _senza_incasso:
+                    # ⛔ (aq), 16/10: la riga «rimborso» e' un DEBITO verso l'ospite (la lista dei
+                    # rimborsi dovuti e il pulsante si reggono su di lei). Si scrive solo se
+                    # l'ospite ha pagato: prima bastava `not _senza_incasso`, che con lo stato
+                    # 'cancellata_host' (blocco gia' tolto dall'host) e' vero, e il giornale diceva
+                    # «dobbiamo 200 EUR» a chi non aveva pagato niente, mentre questa stessa
+                    # risposta diceva «nessun incasso da restituire». Guardia:
+                    # `test_macchina_dei_soldi.test_S18_aq_il_rimborso_dell_admin_su_un_blocco_gia_tolto_non_scrive_un_debito`.
+                    if tot > 0 and _era_pagato and not _senza_incasso:
                         self._giornale(tipo="rimborso", riferimento=rif, soggetto="ospite:" + rif,
                                        importo_cents=tot, valuta=_valuta,
                                        causale="rimborso disposto da admin")
@@ -5414,6 +5421,20 @@ class RouterHTTP:
             gia = bool(stripe_ok and int((esito or {}).get("rimborsato_cents") or 0) > 0)
         if not stripe_ok:
             manca.append("verifica_stripe")
+        # ── LA CONTESTAZIONE DELLA BANCA (S4, 16/10): con una contestazione Stripe non rimborsa
+        # (`charge_disputed`), e prima il bottone restava acceso e il pulsante finiva in 502.
+        # Persa: i soldi all'ospite li da' la sua banca, un nostro rimborso li darebbe due volte;
+        # vinta: tornano a noi. In tutti e due i casi decide una persona, non il bottone.
+        # Si chiede a Stripe e non al nostro database: se l'host aveva gia' cancellato, la
+        # garanzia e' chiusa e `_contestazione_carta` non ha scritto niente di durevole.
+        # Un «non lo so» tiene spento il bottone come un «si'». Guardia:
+        # `test_macchina_dei_soldi.test_S18_con_la_contestazione_della_banca_il_pulsante_e_spento_e_non_da_5xx`.
+        if pi_ and sp is not None and hasattr(sp, "contestazione_di"):
+            esito_c = sp.contestazione_di(pi_)
+            if not (isinstance(esito_c, dict) and esito_c.get("ok")):
+                manca.append("verifica_contestazione")
+            elif esito_c.get("contestato"):
+                manca.append("contestazione_banca")
         riga = {"riferimento": str(rif), "pagato_cents": pagato, "dovuto_cents": dovuto,
                 "valuta": str(mov.get("valuta") or "EUR"),
                 "attesa_ore": max(0, (int(_t.time()) - int(mov.get("ts") or 0)) // 3600),
@@ -7375,11 +7396,18 @@ class RouterHTTP:
         # cosi' — cancellare un soggiorno gia' iniziato/confermato — passa dall'assistenza,
         # che ha l'arbitrato e puo' recuperare dall'host. Fail-open su errore della guardia
         # (mai bloccare una cancellazione legittima per un bug nostro).
+        # ⛔ (al), 16/10: con la garanzia 'risolto' (decisione dell'arbitro) si ferma SEMPRE, anche
+        # con zero all'host. Prima il freno guardava solo `host_riceve_cents > 0`: con l'arbitro
+        # al 100% per l'ospite non scattava, e la cancellazione dopo la partenza riscriveva la
+        # sua cifra col «100% per cancellazione host». Regola del fondatore (16/10, proposta mia,
+        # risposta «mi sembra la cosa giusta, boh»): dopo la decisione dell'arbitro l'host non
+        # cancella piu'. Guardia: `test_escrow_gia_liquidato.test_al_dopo_la_partenza_l_host_non_cambia_il_rimborso_deciso_dall_arbitro`.
         try:
             _gz = getattr(self._sys, "garanzia", None)
             _st = _gz.stato(ref) if _gz is not None else None
-            if isinstance(_st, dict) and _st.get("stato") in ("rilasciato", "risolto") \
-                    and int(_st.get("host_riceve_cents", 0) or 0) > 0:
+            if isinstance(_st, dict) and (_st.get("stato") == "risolto" or (
+                    _st.get("stato") == "rilasciato"
+                    and int(_st.get("host_riceve_cents", 0) or 0) > 0)):
                 logger.error("HOST CANCELLA BLOCCATA | RIF: %s | escrow '%s' gia' liquidato "
                              "all'host per %d: rimborsare il cliente qui sarebbe una perdita "
                              "a nostro carico. Serve l'assistenza (arbitrato/recupero).",
@@ -7387,8 +7415,11 @@ class RouterHTTP:
                              int(_st.get("host_riceve_cents", 0) or 0))
                 return 409, {"errore": "escrow_gia_liquidato",
                              "gia_liquidato_cents": int(_st.get("host_riceve_cents", 0) or 0),
-                             "nota": "il soggiorno risulta gia' confermato e il pagamento "
-                                     "sbloccato: contatta l'assistenza per l'annullamento."}
+                             "nota": ("c'e' gia' la decisione dell'arbitro su questa "
+                                      "prenotazione" if _st.get("stato") == "risolto"
+                                      else "il soggiorno risulta gia' confermato e il "
+                                      "pagamento sbloccato")
+                                     + ": contatta l'assistenza per l'annullamento."}
         except Exception:
             logger.warning("guardia escrow su cancellazione host fallita (ignorata)",
                            exc_info=True)

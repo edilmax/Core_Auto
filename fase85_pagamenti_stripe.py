@@ -476,6 +476,53 @@ class ProviderStripe:
             return {"ok": False, "rimborsi": [], "rimborsato_cents": 0,
                     "motivo": "%s: %s" % (exc.__class__.__name__, exc)}
 
+    def contestazione_di(self, payment_intent: Any) -> Dict[str, Any]:
+        """CHIEDE A STRIPE se la banca dell'ospite ha contestato quel pagamento (S4, 16/10).
+
+        ⛔ PERCHE' ESISTE. «Non puoi emettere un rimborso al di fuori della procedura di
+        contestazione quando ce n'e' una» (docs.stripe.com/disputes/how-disputes-work, letta il
+        16/10/2026), e Stripe lo rifiuta con `charge_disputed`. Il pulsante dei rimborsi dovuti
+        lo scopriva solo premendo, con un 502; e il bottone restava acceso. Il nostro database
+        non lo sa sempre: se l'host aveva gia' cancellato, la garanzia e' chiusa e il webhook
+        della contestazione non trova niente da fermare. La verita' ce l'ha chi muove i soldi.
+
+        LETTURA SOLA: GET del PaymentIntent con `expand` dell'addebito, e il suo campo
+        `disputed` («Whether the charge has been disputed», oggetto Charge). Senza addebito
+        (`latest_charge` nullo) non c'e' niente da contestare.
+
+        ⛔ `ok=False` vuol dire «NON LO SO», mai «non contestato»: come `rimborsi_di`, e chi
+        chiama deve tenere i soldi fermi.
+
+        Ritorna sempre un dict: {'ok', 'contestato', 'motivo'}."""
+        if not (isinstance(payment_intent, str) and payment_intent.startswith("pi_")):
+            return {"ok": False, "contestato": False, "motivo": "payment_intent_assente"}
+        try:
+            from urllib.parse import urlencode
+            url = (PAGAMENTI_URL + "/" + payment_intent + "?"
+                   + urlencode([("expand[]", "latest_charge")]))
+            resp = self._fetch(url, None, {"Authorization": "Bearer " + self._key})
+            if not (isinstance(resp, dict) and resp.get("id") == payment_intent):
+                return {"ok": False, "contestato": False,
+                        "motivo": "risposta_inattesa: %r" % (resp,)}
+            if "latest_charge" not in resp:
+                # le versioni API precedenti al 2022-11-15 non hanno il campo: ASSENTE non e'
+                # «nessun addebito», e' una forma che non so leggere (il codice non fissa la
+                # versione; il conto di prova il 16/10 rispondeva 2026-05-27.dahlia)
+                return {"ok": False, "contestato": False, "motivo": "latest_charge_assente"}
+            addebito = resp["latest_charge"]
+            if addebito is None:
+                return {"ok": True, "contestato": False, "motivo": ""}
+            if not (isinstance(addebito, dict) and isinstance(addebito.get("disputed"), bool)):
+                # un addebito senza `disputed` leggibile non e' «non contestato»: non lo so
+                return {"ok": False, "contestato": False,
+                        "motivo": "addebito_senza_disputed: %r" % (addebito,)}
+            return {"ok": True, "contestato": addebito["disputed"], "motivo": ""}
+        except Exception as exc:
+            logger.error("Stripe: LETTURA CONTESTAZIONE FALLITA pi=%s -> %s: %s",
+                         payment_intent, exc.__class__.__name__, exc, exc_info=True)
+            return {"ok": False, "contestato": False,
+                    "motivo": "%s: %s" % (exc.__class__.__name__, exc)}
+
     def commissione_effettiva(self, payment_intent: Any) -> Dict[str, Any]:
         """QUANTO SI E' PRESO STRIPE DAVVERO su quel pagamento — la META' che ci mancava.
 

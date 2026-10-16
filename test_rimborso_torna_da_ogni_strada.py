@@ -82,8 +82,10 @@ class _StripeCheRicorda:
             # la rilettura dello stato (casella 10): la sessione e' pagata, forma vera
             return {"id": url.rstrip("/").rsplit("/", 1)[-1], "payment_status": "paid"}
         if "/payment_intents/" in url and not body:
+            # anche «la banca ha contestato?» (S4, 16/10): `disputed` c'e' sempre nell'oggetto
+            # Charge vero (docs.stripe.com/api/charges/object); qui nessuna contestazione.
             pi = url.split("?", 1)[0].rstrip("/").rsplit("/", 1)[-1]
-            return {"id": pi, "latest_charge": {"payment_method_details":
+            return {"id": pi, "latest_charge": {"disputed": False, "payment_method_details":
                     {"card": {"fingerprint": self.impronte.get(pi, "")}}}}
         if "/refunds" in url:
             campi = parse_qs(body.decode("utf-8"))

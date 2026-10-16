@@ -40,10 +40,11 @@ import shutil
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 import fase85_pagamenti_stripe as _stripe
 from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
-from fase83_server import crea_router
+from fase83_server import _istante_checkin, crea_router
 from fase87_stripe_webhook import firma_di_test
 from fase163_accettazioni import doc_sha256, CONTRATTO_HOST_VERSIONE
 from test_fase160_escrow_garanzia import nella_finestra
@@ -82,7 +83,8 @@ class TestEscrowGiaLiquidato(unittest.TestCase):
             stripe_secret_key="sk_test_liq", stripe_webhook_secret=WHSEC,
             stripe_success_url="https://bookinvip.com/grazie.html",
             stripe_cancel_url="https://bookinvip.com/annullato.html"))
-        self.r = crea_router(self.sys, host_key="hk", base_url="https://bookinvip.com")
+        self.r = crea_router(self.sys, host_key="hk", admin_key="ak",
+                             base_url="https://bookinvip.com")
         s, c = self.g("POST", "/api/host/registrazione",
                       {"email": "h@liq.it", "password": "password1", "accetta_termini": True,
                        "accetta_clausole": True, "accetta_privacy": True,
@@ -230,6 +232,69 @@ class TestEscrowGiaLiquidato(unittest.TestCase):
         self.assertEqual(out.get("errore"), "escrow_gia_liquidato")
         # e NIENTE effetti: niente penale, record ancora 'pagato', date ancora bloccate
         self.assertEqual(self.sys.pagamenti_pendenti.info(rif)["stato"], "pagato")
+
+    def _rimborso_all_ospite(self, rif):
+        """Il rimborso promesso all'ospite, letto dove vive: le righe «rimborso» del giornale (in
+        ordine) e la cifra della lista «Rimborsi da eseguire», quella che il pulsante paga."""
+        giornale = [int(m["importo_cents"]) for m in self.sys.finanza.movimenti(rif)
+                    if (m.get("tipo") or "") == "rimborso"]
+        s, lista = self.g("GET", "/api/admin/rimborsi_dovuti", None, {"X-Admin-Key": "ak"})
+        self.assertEqual(s, 200, lista)
+        riga = [int(r["dovuto_cents"]) for r in (lista.get("rimborsi") or [])
+                if r.get("riferimento") == rif]
+        return {"giornale": giornale, "lista": riga}
+
+    def test_al_dopo_la_partenza_l_host_non_cambia_il_rimborso_deciso_dall_arbitro(self):
+        """(al), trovato dalla macchina delle combinazioni il 14/10 (`test_macchina_dei_soldi.py
+        --una vicino,flessibile,si,piccolo giorno_arrivo:segnala,sblocco_garanzia:tutto_ok,
+        sblocco_garanzia:arbitro_100,dopo_partenza:dati_fiscali,dopo_partenza:host_cancella`).
+        L'ospite segnala un problema, l'arbitro gli da' il 100% della somma in garanzia (all'host
+        zero) e DOPO LA PARTENZA l'host cancella. Il freno di `_host_cancella` guarda solo
+        `host_riceve_cents > 0`: con zero all'host non scatta, la cancellazione passa e riscrive
+        la decisione dell'arbitro col «100% per cancellazione host». La regola: la cifra decisa
+        dall'arbitro resta quella, scritta UNA volta nel giornale, nella lista del pulsante e in
+        ogni risposta."""
+        ci, co = self._fra(120), self._fra(122)
+        b = self._prenota_e_paga(ci, co)
+        rif, pagato = b["riferimento"], int(b["prezzo_guest_cents"])
+        sblocco = int(self.sys.garanzia.stato(rif)["sblocco_auto_ts"])
+        # l'ospite segnala dentro le sue 24 ore; l'arbitro decide appena dopo, come nella macchina
+        with nella_finestra(self.sys, b["voucher_token"]):
+            s, c = self.g("POST", "/api/garanzia/contesta",
+                          {"voucher_token": b["voucher_token"], "motivo": "non corrisponde"})
+        self.assertEqual(s, 200, c)
+        with mock.patch("time.time", return_value=float(sblocco + 1)):
+            s, arb = self.g("POST", "/api/admin/controversia/risolvi",
+                            {"riferimento": rif, "percentuale_ospite": 100},
+                            {"X-Admin-Key": "ak"})
+        self.assertEqual(s, 200, arb)
+        deciso = int(arb["rimborso_cliente_cents"])
+        st = self.sys.garanzia.stato(rif)
+        # PREMESSE: la strada e' quella di (al) e non un'altra
+        self.assertEqual((st["stato"], int(st["host_riceve_cents"])), ("risolto", 0), st)
+        self.assertEqual(deciso, int(st["importo_host_cents"]), arb)
+        self.assertLess(deciso, pagato, "PREMESSA NON VALIDA: se l'arbitro desse il prezzo "
+                                        "pieno, la cancellazione dell'host non cambierebbe cifra")
+        self.assertEqual(self._rimborso_all_ospite(rif),
+                         {"giornale": [deciso], "lista": [deciso]},
+                         "PREMESSA NON VALIDA: la decisione dell'arbitro non e' scritta dove si "
+                         "legge")
+
+        # dopo la partenza: l'host rientra (la sessione di quattro mesi fa e' scaduta) e cancella
+        dopo_partenza = _istante_checkin(co, "Europe/Rome") + 86400
+        with mock.patch("time.time", return_value=float(dopo_partenza)):
+            s, acc = self.g("POST", "/api/host/login",
+                            {"email": "h@liq.it", "password": "password1"})
+            self.assertEqual(s, 200, acc)
+            s, out = self.g("POST", "/api/host/cancella", {"riferimento": rif},
+                            {"X-Host-Token": acc["token"]})
+        dopo = self._rimborso_all_ospite(rif)
+        # una risposta che non promette una cifra non contraddice l'arbitro
+        dopo["risposta"] = int(out.get("rimborso_cliente_cents", deciso))
+        self.assertEqual(dopo, {"giornale": [deciso], "lista": [deciso], "risposta": deciso},
+                         "(al) LA CANCELLAZIONE DELL'HOST DOPO LA PARTENZA HA RISCRITTO LA "
+                         "DECISIONE DELL'ARBITRO: l'ospite ha pagato %d, l'arbitro gli ha dato "
+                         "%d; la cancellazione ha risposto %d %r" % (pagato, deciso, s, out))
 
     def test_host_cancella_normale_invariata(self):
         """NON-REGRESSIONE: con l'escrow ancora in garanzia la cancellazione host
