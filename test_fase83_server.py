@@ -3519,5 +3519,149 @@ class TestLaPenaleFermataPartePoiQuandoLHostSiSblocca(_BancoDelBonificoLegato):
                         "%r" % (righe,))
 
 
+class TestLeRiparazioniDel16OttobreSottoGliOcchiDelGiudice(_BancoDeiSoldiDelServer):
+    """(aq), S4 e (al), riparati il 16/10: le loro guardie stanno in `test_macchina_dei_soldi`,
+    `test_admin_rimborso_money` e `test_escrow_gia_liquidato`, fuori dagli occhi che il Giudice
+    accende per fase83 nel giro `--diff` (`scegli_sorveglianti`). Il job `caselle` della PR #263
+    ha lasciato vivi 9 mutanti su quelle righe: qui una prova per ciascuno, nel file che il
+    Giudice guarda per primo (metodo della casella 5).
+
+    Riga per riga: il debito dell'admin solo se l'ospite ha pagato, e mai da zero euro -> le due
+    `test_aq_...`; la domanda
+    sulla contestazione solo con un pagamento da chiedere -> `test_S4_...`; il freno della
+    cancellazione dell'host e la sua nota -> le tre `test_al_...`."""
+
+    def _pagata(self, slug, pi, giorni=20):
+        self.pubblica(slug, "moderata")
+        b = self.prenota(slug, giorni)
+        s, c = self.paga(b["riferimento"], pi)
+        _deve(s == 200 and self.sis.pagamenti_pendenti.info(b["riferimento"])["stato"] == "pagato",
+              "PREMESSA: la prenotazione doveva risultare pagata", s, c)
+        return b
+
+    def _rimborsi_nel_giornale(self, rif):
+        return [m.get("importo_cents") for m in self.sis.finanza.movimenti(rif)
+                if m.get("tipo") == "rimborso"]
+
+    def _riga_dovuta(self, rif):
+        s, lista = self.g("GET", "/api/admin/rimborsi_dovuti", None, {"X-Admin-Key": "ak"})
+        _deve(s == 200, "PREMESSA: la lista dei rimborsi dovuti risponde", s, lista)
+        return [r for r in (lista.get("rimborsi") or []) if r.get("riferimento") == rif]
+
+    def _cancella_host(self, rif):
+        return self.g("POST", "/api/host/cancella", {"riferimento": rif},
+                      {"X-Host-Token": self.tok})
+
+    def _fotografia(self, rif):
+        return {"pagamento": self.sis.pagamenti_pendenti.info(rif)["stato"],
+                "garanzia": self.sis.garanzia.stato(rif),
+                "bonifico": self.sis.payout.info(rif),
+                "rimborsi": self._rimborsi_nel_giornale(rif),
+                "bonificati": list(self.connect.bonifici)}
+
+    def test_aq_il_rimborso_dell_admin_su_una_prenotazione_NON_pagata_non_scrive_un_debito(self):
+        self.pubblica("casa-aq")
+        b = self.prenota("casa-aq", 20)
+        rif = b["riferimento"]
+        rec = self.sis.pagamenti_pendenti.info(rif)
+        _deve(rec["stato"] == "in_attesa"
+              and int(json.loads(rec.get("corpo_json") or "{}").get("totale_cents") or 0) > 0,
+              "PREMESSA: prenotazione NON pagata, con un prezzo nel record", rec)
+        idem = self.sis.firma.decodifica(b["voucher_token"]).get("idem_key", "")
+        s, c = self.g("POST", "/api/admin/rimborso",
+                      {"alloggio_id": "casa-aq", "check_in": _fra(20), "check_out": _fra(22),
+                       "idem_key": idem}, {"X-Admin-Key": "ak"})
+        _deve(s == 200, "PREMESSA: il rimborso dell'admin risponde", s, c)
+        self.assertEqual(([], []), (self._rimborsi_nel_giornale(rif), self._riga_dovuta(rif)),
+                         "(aq) DEBITO FINTO: l'ospite non ha pagato niente e il giornale dice che "
+                         "gli dobbiamo dei soldi (risposta: %r)" % (c,))
+
+    def test_aq_un_totale_a_zero_non_chiede_una_riga_di_rimborso(self):
+        """Gemella di `test_blocco_carta.test_un_totale_a_zero_non_chiede_una_riga_di_rimborso`,
+        qui sotto gli occhi di fase83. Il chiamante non chiede una riga da zero euro: che
+        `_giornale` la scarti da se' e' la seconda difesa, non la prima (D19). Il 16/10 `tot > 0`
+        era stato tolto come «ridondante» e quella guardia e' caduta."""
+        import sqlite3
+        b = self._pagata("casa-aq0", "pi_aq0")
+        rif = b["riferimento"]
+        rec = self.sis.pagamenti_pendenti.info(rif)
+        corpo = dict(json.loads(rec.get("corpo_json") or "{}"), totale_cents=0,
+                     prezzo_guest_cents=0)
+        con = sqlite3.connect(self.dir + "/p.db")
+        with con:
+            con.execute("UPDATE pendenti SET corpo_json=? WHERE riferimento=?",
+                        (json.dumps(corpo), rif))
+        con.close()
+        chieste, vero = [], self.r._giornale
+        self.r._giornale = lambda *a, **k: (chieste.append(k), vero(*a, **k))[1]
+        idem = self.sis.firma.decodifica(b["voucher_token"]).get("idem_key", "")
+        s, c = self.g("POST", "/api/admin/rimborso",
+                      {"alloggio_id": "casa-aq0", "check_in": _fra(20), "check_out": _fra(22),
+                       "idem_key": idem}, {"X-Admin-Key": "ak"})
+        self.assertEqual(s, 200, "%r" % (c,))
+        self.assertEqual([k for k in chieste if k.get("tipo") == "rimborso"], [],
+                         "chiesta una riga di rimborso da zero euro")
+        self.assertIn("non determinabile", c.get("rimborso_stripe", ""))
+
+    def test_S4_senza_un_pagamento_da_chiedere_la_riga_non_inventa_la_contestazione(self):
+        """Il pagamento e' arrivato senza `payment_intent` (fuori da Stripe, o un webhook senza
+        `pi_`): la riga dice che manca quello, e basta. Chiedere a Stripe «c'e' una contestazione?»
+        senza un pagamento da nominare da' «non lo so» (`payment_intent_assente`), e un
+        «verifica_contestazione» in piu' sarebbe un falso allarme (regola ferrea 10)."""
+        b = self._pagata("casa-s4", "")
+        rif = b["riferimento"]
+        s, c = self._cancella_host(rif)
+        _deve(s == 200, "PREMESSA: l'host cancella e l'ospite e' da rimborsare", s, c)
+        righe = self._riga_dovuta(rif)
+        _deve(len(righe) == 1, "PREMESSA: la riga del rimborso dovuto c'e'", righe)
+        self.assertEqual((["payment_intent"], False), (righe[0].get("manca"), righe[0].get("bottone")),
+                         "la riga senza pagamento da chiedere dice cose diverse da «manca il "
+                         "payment_intent»: %r" % (righe[0],))
+
+    def test_al_dopo_la_decisione_dell_arbitro_con_zero_all_host_l_host_NON_cancella(self):
+        b = self._pagata("casa-al1", "pi_al1")
+        rif = b["riferimento"]
+        _deve(self.sis.garanzia.contesta(rif, "non corrisponde").get("ok"),
+              "PREMESSA: la garanzia doveva poter diventare contestata")
+        tutto = int(self.sis.garanzia.stato(rif)["importo_host_cents"])
+        _deve(self.sis.garanzia.risolvi(rif, rimborso_ospite_cents=tutto).get("ok"),
+              "PREMESSA: l'arbitro decide")
+        st = self.sis.garanzia.stato(rif)
+        _deve((st["stato"], int(st["host_riceve_cents"])) == ("risolto", 0),
+              "PREMESSA: arbitro al 100% per l'ospite, zero all'host", st)
+        prima = self._fotografia(rif)
+        s, c = self._cancella_host(rif)
+        self.assertEqual((409, "escrow_gia_liquidato"), (s, (c or {}).get("errore")),
+                         "(al) L'HOST HA CANCELLATO DOPO LA DECISIONE DELL'ARBITRO: %s %r" % (s, c))
+        self.assertIn("arbitro", str((c or {}).get("nota")), c)
+        self.assertEqual(prima, self._fotografia(rif), "la cancellazione rifiutata ha mosso soldi")
+
+    def test_al_col_soggiorno_confermato_l_host_NON_cancella(self):
+        b = self._pagata("casa-al2", "pi_al2")
+        rif = b["riferimento"]
+        _deve(self.sis.garanzia.conferma_ospite(rif).get("ok"),
+              "PREMESSA: l'ospite conferma «tutto ok»")
+        st = self.sis.garanzia.stato(rif)
+        _deve(st["stato"] == "rilasciato" and int(st["host_riceve_cents"]) > 0,
+              "PREMESSA: garanzia sbloccata all'host", st)
+        prima = self._fotografia(rif)
+        s, c = self._cancella_host(rif)
+        self.assertEqual((409, "escrow_gia_liquidato", int(st["host_riceve_cents"])),
+                         (s, (c or {}).get("errore"), (c or {}).get("gia_liquidato_cents")),
+                         "L'HOST HA CANCELLATO UN SOGGIORNO GIA' SBLOCCATO: %s %r" % (s, c))
+        self.assertIn("soggiorno", str((c or {}).get("nota")), c)
+        self.assertEqual(prima, self._fotografia(rif), "la cancellazione rifiutata ha mosso soldi")
+
+    def test_al_con_la_garanzia_ancora_aperta_l_host_cancella(self):
+        # l'altra direzione (regola ferrea 10): il freno non scatta prima del tempo
+        b = self._pagata("casa-al3", "pi_al3")
+        rif = b["riferimento"]
+        _deve(self.sis.garanzia.stato(rif)["stato"] == "in_garanzia",
+              "PREMESSA: garanzia aperta", self.sis.garanzia.stato(rif))
+        s, c = self._cancella_host(rif)
+        self.assertEqual((200, "cancellata_host"), (s, (c or {}).get("stato")),
+                         "il freno ha fermato una cancellazione legittima: %s %r" % (s, c))
+
+
 if __name__ == "__main__":
     unittest.main()

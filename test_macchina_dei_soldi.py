@@ -334,8 +334,11 @@ class ReteStripe:
                                                    stato))
                 p["stato"] = "succeeded" if pezzi[1] == "capture" else "canceled"
                 return {"id": pezzi[0], "status": p["stato"]}
-            # `latest_charge` e' l'id dell'addebito; l'oggetto intero solo con `expand[]`
-            addebito = {"id": "ch_" + p["rif"],
+            # `latest_charge` e' l'id dell'addebito; l'oggetto intero solo con `expand[]`.
+            # `disputed` c'e' sempre nell'oggetto Charge vero («Whether the charge has been
+            # disputed», docs.stripe.com/api/charges/object, letta il 16/10): senza, il prodotto
+            # risponderebbe «non lo so» e ogni pulsante resterebbe spento (visto il 16/10, S4).
+            addebito = {"id": "ch_" + p["rif"], "disputed": bool(p["contestato"]),
                         "payment_method_details": {"card": {"fingerprint": ""}}}
             espanso = "latest_charge" in (parse_qs(urlparse(url).query).get("expand[]") or [])
             return {"id": pezzi[0], "status": stato, "amount": p["importo"],
@@ -1272,6 +1275,86 @@ class TestLaMacchinaDeiSoldi(unittest.TestCase):
                 d["conto"], d["codice"], d["perche"], d["config"], d["sequenza"])
                 for d in difetti)))
         self.assertEqual(uscite, [0, 0], testo[-3000:])
+
+    # ── GUARDIE DI DIFETTI VIVI TROVATI DA QUESTA MACCHINA (S18, 15-16/10). D20: scritte e
+    #    viste ROSSE prima di ogni riparazione. Rifanno con `--una` la corsa che ha mostrato il
+    #    difetto: codice vero, rete finta. Le PREMESSE vengono prima (D19): se la corsa non e'
+    #    piu' quella descritta, la guardia lo dice invece di passare a vuoto. ──
+    def test_S18_con_la_contestazione_della_banca_il_pulsante_e_spento_e_non_da_5xx(self):
+        """S18, causa 1 (si chiude con S4/(am)). L'host cancella: all'ospite sono dovuti 200 EUR
+        e la riga compare nella lista col bottone. Poi la banca dell'ospite contesta TUTTO
+        l'incasso. Stripe non rimborsa un pagamento contestato (docs.stripe.com/error-codes,
+        letta il 15/10: `charge_disputed`, `refund_disputed_payment`): il bottone deve essere
+        SPENTO e il pulsante deve dire il motivo (4xx), mai 5xx. Oggi la scheda non guarda la
+        contestazione (`_rimborso_dovuto_scheda`, fase83_server.py:5369-5426): bottone acceso,
+        e il pulsante risponde 502 (fase83_server.py:5606). La regola la scrive gia' il codice
+        (fase83_server.py:5293-5295 e 5424-5426): la lista non deve mostrare «un bottone che il
+        pulsante rifiuta»."""
+        (uscita,), testo, (dati,) = self._lancia(
+            "--una", "vicino,flessibile,si,piccolo",
+            "giorno_arrivo:host_cancella,fine_giorno_arrivo:chargeback,dopo_partenza:pulsante",
+            tetto=300)
+        self.assertNotEqual(uscita, 2, "NON ESEGUITO:\n%s" % testo[-3000:])
+        una = (dati or {}).get("una") or {}
+        self.assertIn(una.get("esito"), ("ok", "rosso"),
+                      "PREMESSA NON VALIDA: la corsa non e' stata fatta tutta (%r). Se la riga "
+                      "sparisce con la contestazione, la regola e' cambiata: questa guardia va "
+                      "riscritta con la decisione del fondatore.\n%s" % (una, testo[-3000:]))
+        risposte = {g: s for g, s, _ in una.get("risposte") or []}
+        f = una.get("ultimi_fatti") or {}
+        self.assertEqual((risposte.get("host_cancella"), risposte.get("chargeback")), (200, 200),
+                         "PREMESSA NON VALIDA: %r" % (una.get("risposte"),))
+        self.assertTrue(f.get("incassato", 0) > 0
+                        and f.get("contestato_carta") == f.get("incassato"),
+                        "PREMESSA NON VALIDA: la banca non contesta tutto l'incassato: %r" % (f,))
+        self.assertTrue(400 <= risposte.get("pulsante", 0) < 500,
+                        "CON LA CONTESTAZIONE APERTA IL PULSANTE HA RISPOSTO %r: deve dire il "
+                        "motivo (4xx), mai 5xx e mai 200. Tutte le risposte: %r"
+                        % (risposte.get("pulsante"), una.get("risposte")))
+        self.assertIs((f.get("riga") or {}).get("bottone"), False,
+                      "CON LA CONTESTAZIONE APERTA IL BOTTONE E' ACCESO: %r" % (f.get("riga"),))
+        # ⛔ E SPENTO PER IL MOTIVO GIUSTO (aggiunto il 16/10, alla riparazione di S4): con la
+        # rete finta senza `disputed` il prodotto rispondeva «verifica_contestazione», cioe'
+        # «non lo so», e questa guardia passava lo stesso -- un verde che non prova niente.
+        corpo = {g: c for g, _, c in una.get("risposte") or []}.get("pulsante") or {}
+        self.assertEqual(((f.get("riga") or {}).get("manca"), corpo.get("manca")),
+                         (["contestazione_banca"], ["contestazione_banca"]),
+                         "IL BOTTONE E' SPENTO MA NON (SOLO) PER LA CONTESTAZIONE: riga %r, "
+                         "pulsante %r" % (f.get("riga"), corpo))
+
+    def test_S18_aq_il_rimborso_dell_admin_su_un_blocco_gia_tolto_non_scrive_un_debito(self):
+        """(aq), trovato in S18 il 15/10. Prenotazione lontana: sulla carta c'e' solo un BLOCCO,
+        nessun soldo entrato. L'host cancella: il blocco si toglie e non resta niente da
+        restituire (giusto: nessuna riga). Poi l'admin preme «rimborso»: la risposta dice
+        «nessun incasso da restituire», ma nel giornale finisce un «rimborso» pari al TOTALE e
+        nella lista compare una riga col bottone: un debito verso chi non ha pagato niente.
+        Dove: fase83_server.py:5196-5214 -- il giornale si scrive con `tot > 0 and not
+        _senza_incasso`; con lo stato `cancellata_host` `_era_pagato` e' falso, quindi anche
+        `_senza_incasso`. ⚠️ I conti della macchina NON lo vedono: questa stessa corsa da' «ok»
+        (misurato il 16/10); lo mostrava solo il 502 del pulsante premuto dopo. Per questo la
+        guardia legge il giornale e la lista, non l'esito della corsa."""
+        (uscita,), testo, (dati,) = self._lancia(
+            "--una", "lontano,flessibile,si,piccolo", "subito:host_cancella,subito:admin_rimborso",
+            tetto=300)
+        self.assertNotEqual(uscita, 2, "NON ESEGUITO:\n%s" % testo[-3000:])
+        una = (dati or {}).get("una") or {}
+        self.assertIn(una.get("esito"), ("ok", "rosso"),
+                      "PREMESSA NON VALIDA: la corsa non e' stata fatta tutta: %r\n%s"
+                      % (una, testo[-3000:]))
+        risposte = {g: s for g, s, _ in una.get("risposte") or []}
+        f = una.get("ultimi_fatti") or {}
+        self.assertEqual(risposte.get("host_cancella"), 200,
+                         "PREMESSA NON VALIDA: %r" % (una.get("risposte"),))
+        self.assertTrue(risposte.get("admin_rimborso", 500) < 500,
+                        "PREMESSA NON VALIDA (o un altro difetto): il rimborso dell'admin ha "
+                        "risposto %r" % (una.get("risposte"),))
+        self.assertEqual((f.get("incassato"), f.get("pi")), (0, "canceled"),
+                         "PREMESSA NON VALIDA: il blocco non e' stato tolto, o qualcosa e' stato "
+                         "incassato: %r" % (f,))
+        self.assertEqual((f.get("promessa_giornale"), f.get("riga")), (None, None),
+                         "UN DEBITO FINTO: l'ospite non ha pagato niente (incassato 0, blocco "
+                         "annullato), ma il giornale dice rimborso %r e la lista mostra %r"
+                         % (f.get("promessa_giornale"), f.get("riga")))
 
 
 if __name__ == "__main__":

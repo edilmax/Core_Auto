@@ -671,5 +671,66 @@ class TestLAddebitoDelPagamentoPerIlBonificoLegato(unittest.TestCase):
         self.assertIn("RuntimeError", reg.output[0])
 
 
+class TestLaContestazioneDellaBanca(unittest.TestCase):
+    """S4 (16/10): `contestazione_di` chiede a Stripe se la banca ha contestato il pagamento,
+    perche' «non puoi emettere un rimborso al di fuori della procedura di contestazione quando
+    ce n'e' una» (docs.stripe.com/disputes/how-disputes-work). Il campo e' `disputed`
+    dell'oggetto Charge (docs.stripe.com/api/charges/object). `ok=False` = «non lo so», MAI
+    «non contestato»: e' cio' che tiene spento il bottone dei rimborsi quando Stripe tace."""
+
+    URL = PAGAMENTI_URL + "/pi_ok?expand%5B%5D=latest_charge"
+
+    def test_legge_disputed_dall_addebito_espanso_con_una_sola_lettura(self):
+        for disputed in (True, False):
+            with self.subTest(disputed=disputed):
+                f = FetchFinto({PAGAMENTI_URL: {"id": "pi_ok", "latest_charge": {
+                    "id": "ch_1", "object": "charge", "disputed": disputed}}})
+                self.assertEqual(_p(f).contestazione_di("pi_ok"),
+                                 {"ok": True, "contestato": disputed, "motivo": ""})
+                self.assertEqual(f.chiamate, [(self.URL, None,
+                                               {"Authorization": "Bearer sk_test_k"})],
+                                 "una LETTURA sola: GET del pagamento con l'addebito espanso")
+
+    def test_senza_addebito_non_c_e_niente_da_contestare(self):
+        f = FetchFinto({PAGAMENTI_URL: {"id": "pi_ok", "latest_charge": None}})
+        self.assertEqual(_p(f).contestazione_di("pi_ok"),
+                         {"ok": True, "contestato": False, "motivo": ""})
+
+    def test_quello_che_non_si_sa_leggere_e_NON_LO_SO_mai_non_contestato(self):
+        # `{"id": "pi_ok"}` e la forma con `charges`: le versioni API precedenti al 2022-11-15
+        # non hanno `latest_charge`; un campo ASSENTE non e' «nessun addebito» (ricontrollo del
+        # 16/10: il conto di prova risponde con 2026-05-27.dahlia, ma il codice non fissa versione)
+        for risposta in ({}, None, [], "pi_ok", {"latest_charge": {"disputed": False}},
+                         {"id": "pi_ok"}, {"id": "pi_ok", "charges": {"data": []}},
+                         {"id": "pi_altro", "latest_charge": {"disputed": False}},
+                         {"id": "pi_ok", "latest_charge": "ch_1"},
+                         {"id": "pi_ok", "latest_charge": {}},
+                         {"id": "pi_ok", "latest_charge": {"id": "ch_1"}},
+                         {"id": "pi_ok", "latest_charge": {"disputed": "false"}},
+                         {"id": "pi_ok", "latest_charge": {"disputed": 0}},
+                         {"id": "pi_ok", "latest_charge": {"disputed": None}}):
+            with self.subTest(risposta=risposta):
+                esito = _p(FetchFinto({PAGAMENTI_URL: risposta})).contestazione_di("pi_ok")
+                self.assertIs(esito["ok"], False, esito)
+                self.assertIs(esito["contestato"], False, esito)
+                self.assertTrue(esito["motivo"], "il perche' c'e' sempre: %r" % (esito,))
+        for cattivo in (None, "", "ch_1", "cs_1", 123, b"pi_1", ["pi_1"]):
+            with self.subTest(ingresso=cattivo):
+                f = FetchFinto({PAGAMENTI_URL: {"id": cattivo, "latest_charge": None}})
+                self.assertEqual(_p(f).contestazione_di(cattivo),
+                                 {"ok": False, "contestato": False,
+                                  "motivo": "payment_intent_assente"})
+                self.assertEqual(f.chiamate, [], "cio' che non e' un pagamento non si chiede")
+
+    def test_stripe_che_non_risponde_e_un_errore_con_l_eccezione_e_NON_LO_SO(self):
+        with self.assertLogs("core_auto.pagamenti_stripe", level="DEBUG") as reg:
+            esito = _p(FetchFinto(solleva=RuntimeError("stripe giu"))).contestazione_di("pi_ok")
+        self.assertEqual(esito, {"ok": False, "contestato": False,
+                                 "motivo": "RuntimeError: stripe giu"})
+        self.assertEqual([r.levelname for r in reg.records], ["ERROR"], reg.output)
+        self.assertIn("pi_ok", reg.output[0])
+        self.assertIsInstance(reg.records[0].exc_info[1], RuntimeError)
+
+
 if __name__ == "__main__":
     unittest.main()

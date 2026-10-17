@@ -479,7 +479,10 @@ class TestIlRimborsoARRIVADavveroAllOspite(unittest.TestCase):
 import threading
 
 STRIPE_FINTO = {"rimborsi_per_pi": {}, "per_chiave": {}, "esplode": False,
-                "barriera_rimborso": None}
+                "barriera_rimborso": None,
+                # S4 (16/10): i pagamenti che la banca ha contestato, e quelli su cui la domanda
+                # «contestato?» non ha risposta (Stripe tace solo su quella lettura)
+                "contestati": set(), "muti_sulla_contestazione": set()}
 CHIAMATE_LISTA = []
 _SERRATURA_FINTO_STRIPE = threading.Lock()
 
@@ -532,6 +535,15 @@ def _fetch_stripe_con_memoria(url, body, headers):
         raise RuntimeError("Stripe irraggiungibile: rete assente")
     if not body and "/checkout/sessions/" in url:     # rilettura dello stato (casella 10)
         return {"id": url.rsplit("/", 1)[-1], "payment_status": "paid"}
+    if not body and "/payment_intents/" in url:
+        # LETTURA — GET /v1/payment_intents/pi_...?expand[]=latest_charge: «la banca ha
+        # contestato?» (S4, 16/10). `disputed` c'e' sempre nell'oggetto Charge vero
+        # (docs.stripe.com/api/charges/object); qui nessuna contestazione.
+        pi = url.split("?", 1)[0].rstrip("/").rsplit("/", 1)[-1]
+        if pi in STRIPE_FINTO["muti_sulla_contestazione"]:
+            raise RuntimeError("Stripe irraggiungibile sulla lettura del pagamento")
+        return {"id": pi, "latest_charge": {"id": "ch_" + pi[3:],
+                                            "disputed": pi in STRIPE_FINTO["contestati"]}}
     if "/refunds" in url and not body:
         # LETTURA — GET /v1/refunds?payment_intent=pi_...
         pi = (parse_qs(urlparse(url).query).get("payment_intent") or [""])[0]
@@ -618,6 +630,8 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
         STRIPE_FINTO["per_chiave"] = {}
         STRIPE_FINTO["esplode"] = False
         STRIPE_FINTO["barriera_rimborso"] = None
+        STRIPE_FINTO["contestati"] = set()
+        STRIPE_FINTO["muti_sulla_contestazione"] = set()
         self.dir = tempfile.mkdtemp()
         d = self.dir
         # ⛔ `db_finanza` NON e' un dettaglio del banco: il giornale immutabile e' la sola
@@ -1449,6 +1463,40 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
         self.assertTrue(riga.get("manca"),
                         "non dichiara cosa manca: l'operatore vede un bottone spento e non sa "
                         "cosa fare -- e quello che non si sa fare non si fa")
+
+    def test_S4_CON_LA_CONTESTAZIONE_DELLA_BANCA_O_SENZA_RISPOSTA_IL_BOTTONE_NON_C_E(self):
+        """S4 (16/10). Stripe non rimborsa un pagamento contestato («non puoi emettere un
+        rimborso al di fuori della procedura di contestazione quando ce n'e' una»,
+        docs.stripe.com/disputes/how-disputes-work): la riga resta, il bottone no, e il
+        pulsante risponde 409 col motivo senza mandare niente a Stripe. E se Stripe non dice se
+        c'e' una contestazione, vale lo stesso: «non lo so» tiene i soldi fermi come un «si'».
+        La prova di confronto (un terzo pagamento, ne' contestato ne' muto) col bottone acceso
+        dice che a spegnerlo e' la contestazione, non qualcos'altro."""
+        casi = (("pi_ospite_c1", "2026-09-10", "2026-09-12", "contestati",
+                 ["contestazione_banca"]),
+                ("pi_ospite_c2", "2026-09-14", "2026-09-16", "muti_sulla_contestazione",
+                 ["verifica_contestazione"]),
+                ("pi_ospite_c3", "2026-09-18", "2026-09-20", None, []))
+        rif_di = {}
+        for pi, ci, co, insieme, _ in casi:
+            rif_di[pi], _c = self._cancella_da_ospite(ci, co, pi)
+            if insieme:
+                STRIPE_FINTO[insieme].add(pi)
+        corpo = self._lista()
+        for pi, _ci, _co, _ins, manca in casi:
+            with self.subTest(pagamento=pi):
+                riga = self._riga(corpo, rif_di[pi])
+                self.assertIsNotNone(riga, "la riga deve restare visibile: %r" % (corpo,))
+                self.assertEqual((riga.get("manca"), riga.get("bottone")), (manca, not manca),
+                                 "riga %r" % (riga,))
+        for pi, _ci, _co, _ins, manca in casi[:2]:
+            with self.subTest(pulsante=pi):
+                s, res = self.g("POST", "/api/admin/rimborsa_dovuto",
+                                {"riferimento": rif_di[pi]}, {"X-Admin-Key": "ak"})
+                self.assertEqual((s, res.get("manca")), (409, manca),
+                                 "il pulsante doveva rifiutare col motivo: %r" % (res,))
+        self.assertEqual(self._rimborsi_inviati(), [],
+                         "sono partiti soldi su un pagamento contestato o non verificato")
 
     def _totale_ospite(self, rif):
         rec = self.sys.pagamenti_pendenti.info(rif) or {}
