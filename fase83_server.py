@@ -7402,12 +7402,14 @@ class RouterHTTP:
         # sua cifra col «100% per cancellazione host». Regola del fondatore (16/10, proposta mia,
         # risposta «mi sembra la cosa giusta, boh»): dopo la decisione dell'arbitro l'host non
         # cancella piu'. Guardia: `test_escrow_gia_liquidato.test_al_dopo_la_partenza_l_host_non_cambia_il_rimborso_deciso_dall_arbitro`.
+        # Anche 'rilasciato' ferma sempre, senza guardare la cifra (16/10, «autorizzato» del
+        # fondatore): fase160 non crea un 'rilasciato' a zero, e se mai comparisse decide
+        # l'assistenza. Prima c'era `host_riceve_cents > 0`, e il Giudice ha mostrato che nessuna
+        # prova lo distingueva (PR #263).
         try:
             _gz = getattr(self._sys, "garanzia", None)
             _st = _gz.stato(ref) if _gz is not None else None
-            if isinstance(_st, dict) and (_st.get("stato") == "risolto" or (
-                    _st.get("stato") == "rilasciato"
-                    and int(_st.get("host_riceve_cents", 0) or 0) > 0)):
+            if isinstance(_st, dict) and _st.get("stato") in ("rilasciato", "risolto"):
                 logger.error("HOST CANCELLA BLOCCATA | RIF: %s | escrow '%s' gia' liquidato "
                              "all'host per %d: rimborsare il cliente qui sarebbe una perdita "
                              "a nostro carico. Serve l'assistenza (arbitrato/recupero).",
