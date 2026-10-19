@@ -415,6 +415,7 @@ In struttura, online paga solo un **anticipo**: la nostra commissione, un serviz
 - Cancellazione normale: l'anticipo **non si rende**, tranne nelle 48 ore (`fase83_server.py:7878-7882`).
 - Cancellazione a **meno di 24 ore** dall'arrivo (ore vere, dalle 15:00 del posto): si addebita la **prima notte** sulla carta salvata (`fase83_server.py:8137`, `:8144`).
 - Il saldo pagato in struttura non passa da noi: se c'è un problema, **non possiamo renderlo**.
+- Il **rimborso dal pannello dell'admin** restituisce **solo l'anticipo**, cioè quello che è passato da Stripe; anche il debito scritto nel giornale è l'anticipo. Il saldo pagato di persona è fra ospite e host (`_admin_rimborso`, `fase83_server.py:5206-5207`; D-13).
 
 ### 1.8 Chi paga Stripe e il cambio
 
@@ -515,6 +516,12 @@ Misurato, non ricordato. Il dettaglio di ognuno sta in `RIPRENDI_QUI.md`.
 - *Perché:* una cancellazione gratuita con i soldi ancora bloccati non costa niente a nessuno; dopo l'incasso, la commissione di Stripe non torna più (§1.8).
 - *Da sapere prima di farla:* la durata del blocco va verificata metodo per metodo (Link, Klarna, Amazon Pay, Satispay possono essere diversi dalla carta); fra le 48 ore e il settimo giorno una cancellazione può avere una penale, e allora si incassa solo quella e il resto si sblocca.
 - *Fonte:* docs.stripe.com/payments/extended-authorization (letta il 2026-10-14): «the default authorization validity period is 7 days for online payments».
+
+**D-13 · 2026-10-18 · Paga in struttura: il rimborso restituisce solo l'anticipo** — ✅ VALIDA, nel codice dal 2026-10-18
+- *Chi:* il fondatore: «incassiamo solo la commissione se paga in struttura», poi «autorizzato».
+- *Decisione:* quando l'admin rimborsa una prenotazione pagata in struttura, a Stripe si chiede di restituire l'anticipo, non il totale del soggiorno. Il saldo pagato di persona non passa da noi.
+- *Perché:* il pulsante chiedeva il totale; Stripe non restituisce più di quanto ha incassato, quindi il rimborso falliva per intero (all'ospite non tornava nemmeno l'anticipo) e il giornale scriveva un debito mai incassato. Trovato da una verifica esterna (Google AI Studio) e confermato leggendo il codice.
+- *Fonte:* `fase83_server.py:5206-5207`; guardia `test_admin_rimborso_money.TestLaListaDeiRimborsiDovuti.test_IL_RIMBORSO_ADMIN_DI_UNA_PAGA_IN_STRUTTURA_RESTITUISCE_L_ANTICIPO`, vista rossa prima della riparazione.
 
 ### Domande aperte — le decide il fondatore (soldi e strategia)
 

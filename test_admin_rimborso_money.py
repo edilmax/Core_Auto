@@ -856,6 +856,64 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
             else:
                 os.environ["PAGA_STRUTTURA_ATTIVO"] = prec
 
+    def test_IL_RIMBORSO_ADMIN_DI_UNA_PAGA_IN_STRUTTURA_RESTITUISCE_L_ANTICIPO(self):
+        """⛔ DIFETTO VIVO trovato il 18/10 (verifica esterna di Google AI Studio, confermata
+        leggendo `_admin_rimborso`): la sorella della STRADA 6, sul pulsante dell'admin. Nella
+        «paga in struttura» la carta ha pagato SOLO l'anticipo; il pulsante chiedeva a Stripe il
+        TOTALE del soggiorno. Stripe non restituisce piu' di quanto ha incassato: il rimborso
+        falliva per intero (all'ospite non tornava nemmeno l'anticipo) e il giornale scriveva un
+        debito pari al totale, cioe' denaro mai entrato online. Regola del fondatore (18/10):
+        «incassiamo solo la commissione se paga in struttura» -> si restituisce l'anticipo, il
+        saldo pagato di persona e' fra ospite e host."""
+        import os
+        prec = os.environ.get("PAGA_STRUTTURA_ATTIVO")
+        os.environ["PAGA_STRUTTURA_ATTIVO"] = "1"
+        try:
+            ci, co = "2026-09-20", "2026-09-22"
+            s, q = self.g("POST", "/api/concierge/quote",
+                          {"alloggio_id": "casa", "check_in": ci, "check_out": co, "party": 2})
+            self.assertEqual(s, 200, q)
+            s, b = self.g("POST", "/api/concierge/book",
+                          {"quote_token": q["quote_token"], "email": "cli@ps.it",
+                           "modo_pagamento": "in_struttura"})
+            self.assertEqual(s, 201, b)
+            self.assertEqual(b.get("modo_pagamento"), "in_struttura",
+                             "setup: doveva essere una prenotazione in struttura: %r" % (b,))
+            anticipo = int(b["anticipo_online_cents"])
+            self.assertGreater(anticipo, 0, "setup: l'anticipo dev'essere > 0")
+            self.assertLess(anticipo, int(q["totale_cents"]),
+                            "setup: l'anticipo dev'essere MENO del totale, altrimenti la "
+                            "prova non distingue le due cifre e non prova niente")
+            rif = b["riferimento"]
+            pl = json.dumps({"type": "checkout.session.completed",
+                             "data": {"object": {"id": "cs_ps_adm", "payment_intent": "pi_ps_adm",
+                                                 "metadata": {"riferimento": rif}}}})
+            self.r.gestisci("POST", "/api/payments/webhook", {}, pl,
+                            {"Stripe-Signature": firma_di_test(pl, WH, int(time.time()))})
+            idem = self._riga_admin(rif)["idem_key"]
+            del CHIAMATE_LISTA[:]
+            s, res = self.g("POST", "/api/admin/rimborso",
+                            {"alloggio_id": "casa", "check_in": ci, "check_out": co,
+                             "idem_key": idem}, {"X-Admin-Key": "ak"})
+            self.assertEqual(s, 200, res)
+            rimborsi = [c for c in CHIAMATE_LISTA if c["url"].endswith("/refunds")]
+            self.assertEqual(len(rimborsi), 1, "a Stripe non e' arrivato nessun rimborso: %r"
+                             % [c["url"] for c in CHIAMATE_LISTA])
+            self.assertIn("amount=%d&" % anticipo, rimborsi[0]["body"] + "&",
+                          "a Stripe si chiede di restituire una cifra diversa dall'anticipo "
+                          "(%d): piu' di quanto ha incassato, il rimborso fallisce per intero. "
+                          "Corpo: %r" % (anticipo, rimborsi[0]["body"]))
+            debiti = [int(m.get("importo_cents") or 0) for m in self.sys.finanza.movimenti(rif)
+                      if (m.get("tipo") or "") == "rimborso"]
+            self.assertEqual(debiti, [anticipo],
+                             "il giornale scrive un debito verso l'ospite diverso dall'anticipo "
+                             "incassato online: %r" % (debiti,))
+        finally:
+            if prec is None:
+                os.environ.pop("PAGA_STRUTTURA_ATTIVO", None)
+            else:
+                os.environ["PAGA_STRUTTURA_ATTIVO"] = prec
+
     # 🔴 DIFETTO VIVO (consegne 30, punto c), visto in produzione il 1/10 su a2c63fd8:
     # controversia decisa dal fondatore (12 centesimi al cliente, 11 all'host), e nell'elenco
     # delle prenotazioni il pannello admin offriva ancora «Rimborsa». Il server diceva
