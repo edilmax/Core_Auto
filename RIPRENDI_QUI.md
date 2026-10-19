@@ -3536,7 +3536,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 67419b5
+CONSEGNE AGGIORNATE A: e7ca07e
 
 - ⛔ DECISIONE DEL METODO (8/10, presa da Claude come progettista su delega esplicita del fondatore: «Questo lo devi decidere tu [...] Dobbiamo terminare e correggere ogni singola cosa»). Le caselle scadevano perche' si misurava PRIMA di aver finito di riparare, e rimisurare era a mano. Da qui in poi, TRE REGOLE:
   1. UN BLOCCO ALLA VOLTA, in quest'ordine: caccia completa -> TUTTE le riparazioni confermate, a lotti (piu' riparazioni sotto UNA suite) -> UNA sola misura delle caselle. Non si rimisura un blocco che ha ancora difetti noti aperti.

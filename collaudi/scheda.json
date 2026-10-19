@@ -972,11 +972,11 @@
  "d4e612aafcd1": {
   "blocco": 9,
   "comando": "python collaudi/esame_marketing.py --casella giurisdizioni --scrivi",
-  "commit": "4c96811",
+  "commit": "e7ca07e",
   "condizione": "si pubblica SOLO dove e' lecito (le giurisdizioni le decide fase154)",
   "denominatore": 8,
   "esito": true,
-  "impronta": "6c46f8c089e2",
+  "impronta": "dcc1026c8be9",
   "impronte_moduli": {
    "fase158_domanda": "c8b1f3c520bb",
    "fase161_domanda_allarme": "fa75bc0fe516",
@@ -1004,10 +1004,10 @@
    "fase94_scheduler_campagna": "baaa54b7d737",
    "fase95_outreach_email": "2bb7d841ddb4",
    "fase96_fonte_osm": "8d0bc0cbb8d9",
-   "fase97_inbound_seo": "8f73f48d3a48"
+   "fase97_inbound_seo": "bface742e2fe"
   },
   "motivo": "",
-  "quando": "2026-09-24T18:27:14"
+  "quando": "2026-10-19T11:10:33"
  },
  "d70ecb7a31cc": {
   "blocco": 1,
@@ -1051,11 +1051,11 @@
  "df0678e71e35": {
   "blocco": 9,
   "comando": "python collaudi/esame_marketing.py --casella interruttore --scrivi",
-  "commit": "4c96811",
+  "commit": "e7ca07e",
   "condizione": "nessun canale pubblica senza che una persona possa fermarlo",
   "denominatore": 26,
   "esito": true,
-  "impronta": "6c46f8c089e2",
+  "impronta": "dcc1026c8be9",
   "impronte_moduli": {
    "fase158_domanda": "c8b1f3c520bb",
    "fase161_domanda_allarme": "fa75bc0fe516",
@@ -1083,10 +1083,10 @@
    "fase94_scheduler_campagna": "baaa54b7d737",
    "fase95_outreach_email": "2bb7d841ddb4",
    "fase96_fonte_osm": "8d0bc0cbb8d9",
-   "fase97_inbound_seo": "8f73f48d3a48"
+   "fase97_inbound_seo": "bface742e2fe"
   },
   "motivo": "",
-  "quando": "2026-09-24T18:27:14"
+  "quando": "2026-10-19T11:10:32"
  },
  "e0c5eaf17028": {
   "blocco": 6,
