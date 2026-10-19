@@ -17,8 +17,9 @@ QUATTRO PASSI:
   [4] IL BONIFICO parte con LA STESSA funzione della produzione (fase101.trasferisci)
 
 ⛔ COSA NON PROVA, dichiarato (D18 punto 3): il gesto dell'host che compila il modulo sulle
-   pagine di Stripe. Serve un browser, ed e' interfaccia di Stripe, non nostra. Qui il conto
-   ricevente si crea gia' abilitato, cosa possibile SOLO in modalita' prova.
+   pagine di Stripe. Serve un browser, ed e' interfaccia di Stripe, non nostra. Dal 17/10 il
+   conto ricevente del passo [4] NON si crea qui: e' quello di prova coi parametri di
+   produzione, registrato una volta, passato con STRIPE_CONTO_PROVA (vedi il passo [4]).
 
 Misurato la prima volta il 2026-08-09: 10 passi su 10, `tr_1U2S69JMRnB73twqzoa0JZnm`.
 """
@@ -155,37 +156,38 @@ if disp < 5000:
 passo("c'e' abbastanza per un bonifico di 10,00 EUR", disp >= 1000, ">=1000", disp)
 
 print("\n-- [4] IL BONIFICO VERO, con LA STESSA funzione della produzione --")
-st, ex = stripe("POST", "/accounts", {
-    "type": "custom", "country": "IT", "email": "ricevente-%s@example.com" % marca,
-    "business_type": "individual",
-    "capabilities[transfers][requested]": "true",
-    "individual[first_name]": "Mario", "individual[last_name]": "Rossi",
-    "individual[email]": "ricevente-%s@example.com" % marca,
-    "individual[dob][day]": "1", "individual[dob][month]": "1", "individual[dob][year]": "1980",
-    "individual[address][line1]": "Via Roma 1", "individual[address][city]": "Roma",
-    "individual[address][postal_code]": "00100", "individual[address][country]": "IT",
-    "individual[phone]": "+390612345678",
-    "business_profile[url]": "https://bookinvip.com",
-    "business_profile[mcc]": "7011",
-    "tos_acceptance[date]": str(int(time.time())), "tos_acceptance[ip]": "127.0.0.1",
-    "external_account[object]": "bank_account", "external_account[country]": "IT",
-    "external_account[currency]": "eur",
-    "external_account[account_number]": "IT89370400440532013000",
-})
-ric = ex.get("id", "")
-passo("nasce un conto host GIA' abilitato (solo in prova)",
-      st == 200 and ric.startswith("acct_"), "un acct_...",
-      ric or ex.get("error", {}).get("message", st))
+# ⛔ 17/10: il conto ricevente NON si crea piu' qui (stessa causa e stessa cura di
+#    `collaudi/esame_orologi.py`, FILE_CONTO). La ricetta 'custom' (i termini accettati dalla
+#    piattaforma al posto dell'host) Stripe di prova la RIFIUTA finche' la piattaforma non si
+#    prende nel pannello la responsabilita' di raccogliere i dati degli host, e il fondatore
+#    non la prende: in produzione li raccoglie Stripe. Il conto di prova coi parametri di
+#    produzione, registrato UNA volta coi dati di prova, arriva da fuori:
+#    `docker exec -e STRIPE_CONTO_PROVA=acct_... -i banco_prova_app python3 - < ...`.
+#    Senza, il passo e' ROSSO (non «non eseguito»: qui un salto non fa fallire il giro).
+ric = os.environ.get("STRIPE_CONTO_PROVA", "").strip()
+passo("c'e' il conto host di prova registrato (STRIPE_CONTO_PROVA)", ric.startswith("acct_"),
+      "un acct_...", ric[:14] or "manca: lo prepara `python collaudi/esame_orologi.py --prepara-conto`")
 
-if not ric:
+if not ric.startswith("acct_"):
     salta("il bonifico", "non ho un conto ricevente")
 else:
     st, a2 = stripe("GET", "/accounts/" + ric)
+    # Come nasce il conto di un host vero (`fase101_stripe_connect.crea_account`), letto come
+    # Stripe lo restituisce. Qui non si importa da `esame_orologi` (si gira nel contenitore):
+    # che i due restino uguali a fase101 lo pretende `test_pipeline_ci`.
+    CONTROLLER_HOST_VERI = {"requirement_collection": "stripe", "stripe_dashboard.type": "express",
+                            "fees.payer": "application", "losses.payments": "application"}
+    c2 = a2.get("controller") or {}
+    forma = {v: (c2.get(v.split(".")[0]) or {}).get(v.split(".")[1]) if "." in v else c2.get(v)
+             for v in CONTROLLER_HOST_VERI}
     cap_tr = ((a2.get("capabilities") or {}).get("transfers"))
     print("      payouts_enabled=%s  transfers=%s" % (a2.get("payouts_enabled"), cap_tr))
+    passo("il conto e' come quelli degli host veri (fase101_stripe_connect.crea_account)",
+          st == 200 and forma == CONTROLLER_HOST_VERI, CONTROLLER_HOST_VERI, "HTTP %s %s" % (st, forma))
+    passo("e riceve bonifici (transfers=active)", cap_tr == "active", "active", cap_tr)
     if cap_tr != "active":
-        salta("il bonifico", "Stripe non ha ancora attivato 'transfers' su questo conto "
-                             "(stato: %s) — non e' un difetto nostro" % cap_tr)
+        salta("il bonifico", "la registrazione del conto sulle pagine di Stripe non e' finita "
+                             "(transfers=%s)" % cap_tr)
     else:
         from fase101_stripe_connect import crea_provider_connect
         prov = crea_provider_connect(CHIAVE)

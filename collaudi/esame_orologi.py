@@ -10,6 +10,9 @@ contro Stripe di PROVA con l'orologio NOSTRO spostato, e i tre esiti si rileggon
                                                      l'esame deve gridare, e NON scrive mai
     python collaudi/esame_orologi.py --autoprova     il giudizio sui passi, nelle due direzioni,
                                                      senza rete (D18 punto 2)
+    python collaudi/esame_orologi.py --prepara-conto UNA volta: il conto Connect di prova coi
+                                                     parametri di produzione e il link per
+                                                     registrarlo coi dati di prova (vedi FILE_CONTO)
 
 PERCHE' L'OROLOGIO E' IL NOSTRO, misurato il 3 e il 4 settembre 2026 su docs.stripe.com (7 pagine):
 le Simulazioni/test clock di Stripe si agganciano SOLO a Customer, abbonamenti, fatture e preventivi
@@ -30,7 +33,8 @@ I TRE RAMI, e cosa Stripe rilegge:
           prende -> arriva il webhook tardivo del primo pagamento -> `_conferma_pagamento` non
           puo' ribloccare, marca il rimborso dovuto -> lista col pulsante -> premuto -> STRIPE
           vede ESATTAMENTE UN rimborso, dell'intero pagato.
-  PAYOUT  l'host ha un conto Connect di prova gia' abilitato; prenotazione pagata con check-in
+  PAYOUT  l'host ha il conto Connect di prova registrato una volta (FILE_CONTO, come i conti degli
+          host veri: i dati li raccoglie Stripe); prenotazione pagata con check-in
           domani; la garanzia nasce con `sblocco_auto_ts` = check-in + 24 h; l'orologio della
           garanzia avanza oltre -> `auto_rilascia` + `_trasferisci_all_host` (le due righe del
           tick di produzione) -> STRIPE vede il Transfer `tr_` con l'importo e il destinatario.
@@ -78,15 +82,32 @@ INDICE_CASELLA = 2                       # la terza casella del blocco (0-based)
 COMANDO = "python collaudi/esame_orologi.py --scrivi"
 RAMI = ("hold", "payout", "penale")
 FILE_CHIAVE = e2e.FILE_CHIAVE
+# ⛔ IL CONTO CONNECT DI PROVA DELL'HOST NON SI CREA A OGNI GIRO (17/10). La vecchia ricetta (conto
+#    'custom', i termini accettati dalla piattaforma al posto dell'host) Stripe di prova la RIFIUTA
+#    finche' la piattaforma non si prende nel pannello la responsabilita' di raccogliere i dati
+#    degli host: «Please review the responsibilities of collecting requirements for connected
+#    accounts» (`prova_conto_connect_20261017.log`). Il fondatore quella responsabilita' NON la
+#    prende: in produzione i dati li raccoglie Stripe (`fase101_stripe_connect.crea_account`).
+#    Quindi il conto di prova nasce UNA volta coi parametri di produzione (`--prepara-conto`), si
+#    registra sulle pagine di Stripe coi dati di prova (docs.stripe.com/connect/testing), e il suo
+#    `acct_` sta QUI, fuori dal repository, accanto alla chiave di prova.
+FILE_CONTO = os.path.join(os.path.dirname(FILE_CHIAVE), "stripe conto connect prova.txt")
 PREZZO_NOTTE = 20000
 ATTESA_CAPACITA_S = 45                   # quanto si aspetta che Stripe attivi `transfers` sul conto
+# Il `controller` di un conto nato da `fase101_stripe_connect.crea_account` (le voci che manda a
+# Stripe, piu' chi raccoglie i dati), letto come Stripe lo restituisce: misurato il 18/10 sul conto
+# di prova (GET /v1/accounts). Uguale a quello di `prova_bonifico_host.py`: lo pretende
+# `test_pipeline_ci.test_LE_DUE_PROVE_DEL_CONTO_PRETENDONO_CIO_CHE_FASE101_CHIEDE_A_STRIPE`.
+CONTROLLER_HOST_VERI = {"requirement_collection": "stripe", "stripe_dashboard.type": "express",
+                        "fees.payer": "application", "losses.payments": "application"}
 
 NON_GUARDA = (
     "la scadenza dell'autorizzazione DI STRIPE (7 giorni, `capture_before`): non e' un nostro "
     "timer e Stripe non offre modo di accelerarla; qui scadono le nostre tre finestre",
     "la modalita' viva: tutto e' in PROVA (`sk_test`), e l'esame si rifiuta con una chiave viva",
-    "il modulo di attivazione del conto Connect che l'host compila sulle pagine di Stripe: il "
-    "conto ricevente nasce gia' abilitato, cosa possibile SOLO in prova (come prova_bonifico_host)",
+    "il modulo di registrazione del conto Connect che l'host compila sulle pagine di Stripe: il "
+    "conto di prova e' registrato UNA volta (`--prepara-conto` + le pagine di Stripe coi dati di "
+    "prova) e qui si RILEGGE soltanto; il giro non rifa' la registrazione",
     "la penale dell'HOST che cancella (15 %, `PENALE_HOST_BPS`): qui la penale e' quella "
     "dell'ospite secondo la politica di cancellazione",
     "le prenotazioni «paga in struttura» e le valute diverse da EUR",
@@ -365,35 +386,104 @@ def ramo_hold(b, con_guasto=False):
     passo("hold", "e la riga esce dalla lista perche' lo dice Stripe", b.riga_di(corpo, rif) is None)
 
 
+def _leggi_conti():
+    """Gli `acct_` DIVERSI del file del conto di prova, in ordine ([] se manca). Piu' d'uno e' un
+    errore di chi chiama: scegliere il primo misurerebbe in silenzio il conto vecchio."""
+    try:
+        with open(FILE_CONTO, encoding="utf-8") as f:
+            testo = f.read()
+    except OSError:
+        return []
+    return list(dict.fromkeys(re.findall(r"\bacct_[A-Za-z0-9]+\b", testo)))
+
+
+def _troppi_conti(conti):
+    return ("il file %s ha %d conti diversi (%s): si RISCRIVE con uno solo, non si aggiunge sotto"
+            % (FILE_CONTO, len(conti), ", ".join(conti)))
+
+
+def _diverge_dagli_host_veri(controller):
+    """Le voci del `controller` diverse da CONTROLLER_HOST_VERI: ["voce=trovato (atteso)", ...]."""
+    diverse = []
+    for voce, atteso in CONTROLLER_HOST_VERI.items():
+        trovato = controller
+        for pezzo in voce.split("."):
+            trovato = trovato.get(pezzo) if isinstance(trovato, dict) else None
+        if trovato != atteso:
+            diverse.append("%s=%r (atteso %r)" % (voce, trovato, atteso))
+    return diverse
+
+
 def _conto_connect_di_prova(chiave):
-    """Un conto ricevente 'custom' GIA' abilitato ai transfer: possibile SOLO in prova (la stessa
-    ricetta di `collaudi/prova_bonifico_host.py`, passo [4], misurata il 2026-08-09)."""
-    marca = str(int(time.time()))
-    ex = e2e._chiama(chiave, "accounts", {
-        "type": "custom", "country": "IT", "email": "ricevente-orologi-%s@example.com" % marca,
-        "business_type": "individual", "capabilities[transfers][requested]": "true",
-        "individual[first_name]": "Mario", "individual[last_name]": "Rossi",
-        "individual[email]": "ricevente-orologi-%s@example.com" % marca,
-        "individual[dob][day]": "1", "individual[dob][month]": "1", "individual[dob][year]": "1980",
-        "individual[address][line1]": "Via Roma 1", "individual[address][city]": "Roma",
-        "individual[address][postal_code]": "00100", "individual[address][country]": "IT",
-        "individual[phone]": "+390612345678",
-        "business_profile[url]": "https://bookinvip.com", "business_profile[mcc]": "7011",
-        "tos_acceptance[date]": str(int(time.time())), "tos_acceptance[ip]": "127.0.0.1",
-        "external_account[object]": "bank_account", "external_account[country]": "IT",
-        "external_account[currency]": "eur", "external_account[account_number]": "IT89370400440532013000"})
-    if "_errore" in ex:
-        return None, repr(ex["_errore"])
-    acct = ex.get("id") or ""
+    """Il conto ricevente dell'host di prova: lo RILEGGE da Stripe, non lo crea (vedi FILE_CONTO).
+    Vale solo se e' come i conti degli host veri (CONTROLLER_HOST_VERI) e se riceve bonifici;
+    altrimenti -> (None, motivo), e il ramo payout e' ROSSO col suo motivo. Una lettura in errore
+    si riprova fino a ATTESA_CAPACITA_S, come l'attesa di `transfers`."""
+    conti = _leggi_conti()
+    if len(conti) > 1:
+        return None, _troppi_conti(conti)
+    if not conti:
+        return None, ("manca il conto Connect di prova (%s): si prepara UNA volta con "
+                      "`python collaudi/esame_orologi.py --prepara-conto`, poi si completa la "
+                      "registrazione sulle pagine di Stripe coi dati di prova" % FILE_CONTO)
+    acct = conti[0]
     inizio = time.time()
-    stato = ""
-    while time.time() - inizio < ATTESA_CAPACITA_S:
+    while True:
         a = e2e._chiama(chiave, "accounts/" + urllib.parse.quote(acct))
-        stato = ((a.get("capabilities") or {}).get("transfers")) if "_errore" not in a else "?"
+        scaduto = time.time() - inizio >= ATTESA_CAPACITA_S
+        if "_errore" in a:
+            if scaduto:
+                return None, ("il conto %s non si legge su Stripe da %d s: %r"
+                              % (acct[:14], ATTESA_CAPACITA_S, a["_errore"]))
+            time.sleep(5)
+            continue
+        if a.get("livemode") is True:
+            return None, "il conto %s e' VIVO, non di prova" % acct[:14]
+        diverse = _diverge_dagli_host_veri(a.get("controller") or {})
+        if diverse:
+            return None, ("il conto %s non e' come quelli degli host veri "
+                          "(fase101_stripe_connect.crea_account): %s" % (acct[:14], "; ".join(diverse)))
+        stato = (a.get("capabilities") or {}).get("transfers")
         if stato == "active":
             return acct, "transfers=active"
+        if scaduto:
+            return None, ("il conto %s non riceve bonifici (transfers=%s): la registrazione sulle "
+                          "pagine di Stripe non e' finita; un link nuovo lo da' `--prepara-conto`"
+                          % (acct[:14], stato))
         time.sleep(5)
-    return acct, "transfers=%s dopo %d s" % (stato, ATTESA_CAPACITA_S)
+
+
+def prepara_conto(chiave):
+    """UNA volta: il conto di prova coi parametri di PRODUZIONE (`fase101_stripe_connect`) e il link
+    dove si completa la registrazione coi dati di prova. Se il file ha gia' un conto, non ne crea un
+    altro: da' solo un link nuovo (i link durano pochi minuti); se ne ha piu' d'uno si ferma.
+    -> codice d'uscita."""
+    from fase101_stripe_connect import crea_provider_connect
+    conti = _leggi_conti()
+    if len(conti) > 1:
+        print("  ⛔ " + _troppi_conti(conti))
+        return 1
+    provider = crea_provider_connect(chiave)
+    acct = conti[0] if conti else None
+    if acct:
+        print("  il conto c'e' gia' nel file: %s... (non ne creo un altro)" % acct[:14])
+    else:
+        acct = provider.crea_account("host-prova-orologi@example.com")
+        if not acct:
+            print("  ⛔ Stripe non ha creato il conto coi parametri di produzione")
+            return 1
+        with open(FILE_CONTO, "w", encoding="utf-8") as f:
+            f.write("%s\n# conto Connect di PROVA dell'esame degli orologi, coi parametri di "
+                    "produzione (fase101_stripe_connect.crea_account), nato il %s\n"
+                    % (acct, datetime.date.today().isoformat()))
+        print("  conto creato coi parametri di produzione: %s... -> scritto in %s" % (acct[:14], FILE_CONTO))
+    link = provider.link_onboarding(acct, "https://bookinvip.com/host.html")
+    if not link:
+        print("  ⛔ Stripe non ha dato il link di registrazione")
+        return 1
+    print("  LINK DI REGISTRAZIONE (dura pochi minuti; dati di PROVA da docs.stripe.com/connect/testing):")
+    print("  " + link)
+    return 0
 
 
 def ramo_payout(b):
@@ -403,7 +493,7 @@ def ramo_payout(b):
     b.alloggio("villa-payout", unita=2, politica="flessibile", da=oggi.isoformat(),
                a=(oggi + datetime.timedelta(days=40)).isoformat())
     acct, dettaglio = _conto_connect_di_prova(b.chiave)
-    passo("payout", "nasce un conto Connect di prova per l'host, abilitato ai transfer",
+    passo("payout", "il conto Connect di prova dell'host (come quelli veri) riceve bonifici",
           bool(acct) and dettaglio == "transfers=active", "%s %s" % ((acct or "")[:14], dettaglio))
     if not acct or dettaglio != "transfers=active":
         return
@@ -586,6 +676,13 @@ def main(argv=None):
         print("VERDETTO: %s" % ("✅ il giudizio grida sui passi rossi e tace sui verdi" if riuscita
                                 else "⛔ IL GIUDIZIO NON E' AFFIDABILE"))
         return 0 if riuscita else 1
+
+    if "--prepara-conto" in argv:
+        if "--scrivi" in argv:
+            print("⛔ FERMO: `--prepara-conto` non misura niente, quindi non scrive nella scheda.")
+            return 2
+        print("🏦 PREPARAZIONE DEL CONTO CONNECT DI PROVA (una volta sola; non misura, non scrive)")
+        return prepara_conto(e2e.leggi_chiave())   # leggi_chiave si ferma da sola con una chiave viva
 
     con_guasto = "--con-guasto" in argv
     solo = argv[argv.index("--ramo") + 1] if "--ramo" in argv else None
