@@ -3663,5 +3663,24 @@ class TestLeRiparazioniDel16OttobreSottoGliOcchiDelGiudice(_BancoDeiSoldiDelServ
                          "il freno ha fermato una cancellazione legittima: %s %r" % (s, c))
 
 
+class TestLaDataDelCheckInSiLeggeUgualeSuOgniPython(unittest.TestCase):
+    """DATE-311 (19/10): dal Python 3.11 `date.fromisoformat` accetta anche '20260905' e
+    '2026-W36-6'. Le due funzioni del check-in accettano solo AAAA-MM-GG, su ogni versione.
+    Gemella di `test_fusi_orari.test_non_si_rompe_su_una_data_assurda`, qui perche' il
+    Giudice `--diff` guarda questo file: li' il mutante su `_istante_fine_tutela` passava."""
+
+    def test_una_data_giusta_da_l_istante_e_la_fine_tutela(self):
+        inizio = fase83_server._istante_checkin_prudente("2026-09-05")
+        self.assertIsNotNone(inizio)
+        self.assertEqual(fase83_server._istante_fine_tutela("2026-09-05", 24),
+                         inizio + 24 * 3600)
+
+    def test_le_forme_compatte_e_a_settimane_sono_rifiutate(self):
+        for cattiva in ("20260905", "2026-W36-6", "2026W366", "2026-13-45", ""):
+            with self.subTest(data=cattiva):
+                self.assertIsNone(fase83_server._istante_checkin_prudente(cattiva))
+                self.assertIsNone(fase83_server._istante_fine_tutela(cattiva, 24))
+
+
 if __name__ == "__main__":
     unittest.main()

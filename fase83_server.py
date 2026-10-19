@@ -517,6 +517,8 @@ def _istante_checkin_prudente(check_in: str) -> Optional[int]:
         giorno = _d.date.fromisoformat(str(check_in))
     except Exception:
         return None
+    if giorno.isoformat() != str(check_in):   # dal 3.11 passano anche 20260905 e 2026-W36-6
+        return None
     piu_a_ovest = _d.timezone(_d.timedelta(hours=ORE_FUSO_MIN))
     return int(_d.datetime(giorno.year, giorno.month, giorno.day,
                            ORA_CHECKIN_LOCALE, 0, 0, tzinfo=piu_a_ovest).timestamp())
@@ -529,6 +531,8 @@ def _istante_fine_tutela(check_in: str, ore_finestra: int = 24) -> Optional[int]
     try:
         giorno = _d.date.fromisoformat(str(check_in))
     except Exception:
+        return None
+    if giorno.isoformat() != str(check_in):
         return None
     piu_a_ovest = _d.timezone(_d.timedelta(hours=ORE_FUSO_MIN))
     inizio = _d.datetime(giorno.year, giorno.month, giorno.day,

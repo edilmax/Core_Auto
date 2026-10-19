@@ -32,7 +32,9 @@ PERCHE' ESISTE (due buchi veri, trovati il 2026-07-29 e chiusi da questo file).
   (renderebbe il gate rosso per un debito noto, che insegna a ignorare il rosso) ma un
   job dedicato `full-suite-311` che BLOCCA su tutto cio' che su 3.11 e' gia' verde e
   tiene il debito in un elenco dichiarato, a cricchetto: da li' si possono solo
-  togliere moduli.
+  togliere moduli. L'elenco e' arrivato a ZERO il 2026-10-19 (le due funzioni di
+  fase83 che leggevano il check-in ora rifiutano ogni data che non sia AAAA-MM-GG):
+  da quel giorno il job 3.11 lancia la suite intera.
 
   TERZO CONTROLLO (dipendenze) - la CI installa `-r requirements.txt hypothesis pyyaml
   coverage`; l'immagine non installa NIENTE (produzione stdlib-pura). E' una divergenza
@@ -48,8 +50,8 @@ CONFINI (cosa questo file NON fa, dichiarato per non spacciare copertura che non
     sonda, che la interroga pretendendo 200, e che il gate lo aspetta. Che il container
     parta davvero lo prova la CI eseguendolo;
   · non esegue la suite su 3.11 (lo fa il job full-suite-311): qui si prova che quel
-    job esiste, gira sul Python giusto, blocca, e che il suo elenco di debito e' fatto
-    di moduli veri e non puo' allargarsi;
+    job esiste, gira sul Python giusto, blocca, e lancia la suite intera senza
+    escludere niente;
   · non giudica la qualita' del Dockerfile (lo fa test_deploy_config.py) ne' quali
     moduli l'immagine copia (lo fa test_copertura_onesta.py).
 
@@ -385,34 +387,13 @@ def versioni_python_per_job(doc):
 def job_che_girano_la_suite_intera(doc):
     """I job che mandano in prova TUTTA la suite (non un sottoinsieme scelto).
 
-    Due forme: `unittest discover` (la suite per intero) e l'elenco costruito a
-    partire da tutti i `test_*.py` del repo meno il debito dichiarato, che il job
-    sulla versione di produzione scrive in `moduli_311.txt`.
+    Una sola forma: `unittest discover`. Fino al 2026-10-19 ce n'era una seconda,
+    l'elenco `moduli_311.txt` del job 3.11 meno il debito dichiarato: il debito e'
+    arrivato a zero e quell'elenco non esiste piu'. Se tornasse, quel job uscirebbe
+    da qui e la guardia sulla versione di produzione diventerebbe rossa.
     """
     return sorted(nome for nome, job in (doc.get("jobs") or {}).items()
-                  if any("unittest discover" in c or "moduli_311.txt" in c
-                         for c in comandi(job)))
-
-
-def moduli_esclusi_dal_gate_311(job):
-    """I moduli che il comando BLOCCANTE del job 3.11 lascia fuori (il debito)."""
-    for c in comandi(job):
-        trovato = re.search(r"grep -vE '\^\(([^)]*)\)\\\.py\$'", c)
-        if trovato:
-            return sorted(trovato.group(1).split("|"))
-    return []
-
-
-def moduli_del_passo_report(job):
-    """I moduli che il passo report-only del job 3.11 rimanda in prova comunque.
-
-    E' il comando che nomina i moduli uno per uno; quello che BLOCCA invece li legge
-    da `moduli_311.txt`, e non va confuso con questo.
-    """
-    for c in comandi(job):
-        if "unittest" in c and "moduli_311.txt" not in c:
-            return sorted(set(re.findall(r"\btest_[a-z0-9_]+", c)))
-    return []
+                  if any("unittest discover" in c for c in comandi(job)))
 
 
 def pacchetti_installati_dalla_ci(doc, requisiti):
@@ -883,44 +864,30 @@ class TestParitaVersionePython(unittest.TestCase):
                       "il job sulla versione di produzione deve BLOCCARE: se resta "
                       "fuori dal gate, il suo rosso non ferma nessun deploy")
 
-    def test_il_debito_su_3_11_e_dichiarato_modulo_per_modulo_e_a_cricchetto(self):
-        """Il job 3.11 blocca su tutto TRANNE un elenco di moduli scritto in chiaro.
-        Quell'elenco e' l'unica cosa che lo tiene verde oggi: se diventasse una lista
-        aperta, il job non proverebbe piu' niente. Quindi: nomi veri, elenco corto, e
-        i moduli esclusi devono comunque girare nel passo report-only."""
+    def test_il_debito_su_3_11_e_a_zero_e_non_torna(self):
+        """Il cricchetto del 2026-07-29 (7 moduli esclusi su 3.11) e' arrivato a zero
+        il 2026-10-19. Da qui il job 3.11 lancia la suite INTERA: nessun elenco, nessun
+        filtro, nessun passo «report-only» dove un rosso si legge e non ferma niente.
+        Rimettere un'esclusione vorrebbe dire riaprire il debito di nascosto."""
         job = self.doc["jobs"]["full-suite-311"]
-        esclusi = moduli_esclusi_dal_gate_311(job)
-        self.assertEqual(len(esclusi), 7,
-                         "CRICCHETTO del debito su 3.11: da questo elenco si possono "
-                         "solo TOGLIERE moduli (quando li si corregge), mai "
-                         "aggiungerne. Erano 7 il 2026-07-29. Trovati: %s" % esclusi)
-        for modulo in esclusi:
-            with self.subTest(modulo=modulo):
-                self.assertTrue(
-                    os.path.isfile(os.path.join(RADICE, modulo + ".py")),
-                    "il debito nomina %r, che non esiste piu' come file: o e' un "
-                    "refuso (e allora il modulo VERO sta girando senza rete) o e' "
-                    "una riga da cancellare" % modulo)
-        self.assertEqual(moduli_del_passo_report(job), esclusi,
-                         "i moduli esclusi dal comando che blocca e quelli rimandati "
-                         "in prova nel passo report-only DEVONO coincidere: se "
-                         "divergono, una parte del debito non la guarda piu' nessuno")
+        tutti = "\n".join(comandi(job))
+        self.assertIn('unittest discover -s . -p "test_*.py"', tutti,
+                      "il job 3.11 non lancia piu' la suite intera")
+        for vietato in ("grep -v", "moduli_311.txt", "report-only"):
+            with self.subTest(vietato=vietato):
+                self.assertNotIn(vietato, tutti + str(job),
+                                 "il job 3.11 torna a escludere qualcosa (%r): il "
+                                 "debito su Python di produzione e' chiuso" % vietato)
 
-    def test_il_job_311_non_puo_svuotarsi_di_nascosto(self):
-        """Il difetto peggiore possibile qui: un filtro sbagliato che lascia zero
-        moduli. Il comando uscirebbe 0 e il job sarebbe VERDE avendo provato niente."""
-        blocco = comando_del_passo(self.doc["jobs"]["full-suite-311"], "moduli_311.txt")
-        self.assertNotIn("|| true", blocco)
-        self.assertIn("-lt 300", blocco,
-                      "manca la guardia sul numero di moduli: senza, un filtro rotto "
-                      "renderebbe il job verde a vuoto")
-        self.assertIn("exit 1", blocco)
-        quanti = len([n for n in os.listdir(RADICE)
-                      if n.startswith("test_") and n.endswith(".py")])
-        self.assertGreater(quanti, 300,
-                           "i moduli di test nel repo sono %d: la soglia -lt 300 "
-                           "scritta nel job va rivista, altrimenti diventa un rosso "
-                           "fisso" % quanti)
+    def test_il_job_311_non_puo_essere_annullato(self):
+        """Un `|| true` o un `continue-on-error` farebbero il job VERDE con la suite
+        rossa: sarebbe la stessa cecita' del debito, senza nemmeno l'elenco."""
+        job = self.doc["jobs"]["full-suite-311"]
+        self.assertNotIn("|| true", "\n".join(comandi(job)))
+        self.assertNotIn("continue-on-error", str(job))
+        for passo in job.get("steps") or []:
+            with self.subTest(passo=passo.get("name")):
+                self.assertNotIn("continue-on-error", passo)
 
     def test_il_fuzzing_gira_sulla_versione_di_produzione(self):
         self.assertEqual(self.per_job.get("atheris"), {"3.11"},
