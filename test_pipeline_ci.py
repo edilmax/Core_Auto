@@ -12194,6 +12194,196 @@ class TestLEsameDegliOrologiNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
         self.assertNotIn('"cerca": "test_clock"', regole)
         self.assertTrue(os.path.isfile(os.path.join(QUI, "collaudi", "esame_orologi.py")))
 
+    # Il `controller` di un conto nato da `fase101_stripe_connect.crea_account`, come Stripe di
+    # prova lo restituisce: letto il 18/10 con GET /v1/accounts sul conto di prova del Desktop.
+    _CONTROLLER_VERO = {"requirement_collection": "stripe", "stripe_dashboard": {"type": "express"},
+                        "fees": {"payer": "application"}, "losses": {"payments": "application"},
+                        "type": "application", "is_controller": True}
+
+    def _conto_con_stripe_finto(self, contenuto_file, risposta_get, attesa=0):
+        """Esegue `_conto_connect_di_prova` con un FILE del conto scelto qui e una rete finta che
+        registra ogni chiamata. `risposta_get` e' una risposta, o una LISTA di risposte date in
+        fila (l'ultima si ripete). L'orologio e' finto: `sleep` lo fa avanzare, niente attese
+        vere. Ritorna (esito, chiamate)."""
+        esame = self._esame()
+        chiamate = []
+        fila = list(risposta_get) if isinstance(risposta_get, list) else [risposta_get]
+        adesso = [0.0]
+
+        def finto(chiave, percorso, dati=None, idem=None):
+            chiamate.append((percorso, dati))
+            if dati is not None:
+                return {"id": "acct_NATO_DAL_GIRO"}
+            return dict(fila.pop(0) if len(fila) > 1 else fila[0])
+
+        cartella = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, cartella, True)
+        file_conto = os.path.join(cartella, "conto.txt")
+        if contenuto_file is not None:
+            with io.open(file_conto, "w", encoding="utf-8") as f:
+                f.write(contenuto_file)
+        vero_chiama = esame.e2e._chiama
+        try:
+            esame.e2e._chiama = finto
+            esame.FILE_CONTO = file_conto
+            esame.ATTESA_CAPACITA_S = attesa
+            esame.time = type("OrologioFinto", (), {
+                "time": staticmethod(lambda: adesso[0]),
+                "sleep": staticmethod(lambda s: adesso.__setitem__(0, adesso[0] + s))})
+            esito = esame._conto_connect_di_prova("sk_test_finta")
+        finally:
+            esame.e2e._chiama = vero_chiama
+        return esito, chiamate
+
+    def _conto(self, transfers, **controller):
+        """Un conto di prova come Stripe lo restituisce; `controller` cambia le voci di uno vero
+        (`losses={"payments": "stripe"}` ...)."""
+        return {"id": "acct_PROVA", "livemode": False,
+                "controller": dict(self._CONTROLLER_VERO, **controller),
+                "capabilities": {"transfers": transfers}}
+
+    def test_SENZA_IL_CONTO_DI_PROVA_IL_PAYOUT_E_ROSSO_E_SU_STRIPE_NON_NASCE_NIENTE(self):
+        """17/10: la ricetta del conto 'custom' (la piattaforma accetta i termini al posto
+        dell'host) Stripe di prova la RIFIUTA finche' la piattaforma non si prende nel pannello
+        la responsabilita' di raccogliere i dati degli host -- e il fondatore NON la prende (in
+        produzione li raccoglie Stripe). Quindi l'esame non deve piu' CREARE conti: senza il conto
+        di prova gia' registrato si ferma ROSSO e dice come prepararlo."""
+        (acct, motivo), chiamate = self._conto_con_stripe_finto(None, {})
+        self.assertIsNone(acct)
+        self.assertIn("--prepara-conto", motivo)
+        self.assertEqual([c for c in chiamate if c[1] is not None], [],
+                         "senza il conto l'esame ha CREATO qualcosa su Stripe: %r" % (chiamate,))
+
+    def test_IL_CONTO_DI_PROVA_VALE_SOLO_SE_E_COME_QUELLI_DEGLI_HOST_VERI(self):
+        """Il conto letto dal file deve essere quello che `fase101_stripe_connect.crea_account`
+        fa nascere in produzione (i dati li raccoglie Stripe) E poter ricevere bonifici. Un conto
+        della vecchia ricetta (li raccoglie la piattaforma) e' rosso anche se ha i transfer.
+        18/10 (GML, compito 15): «come quelli veri» vuol dire TUTTE le voci che `crea_account`
+        manda (perdite e commissioni alla piattaforma, dashboard Express), non solo chi raccoglie
+        i dati; e «riceve bonifici» vuol dire `active`, non «tutto tranne inactive»."""
+        conto = self._conto
+        (acct, dett), chiamate = self._conto_con_stripe_finto("acct_PROVA\n", conto("active"))
+        self.assertEqual((acct, dett), ("acct_PROVA", "transfers=active"))
+        self.assertEqual([c for c in chiamate if c[1] is not None], [], "ha scritto su Stripe")
+        for nome, risposta in (("raccoglie la piattaforma", conto("active", requirement_collection="application")),
+                               ("perdite pagate da Stripe", conto("active", losses={"payments": "stripe"})),
+                               ("commissioni pagate dall'host", conto("active", fees={"payer": "account"})),
+                               ("dashboard completa", conto("active", stripe_dashboard={"type": "full"})),
+                               ("controller vuoto", dict(conto("active"), controller={})),
+                               ("transfer non attivi", conto("inactive")),
+                               ("transfer in attesa", conto("pending")),
+                               ("transfer senza stato", conto(None)),
+                               ("conto vivo", dict(conto("active"), livemode=True)),
+                               ("conto illeggibile", {"_errore": "404"})):
+            (acct, dett), chiamate = self._conto_con_stripe_finto("acct_PROVA", risposta)
+            self.assertIsNone(acct, "con «%s» il conto e' stato accettato: %s" % (nome, dett))
+            self.assertTrue(dett, "con «%s» il rosso e' MUTO" % nome)
+            self.assertEqual([c for c in chiamate if c[1] is not None], [], "ha scritto su Stripe")
+        (acct, dett), _c = self._conto_con_stripe_finto("non e' un conto", conto("active"))
+        self.assertIsNone(acct)
+
+    def test_DUE_CONTI_NEL_FILE_SONO_UN_ROSSO_NON_UNA_SCELTA(self):
+        """GML, compito 15: `_leggi_conto` prendeva il PRIMO `acct_` del file. Chi APPENDE il conto
+        nuovo sotto il vecchio (l'abitudine dei nostri registri) avrebbe misurato il vecchio senza
+        saperlo. Due conti diversi = rosso che lo dice; lo stesso conto ripetuto va bene."""
+        (acct, dett), chiamate = self._conto_con_stripe_finto(
+            "acct_VECCHIO\n# nota\nacct_NUOVO\n", self._conto("active"))
+        self.assertIsNone(acct, "con due conti nel file ne ha scelto uno: %s" % dett)
+        self.assertIn("acct_VECCHIO", dett)
+        self.assertIn("acct_NUOVO", dett)
+        self.assertEqual(chiamate, [], "con due conti nel file ha chiamato Stripe")
+        (acct, dett), _c = self._conto_con_stripe_finto("acct_PROVA\nacct_PROVA\n", self._conto("active"))
+        self.assertEqual(acct, "acct_PROVA", dett)
+
+    def test_UNA_LETTURA_IN_ERRORE_SI_RIPROVA_FINO_ALL_ATTESA(self):
+        """GML, compito 15: alla PRIMA lettura in errore l'esame usciva rosso subito (la ricetta
+        di prima riprovava fino a ATTESA_CAPACITA_S). Un singhiozzo di rete non fa rosso un conto
+        sano; un errore che dura tutta l'attesa si', col suo motivo."""
+        (acct, dett), chiamate = self._conto_con_stripe_finto(
+            "acct_PROVA", [{"_errore": "HTTP 503"}, self._conto("active")], attesa=45)
+        self.assertEqual((acct, dett), ("acct_PROVA", "transfers=active"))
+        self.assertEqual(len(chiamate), 2)
+        (acct, dett), chiamate = self._conto_con_stripe_finto("acct_PROVA", {"_errore": "HTTP 503"}, attesa=45)
+        self.assertIsNone(acct)
+        self.assertIn("503", dett)
+        self.assertGreater(len(chiamate), 1, "l'errore non e' stato riprovato")
+
+    def _prepara_con_stripe_finto(self, contenuto_file):
+        """Esegue `prepara_conto` con un provider finto al posto di quello di `fase101`.
+        Ritorna (codice, conti_creati, link_chiesti, file_dopo)."""
+        import fase101_stripe_connect as f101
+        esame = self._esame()
+        creati, link = [], []
+
+        class ProviderFinto:
+            def crea_account(self, email=""):
+                creati.append(email)
+                return "acct_NATOORA"
+
+            def link_onboarding(self, acct, ritorno, rinfresco=""):
+                link.append(acct)
+                return "https://connect.stripe.com/setup/e/finto"
+
+        cartella = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, cartella, True)
+        file_conto = os.path.join(cartella, "conto.txt")
+        if contenuto_file is not None:
+            with io.open(file_conto, "w", encoding="utf-8") as f:
+                f.write(contenuto_file)
+        vero = f101.crea_provider_connect
+        try:
+            f101.crea_provider_connect = lambda chiave, **k: ProviderFinto()
+            esame.FILE_CONTO = file_conto
+            with contextlib.redirect_stdout(io.StringIO()):
+                codice = esame.prepara_conto("sk_test_finta")
+        finally:
+            f101.crea_provider_connect = vero
+        dopo = None
+        if os.path.isfile(file_conto):
+            with io.open(file_conto, encoding="utf-8") as f:
+                dopo = f.read()
+        return codice, creati, link, dopo
+
+    def test_PREPARA_CONTO_NE_CREA_UNO_SOLO_E_MAI_SOPRA_UN_ALTRO(self):
+        """GML, compito 15: `prepara_conto` non aveva guardia. Con il conto gia' nel file da' solo
+        un link nuovo (non ne nasce un altro su Stripe, il file resta com'e'); senza, ne crea UNO e
+        lo scrive; con due conti nel file si ferma senza creare e senza link."""
+        codice, creati, link, dopo = self._prepara_con_stripe_finto("acct_VECCHIO\n# nota\n")
+        self.assertEqual((codice, creati, link, dopo), (0, [], ["acct_VECCHIO"], "acct_VECCHIO\n# nota\n"))
+        codice, creati, link, dopo = self._prepara_con_stripe_finto(None)
+        self.assertEqual((codice, len(creati), link), (0, 1, ["acct_NATOORA"]))
+        self.assertEqual(re.findall(r"\bacct_[A-Za-z0-9]+\b", dopo), ["acct_NATOORA"])
+        codice, creati, link, dopo = self._prepara_con_stripe_finto("acct_VECCHIO\nacct_NUOVO\n")
+        self.assertEqual((codice, creati, link, dopo), (1, [], [], "acct_VECCHIO\nacct_NUOVO\n"))
+
+    def test_LE_DUE_PROVE_DEL_CONTO_PRETENDONO_CIO_CHE_FASE101_CHIEDE_A_STRIPE(self):
+        """GML, compito 15: «come quelli degli host veri» era controllato a meta', e in DUE posti
+        (`esame_orologi` e il passo [4] di `prova_bonifico_host`, che gira nel contenitore e non
+        puo' importare l'altro). Qui le voci attese dei due attrezzi si confrontano con quelle
+        che `crea_account` di PRODUZIONE manda davvero a Stripe: se la produzione cambia, i due
+        esami non possono restare indietro."""
+        import ast
+        import fase101_stripe_connect as f101
+        inviati = {}
+        provider = f101.crea_provider_connect("sk_test_finta")
+        provider._post = lambda url, params, idem_key="": inviati.update(params) or {"id": "acct_X"}
+        self.assertEqual(provider.crea_account("host@example.com"), "acct_X")
+        atteso = {"requirement_collection": "stripe"}
+        for chiave, valore in inviati.items():
+            m = re.fullmatch(r"controller\[(\w+)\]\[(\w+)\]", chiave)
+            if m:
+                atteso["%s.%s" % m.groups()] = valore
+        self.assertGreaterEqual(len(atteso), 4, inviati)
+        for nome in ("esame_orologi.py", "prova_bonifico_host.py"):
+            with io.open(os.path.join(QUI, "collaudi", nome), encoding="utf-8") as f:
+                albero = ast.parse(f.read())
+            valori = [ast.literal_eval(n.value) for n in ast.walk(albero) if isinstance(n, ast.Assign)
+                      and any(isinstance(t, ast.Name) and t.id == "CONTROLLER_HOST_VERI" for t in n.targets)]
+            letture = [n for n in ast.walk(albero) if isinstance(n, ast.Name)
+                       and n.id == "CONTROLLER_HOST_VERI" and isinstance(n.ctx, ast.Load)]
+            self.assertEqual(valori, [atteso], "%s: CONTROLLER_HOST_VERI non e' cio' che fase101 chiede" % nome)
+            self.assertTrue(letture, "%s dichiara CONTROLLER_HOST_VERI ma non lo usa" % nome)
+
 
 class TestLEsameDellePrenotazioniNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
     """⛔ D18 PUNTO 4 PER `collaudi/esame_prenotazioni.py`, l'attrezzo che scrive la casella 1 del
@@ -14874,7 +15064,7 @@ class TestLaMisuraSegueIlCodice(unittest.TestCase):
         self.assertEqual(s.come_si_rimisura("python collaudi/esame_gare.py --scrivi"), "ci")
         self.assertTrue(s.FUORI_CI, "l'elenco di cio' che la CI non puo' misurare e' vuoto")
         comandi = {str(r.get("comando")) for r in s.leggi().values() if isinstance(r, dict)}
-        segni = re.compile(r"urlopen\(|\[\"ssh\"|sk_test|STRIPE_SECRET_KEY")
+        segni = re.compile(r"urlopen\(|\[\"ssh\"|sk_test|STRIPE_SECRET_KEY|" + self.SEGNI_CHIAVE_DI_PROVA)
         for comando, motivo in sorted(s.FUORI_CI.items()):
             with self.subTest(comando=comando):
                 self.assertEqual(s.come_si_rimisura(comando), "fuori_ci")
@@ -14889,6 +15079,37 @@ class TestLaMisuraSegueIlCodice(unittest.TestCase):
                     trovato, "%s e' dichiarato fuori dalla CI ma non apre la rete, non paga "
                              "su Stripe e non entra nel server: cosi' si toglie dal gate un "
                              "esame che la CI sa fare" % comando)
+
+    # Chi legge la chiave di PROVA di Stripe (il file sul Desktop del fondatore, o il suo
+    # lettore con il blocco contro il vivo): in CI quella chiave non c'e'.
+    SEGNI_CHIAVE_DI_PROVA = r"STRIPE_TEST_KEY_FILE|leggi_chiave\("
+
+    def test_UN_ESAME_CHE_VUOLE_LA_CHIAVE_DI_PROVA_NON_SI_RIFA_IN_CI(self):
+        """L'altro verso della guardia qui sopra. PR #264 (17/10): la casella di `esame_rimborsi`
+        misurata sul PC con la chiave di prova, la CI l'ha rifatta SENZA chiave ed e' venuta
+        ROSSA «E2E contro Stripe di prova non eseguito»: il gate fermava una misura vera perche'
+        l'esame era rimasto «dentro la CI». Un esame che senza quella chiave non puo' misurare
+        sta in FUORI_CI, col suo perche'."""
+        import importlib
+        s = importlib.import_module("collaudi.scheda")
+        segni = re.compile(self.SEGNI_CHIAVE_DI_PROVA)
+        comandi = {str(r.get("comando")) for r in s.leggi().values() if isinstance(r, dict)}
+        visti = 0
+        for comando in sorted(comandi):
+            pezzi = comando.split()
+            attrezzo = os.path.join(QUI, pezzi[1]) if len(pezzi) > 1 else ""
+            if not attrezzo.endswith(".py") or not os.path.isfile(attrezzo):
+                continue
+            with io.open(attrezzo, encoding="utf-8") as f:
+                if not segni.search(f.read()):
+                    continue
+            visti += 1
+            with self.subTest(comando=comando):
+                self.assertNotEqual(s.come_si_rimisura(comando), "ci",
+                                    "%s legge la chiave di PROVA di Stripe ma la CI lo rifa': "
+                                    "senza chiave e' rosso per finta" % comando)
+        self.assertGreaterEqual(visti, 2, "la guardia non ha trovato nemmeno gli esami che "
+                                          "pagano su Stripe di prova: i segni sono sbagliati")
 
     def test_IL_GATE_ASPETTA_LE_CASELLE_E_LA_MUTAZIONE_SUL_DIFF(self):
         doc = _doc_ci()

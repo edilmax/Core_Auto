@@ -432,6 +432,9 @@ FUORI_CI = {
         "legge i numeri dal SITO VIVO, non dal codice della PR",
     "python collaudi/esame_orologi.py --scrivi":
         "paga su Stripe di PROVA: la chiave sta sul computer del fondatore, non in CI",
+    "python collaudi/esame_rimborsi.py --scrivi":
+        "il suo E2E rimborsa su Stripe di PROVA: la chiave sta sul computer del fondatore, non in "
+        "CI (PR #264: rifatta in CI senza chiave era ROSSA «E2E ... non eseguito»)",
     "python collaudi/esame_produzione.py --scrivi":
         "legge gli invarianti sulla macchina di PRODUZIONE (ssh)",
     "python collaudi/esame_produzione.py --casella ogni-ora --scrivi":
