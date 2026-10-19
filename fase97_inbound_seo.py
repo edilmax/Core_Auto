@@ -241,12 +241,51 @@ def _pct(bps: int) -> str:
     return "%d" % (bps // 100) if bps % 100 == 0 else "%d.%d" % (bps // 100, (bps % 100) // 10)
 
 
+def _tariffa_tecnica(valuta_estera: bool = False) -> Tuple[int, int]:
+    """(bps, quota fissa in cents) della tariffa tecnica, dalla FONTE UNICA (fase98)."""
+    from fase98_policy_commissione import tariffa_tecnica_bps, tariffa_tecnica_fisso_cents
+    return tariffa_tecnica_bps(valuta_estera), tariffa_tecnica_fisso_cents()
+
+
+# Il NOME della tariffa tecnica e la frase per chi mette il prezzo fuori euro, per lingua
+# ({est} = la tariffa estera, letta da fase98). Senza il nome la pagina chiamava
+# «commissione» anche la tariffa; senza la seconda taceva quella estera.
+_TARIFFA_TESTI: Dict[str, Tuple[str, str]] = {
+    "it": ("tariffa tecnica", "{est}% se il prezzo non è in euro"),
+    "en": ("technical fee", "{est}% if the price is not in euros"),
+    "es": ("tarifa técnica", "{est}% si el precio no está en euros"),
+    "fr": ("frais techniques", "{est}% si le prix n'est pas en euros"),
+    "de": ("technische Gebühr", "{est}%, wenn der Preis nicht in Euro ist"),
+    "pt": ("taxa técnica", "{est}% se o preço não estiver em euros"),
+    "ja": ("技術手数料", "価格がユーロ以外の場合は{est}%"),
+    "zh": ("技术服务费", "价格非欧元时为{est}%"),
+    "ru": ("технический сбор", "{est}%, если цена не в евро"),
+    "id": ("biaya teknis", "{est}% jika harga tidak dalam euro"),
+    "th": ("ค่าธรรมเนียมทางเทคนิค", "{est}% หากราคาไม่ใช่สกุลเงินยูโร"),
+    "vi": ("phí kỹ thuật", "{est}% nếu giá không tính bằng euro"),
+    "ko": ("기술 수수료", "가격이 유로가 아닌 경우 {est}%"),
+}
+
+
+def _con_tariffa(testo: str, lingua: str = "it") -> str:
+    """Ogni «{noi}%» dei testi diventa commissione + tariffa tecnica (col suo nome) + quota
+    fissa, e la tariffa per chi mette il prezzo fuori euro.
+    ⛔ DIFETTO VIVO del 18/10 (`test_fase97_inbound_seo.TestLaLandingDiceIlCostoVeroAllHost`):
+    in tutte le lingue la pagina diceva all'host «paghi solo il {noi}%» e taceva la tariffa
+    tecnica che paga SEMPRE (README). Qui, e non in 13 traduzioni, perche' vale per ogni lingua."""
+    nome, fuori = _TARIFFA_TESTI.get(lingua, _TARIFFA_TESTI["en"])
+    fuori = fuori.format(est=_pct(_tariffa_tecnica(valuta_estera=True)[0]))
+    return testo.replace("{noi}%", "{noi}% + " + nome + " {tec}% + €{fisso} (" + fuori + ")")
+
+
 def risparmio_notte(prezzo_cents: int, commissione_bps: int, ota_bps: int) -> Dict[str, int]:
-    """Quanto tiene l'host con noi vs con l'OTA, su una notte. Tutto in cents interi."""
+    """Quanto tiene l'host con noi vs con l'OTA, su una notte. Tutto in cents interi.
+    Con noi l'host paga la commissione E la tariffa tecnica (percentuale + quota fissa)."""
     p = max(0, int(prezzo_cents))
     nostra = max(0, p * max(0, int(commissione_bps)) // 10000)
     ota = max(0, p * max(0, int(ota_bps)) // 10000)
-    netto_noi = p - nostra
+    tec_bps, tec_fisso = _tariffa_tecnica()
+    netto_noi = max(0, p - nostra - (p * tec_bps // 10000 + tec_fisso)) if p else 0
     netto_ota = p - ota
     return {"prezzo": p, "commissione_noi": nostra, "commissione_ota": ota,
             "netto_noi": netto_noi, "netto_ota": netto_ota,
@@ -529,11 +568,12 @@ def faq_jsonld(lingua: str = "it", *, commissione_bps: int = 1000,
                ota_bps: int = 2500) -> str:
     lng = lingua if lingua in _FAQ else "en"
     noi, ota = _pct(commissione_bps), _pct(ota_bps)
+    tec_bps, tec_fisso = _tariffa_tecnica()
     items = []
     for q, a in _FAQ[lng]:
+        testo = _con_tariffa(a, lng).format(noi=noi, ota=ota, tec=_pct(tec_bps), fisso=_euro(tec_fisso))
         items.append({"@type": "Question", "name": q,
-                      "acceptedAnswer": {"@type": "Answer",
-                                         "text": a.format(noi=noi, ota=ota)}})
+                      "acceptedAnswer": {"@type": "Answer", "text": testo}})
     return _jsonld({"@context": "https://schema.org", "@type": "FAQPage",
                     "mainEntity": items})
 
@@ -623,6 +663,8 @@ def genera_landing_host(citta: str, *, lingua: str = "it", base_url: str = "",
     codice = _bcp47(lang, regione)                    # BCP-47 completo (es. 'es-MX')
     t = _T[lng]
     noi, ota = _pct(commissione_bps), _pct(ota_bps)
+    tec_bps, tec_fisso = _tariffa_tecnica()
+    tec, fisso = _pct(tec_bps), _euro(tec_fisso)
     r = risparmio_notte(prezzo_demo_cents, commissione_bps, ota_bps)
     e = html.escape
     citta_e = e(citta)
@@ -631,14 +673,16 @@ def genera_landing_host(citta: str, *, lingua: str = "it", base_url: str = "",
     canonical = _url_locale(base, slug, codice)       # self-canonical del locale corrente
 
     def fmt(s):
-        return s.format(citta=citta_e, ota=ota, noi=noi, prezzo=_euro(r["prezzo"]),
-                        netto_ota=_euro(r["netto_ota"]), netto_noi=_euro(r["netto_noi"]),
-                        risparmio=_euro(r["risparmio"]))
+        return _con_tariffa(s, lng).format(citta=citta_e, ota=ota, noi=noi, tec=tec, fisso=fisso,
+                                      prezzo=_euro(r["prezzo"]), netto_ota=_euro(r["netto_ota"]),
+                                      netto_noi=_euro(r["netto_noi"]),
+                                      risparmio=_euro(r["risparmio"]))
 
     def fmt_raw(s):   # per il JSON-LD: valori GREZZI (l'escaping lo fa json.dumps, non html)
-        return s.format(citta=citta, ota=ota, noi=noi, prezzo=_euro(r["prezzo"]),
-                        netto_ota=_euro(r["netto_ota"]), netto_noi=_euro(r["netto_noi"]),
-                        risparmio=_euro(r["risparmio"]))
+        return _con_tariffa(s, lng).format(citta=citta, ota=ota, noi=noi, tec=tec, fisso=fisso,
+                                      prezzo=_euro(r["prezzo"]), netto_ota=_euro(r["netto_ota"]),
+                                      netto_noi=_euro(r["netto_noi"]),
+                                      risparmio=_euro(r["risparmio"]))
 
     # link interni (SEO): altre città
     rel_links = "".join(
@@ -647,7 +691,7 @@ def genera_landing_host(citta: str, *, lingua: str = "it", base_url: str = "",
 
     faq_html = "".join(
         "<details><summary>%s</summary><p>%s</p></details>"
-        % (e(q), e(a.format(noi=noi, ota=ota))) for q, a in _FAQ[lng])
+        % (e(q), e(fmt_raw(a))) for q, a in _FAQ[lng])
 
     cta_url = base + "/diventa-host.html?ref=seo-" + slug
     page = (
@@ -743,7 +787,8 @@ def llms_txt(base_url: str = "", *, commissione_bps: int = 1500,
     quando un host chiede a un LLM 'come affittare senza commissioni alte', citi noi."""
     b = (base_url or "https://bookinvip.com").rstrip("/")
     noi, ota = _pct(commissione_bps), _pct(ota_bps)
-    return (
+    tec_bps, tec_fisso = _tariffa_tecnica()
+    return _con_tariffa(
         "# BookinVIP\n\n"
         "> BookinVIP è la piattaforma di prenotazione alloggi per prenotazioni DIRETTE, senza le "
         "alte commissioni delle OTA. Commissione host {noi}% (contro ~{ota}% di Booking/Airbnb), "
@@ -767,7 +812,7 @@ def llms_txt(base_url: str = "", *, commissione_bps: int = 1500,
         "- Vetrina: {b}/\n"
         "- Guida / Blog: {b}/blog\n"
         "- Diventa host: {b}/diventa-host.html\n"
-    ).format(noi=noi, ota=ota, b=b)
+    ).format(noi=noi, ota=ota, b=b, tec=_pct(tec_bps), fisso=_euro(tec_fisso))
 
 
 def sitemap_inbound(base_url: str = "", *, citta: Sequence[str] = CITTA_SEED,
