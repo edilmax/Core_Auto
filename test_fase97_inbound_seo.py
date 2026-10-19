@@ -1,7 +1,9 @@
 """Test Fase 97 - Inbound SEO/AEO. Funzioni PURE: deterministico, nessun I/O."""
 import json
+import re
 import unittest
 
+import fase97_inbound_seo as fase97
 from fase97_inbound_seo import (CITTA_SEED, citta_da_slug, faq_jsonld,
                                 genera_landing_host, llms_txt, risparmio_notte,
                                 sitemap_inbound, slug_citta)
@@ -21,12 +23,16 @@ class TestSlug(unittest.TestCase):
 
 class TestRisparmio(unittest.TestCase):
     def test_math_cents_interi(self):
+        # 18/10: il netto con noi toglie ANCHE la tariffa tecnica (prima pretendeva il conto
+        # senza, cioe' la bugia della pagina); la tariffa si legge dal motore
+        from fase98_policy_commissione import tariffa_tecnica_bps, tariffa_tecnica_fisso_cents
+        tecnica = 10000 * tariffa_tecnica_bps() // 10000 + tariffa_tecnica_fisso_cents()
         r = risparmio_notte(10000, 1500, 2500)        # €100, noi 15%, OTA 25%
         self.assertEqual(r["commissione_noi"], 1500)
         self.assertEqual(r["commissione_ota"], 2500)
-        self.assertEqual(r["netto_noi"], 8500)
+        self.assertEqual(r["netto_noi"], 8500 - tecnica)
         self.assertEqual(r["netto_ota"], 7500)
-        self.assertEqual(r["risparmio"], 1000)         # +€10 a notte
+        self.assertEqual(r["risparmio"], 1000 - tecnica)
 
     def test_invarianti_non_negativi(self):
         r = risparmio_notte(-5, -10, 999999)
@@ -47,9 +53,11 @@ class TestLanding(unittest.TestCase):
     def test_calcolo_risparmio_in_pagina(self):
         h = genera_landing_host("Roma", lingua="it", commissione_bps=1500, ota_bps=2500,
                                 prezzo_demo_cents=10000)
-        self.assertIn("85.00", h)        # netto noi
-        self.assertIn("75.00", h)        # netto OTA
-        self.assertIn("10.00", h)        # risparmio
+        r = risparmio_notte(10000, 1500, 2500)         # col netto VERO (tariffa tecnica tolta)
+        self.assertIn("€%d.%02d" % divmod(r["netto_noi"], 100), h)     # netto noi
+        self.assertIn("€75.00", h)                                     # netto OTA
+        self.assertIn("+€%d.%02d" % divmod(r["risparmio"], 100), h)    # risparmio
+        self.assertNotIn("€85.00", h)    # il netto di prima, senza tariffa tecnica
 
     def test_xss_safe(self):
         h = genera_landing_host('Roma"><script>alert(1)</script>', lingua="it")
@@ -107,6 +115,152 @@ class TestStrutturaSemantica(unittest.TestCase):
         self.assertEqual(h.count("<main>"), 1)
         self.assertNotIn("<nav", h)
         self.assertIn('<section aria-labelledby="faq">', h)
+
+
+class TestLaLandingDiceIlCostoVeroAllHost(unittest.TestCase):
+    """⛔ DIFETTO VIVO trovato il 18/10 da un revisore esterno (Qwen) e verificato col curl sul
+    sito vero: le pagine /affitta/<citta> dicevano all'host «paghi SOLO il 10%» e «su una notte
+    da €100 con noi tieni €90 -> +€15», in tutte le lingue. Tacevano la tariffa tecnica che
+    l'host paga SEMPRE (README, «Tariffa tecnica ... SEMPRE dovuta»): il netto vero e' piu'
+    basso. E' il modo di rompersi n. 3 (testi che mentono) sulla pagina che recluta gli host.
+    Le cifre si prendono DAL MOTORE (`fase98_policy_commissione`): scritte a mano qui, il giorno
+    che cambiano questa prova resterebbe verde su una bugia."""
+
+    PREZZO = 10000          # la notte dimostrativa che la pagina usa (prezzo_demo_cents)
+    REGIME = 1000           # quello che il server passa (COMMISSIONE_BPS, ripiego 1000)
+    # GML compito 16 (2): una bugia che compare solo ad ALTRI parametri non si vedeva. Il primo
+    # caso e' quello del server; gli altri cambiano regime e prezzo (anche non tondi)
+    CASI = ((REGIME, PREZZO), (800, 12345), (1500, 4999))
+
+    def _tariffa(self, estera=False):
+        from fase98_policy_commissione import tariffa_tecnica_bps, tariffa_tecnica_fisso_cents
+        return tariffa_tecnica_bps(estera), tariffa_tecnica_fisso_cents()
+
+    @staticmethod
+    def _pct(bps):
+        """La percentuale COME LA SCRIVE la pagina (GML compito 16 (3): «%d» % (bps // 100)
+        sbagliava su un valore non tondo, e la prova diventava rossa per finta)."""
+        return re.escape(fase97._pct(bps)) + "%"
+
+    def _netto_vero(self, regime=None, prezzo=None):
+        regime = self.REGIME if regime is None else regime
+        prezzo = self.PREZZO if prezzo is None else prezzo
+        bps, fisso = self._tariffa()
+        return prezzo - prezzo * regime // 10000 - (prezzo * bps // 10000 + fisso)
+
+    @staticmethod
+    def _euro(cents):
+        return "%d.%02d" % (cents // 100, cents % 100)
+
+    @staticmethod
+    def _parti(h):
+        """(testo visibile, JSON-LD) della pagina."""
+        jsonld = "".join(re.findall(r'<script type="application/ld\+json">(.*?)</script>', h, re.S))
+        visibile = re.sub(r'<script type="application/ld\+json">.*?</script>', "", h, flags=re.S)
+        return visibile, jsonld
+
+    def test_il_conto_dell_host_toglie_anche_la_tariffa_tecnica(self):
+        bps, fisso = self._tariffa()
+        r = risparmio_notte(self.PREZZO, self.REGIME, 2500)
+        self.assertEqual(r["netto_noi"], self._netto_vero(),
+                         "il netto dell'host con noi non toglie la tariffa tecnica")
+        self.assertEqual(r["risparmio"], r["netto_noi"] - r["netto_ota"])
+
+    def test_ogni_lingua_dice_la_tariffa_tecnica_e_il_netto_vero(self):
+        bps, fisso = self._tariffa()
+        tecnica = re.compile(r"(?<![\d.,])" + self._pct(bps))
+        for regime, prezzo in self.CASI:
+            r = risparmio_notte(prezzo, regime, 2500)
+            netto = self._euro(self._netto_vero(regime, prezzo))
+            falso = self._euro(prezzo - prezzo * regime // 10000)
+            for lng in sorted(fase97._T):
+                with self.subTest(lingua=lng, regime=regime, prezzo=prezzo):
+                    h = genera_landing_host("Roma", lingua=lng, commissione_bps=regime,
+                                            ota_bps=2500, prezzo_demo_cents=prezzo)
+                    visibile, jsonld = self._parti(h)
+                    # OGNI volta che la pagina nomina la commissione, la tariffa la segue: una
+                    # sola frase che dice «solo il {noi}%» basta a ingannare (la FAQ visibile
+                    # l'aveva ancora dopo la prima riparazione). Fra le due percentuali ci dev'essere
+                    # il NOME della tariffa (almeno una lettera), mai una cifra: GML compito 17 (d),
+                    # col nome facoltativo passava la pagina che lo scriveva solo al regime di prova
+                    for parte in (visibile, jsonld):
+                        sola = re.findall(r"(?<![\d.,])%s(?! \+ [^\d%%+]*[^\W\d_][^\d%%+]* %s \+ €%s)"
+                                          % (self._pct(regime), self._pct(bps),
+                                             re.escape(self._euro(fisso))), parte)
+                        self.assertEqual(sola, [], "%s: la commissione compare %d volte SENZA la "
+                                         "tariffa tecnica" % (lng, len(sola)))
+                    self.assertIn(netto, visibile, "%s: il netto con noi non e' %s" % (lng, netto))
+                    self.assertNotIn("€" + falso, visibile, "%s: la pagina promette ancora €%s, "
+                                     "senza tariffa tecnica" % (lng, falso))
+                    # GML compito 16 (4): il guadagno in piu' si pretendeva solo in italiano
+                    self.assertIn("+€" + self._euro(r["risparmio"]), visibile,
+                                  "%s: manca il guadagno vero a notte" % lng)
+                    for nome, parte in (("testo della pagina", visibile), ("FAQ per Google", jsonld)):
+                        self.assertRegex(parte, tecnica, "%s, %s: manca la tariffa tecnica"
+                                         % (lng, nome))
+                        self.assertIn(self._euro(fisso), parte, "%s, %s: manca la quota fissa €%s"
+                                      % (lng, nome, self._euro(fisso)))
+
+    def test_ogni_lingua_da_un_nome_alla_tariffa_tecnica(self):
+        """La pagina diceva «la commissione e' {noi}% + {tec}% + €{fisso}»: i numeri giusti, ma la
+        tariffa tecnica chiamata commissione. Fra la commissione e la tariffa ci dev'essere il
+        suo NOME, nella lingua della pagina (quale parola, lo decide la pagina: qui si
+        pretende che ci sia, non che sia tradotta bene -- quello una macchina non lo vede)."""
+        bps, fisso = self._tariffa()
+        for regime, prezzo in self.CASI:     # GML compito 17 (d): non solo al regime di prova
+            nominata = re.compile(r"(?<![\d.,])%s \+ [^\d%%+]*[^\W\d_][^\d%%+]* %s \+ €%s"
+                                  % (self._pct(regime), self._pct(bps),
+                                     re.escape(self._euro(fisso))))
+            for lng in sorted(fase97._T):
+                with self.subTest(lingua=lng, regime=regime, prezzo=prezzo):
+                    visibile, jsonld = self._parti(genera_landing_host(
+                        "Roma", lingua=lng, commissione_bps=regime, prezzo_demo_cents=prezzo))
+                    for nome, parte in (("testo della pagina", visibile), ("FAQ per Google", jsonld)):
+                        self.assertRegex(parte, nominata, "%s, %s: la tariffa tecnica non ha un nome"
+                                         % (lng, nome))
+                        # e OGNI volta il nome e' quello della SUA lingua, non quello di un'altra
+                        # (con «c'e' almeno una volta» passava la pagina che lo sbagliava in testa)
+                        nomi = re.findall(r"(?<![\d.,])%s \+ ([^\d%%+]+) %s \+ €%s"
+                                          % (self._pct(regime), self._pct(bps),
+                                             re.escape(self._euro(fisso))), parte)
+                        self.assertEqual(set(nomi), {fase97._TARIFFA_TESTI[lng][0]},
+                                         "%s, %s: il nome della tariffa non e' nella lingua della "
+                                         "pagina" % (lng, nome))
+
+    def test_ogni_lingua_dice_la_tariffa_fuori_euro(self):
+        """GML compito 16, nota: chi mette il prezzo in un'altra valuta paga la tariffa
+        tecnica ESTERA (README: il conto Stripe tiene solo euro e il cambio costa in piu'),
+        e la pagina diceva a tutti solo quella in euro."""
+        estera, fisso = self._tariffa(estera=True)
+        fuori = re.compile(r"(?<![\d.,])" + self._pct(estera))
+        for lng in sorted(fase97._T):
+            with self.subTest(lingua=lng):
+                visibile, jsonld = self._parti(genera_landing_host(
+                    "Roma", lingua=lng, commissione_bps=self.REGIME, prezzo_demo_cents=self.PREZZO))
+                for nome, parte in (("testo della pagina", visibile), ("FAQ per Google", jsonld)):
+                    self.assertRegex(parte, fuori, "%s, %s: manca la tariffa fuori euro"
+                                     % (lng, nome))
+
+    def test_ogni_frase_che_nomina_la_commissione_la_scrive_col_segnaposto(self):
+        """GML compito 16 (1): la riparazione aggiunge la tariffa dove trova «{noi}%». Una frase
+        che scrive la commissione in un altro modo («{noi} %», «{noi} per cento») resterebbe
+        senza tariffa e senza guardia. ⚠️ Limite dichiarato: una frase di costo SENZA cifra
+        («paghi solo una piccola commissione») qui non si vede: la legge una persona."""
+        for nome, testi in (("_T", [v for t in fase97._T.values() for v in t.values()]),
+                            ("_FAQ", [x for f in fase97._FAQ.values() for qa in f for x in qa])):
+            for testo in testi:
+                if not isinstance(testo, str):
+                    continue
+                self.assertEqual(testo.count("{noi}"), testo.count("{noi}%"),
+                                 "%s: «{noi}» senza «%%» subito dopo in: %s" % (nome, testo[:80]))
+
+    def test_il_file_per_gli_assistenti_ai_dice_la_tariffa_tecnica(self):
+        bps, fisso = self._tariffa()
+        estera, _ = self._tariffa(estera=True)
+        t = llms_txt("https://bookinvip.com", commissione_bps=self.REGIME)
+        self.assertRegex(t, r"(?<![\d.,])" + self._pct(bps))
+        self.assertRegex(t, r"(?<![\d.,])" + self._pct(estera))
+        self.assertIn(self._euro(fisso), t)
 
 
 class TestFaqJsonld(unittest.TestCase):

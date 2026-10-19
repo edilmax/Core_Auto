@@ -340,7 +340,7 @@ Gli stessi passi, con il punto del codice dove stanno:
 | 3 | **Arrivo fra meno di 6 giorni**: i soldi si prendono subito | `fase85_pagamenti_stripe.py:73` |
 | 4 | Il blocco vale solo coi metodi che lo reggono: carta (con dentro Apple Pay e Google Pay), Link, Klarna, Amazon Pay, Satispay | `fase85_pagamenti_stripe.py:59` |
 | 5 | Pagato: si apre la **garanzia** con la quota dell'host (il suo netto più la tassa di soggiorno, che poi gira lui al Comune) | `fase83_server.py:6741`, `:6771` |
-| 6 | La garanzia si sblocca da sola **24 ore dopo l'arrivo**; l'arrivo si conta alle **15:00 ora del posto** | `fase160_escrow_garanzia.py:22`, `:90`; `fase83_server.py:573` |
+| 6 | La garanzia si sblocca da sola **24 ore dopo l'arrivo**; l'arrivo si conta alle **15:00 ora del posto**. La data d'arrivo vale solo se è scritta AAAA-MM-GG, uguale sul PC e sul server: fino al 2026-10-19 il Python del server accettava anche «20260905» e «2026-W36-6» (DATE-311) | `fase160_escrow_garanzia.py:22`, `:90`; `fase83_server.py:573`; la data `fase83_server.py:_istante_checkin_prudente` |
 | 7 | **Solo nelle 24 ore dall'arrivo** l'ospite può premere **«tutto ok»** (soldi subito all'host) o **«segnala un problema»** (soldi fermi, decide una persona): prima la risposta è «non ancora arrivato», dopo «finestra chiusa». Se l'alloggio non ha un fuso orario, la finestra si apre al primo arrivo possibile del giorno d'arrivo, così l'ospite non perde ore. Il giro che sblocca le garanzie scadute passa **ogni ora** | `fase83_server.py:7700`, `:7717`, `:13581`; la finestra `fase83_server.py:3096` |
 | 8 | Il **bonifico** all'host parte da solo, con Stripe Connect | `fase83_server.py:7128` |
 
@@ -443,6 +443,7 @@ Misurato, non ricordato. Il dettaglio di ognuno sta in `RIPRENDI_QUI.md`.
 - Il **contratto dell'host** non nomina le 48 ore (ART. 6-TER, `fase163_accettazioni.py:129-135`): chi sceglie «non rimborsabile» rende comunque tutto nelle 48 ore, e il contratto non glielo dice. I Termini dell'ospite invece lo dicono.
 - **Paga in struttura**: per l'ospite che **non si presenta e non cancella** non c'è penale, perché manca chi la faccia partire.
 - **Non guardato**: il primo bonifico vero legato al suo pagamento (`source_transaction`) sul pannello di Stripe. I pagamenti veri non girano nella CI (§9).
+- **Non guardato (DATE-311, 2026-10-19)**: riparate le due letture della data d'arrivo in `fase83_server.py`, ma nel codice di produzione ci sono altre letture di date con `fromisoformat` (48 righe in tutto, contate col grep il 2026-10-19), fra cui `fase187_fuso_orario.py:121` che calcola l'arrivo quando l'alloggio ha un fuso: sul Python del server possono accettare le stesse forme strane. Da cercare una per una.
 
 ## 📜 Registro delle decisioni
 
