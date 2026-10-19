@@ -5203,6 +5203,8 @@ class RouterHTTP:
                     except Exception:
                         dj = {}
                     tot = int(dj.get("totale_cents", 0) or dj.get("prezzo_guest_cents", 0) or 0)
+                    if dj.get("modo_pagamento") == "in_struttura":   # la carta ha pagato SOLO l'anticipo
+                        tot = int(dj.get("anticipo_online_cents", 0) or 0)
                     _tot = tot
                     _valuta = dj.get("valuta") or "EUR"
                     _pi = str(dj.get("stripe_pi") or "")
