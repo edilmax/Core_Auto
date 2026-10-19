@@ -307,8 +307,12 @@ jobs:
   #      aggiungerne. Quando un modulo viene corretto su 3.11 esce di qui e da
   #      quel momento e' protetto per sempre. Quando l'elenco arriva a ZERO,
   #      questo job diventa `unittest discover` puro come full-suite.
+  #  >>> ARRIVATO A ZERO il 2026-10-19: l'ultimo rosso era la famiglia (a), chiusa
+  #      alla fonte in fase83 (`_istante_checkin_prudente`/`_istante_fine_tutela`
+  #      rifiutano ogni data che non sia scritta AAAA-MM-GG). I 7 moduli girati su
+  #      3.11 nella copia Linux: 84 prove, OK. Da qui il job e' `discover` puro.
   full-suite-311:
-    name: full-suite-311 (Python di PRODUZIONE, debito dichiarato)
+    name: full-suite-311 (Python di PRODUZIONE)
     runs-on: ubuntu-latest
     # ⛔ 45 -> 75 il 2026-09-02. E' QUESTO il job che il 2026-09-01 e' stato annullato a
     # 46,7 minuti, mandando rosso il `gate` della #134 con il codice sano. Il suo 45 non
@@ -336,35 +340,9 @@ jobs:
           cache: pip
       - name: Dipendenze di test
         run: pip install -r requirements.txt hypothesis pyyaml coverage z3-solver
-      # I 7 moduli con debito dichiarato (5 di semantica delle date + 2 che su
-      # Windows sciolgono male le cartelle temporanee) restano fuori da QUESTO
-      # comando, che blocca su tutto il resto: oggi sono 388 moduli su 395.
-      - name: Suite su 3.11 meno il debito dichiarato (BLOCCA)
-        run: |
-          ls test_*.py \
-            | grep -vE '^(test_fusi_orari|test_fuso_alloggio|test_fase64_smartpass|test_impossibile_tokyo_honolulu|test_paga_struttura_avanzato|test_fase10_dashboard|test_fase11_report)\.py$' \
-            | sed 's/\.py$//' > moduli_311.txt
-          echo "moduli in prova su 3.11: $(wc -l < moduli_311.txt) (esclusi 7 con debito dichiarato)"
-          if [ "$(wc -l < moduli_311.txt)" -lt 300 ]; then
-            echo "::error title=Elenco sospetto::meno di 300 moduli di test trovati: il filtro ha mangiato la suite."
-            exit 1
-          fi
-          python -m unittest $(cat moduli_311.txt)
-      # Il debito NON sparisce dalla vista: gira lo stesso, e il suo rosso resta
-      # scritto nel log. E' l'unico modo perche' qualcuno lo chiuda.
-      # Il messaggio finale NON e' fisso: dice la verita' misurata in questa run. Se un
-      # giorno il debito passa, la CI lo annuncia e chiede di stringere il cricchetto -
-      # cosi' non resta un elenco di esclusioni che nessuno rilegge piu'.
-      - name: Il debito noto su 3.11 (report-only, deve restare visibile)
-        if: always()
-        run: |
-          if python -m unittest test_fusi_orari test_fuso_alloggio test_fase64_smartpass \
-               test_impossibile_tokyo_honolulu test_paga_struttura_avanzato \
-               test_fase10_dashboard test_fase11_report; then
-            echo "::notice title=Debito su Python 3.11 CHIUSO::i moduli esclusi passano ORA anche sul Python di produzione: toglili dal filtro del passo che blocca (cricchetto) e questo passo sparisce."
-          else
-            echo "::notice title=Debito su Python 3.11::i moduli dichiarati non passano ancora sul Python di PRODUZIONE (misura del 2026-07-29: 15 rossi veri di semantica delle date + artefatti Windows). Vedi il commento del job full-suite-311 in ci.yml."
-          fi
+      # Nessun modulo escluso: il debito su 3.11 e' a zero (vedi il commento sopra).
+      - name: Suite intera su 3.11 (BLOCCA)
+        run: python -m unittest discover -s . -p "test_*.py"
 
   # ==========================================================================
   #  COPERTURA — quanta parte del prodotto vivo i test la attraversano davvero

@@ -128,9 +128,14 @@ class TestLaTutelaNonSiAccorciaMaiANessuno(unittest.TestCase):
                          "i fusi del mondo vanno da UTC-12 a UTC+14 (Kiribati)")
 
     def test_non_si_rompe_su_una_data_assurda(self):
-        for cattiva in (None, "", "domani", "2026-13-45", 20260905):
+        # Le forme compatte e a settimane le accetta `date.fromisoformat` solo dal
+        # Python 3.11 (quello del server): sul PC erano rifiutate, in produzione no.
+        for cattiva in (None, "", "domani", "2026-13-45", 20260905,
+                        "20260905", "2026-W36-6", "2026W366"):
             self.assertIsNone(_istante_checkin_prudente(cattiva),
                               "data %r accettata" % cattiva)
+            self.assertIsNone(_istante_fine_tutela(cattiva, ORE_TUTELA),
+                              "data %r accettata dalla fine tutela" % cattiva)
 
     def test_non_dipende_dal_fuso_DEL_SERVER(self):
         """La proprieta' piu' importante: lo stesso check-in deve dare lo stesso istante
