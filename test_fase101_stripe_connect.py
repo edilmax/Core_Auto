@@ -2,11 +2,15 @@
 E le guardie di `TestIBuchiDelGiudice` (2026-09-04): trasferisci, stato_account, link_onboarding,
 crea_account, `_intero_pos` e i ripieghi dei params, nate dai 37 mutanti sopravvissuti al giro
 col solo test dedicato."""
+import http.client
+import io
+import json
 import unittest
+import urllib.error
 import urllib.parse
 
 from fase101_stripe_connect import (STRIPE_URL, ProviderConnect, ProviderStripeConnect,
-                                    _intero_pos, costruisci_params,
+                                    _esito_sconosciuto, _intero_pos, costruisci_params,
                                     crea_provider_stripe_connect)
 
 DATI = {"prezzo_guest_cents": 11200, "commissione_cents": 1500,
@@ -178,8 +182,13 @@ class PostFinto:
     def __init__(self, risposte=None):
         self.risposte = risposte or {}
         self.chiamate = []
+        self.letture = []
 
     def __call__(self, url, body, headers):
+        if body is None and url.startswith(ProviderConnect.TRANSFERS + "?"):
+            # la rilettura anti-doppio di `trasferisci` (Pilastro zero): nessun bonifico gia' fatto
+            self.letture.append(url)
+            return {"object": "list", "data": [], "has_more": False}
         self.chiamate.append((url, body, headers))
         for prefisso, r in self.risposte.items():
             if url.startswith(prefisso):
@@ -358,8 +367,12 @@ class TestIBuchiDelGiudice(unittest.TestCase):
                 self.assertEqual(spy3.chiamate, [], "un bonifico rifiutato non deve toccare Stripe")
         for risposta in ({"id": "xx_1"}, {"id": None}, {}, None, "str"):                          # 243
             with self.subTest(risposta=risposta):
-                p = ProviderConnect("sk", fetch=PostFinto({ProviderConnect.TRANSFERS: risposta}))
-                self.assertIsNone(p.trasferisci("acct_1", 100, "eur", "R"))
+                spy4 = PostFinto({ProviderConnect.TRANSFERS: risposta})
+                p = ProviderConnect("sk", fetch=spy4)
+                # PILASTRO ZERO (19/10): una risposta che non e' un bonifico non dice se e' partito.
+                # Non e' un rifiuto (None, «a mano»): e' ESITO SCONOSCIUTO, dopo aver riletto Stripe.
+                self.assertEqual(p.trasferisci("acct_1", 100, "eur", "R"), "")
+                self.assertEqual(len(spy4.letture), 2, "una lettura prima e una dopo il POST")
 
 
 class TestCollegaStripe_IlContoDellHostNasceComeLoAccettaStripe(unittest.TestCase):
@@ -424,6 +437,185 @@ class TestIlBonificoSiLegaAlPagamentoDellOspite(unittest.TestCase):
         self.assertEqual(_decodifica(spy.chiamate[0][1]), {
             "amount": "100", "currency": "eur", "destination": "acct_1", "transfer_group": "R",
             "metadata[riferimento]": "R"})
+
+
+_LISTA = object()
+
+
+def _bonifico(tid, acct="acct_1", importo=100, rif="R", valuta="eur", **altro):
+    """Un bonifico come lo elenca Stripe (docs.stripe.com/api/transfers/list, 19/10/2026)."""
+    t = {"id": tid, "object": "transfer", "amount": importo, "currency": valuta,
+         "destination": acct, "metadata": {"riferimento": rif}, "reversed": False,
+         "amount_reversed": 0}
+    t.update(altro)
+    return t
+
+
+class _StripeLista:
+    """Stripe finto coi bonifici GIA' fatti (`esistenti`, il piu' nuovo per primo) e la lista
+    come la da' l'API vera: filtro `destination`, pagine da `limit`, `has_more`,
+    `starting_after`. `post` e' la risposta del POST (o l'eccezione da sollevare); `esegue` = il
+    POST crea davvero il bonifico anche quando poi solleva; `lettura` = cosa risponde (o solleva)
+    OGNI lettura, al posto della lista."""
+
+    def __init__(self, esistenti=(), post=None, esegue=False, lettura=_LISTA):
+        self.esistenti = [dict(t) for t in esistenti]
+        self.risposta_post = {"id": "tr_nuovo"} if post is None else post
+        self.esegue = esegue
+        self.lettura = lettura
+        self.letture = []
+        self.post = []
+
+    def __call__(self, url, body, headers):
+        if body is None:
+            self.letture.append(url)
+            if isinstance(self.lettura, BaseException):
+                raise self.lettura
+            if self.lettura is not _LISTA:
+                return self.lettura
+            q = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(url).query))
+            tutti = [t for t in self.esistenti if t.get("destination") == q.get("destination")]
+            da = [t["id"] for t in tutti].index(q["starting_after"]) + 1 \
+                if "starting_after" in q else 0
+            pagina = tutti[da:da + int(q.get("limit", "10"))]
+            return {"object": "list", "data": pagina, "has_more": da + len(pagina) < len(tutti)}
+        campi = _decodifica(body)
+        self.post.append(campi)
+        if self.esegue:
+            self.esistenti.insert(0, _bonifico("tr_eseguito", campi["destination"],
+                                               int(campi["amount"]),
+                                               campi["metadata[riferimento]"], campi["currency"]))
+        if isinstance(self.risposta_post, BaseException):
+            raise self.risposta_post
+        return self.risposta_post
+
+
+def _http(codice, corpo=b"{}"):
+    return urllib.error.HTTPError(ProviderConnect.TRANSFERS, codice, "x", {}, io.BytesIO(corpo))
+
+
+class TestPilastroZero_IlBonificoAllHostNonSiPagaDueVolte(unittest.TestCase):
+    """PILASTRO ZERO (ricerca del fondatore 19/10, voce 19; «autorizzato» lo stesso giorno). Una
+    risposta di Stripe che non arriva non dice se il bonifico e' partito, e la chiave anti-doppio
+    Stripe la ricorda 24 ore (docs.stripe.com/error-low-level, letta il 19/10/2026). Le prove
+    gemelle di `test_movimenti_giornale.TestAgganciMoneyPath.test_PILASTRO_ZERO_*` (dal timeout
+    fino al giornale), qui ramo per ramo (D19)."""
+
+    def test_solo_un_4xx_diverso_da_409_e_un_rifiuto_certo(self):
+        class Ostile(Exception):
+            def __getattr__(self, nome):
+                raise KeyError(nome)
+
+        class CodiceBool(Exception):
+            code = True
+
+        class CodiceTesto(Exception):
+            code = "400"
+
+        for exc, sconosciuto in ((_http(400), False), (_http(402), False), (_http(404), False),
+                                 (_http(429), False), (_http(499), False), (_http(399), True),
+                                 (_http(409), True), (_http(500), True), (_http(503), True),
+                                 (TimeoutError("timed out"), True),
+                                 (urllib.error.URLError("timed out"), True),
+                                 (http.client.RemoteDisconnected("closed"), True),
+                                 (json.JSONDecodeError("x", "", 0), True), (Ostile(), True),
+                                 (CodiceBool(), True), (CodiceTesto(), True)):
+            with self.subTest(exc=exc.__class__.__name__, codice=getattr(exc, "code", None)
+                              if not isinstance(exc, Ostile) else "ostile"):
+                self.assertIs(_esito_sconosciuto(exc), sconosciuto)
+
+    def test_trasferisci_tre_risposte_e_mai_un_secondo_bonifico(self):
+        rifiuto = _http(400, b'{"error": {"code": "balance_insufficient", "message": "no"}}')
+        casi = (
+            ("gia' fatto e giusto: si ritrova", _StripeLista([_bonifico("tr_v")]), "tr_v", 0),
+            ("nessuno: si fa", _StripeLista(), "tr_nuovo", 1),
+            ("di un altro riferimento", _StripeLista([_bonifico("tr_x", rif="R2")]), "tr_nuovo", 1),
+            ("gia' fatto, altro importo", _StripeLista([_bonifico("tr_v", importo=99)]), "", 0),
+            ("gia' fatto, importo non intero", _StripeLista([_bonifico("tr_v", importo=100.0)]),
+             "", 0),
+            ("gia' fatto, altra valuta", _StripeLista([_bonifico("tr_v", valuta="usd")]), "", 0),
+            ("gia' fatto e stornato", _StripeLista([_bonifico("tr_v", reversed=True)]), "", 0),
+            ("stornato in parte", _StripeLista([_bonifico("tr_v", amount_reversed=1)]), "", 0),
+            ("storno non detto", _StripeLista([_bonifico("tr_v", reversed=None)]), "", 0),
+            ("storno falso-zero", _StripeLista([_bonifico("tr_v", reversed=0)]), "", 0),
+            ("storno booleano", _StripeLista([_bonifico("tr_v", amount_reversed=False)]), "", 0),
+            ("lettura che non risponde", _StripeLista(lettura=TimeoutError("t")), "", 0),
+            ("rifiuto 4xx: a mano", _StripeLista(post=rifiuto), None, 1),
+            ("rifiuto nel corpo", _StripeLista(post={"error": {"message": "no"}}), None, 1),
+            ("409, la chiave e' in corso", _StripeLista(post=_http(409)), "", 1),
+            ("500 eseguito: si ritrova", _StripeLista(post=_http(500), esegue=True),
+             "tr_eseguito", 1),
+            ("500 non eseguito", _StripeLista(post=_http(500)), "", 1),
+            ("timeout eseguito: si ritrova", _StripeLista(post=TimeoutError("t"), esegue=True),
+             "tr_eseguito", 1),
+        )
+        for nome, stripe, atteso, post in casi:
+            with self.subTest(nome):
+                self.assertEqual(ProviderConnect("sk", fetch=stripe).trasferisci(
+                    "acct_1", 100, "EUR", "R"), atteso)
+                self.assertEqual(len(stripe.post), post, "POST a Stripe")
+
+    def test_senza_riferimento_un_esito_sconosciuto_resta_sconosciuto(self):
+        stripe = _StripeLista(post=_http(500), esegue=True)
+        self.assertEqual(ProviderConnect("sk", fetch=stripe).trasferisci("acct_1", 100, "eur", ""),
+                         "")
+
+    def test_bonifico_di_chiede_il_conto_giusto_e_dice_non_so_quando_non_e_sicuro(self):
+        for chiave, acct, rif in (("", "acct_1", "R"), ("sk", "cus_1", "R"), ("sk", None, "R"),
+                                  ("sk", "acct_1", ""), ("sk", "acct_1", None)):
+            with self.subTest(chiave=chiave, acct=acct, rif=rif):
+                s = _StripeLista()
+                self.assertEqual(ProviderConnect(chiave, fetch=s).bonifico_di(acct, rif),
+                                 {"ok": False, "motivo": "argomenti_non_validi"})
+                self.assertEqual(s.letture, [])
+        s = _StripeLista()
+        self.assertEqual(ProviderConnect("sk", fetch=s).bonifico_di("acct_1", "R"),
+                         {"ok": True, "bonifico": None})
+        u = urllib.parse.urlsplit(s.letture[0])
+        self.assertEqual("%s://%s%s" % (u.scheme, u.netloc, u.path), ProviderConnect.TRANSFERS)
+        self.assertEqual(dict(urllib.parse.parse_qsl(u.query)),
+                         {"destination": "acct_1", "limit": "100"})
+        # trovato alla terza pagina, sfogliando con `starting_after`
+        altri = [_bonifico("tr_%03d" % i, rif="X%d" % i) for i in range(230)]
+        s = _StripeLista(altri[:215] + [_bonifico("tr_mio", importo=7)] + altri[215:])
+        self.assertEqual(ProviderConnect("sk", fetch=s).bonifico_di("acct_1", "R"),
+                         {"ok": True, "bonifico": {"id": "tr_mio", "importo_cents": 7,
+                                                   "valuta": "eur", "stornato": False}})
+        self.assertEqual(len(s.letture), 3)
+        self.assertIn("starting_after=tr_099", s.letture[1])
+        # oltre PAGINE_MASSIME si ferma, e non sa
+        s = _StripeLista([_bonifico("tr_%04d" % i, rif="X")
+                          for i in range(100 * ProviderConnect.PAGINE_MASSIME + 1)])
+        r = ProviderConnect("sk", fetch=s).bonifico_di("acct_1", "R")
+        self.assertEqual((r["ok"], len(s.letture)), (False, ProviderConnect.PAGINE_MASSIME))
+        self.assertIn("pagine", r["motivo"])
+        # due bonifici per lo stesso riferimento: il doppio c'e' gia', non si aggiunge il terzo
+        r = ProviderConnect("sk", fetch=_StripeLista([_bonifico("tr_a"), _bonifico("tr_b")])
+                            ).bonifico_di("acct_1", "R")
+        self.assertFalse(r["ok"])
+        self.assertIn("tr_a, tr_b", r["motivo"])
+        # metadati che non sono un dizionario: non sono lui
+        s = _StripeLista([_bonifico("tr_x", metadata=None), _bonifico("tr_y", metadata="R")])
+        self.assertEqual(ProviderConnect("sk", fetch=s).bonifico_di("acct_1", "R"),
+                         {"ok": True, "bonifico": None})
+        # `has_more` che non e' True: ci si ferma; True senza bonifici: non so
+        self.assertEqual(ProviderConnect("sk", fetch=_StripeLista(
+            lettura={"data": [], "has_more": "si"})).bonifico_di("acct_1", "R"),
+            {"ok": True, "bonifico": None})
+        self.assertFalse(ProviderConnect("sk", fetch=_StripeLista(
+            lettura={"data": [], "has_more": True})).bonifico_di("acct_1", "R")["ok"])
+        for risposta in (None, "str", [], {}, {"data": None}, {"data": "x"}, {"data": [None]},
+                         {"data": [{"id": "xx_1"}]}, {"data": [{"id": None}]}):
+            with self.subTest(risposta=risposta):
+                r = ProviderConnect("sk", fetch=_StripeLista(lettura=risposta)).bonifico_di(
+                    "acct_1", "R")
+                self.assertFalse(r["ok"])
+                self.assertIn("risposta_inattesa", r["motivo"])
+        r = ProviderConnect("sk", fetch=_StripeLista(lettura=_http(
+            500, b'{"error": {"code": "api_error", "message": "boom"}}'))).bonifico_di(
+            "acct_1", "R")
+        self.assertFalse(r["ok"])
+        self.assertIn("codice: api_error", r["motivo"])
 
 
 if __name__ == "__main__":

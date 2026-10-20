@@ -82,7 +82,10 @@ Core_Auto/
 4. **Escrow** (`fase160`) — la quota dell'host resta ferma fino al "tutto ok" dell'ospite o al
    rilascio automatico dopo 24 ore.
 5. **Bonifico** (`fase101` Stripe Connect) — al rilascio la quota parte **da sola** verso il
-   conto dell'host; senza conto collegato resta un bonifico manuale tracciato.
+   conto dell'host; senza conto collegato resta un bonifico manuale tracciato. Prima di ogni
+   bonifico si chiede a Stripe se c'è già; se Stripe non risponde (timeout, errore 5xx) l'esito
+   è **sconosciuto**, non «fallito»: non diventa mai un bonifico manuale, perché pagarlo a mano
+   vorrebbe dire pagare l'host due volte (deciso il 19/10/2026, Pilastro zero).
 6. **Contabilità** (`fase177`) — libro giornale **append-only** con catena di hash: ogni riga è
    firmata e una manomissione si vede. Da qui escono estratti certificati e report **DAC7**.
 

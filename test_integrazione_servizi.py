@@ -291,6 +291,7 @@ class FintoStripeForm(_FintoSevero):
                           "url": "https://checkout.stripe.com/c/pay/cs_test_1"} \
             if risposta is _MANCA else risposta
         self._guasto = guasto
+        self.bonifici = []         # i bonifici che QUESTO finto ha eseguito (POST con un tr_)
 
     def __call__(self, url, body, headers):
         h = dict(headers or {})
@@ -303,8 +304,24 @@ class FintoStripeForm(_FintoSevero):
         if not body and "/checkout/sessions/" in url:
             # la rilettura dello stato (casella 10): la forma vera della Checkout Session
             return {"id": url.rstrip("/").rsplit("/", 1)[-1], "payment_status": "paid"}
+        if not body and url.startswith("https://api.stripe.com/v1/transfers?"):
+            # la rilettura anti-doppio del Connect (Pilastro zero, 19/10): la lista vera dei
+            # bonifici gia' eseguiti verso quel conto (docs.stripe.com/api/transfers/list)
+            q = dict(parse_qsl(urlsplit(url).query))
+            return {"object": "list", "has_more": False,
+                    "data": [b for b in reversed(self.bonifici)
+                             if b["destination"] == q.get("destination")]}
         r = self._risposta
-        return r(self.richieste[-1]) if callable(r) else r
+        esito = r(self.richieste[-1]) if callable(r) else r
+        c = self.richieste[-1]["campi"]
+        if (body and url == "https://api.stripe.com/v1/transfers" and isinstance(esito, dict)
+                and str(esito.get("id") or "").startswith("tr_")):
+            self.bonifici.append({"id": esito["id"], "object": "transfer",
+                                  "amount": int(c["amount"]), "currency": c["currency"],
+                                  "destination": c["destination"],
+                                  "metadata": {"riferimento": c.get("metadata[riferimento]", "")},
+                                  "reversed": False, "amount_reversed": 0})
+        return esito
 
 
 class FintoStripeCarta(_FintoSevero):
@@ -873,21 +890,26 @@ class TestStripeConnectContratto(_ContrattiPuliti):
         self.assertEqual(c["metadata[riferimento]"], "BVIP-AAAA")
 
     def test_stessa_prenotazione_stessa_idempotency_key(self):
-        """Due tentativi sullo stesso riferimento = stessa chiave: Stripe dedupe -> UN bonifico."""
+        """Due tentativi sullo stesso riferimento: UN bonifico. Dal 19/10 (Pilastro zero) il
+        secondo non arriva nemmeno al POST: prima rilegge Stripe, ci trova il primo e lo rende
+        (la chiave Stripe la ricorda 24 ore, la lista dei bonifici per sempre)."""
         f = FintoStripeForm(risposta={"id": "tr_123"})
         p = crea_provider_connect("sk_test_x", fetch=f)
-        p.trasferisci("acct_H1", 21600, "EUR", "BVIP-AAAA")
-        p.trasferisci("acct_H1", 21600, "EUR", "BVIP-AAAA")
-        chiavi = [r["headers"].get("Idempotency-Key") for r in f.richieste]
-        self.assertEqual(chiavi, ["transfer_BVIP-AAAA", "transfer_BVIP-AAAA"])
+        self.assertEqual(p.trasferisci("acct_H1", 21600, "EUR", "BVIP-AAAA"), "tr_123")
+        self.assertEqual(p.trasferisci("acct_H1", 21600, "EUR", "BVIP-AAAA"), "tr_123")
+        chiavi = [r["headers"].get("Idempotency-Key") for r in f.richieste if r["corpo"]]
+        self.assertEqual(chiavi, ["transfer_BVIP-AAAA"])
+        self.assertEqual(len([r for r in f.richieste if not r["corpo"]]), 2, "le due riletture")
 
     def test_riferimenti_diversi_chiavi_diverse(self):
         f = FintoStripeForm(risposta={"id": "tr_123"})
         p = crea_provider_connect("sk_test_x", fetch=f)
         p.trasferisci("acct_H1", 100, "EUR", "BVIP-AAAA")
         p.trasferisci("acct_H1", 100, "EUR", "BVIP-BBBB")
-        self.assertNotEqual(f.richieste[0]["headers"]["Idempotency-Key"],
-                            f.richieste[1]["headers"]["Idempotency-Key"])
+        post = [r for r in f.richieste if r["corpo"]]
+        self.assertEqual(len(post), 2)
+        self.assertNotEqual(post[0]["headers"]["Idempotency-Key"],
+                            post[1]["headers"]["Idempotency-Key"])
 
     def test_importi_e_conti_invalidi_nessuna_chiamata(self):
         for acct, imp in (("acct_H1", 0), ("acct_H1", -5), ("acct_H1", 12.5),
@@ -898,11 +920,14 @@ class TestStripeConnectContratto(_ContrattiPuliti):
             self.assertEqual(f.richieste, [], "(%r,%r) ha chiamato Stripe" % (acct, imp))
 
     def test_risposta_non_transfer_non_e_un_bonifico(self):
-        """Solo un id 'tr_...' vale come bonifico partito: qualsiasi altra cosa -> None."""
-        for risposta in ({"id": "cs_123"}, {"id": ""}, {}, {"error": {"code": "x"}}, None):
+        """Solo un id 'tr_...' vale come bonifico partito. Dal 19/10 (Pilastro zero) il resto si
+        divide in due: un rifiuto (l'errore nel corpo) -> None, si paga a mano; una risposta che
+        non e' un bonifico e non e' un rifiuto -> "" ESITO SCONOSCIUTO (falso anche lui)."""
+        for risposta, atteso in (({"id": "cs_123"}, ""), ({"id": ""}, ""), ({}, ""),
+                                 ({"error": {"code": "x"}}, None), (None, "")):
             f = FintoStripeForm(risposta=risposta)
             p = crea_provider_connect("sk_test_x", fetch=f)
-            self.assertIsNone(p.trasferisci("acct_H1", 100, "EUR", "BVIP-X"), repr(risposta))
+            self.assertEqual(p.trasferisci("acct_H1", 100, "EUR", "BVIP-X"), atteso, repr(risposta))
 
     # ── destination charge (crea_link): la via in cui la NOSTRA commissione viaggia
     #    dentro la stessa richiesta del pagamento dell'ospite. Non era coperta: qui
@@ -943,11 +968,15 @@ class TestStripeConnectContratto(_ContrattiPuliti):
                              "(%r,%r) ha chiamato Stripe" % (lordo, fee))
 
     def test_stripe_500_sul_transfer_non_solleva(self):
+        """Stripe risponde 500 a tutto: non solleva, e dal 19/10 (Pilastro zero) e' ESITO
+        SCONOSCIUTO (""), non un rifiuto: gia' la rilettura iniziale fallisce, quindi nessun POST
+        alla cieca."""
         f = FintoStripeForm(guasto=urllib.error.HTTPError(
             "https://api.stripe.com", 500, "boom", {}, None))
         p = crea_provider_connect("sk_test_x", fetch=f)
-        self.assertIsNone(p.trasferisci("acct_H1", 21600, "EUR", "BVIP-AAAA"))
+        self.assertEqual(p.trasferisci("acct_H1", 21600, "EUR", "BVIP-AAAA"), "")
         self.assertEqual(len(f.richieste), 1)
+        self.assertIsNone(f.richieste[0]["corpo"], "la sola richiesta e' la lettura, non un POST")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1822,6 +1851,8 @@ class _BaseIntegrazione(_ContrattiPuliti):
         self.sis.stripe._fetch = self.stripe                 # checkout (fase85)
         self.connect = FintoStripeForm(risposta={"id": "tr_ok"})
         self.sis.connect._fetch = self.connect                # transfer (fase101)
+        # e la rilettura anti-doppio (Pilastro zero, 19/10): senza, leggerebbe dalla rete VERA
+        self.sis.connect._fetch_get = lambda url, headers: self.connect(url, None, headers)
         self.carta = FintoStripeCarta({"/checkout/sessions/": {"customer": "cus_1",
                                                                "setup_intent": "seti_1"},
                                        "/setup_intents/": {"payment_method": "pm_1"}})
@@ -2238,12 +2269,21 @@ class TestApiDbConnectPayout(_BaseIntegrazione):
         self.assertEqual(gio[0]["importo_cents"], int(self.b["netto_host_cents"]))
 
     def test_stripe_500_sul_bonifico_non_perde_i_soldi_dell_host(self):
-        """Il transfer fallisce: il payout NON puo' risultare partito; resta 'maturato'
-        (visibile, ripagabile) e a giornale resta la prova che serve il bonifico manuale."""
+        """Il transfer risponde 500: il payout NON puo' risultare partito; resta 'maturato'
+        (visibile, ripagabile). ⛔ PILASTRO ZERO (19/10, ricerca del fondatore): un 500 e' un
+        esito SCONOSCIUTO, non un rifiuto (docs.stripe.com/error-low-level: «Considera
+        indeterminato l'esito di una richiesta che restituisce 500»). Riletto, Stripe qui non ha
+        il bonifico, ma puo' averlo ancora in lavorazione: niente riga «bonifico manuale»
+        (pagarlo a mano lo pagherebbe due volte), al suo posto l'allarme nel registro. Fino a
+        quel giorno questa prova PRETENDEVA la riga «manuale»: era il difetto, scritto come
+        requisito."""
         self.sis.connect._fetch = FintoStripeForm(guasto=urllib.error.HTTPError(
             "https://api.stripe.com", 500, "boom", {}, None))
-        s, out = self.conferma()
+        with self.assertLogs("core_auto.server", level="ERROR") as registro:
+            s, out = self.conferma()
         self.assertEqual(s, 200, out)
+        self.assertTrue(any("BONIFICO ESITO SCONOSCIUTO" in r for r in registro.output),
+                        registro.output)
         pay = self.sql("payout", "SELECT * FROM payout WHERE prenotazione_id=?", (self.rif,))
         self.assertEqual(pay[0]["stato"], "maturato", "payout dato per partito senza transfer")
         self.assertEqual(pay[0]["minori"], int(self.b["netto_host_cents"]),
@@ -2252,7 +2292,8 @@ class TestApiDbConnectPayout(_BaseIntegrazione):
                                   "SELECT * FROM libro_giornale WHERE tipo='payout_host'"), [])
         manuale = self.sql("finanza",
                            "SELECT * FROM libro_giornale WHERE tipo='payout_manuale'")
-        self.assertEqual(len(manuale), 1, "nessuna traccia del bonifico da fare a mano")
+        self.assertEqual(manuale, [], "un esito sconosciuto e' diventato «bonifico da fare a "
+                                      "mano»: pagarlo a mano lo pagherebbe due volte")
 
     def test_secondo_sblocco_non_manda_un_secondo_bonifico(self):
         primo, secondo = self.conferma(), self.conferma()

@@ -12,7 +12,9 @@ from __future__ import annotations
 import json
 import logging
 import urllib.parse
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
+
+from fase85_pagamenti_stripe import _motivo_errore
 
 logger = logging.getLogger("core_auto.stripe_connect")
 
@@ -21,6 +23,22 @@ STRIPE_URL = "https://api.stripe.com/v1/checkout/sessions"
 
 def _intero_pos(v: Any) -> bool:
     return isinstance(v, int) and not isinstance(v, bool) and v > 0
+
+
+def _esito_sconosciuto(exc: BaseException) -> bool:
+    """⛔ PILASTRO ZERO (19/10/2026). Una chiamata a Stripe finita in errore ha l'esito SCONOSCIUTO
+    -- puo' essere stata ESEGUITA -- salvo un rifiuto certo: una risposta 4xx, tranne 409 (la
+    stessa chiave e' ancora in lavorazione). Timeout, connessione caduta, 5xx e una risposta che
+    non si legge restano sconosciuti (docs.stripe.com/error-low-level, letta il 19/10/2026:
+    «Considera indeterminato l'esito di una richiesta che restituisce 500»). Il codice si legge
+    da `code` come fa la diagnostica di `_post` (l'HTTPError vero e gli errori finti delle prove),
+    dentro un `try`: nel dubbio e' sconosciuto, perche' un rifiuto inventato fa pagare due volte."""
+    try:
+        codice = getattr(exc, "code", None)
+        return not (isinstance(codice, int) and not isinstance(codice, bool)
+                    and 400 <= codice < 500 and codice != 409)
+    except Exception:
+        return True
 
 
 def costruisci_params(prezzo_guest_cents: int, application_fee_cents: int,
@@ -119,10 +137,13 @@ class ProviderConnect:
                                                       Dict[str, Any]]] = None) -> None:
         self._key = secret_key or ""
         self._fetch = fetch or self._fetch_reale
-        self._fetch_get = fetch_get or self._fetch_get_reale
+        # Una rete FINTA iniettata serve anche le letture (senza corpo e' un GET, come in fase85):
+        # altrimenti una prova che inietta solo `fetch` leggerebbe dalla rete VERA.
+        self._fetch_get = fetch_get or (self._fetch_get_reale if fetch is None
+                                        else (lambda url, headers: fetch(url, None, headers)))
 
-    def _post(self, url: str, params: Dict[str, str],
-              idem_key: str = "") -> Optional[Dict[str, Any]]:
+    def _post(self, url: str, params: Dict[str, str], idem_key: str = "",
+              esito: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
         try:
             headers = {"Authorization": "Bearer " + self._key,
                        "Content-Type": "application/x-www-form-urlencoded"}
@@ -157,6 +178,8 @@ class ProviderConnect:
             #    STESSO `__getattr__` ostile: `KeyError: 'code'`, e l'errore usciva
             #    di nuovo. Qui NIENTE che tocchi l'oggetto dell'eccezione sta fuori
             #    da un `try`.
+            if esito is not None:                 # PILASTRO ZERO: rifiuto, o esito sconosciuto?
+                esito["sconosciuto"] = _esito_sconosciuto(e)
             tipo = codice = msg = ""
             stato = "?"
             try:
@@ -233,29 +256,133 @@ class ProviderConnect:
     def trasferisci(self, account_id: str, amount_cents: Any, currency: str,
                     riferimento: str, source_transaction: str = "") -> Optional[str]:
         """Sposta il netto host sul suo conto. IDEMPOTENTE per riferimento (Stripe dedupa
-        con la stessa Idempotency-Key: mai doppio bonifico). -> tr_... o None.
+        con la stessa Idempotency-Key: mai doppio bonifico).
         COMPITO 41: con l'ADDEBITO dell'ospite (`source_transaction`, ch_/py_) il bonifico non
         esce dal saldo DISPONIBILE (il 4/10 -0,27 EUR): Stripe lo accetta e lo esegue quando quei
         soldi sono disponibili. Col legame il gruppo lo crea Stripe (come nell'esempio ufficiale:
         mandarli insieme non e' documentato) e il riferimento resta nei metadata
-        (docs.stripe.com/connect/separate-charges-and-transfers, letto l'11/10/2026)."""
+        (docs.stripe.com/connect/separate-charges-and-transfers, letto l'11/10/2026).
+
+        ⛔ PILASTRO ZERO (19/10/2026, «autorizzato»). Una risposta che non arriva (timeout,
+        connessione caduta, 5xx) NON dice se il bonifico e' partito, e Stripe ricorda la chiave
+        anti-doppio solo 24 ore (docs.stripe.com/error-low-level, letta il 19/10/2026): pagarlo a
+        mano, o rifare il POST a chiave dimenticata, paga l'host DUE volte. Quindi, col
+        riferimento, PRIMA si chiede a Stripe se il bonifico c'e' gia' (`bonifico_di`), e dopo un
+        esito sconosciuto si rilegge SUBITO. Tre risposte, non due:
+          'tr_...' = partito (adesso, o ritrovato su Stripe);
+          None     = NON partito, con certezza (argomenti non validi, o un rifiuto 4xx): a mano;
+          ""       = ESITO SCONOSCIUTO: niente bonifico nuovo e niente «a mano», il motivo e' nel
+                     registro. Vuota e quindi falsa: chi sa solo «riuscito o no» non la scambia
+                     mai per un bonifico partito."""
         if not (self._key and isinstance(account_id, str) and account_id.startswith("acct_")):
             return None
         if not (isinstance(amount_cents, int) and not isinstance(amount_cents, bool)
                 and amount_cents > 0):
             return None
+        rif = str(riferimento or "")
         params = {"amount": str(amount_cents),
                   "currency": (currency or "eur").lower(),
                   "destination": account_id,
-                  "metadata[riferimento]": str(riferimento or "")}
+                  "metadata[riferimento]": rif}
         if isinstance(source_transaction, str) and source_transaction.startswith(("ch_", "py_")):
             params["source_transaction"] = source_transaction
         else:
-            params["transfer_group"] = str(riferimento or "")
-        r = self._post(self.TRANSFERS, params,
-                       idem_key="transfer_" + str(riferimento or account_id))
+            params["transfer_group"] = rif
+        if rif:
+            gia = self._bonifico_esistente(account_id, rif, amount_cents, params["currency"])
+            if gia is not None:                       # gia' partito ('tr_...'), o non si sa ("")
+                return gia
+        esito: Dict[str, Any] = {}
+        r = self._post(self.TRANSFERS, params, idem_key="transfer_" + (rif or account_id),
+                       esito=esito)
         tid = r.get("id") if r else None
-        return tid if isinstance(tid, str) and tid.startswith("tr_") else None
+        if isinstance(tid, str) and tid.startswith("tr_"):
+            return tid
+        if esito.get("sconosciuto") is False or (isinstance(r, dict)
+                                                 and isinstance(r.get("error"), dict)):
+            return None                               # rifiuto certo: non e' partito niente
+        logger.error("Connect: bonifico con ESITO SCONOSCIUTO verso %s (riferimento %r, %d %s): "
+                     "la risposta di Stripe non e' arrivata o non si legge, si rilegge Stripe",
+                     account_id, rif, amount_cents, params["currency"])
+        return (self._bonifico_esistente(account_id, rif, amount_cents, params["currency"])
+                or "") if rif else ""
+
+    def _bonifico_esistente(self, account_id: str, riferimento: str, amount_cents: int,
+                            valuta: str) -> Optional[str]:
+        """-> 'tr_...' il bonifico di questo riferimento c'e' gia' su Stripe ed e' quello giusto
+        (stesso importo e valuta, non stornato) · None Stripe dice che non c'e' · "" non si sa, o
+        c'e' ma non torna: lo dice il registro, e niente secondo bonifico."""
+        letto = self.bonifico_di(account_id, riferimento)
+        if not letto.get("ok"):
+            logger.error("Connect: NON SO se il bonifico per %r verso %s e' gia' partito (%s): "
+                         "non lo rifaccio alla cieca", riferimento, account_id,
+                         letto.get("motivo"))
+            return ""
+        b = letto.get("bonifico")
+        if b is None:
+            return None
+        if (_intero_pos(b["importo_cents"]) and b["importo_cents"] == amount_cents
+                and b["valuta"] == valuta and not b["stornato"]):
+            logger.warning("Connect: il bonifico %s per %r verso %s c'era gia' su Stripe: non se "
+                           "ne fa un altro", b["id"], riferimento, account_id)
+            return b["id"]
+        logger.error("Connect: per %r verso %s Stripe ha GIA' il bonifico %s ma non torna (%r, "
+                     "atteso %d %s): niente secondo bonifico, decide una persona",
+                     riferimento, account_id, b["id"], b, amount_cents, valuta)
+        return ""
+
+    # Pagine da 100 lette al massimo per ritrovare un bonifico: oltre, la risposta e' «non so».
+    PAGINE_MASSIME = 10
+
+    def bonifico_di(self, account_id: str, riferimento: str) -> Dict[str, Any]:
+        """IL BONIFICO DI QUESTA PRENOTAZIONE C'E' GIA' SU STRIPE? Solo lettura: GET
+        /v1/transfers filtrato sul conto dell'host (`destination`, 100 per pagina, `has_more` e
+        `starting_after`: docs.stripe.com/api/transfers/list, letta il 19/10/2026), cercando
+        `metadata[riferimento]`, che `trasferisci` mette sempre (il gruppo no: col legame
+        all'addebito lo sceglie Stripe).
+        -> {'ok': True, 'bonifico': None} nessuno · {'ok': True, 'bonifico': {'id',
+        'importo_cents', 'valuta', 'stornato'}} uno · {'ok': False, 'motivo'} NON LO SO (rete,
+        risposta che non e' una lista di bonifici, oltre PAGINE_MASSIME, piu' di un bonifico per
+        lo stesso riferimento): chi chiama non paga. Mai solleva."""
+        if not (self._key and isinstance(account_id, str) and account_id.startswith("acct_")
+                and isinstance(riferimento, str) and riferimento):
+            return {"ok": False, "motivo": "argomenti_non_validi"}
+        trovati: List[Dict[str, Any]] = []
+        dopo = ""
+        try:
+            for _ in range(self.PAGINE_MASSIME):
+                q = {"destination": account_id, "limit": "100"}
+                if dopo:
+                    q["starting_after"] = dopo
+                r = self._fetch_get(self.TRANSFERS + "?" + urllib.parse.urlencode(q),
+                                    {"Authorization": "Bearer " + self._key})
+                dati = r.get("data") if isinstance(r, dict) else None
+                if not (isinstance(dati, list) and all(
+                        isinstance(t, dict) and str(t.get("id") or "").startswith("tr_")
+                        for t in dati)):
+                    return {"ok": False, "motivo": "risposta_inattesa: %.200r" % (r,)}
+                trovati += [t for t in dati if isinstance(t.get("metadata"), dict)
+                            and t["metadata"].get("riferimento") == riferimento]
+                if r.get("has_more") is not True:
+                    break
+                if not dati:
+                    return {"ok": False, "motivo": "risposta_inattesa: has_more senza bonifici"}
+                dopo = dati[-1]["id"]
+            else:
+                return {"ok": False, "motivo": "oltre %d pagine di bonifici" % self.PAGINE_MASSIME}
+        except Exception as exc:
+            return {"ok": False, "motivo": _motivo_errore(exc)}
+        if len(trovati) > 1:
+            return {"ok": False, "motivo": "%d bonifici per lo stesso riferimento: %s"
+                    % (len(trovati), ", ".join(t["id"] for t in trovati))}
+        if not trovati:
+            return {"ok": True, "bonifico": None}
+        t = trovati[0]
+        stornato = not (t.get("reversed") is False and t.get("amount_reversed") == 0
+                        and not isinstance(t.get("amount_reversed"), bool))
+        return {"ok": True, "bonifico": {"id": t["id"], "importo_cents": t.get("amount"),
+                                         "valuta": str(t.get("currency") or "").lower(),
+                                         "stornato": stornato}}
 
     def _fetch_reale(self, url: str, body: bytes,
                      headers: Dict[str, str]) -> Dict[str, Any]:  # pragma: no cover

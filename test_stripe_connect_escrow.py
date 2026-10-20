@@ -16,6 +16,7 @@ import shutil
 import tempfile
 import time
 import unittest
+import urllib.parse
 
 import fase85_pagamenti_stripe as _stripe
 from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
@@ -58,6 +59,7 @@ class _FakeConnectRete:
 
     def __init__(self):
         self.post = []          # (url, params_str, headers)
+        self.eseguiti = []      # i bonifici fatti davvero, come li elenca Stripe
         self.fallisci_transfer = False
 
     def fetch(self, url, body, headers):
@@ -70,10 +72,23 @@ class _FakeConnectRete:
         if url.endswith("/transfers"):
             if self.fallisci_transfer:
                 return {"error": {"message": "insufficient funds"}}
-            return {"id": "tr_TEST%d" % len(self.post)}
+            campi = dict(urllib.parse.parse_qsl(corpo))
+            self.eseguiti.append({"id": "tr_TEST%d" % len(self.post), "object": "transfer",
+                                  "amount": int(campi["amount"]), "currency": campi["currency"],
+                                  "destination": campi["destination"],
+                                  "metadata": {"riferimento": campi.get("metadata[riferimento]",
+                                                                        "")},
+                                  "reversed": False, "amount_reversed": 0})
+            return {"id": self.eseguiti[-1]["id"]}
         return {}
 
     def fetch_get(self, url, headers):
+        if url.startswith("https://api.stripe.com/v1/transfers?"):
+            # la rilettura anti-doppio (Pilastro zero, 19/10): la lista vera dei bonifici fatti
+            q = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(url).query))
+            return {"object": "list", "has_more": False,
+                    "data": [t for t in reversed(self.eseguiti)
+                             if t["destination"] == q.get("destination")]}
         return {"payouts_enabled": True, "details_submitted": True}
 
     def transfers(self):
