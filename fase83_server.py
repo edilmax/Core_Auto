@@ -7294,6 +7294,18 @@ class RouterHTTP:
                                "fallisce se non basta", _rif_per_registro(rif))
             legame = {"source_transaction": addebito} if addebito else {}
             tid = connect.trasferisci(acct, int(importo_cents), valuta, str(rif), **legame)
+            if tid == "":
+                # ⛔ PILASTRO ZERO (ricerca del fondatore 19/10, «autorizzato»): ESITO SCONOSCIUTO.
+                # Il bonifico PUO' essere partito (fase101 `trasferisci`): una riga «bonifico
+                # manuale» qui farebbe pagare l'host due volte. Resta 'maturato', e ogni nuovo
+                # tentativo rilegge Stripe prima di rifarlo.
+                logger.error("BONIFICO ESITO SCONOSCIUTO | RIF: %s | HOST_ID: %s | IMPORTO: %d %s "
+                             "| CONTO: %s | messaggio: Stripe non ha dato una risposta certa (il "
+                             "motivo e' nella riga di Connect qui sopra) e il bonifico PUO' essere "
+                             "partito: NON pagarlo a mano, prima si guarda su Stripe; ogni nuovo "
+                             "tentativo rilegge Stripe prima di rifarlo", _rif_per_registro(rif),
+                             host_id, int(importo_cents), valuta, acct)
+                return
             if tid:
                 if pd is not None:
                     pd.aggiorna_stato(rif, "in_transito")     # soldi partiti verso l'host

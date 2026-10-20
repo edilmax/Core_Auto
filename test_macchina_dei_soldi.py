@@ -360,8 +360,19 @@ class ReteStripe:
                 raise ErroreStripe("amount_too_large", "The transfers exceed the source charge.")
             self.conta += 1
             self.bonifici.append({"rif": q.get("metadata[riferimento]", ""), "importo": importo,
-                                  "acct": q.get("destination", ""), "ts": _ora(), "fonte": fonte})
+                                  "acct": q.get("destination", ""), "ts": _ora(), "fonte": fonte,
+                                  "id": "tr_%d" % self.conta,
+                                  "valuta": q.get("currency", "")})
             return {"id": "tr_%d" % self.conta, "object": "transfer"}
+        if percorso.endswith("/v1/transfers") and not body:
+            # la rilettura anti-doppio del Connect (Pilastro zero, 19/10): la lista vera dei
+            # bonifici verso quel conto, il piu' nuovo per primo (docs.stripe.com/api/transfers/list)
+            dest = (parse_qs(urlparse(url).query).get("destination") or [""])[0]
+            return {"object": "list", "has_more": False, "data": [
+                {"id": b["id"], "object": "transfer", "amount": b["importo"],
+                 "currency": b["valuta"], "destination": b["acct"],
+                 "metadata": {"riferimento": b["rif"]}, "reversed": False, "amount_reversed": 0}
+                for b in reversed(self.bonifici) if b["acct"] == dest]}
         # commissioni e movimenti di saldo: non modellati (NON_GUARDA), il prodotto li dichiara
         # «sconosciuti» invece di inventarli.
         raise ErroreStripe("resource_missing", "non modellato dalla rete finta: " + percorso)

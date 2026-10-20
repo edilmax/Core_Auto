@@ -51,13 +51,13 @@
  "0f42c4387710": {
   "blocco": 1,
   "comando": "python collaudi/esame_webhook.py --scrivi",
-  "commit": "2828401",
+  "commit": "2be273b",
   "condizione": "un evento Stripe consegnato due volte entro 72 ore viene elaborato UNA volta sola: la memoria della deduplicazione degli eventi (evt_) dura almeno 3 giorni, e due Event diversi per lo stesso fatto (stesso oggetto e stesso tipo) contano come uno",
   "denominatore": 8,
   "esito": true,
-  "impronta": "272148b40c92",
+  "impronta": "f535d6ee93a2",
   "impronte_moduli": {
-   "fase101_stripe_connect": "d1d77582dbf9",
+   "fase101_stripe_connect": "8f4784fbe330",
    "fase102_motore_autonomo": "5f821fcc906f",
    "fase104_gateway_asia": "f0f1fed87367",
    "fase131_payout_dashboard": "06cd8f312f05",
@@ -85,7 +85,7 @@
    "fase99_multicurrency": "61a3b5a0c820"
   },
   "motivo": "",
-  "quando": "2026-10-17T10:16:46"
+  "quando": "2026-10-20T08:41:37"
  },
  "159ad2c8ab8f": {
   "blocco": 1,
@@ -207,13 +207,13 @@
  "227c35ec4353": {
   "blocco": 1,
   "comando": "python collaudi/esame_percorso_ruoli.py --casella coerenza --scrivi",
-  "commit": "2828401",
+  "commit": "2be273b",
   "condizione": "lo stesso fatto sui soldi -- una prenotazione, un rimborso, un bonifico -- letto dal pannello dell'host, da quello dell'admin e dal bunker da' lo STESSO numero al centesimo, riga per riga e non solo nei totali (due errori che si compensano danno un totale giusto), e le letture si enumerano dal codice, non a memoria",
   "denominatore": 4,
   "esito": true,
-  "impronta": "272148b40c92",
+  "impronta": "f535d6ee93a2",
   "impronte_moduli": {
-   "fase101_stripe_connect": "d1d77582dbf9",
+   "fase101_stripe_connect": "8f4784fbe330",
    "fase102_motore_autonomo": "5f821fcc906f",
    "fase104_gateway_asia": "f0f1fed87367",
    "fase131_payout_dashboard": "06cd8f312f05",
@@ -241,7 +241,7 @@
    "fase99_multicurrency": "61a3b5a0c820"
   },
   "motivo": "",
-  "quando": "2026-10-17T10:16:56"
+  "quando": "2026-10-20T08:40:46"
  },
  "24faa37bd025": {
   "blocco": 7,
@@ -267,13 +267,13 @@
  "3226d2908ddf": {
   "blocco": 1,
   "comando": "python collaudi/esame_webhook.py --scrivi",
-  "commit": "2828401",
+  "commit": "2be273b",
   "condizione": "il gestore dei webhook di Stripe verifica la firma sul corpo grezzo, SALVA l'evento con il suo identificativo prima di fare qualunque cosa, e risponde 2xx solo quando l'evento e' salvato E applicato: altrimenti NON-2xx, cosi' Stripe ritenta e l'evento resta allo sweeper. La consegna avviene dentro la risposta, come nella guida di Stripe per il Checkout",
   "denominatore": 9,
   "esito": true,
-  "impronta": "272148b40c92",
+  "impronta": "f535d6ee93a2",
   "impronte_moduli": {
-   "fase101_stripe_connect": "d1d77582dbf9",
+   "fase101_stripe_connect": "8f4784fbe330",
    "fase102_motore_autonomo": "5f821fcc906f",
    "fase104_gateway_asia": "f0f1fed87367",
    "fase131_payout_dashboard": "06cd8f312f05",
@@ -301,18 +301,18 @@
    "fase99_multicurrency": "61a3b5a0c820"
   },
   "motivo": "",
-  "quando": "2026-10-17T10:16:46"
+  "quando": "2026-10-20T08:41:37"
  },
  "33adcd0164e8": {
   "blocco": 1,
   "comando": "python collaudi/esame_webhook.py --scrivi",
-  "commit": "2828401",
+  "commit": "2be273b",
   "condizione": "lo stato di un pagamento si rilegge dall'API di Stripe con l'identificativo (payment_status della sessione di Checkout, o status del PaymentIntent), non dal contenuto dell'evento: l'ordine di arrivo degli eventi non conta, e se la rilettura fallisce non si conferma niente (Stripe ritenta)",
   "denominatore": 10,
   "esito": true,
-  "impronta": "272148b40c92",
+  "impronta": "f535d6ee93a2",
   "impronte_moduli": {
-   "fase101_stripe_connect": "d1d77582dbf9",
+   "fase101_stripe_connect": "8f4784fbe330",
    "fase102_motore_autonomo": "5f821fcc906f",
    "fase104_gateway_asia": "f0f1fed87367",
    "fase131_payout_dashboard": "06cd8f312f05",
@@ -340,7 +340,7 @@
    "fase99_multicurrency": "61a3b5a0c820"
   },
   "motivo": "",
-  "quando": "2026-10-17T10:16:46"
+  "quando": "2026-10-20T08:41:37"
  },
  "3a547df3a743": {
   "blocco": 8,
@@ -372,13 +372,13 @@
  "50691c557e6e": {
   "blocco": 1,
   "comando": "python collaudi/esame_soldi.py --scrivi",
-  "commit": "2828401",
+  "commit": "2be273b",
   "condizione": "le dimostrazioni z3 sugli invarianti GIRANO in CI, e i test che le portano NON risultano saltati",
   "denominatore": 54,
   "esito": true,
-  "impronta": "272148b40c92",
+  "impronta": "f535d6ee93a2",
   "impronte_moduli": {
-   "fase101_stripe_connect": "d1d77582dbf9",
+   "fase101_stripe_connect": "8f4784fbe330",
    "fase102_motore_autonomo": "5f821fcc906f",
    "fase104_gateway_asia": "f0f1fed87367",
    "fase131_payout_dashboard": "06cd8f312f05",
@@ -406,7 +406,7 @@
    "fase99_multicurrency": "61a3b5a0c820"
   },
   "motivo": "",
-  "quando": "2026-10-17T10:12:03"
+  "quando": "2026-10-20T08:41:16"
  },
  "506a24febc87": {
   "blocco": 6,
@@ -521,13 +521,13 @@
  "6ede8f323461": {
   "blocco": 1,
   "comando": "python collaudi/esame_rimborso_scritto.py --scrivi",
-  "commit": "2828401",
+  "commit": "2be273b",
   "condizione": "chi paga cosa in un rimborso e' SCRITTO dove si legge, in tutte le lingue, e coincide col motore: all'ospite che gli torna il prezzo secondo la politica e la tassa di soggiorno per intero, senza trattenute; all'host, nel contratto, che sulla parte trattenuta commissione e tariffa tecnica restano dovute pro quota e che il costo del gestore di pagamento non torna a nessuno",
   "denominatore": 763,
   "esito": true,
-  "impronta": "272148b40c92",
+  "impronta": "f535d6ee93a2",
   "impronte_moduli": {
-   "fase101_stripe_connect": "d1d77582dbf9",
+   "fase101_stripe_connect": "8f4784fbe330",
    "fase102_motore_autonomo": "5f821fcc906f",
    "fase104_gateway_asia": "f0f1fed87367",
    "fase131_payout_dashboard": "06cd8f312f05",
@@ -555,7 +555,7 @@
    "fase99_multicurrency": "61a3b5a0c820"
   },
   "motivo": "",
-  "quando": "2026-10-17T10:16:52"
+  "quando": "2026-10-20T08:40:52"
  },
  "7d0c5b891c14": {
   "blocco": 5,
@@ -736,11 +736,11 @@
  "a36e3373da1d": {
   "blocco": 8,
   "comando": "python collaudi/esame_sentinella.py --scrivi",
-  "commit": "2828401",
+  "commit": "551f6e3",
   "condizione": "una sentinella ESTERNA (non nostra) si accorge se il sito muore",
   "denominatore": 10,
   "esito": false,
-  "impronta": "3d6a2e79b6a8",
+  "impronta": "1061fffd2292",
   "impronte_moduli": {
    "fase13_protocollo_finale": "2dce22f058cc",
    "fase16_outbox": "a47de5874653",
@@ -754,11 +754,11 @@
    "fase42_observability": "a557645447a7",
    "fase60_mcp_server": "56ffc4364819",
    "fase81_bootstrap_casavip": "2817a7a7da80",
-   "fase83_server": "f09d1a8d8e28",
+   "fase83_server": "3eae0fbaac60",
    "fase86_email": "12848db384ba"
   },
   "motivo": "[esiste] un monitor ESTERNO (non GitHub) esiste e guarda bookinvip.com/api/health (nessun monitor esterno nelle letture: serve un conto (UptimeRobot o Better Stack, gratuito), lo apre il fondatore); [sveglia] il monitor esterno controlla almeno ogni 5 minuti e non e' in pausa (nessun monitor esterno); [sveglia] nelle ultime 24 ore i controlli del monitor non hanno buchi > 15 minuti e l'ultimo ha meno di 15 minuti (controlli nelle 24 ore: 0, buco massimo -, ultimo -); [sveglia] GitHub (seconda linea): ultimo giro entro 60 minuti e buco massimo nelle 24 ore sotto i 60 minuti — DECIDE, perche' il",
-  "quando": "2026-10-17T15:22:30"
+  "quando": "2026-10-19T22:55:14"
  },
  "a5c77ac6c76a": {
   "blocco": 5,
@@ -812,13 +812,13 @@
  "b083bc980d6f": {
   "blocco": 1,
   "comando": "python collaudi/esame_money_float.py --scrivi",
-  "commit": "2828401",
+  "commit": "2be273b",
   "condizione": "nessun numero con la virgola tocca un prezzo o un importo: l'ispettore statico conta ZERO rilievi money-float su tutto il codice, non solo sul percorso del pagamento",
   "denominatore": 601,
   "esito": true,
-  "impronta": "272148b40c92",
+  "impronta": "f535d6ee93a2",
   "impronte_moduli": {
-   "fase101_stripe_connect": "d1d77582dbf9",
+   "fase101_stripe_connect": "8f4784fbe330",
    "fase102_motore_autonomo": "5f821fcc906f",
    "fase104_gateway_asia": "f0f1fed87367",
    "fase131_payout_dashboard": "06cd8f312f05",
@@ -846,7 +846,7 @@
    "fase99_multicurrency": "61a3b5a0c820"
   },
   "motivo": "",
-  "quando": "2026-10-17T10:16:55"
+  "quando": "2026-10-20T08:40:45"
  },
  "bf93b1c1b0ce": {
   "blocco": 7,
@@ -872,13 +872,13 @@
  "c3cf3da4543f": {
   "blocco": 1,
   "comando": "python collaudi/esame_soldi.py --scrivi",
-  "commit": "2828401",
+  "commit": "2be273b",
   "condizione": "esistono le relazioni metamorfiche sull'aritmetica del denaro",
   "denominatore": 15,
   "esito": true,
-  "impronta": "272148b40c92",
+  "impronta": "f535d6ee93a2",
   "impronte_moduli": {
-   "fase101_stripe_connect": "d1d77582dbf9",
+   "fase101_stripe_connect": "8f4784fbe330",
    "fase102_motore_autonomo": "5f821fcc906f",
    "fase104_gateway_asia": "f0f1fed87367",
    "fase131_payout_dashboard": "06cd8f312f05",
@@ -906,18 +906,18 @@
    "fase99_multicurrency": "61a3b5a0c820"
   },
   "motivo": "",
-  "quando": "2026-10-17T10:12:03"
+  "quando": "2026-10-20T08:41:16"
  },
  "cdb4797be3c9": {
   "blocco": 1,
   "comando": "python collaudi/esame_webhook.py --scrivi",
-  "commit": "2828401",
+  "commit": "2be273b",
   "condizione": "un'elaborazione fallita di un evento Stripe NON sparisce: l'evento resta «non elaborato» nell'archivio, viene ritentato da noi e dopo un'ora di tentativi e' un'anomalia del Guardiano con email -- anche sul ramo dell'identita' (KYC), non solo su quello del pagamento",
   "denominatore": 9,
   "esito": true,
-  "impronta": "272148b40c92",
+  "impronta": "f535d6ee93a2",
   "impronte_moduli": {
-   "fase101_stripe_connect": "d1d77582dbf9",
+   "fase101_stripe_connect": "8f4784fbe330",
    "fase102_motore_autonomo": "5f821fcc906f",
    "fase104_gateway_asia": "f0f1fed87367",
    "fase131_payout_dashboard": "06cd8f312f05",
@@ -945,7 +945,7 @@
    "fase99_multicurrency": "61a3b5a0c820"
   },
   "motivo": "",
-  "quando": "2026-10-17T10:16:46"
+  "quando": "2026-10-20T08:41:37"
  },
  "d22022c687dd": {
   "blocco": 3,

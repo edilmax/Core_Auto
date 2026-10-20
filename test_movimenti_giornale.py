@@ -14,11 +14,16 @@ Invarianti:
 """
 import hashlib
 import hmac
+import http.client
+import io
 import json
 import shutil
+import socket
 import tempfile
 import time
 import unittest
+import urllib.error
+import urllib.parse
 
 from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import crea_router
@@ -100,6 +105,67 @@ class _FakeConnect:
         self._tid = tid
     def trasferisci(self, acct, importo, valuta, rif):
         return self._tid
+
+
+class _StripeDeiBonifici:
+    """Uno Stripe finto che TIENE i bonifici eseguiti. Serve al Pilastro zero: un esito che non
+    arriva (timeout, connessione caduta, 5xx) NON e' un rifiuto. docs.stripe.com/error-low-level
+    (letta il 19/10/2026): l'esito e' «sconosciuto», si ritenta con la STESSA chiave entro 24
+    ore; dopo, «non ritentare con la vecchia chiave o con una nuova»: si rilegge l'oggetto.
+    Stripe tiene le chiavi «per almeno 24 ore e puo' rimuoverle dopo»: `ricorda_chiavi=False` e'
+    quel dopo. Con `eseguito_prima=True` il primo POST ESEGUE il bonifico e poi solleva `guasto`:
+    i soldi sono partiti e noi non lo sappiamo."""
+
+    def __init__(self, guasto, ricorda_chiavi, eseguito_prima=True, letture_rotte=()):
+        self.guasto = guasto
+        self.ricorda_chiavi = ricorda_chiavi
+        self.eseguito_prima = eseguito_prima
+        self.letture_rotte = letture_rotte   # quali letture (1 = la prima) non rispondono
+        self.bonifici = []           # cio' che Stripe ha DAVVERO eseguito
+        self.inattesi = []           # chiamate che questo finto non sa servire
+        self._per_chiave = {}
+        self._post_ricevuti = 0
+        self._letture = 0
+
+    def post(self, url, body, headers):
+        if body is None:
+            return self.get(url, headers)
+        if url != "https://api.stripe.com/v1/transfers":
+            self.inattesi.append(("POST", url))
+            return {}
+        self._post_ricevuti += 1
+        primo = self._post_ricevuti == 1 and self.guasto is not None
+        if primo and not self.eseguito_prima:
+            raise self.guasto
+        chiave = headers.get("Idempotency-Key", "")
+        if self.ricorda_chiavi and chiave in self._per_chiave:
+            return dict(self._per_chiave[chiave])
+        campi = dict(urllib.parse.parse_qsl(body.decode("utf-8")))
+        tr = {"id": "tr_%d" % (len(self.bonifici) + 1), "object": "transfer",
+              "amount": int(campi["amount"]), "currency": campi.get("currency", ""),
+              "destination": campi.get("destination", ""),
+              "transfer_group": campi.get("transfer_group"),
+              "reversed": False, "amount_reversed": 0,
+              "metadata": {k[len("metadata["):-1]: v for k, v in campi.items()
+                           if k.startswith("metadata[")}}
+        self.bonifici.append(tr)
+        self._per_chiave[chiave] = tr
+        if primo:
+            raise self.guasto
+        return dict(tr)
+
+    def get(self, url, headers):
+        u = urllib.parse.urlsplit(url)
+        if u.path != "/v1/transfers":
+            self.inattesi.append(("GET", url))
+            return {}
+        self._letture += 1
+        if self._letture in self.letture_rotte:
+            raise TimeoutError("The read operation timed out")
+        q = dict(urllib.parse.parse_qsl(u.query))
+        dati = [dict(t) for t in reversed(self.bonifici)
+                if all(t.get(k) == q[k] for k in ("destination", "transfer_group") if k in q)]
+        return {"object": "list", "data": dati, "has_more": False}
 
 
 class TestAgganciMoneyPath(unittest.TestCase):
@@ -229,6 +295,94 @@ class TestAgganciMoneyPath(unittest.TestCase):
         self.assertEqual(dopo - prima, netto,
                          "il debito verso l'host e' stato saldato DUE volte (fallito+riuscito)")
         self.assertTrue(self.sis.finanza.verifica_catena()["ok"])
+
+    # ── PILASTRO ZERO (ricerca del fondatore, 19/10, voce 19): l'esito AMBIGUO di Stripe ──
+    def _bonifico_con(self, stripe):
+        """Prenotazione pagata, host collegato, e il Connect VERO (fase101) sopra lo Stripe
+        finto: dalla risposta mancata fino al giornale non c'e' niente di finto in mezzo."""
+        from fase101_stripe_connect import ProviderConnect
+        self.sis.registro_host.imposta_stripe_account(self.hid, "acct_TEST")
+        rif = self._prenota_paga()
+        netto = int(self.sis.payout.info(rif)["minori"])
+        self.assertGreater(netto, 0)
+        self.sis.connect = ProviderConnect("sk_test_x", fetch=stripe.post,
+                                           fetch_get=stripe.get)
+        return rif, netto
+
+    def test_PILASTRO_ZERO_un_bonifico_senza_risposta_non_e_un_rifiuto(self):
+        """Il bonifico e' partito ma la risposta non e' arrivata. Dire «BONIFICO MANUALE
+        RICHIESTO» qui significa chiedere a una persona di pagare l'host una SECONDA volta: e'
+        la «chiave nuova» che Stripe dice di non usare finche' l'esito non e' risolto."""
+        ambigui = {
+            "timeout in lettura": TimeoutError("The read operation timed out"),
+            "timeout in connessione": urllib.error.URLError(socket.timeout("timed out")),
+            "connessione caduta": http.client.RemoteDisconnected(
+                "Remote end closed connection without response"),
+            "Stripe 500": urllib.error.HTTPError("https://api.stripe.com/v1/transfers", 500,
+                                                 "Internal Server Error", {}, None),
+            "Stripe 503": urllib.error.HTTPError("https://api.stripe.com/v1/transfers", 503,
+                                                 "Service Unavailable", {}, None),
+        }
+        for nome, guasto in ambigui.items():
+            with self.subTest(nome):
+                stripe = _StripeDeiBonifici(guasto, ricorda_chiavi=True)
+                rif, netto = self._bonifico_con(stripe)
+                with self.assertLogs("core_auto", level="ERROR") as cattura:
+                    self.r._trasferisci_all_host(rif, netto)
+                self.assertEqual(len(stripe.bonifici), 1, "premessa: i soldi sono partiti")
+                self.assertNotIn("payout_manuale", self._tipi(rif),
+                                 "%s: il giornale chiede il bonifico A MANO, ma quello vero e' "
+                                 "gia' partito" % nome)
+                self.assertNotIn("MANUALE", "\n".join(cattura.output).upper(),
+                                 "%s: il registro chiede il bonifico A MANO" % nome)
+                self.assertEqual(stripe.inattesi, [])
+
+    def test_PILASTRO_ZERO_dopo_un_timeout_il_ritentativo_non_paga_due_volte(self):
+        """Un payout rimasto 'maturato' lo ritentano da soli gli sblocchi (verifica ripristinata,
+        dati fiscali completati), anche giorni dopo: a chiave dimenticata da Stripe, un POST
+        nuovo e' un SECONDO bonifico. Due casi: la rilettura subito dopo il timeout risponde, o
+        non risponde nemmeno lei (la seconda lettura di Stripe va in timeout) e il bonifico va
+        ritrovato al tentativo dopo."""
+        for nome, rotte in (("rilettura che risponde", ()), ("rilettura che non risponde", (2,))):
+            with self.subTest(nome):
+                stripe = _StripeDeiBonifici(TimeoutError("The read operation timed out"),
+                                            ricorda_chiavi=False, letture_rotte=rotte)
+                rif, netto = self._bonifico_con(stripe)
+                self.r._trasferisci_all_host(rif, netto)   # i soldi partono, la risposta no
+                resto = (self.sis.payout.info(rif) or {}).get("minori") or 0
+                self.r._trasferisci_all_host(rif, int(resto) or netto)
+                self.assertEqual(len(stripe.bonifici), 1,
+                                 "Stripe ha %d bonifici per la stessa prenotazione: il timeout e' "
+                                 "stato preso per un rifiuto e il ritentativo a chiave scaduta ha "
+                                 "pagato l'host di nuovo" % len(stripe.bonifici))
+                self.assertEqual(self.sis.payout.stato_di(rif), "in_transito",
+                                 "il bonifico ritrovato su Stripe non risulta partito")
+                self.assertEqual(self._tipi(rif).count("payout_host"), 1)
+                self.assertNotIn("payout_manuale", self._tipi(rif))
+                self.assertEqual(stripe.inattesi, [])
+
+    def test_PILASTRO_ZERO_le_due_direzioni(self):
+        """Ferrea 10: le due prove sopra non devono gridare sempre. (a) Entro 24 ore la stessa
+        chiave risolve da sola: un solo bonifico. (b) Un RIFIUTO vero (4xx col motivo, niente
+        eseguito) resta un rifiuto: il bonifico va fatto a mano, e il giornale lo dice."""
+        stripe = _StripeDeiBonifici(TimeoutError("The read operation timed out"),
+                                    ricorda_chiavi=True)
+        rif, netto = self._bonifico_con(stripe)
+        self.r._trasferisci_all_host(rif, netto)
+        resto = (self.sis.payout.info(rif) or {}).get("minori") or 0
+        self.r._trasferisci_all_host(rif, int(resto) or netto)
+        self.assertEqual(len(stripe.bonifici), 1)
+        corpo = json.dumps({"error": {"type": "invalid_request_error",
+                                      "code": "balance_insufficient",
+                                      "message": "Insufficient funds"}}).encode("utf-8")
+        rifiuto = urllib.error.HTTPError("https://api.stripe.com/v1/transfers", 400,
+                                         "Bad Request", {}, io.BytesIO(corpo))
+        stripe2 = _StripeDeiBonifici(rifiuto, ricorda_chiavi=True, eseguito_prima=False)
+        rif2, netto2 = self._bonifico_con(stripe2)
+        self.r._trasferisci_all_host(rif2, netto2)
+        self.assertEqual(stripe2.bonifici, [])
+        self.assertIn("payout_manuale", self._tipi(rif2))
+        self.assertEqual(stripe.inattesi + stripe2.inattesi, [])
 
 
 if __name__ == "__main__":

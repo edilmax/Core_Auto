@@ -251,11 +251,14 @@ class TestLeAltrePorteDelDenaro(unittest.TestCase):
         visti = {}
 
         class Finto(ProviderConnect):
-            def _post(self, url, dati, idem_key=None):
+            def _post(self, url, dati, idem_key=None, esito=None):
                 visti.update(dati)
                 return {"id": "tr_ok"}
 
-        p = Finto("sk_test")
+        # e la rilettura anti-doppio (Pilastro zero, 19/10) da una lista finta: senza, il bonifico
+        # chiederebbe allo Stripe VERO se c'e' gia', e su un «non so» non partirebbe
+        p = Finto("sk_test", fetch_get=lambda url, headers: {"object": "list", "data": [],
+                                                             "has_more": False})
         p.trasferisci("acct_x", 54000, "JPY", "rif1")
         self.assertEqual(visti.get("amount"), "54000",
                          "l'importo del bonifico e' cambiato di scala")
