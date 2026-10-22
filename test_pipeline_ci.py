@@ -69,6 +69,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -6432,7 +6433,7 @@ class TestIlDeployNonPuoSALTAREIlPassoDiSicurezza(unittest.TestCase):
             p = os.path.join(d, nome)
             with io.open(p, "w", encoding="utf-8", newline="\n") as f:
                 f.write(testo)
-            os.chmod(p, 0o755)
+            os.chmod(p, stat.S_IRWXU)
         return d
 
     def _scambio(self, finti):
@@ -6447,7 +6448,7 @@ class TestIlDeployNonPuoSALTAREIlPassoDiSicurezza(unittest.TestCase):
         if os.name == "nt" and len(posix) > 1 and posix[1] == ":":
             posix = "/" + posix[0].lower() + posix[2:]
         script = os.path.join(self.RADICE, "deploy", "protocollo_d17.sh").replace("\\", "/")
-        e = subprocess.run([self.sh, "-c", 'PATH="$1:$PATH"; export PATH; exec sh "$2" scambio', "d17", posix, script],
+        e = subprocess.run([self.sh, "-c", 'PATH="$1:$PATH"; export PATH; exec sh "$2" scambio', "d17", posix, script],  # nosec B603 - il nostro protocollo_d17.sh con attrezzi finti in una cartella di prova  # noqa: S603
                            cwd=self.dir, env=amb, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         registri = sorted(f for f in os.listdir(self.dir) if f.startswith("deploy_scambio_") and f.endswith(".log"))
         testi = []
