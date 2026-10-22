@@ -90,13 +90,13 @@
  "159ad2c8ab8f": {
   "blocco": 1,
   "comando": "python collaudi/esame_produzione.py --casella ogni-ora --scrivi",
-  "commit": "2828401",
+  "commit": "e131132",
   "condizione": "gli invarianti sui dati veri girano in produzione almeno OGNI ORA, non una volta al giorno, e l'ultimo giro si legge dal registro del server con la sua ora",
   "denominatore": 13,
   "esito": true,
-  "impronta": "272148b40c92",
+  "impronta": "f535d6ee93a2",
   "impronte_moduli": {
-   "fase101_stripe_connect": "d1d77582dbf9",
+   "fase101_stripe_connect": "8f4784fbe330",
    "fase102_motore_autonomo": "5f821fcc906f",
    "fase104_gateway_asia": "f0f1fed87367",
    "fase131_payout_dashboard": "06cd8f312f05",
@@ -124,7 +124,7 @@
    "fase99_multicurrency": "61a3b5a0c820"
   },
   "motivo": "",
-  "quando": "2026-10-17T16:22:20"
+  "quando": "2026-10-21T08:26:03"
  },
  "16d2c823889f": {
   "blocco": 1,
@@ -168,13 +168,13 @@
  "224ae0884a0b": {
   "blocco": 1,
   "comando": "python collaudi/esame_orologi.py --scrivi",
-  "commit": "2828401",
+  "commit": "e131132",
   "condizione": "hold, payout e penale scadono davvero in un giro contro Stripe di PROVA con l'orologio NOSTRO spostato, e i tre esiti si rileggono da Stripe (rimborso dell'hold, bonifico all'host, penale addebitata)",
   "denominatore": 25,
   "esito": false,
-  "impronta": "272148b40c92",
+  "impronta": "f535d6ee93a2",
   "impronte_moduli": {
-   "fase101_stripe_connect": "d1d77582dbf9",
+   "fase101_stripe_connect": "8f4784fbe330",
    "fase102_motore_autonomo": "5f821fcc906f",
    "fase104_gateway_asia": "f0f1fed87367",
    "fase131_payout_dashboard": "06cd8f312f05",
@@ -201,8 +201,8 @@
    "fase87_stripe_webhook": "c77544db5a33",
    "fase99_multicurrency": "61a3b5a0c820"
   },
-  "motivo": "[payout] nasce un conto Connect di prova per l'host, abilitato ai transfer ( {'http': 400, 'type': 'invalid_request_error', 'code': '', 'message': 'Please review the responsibilities of collecting requirements for connected accounts at https://dashboard.stripe.com/settings/connect/platform-profile.'})",
-  "quando": "2026-10-17T10:16:30"
+  "motivo": "[payout] il conto Connect di prova dell'host (come quelli veri) riceve bonifici ( il conto acct_1URZZzJ1I non riceve bonifici (transfers=inactive): la registrazione sulle pagine di Stripe non e' finita; un link nuovo lo da' `--prepara-conto`)",
+  "quando": "2026-10-21T08:25:58"
  },
  "227c35ec4353": {
   "blocco": 1,
@@ -622,13 +622,13 @@
  "813b9082642c": {
   "blocco": 1,
   "comando": "python collaudi/esame_produzione.py --scrivi",
-  "commit": "2828401",
+  "commit": "e131132",
   "condizione": "gli invarianti sono verificati in PRODUZIONE, non solo nei test",
   "denominatore": 14,
   "esito": false,
-  "impronta": "272148b40c92",
+  "impronta": "f535d6ee93a2",
   "impronte_moduli": {
-   "fase101_stripe_connect": "d1d77582dbf9",
+   "fase101_stripe_connect": "8f4784fbe330",
    "fase102_motore_autonomo": "5f821fcc906f",
    "fase104_gateway_asia": "f0f1fed87367",
    "fase131_payout_dashboard": "06cd8f312f05",
@@ -655,8 +655,8 @@
    "fase87_stripe_webhook": "c77544db5a33",
    "fase99_multicurrency": "61a3b5a0c820"
   },
-  "motivo": "l'ULTIMO giro INTERO del Guardiano e' finito pulito (GUARDIANO: nessuno stato anomalo), ha meno di 25 h e ha verificato gli invarianti (la sua riga INVARIANTI ARCHIVI lo precede) (GUARDIANO: 1 stato/i anomalo/i -> {'bonifico_fermo': [{'pren · eta 0.0 h · riga INVARIANTI ARCHIVI subito prima: si')",
-  "quando": "2026-10-17T15:20:55"
+  "motivo": "l'ULTIMO giro INTERO del Guardiano e' finito pulito (GUARDIANO: nessuno stato anomalo), ha meno di 25 h e ha verificato gli invarianti (la sua riga INVARIANTI ARCHIVI lo precede) (GUARDIANO: 1 stato/i anomalo/i -> {'bonifico_fermo': [{'pren · eta 9.9 h · riga INVARIANTI ARCHIVI subito prima: si')",
+  "quando": "2026-10-21T08:26:01"
  },
  "8267c64a367a": {
   "blocco": 4,
@@ -736,11 +736,11 @@
  "a36e3373da1d": {
   "blocco": 8,
   "comando": "python collaudi/esame_sentinella.py --scrivi",
-  "commit": "551f6e3",
+  "commit": "e131132",
   "condizione": "una sentinella ESTERNA (non nostra) si accorge se il sito muore",
   "denominatore": 10,
   "esito": false,
-  "impronta": "1061fffd2292",
+  "impronta": "5f7ca8d9096b",
   "impronte_moduli": {
    "fase13_protocollo_finale": "2dce22f058cc",
    "fase16_outbox": "a47de5874653",
@@ -754,11 +754,11 @@
    "fase42_observability": "a557645447a7",
    "fase60_mcp_server": "56ffc4364819",
    "fase81_bootstrap_casavip": "2817a7a7da80",
-   "fase83_server": "3eae0fbaac60",
+   "fase83_server": "0fdbb3e1ba48",
    "fase86_email": "12848db384ba"
   },
   "motivo": "[esiste] un monitor ESTERNO (non GitHub) esiste e guarda bookinvip.com/api/health (nessun monitor esterno nelle letture: serve un conto (UptimeRobot o Better Stack, gratuito), lo apre il fondatore); [sveglia] il monitor esterno controlla almeno ogni 5 minuti e non e' in pausa (nessun monitor esterno); [sveglia] nelle ultime 24 ore i controlli del monitor non hanno buchi > 15 minuti e l'ultimo ha meno di 15 minuti (controlli nelle 24 ore: 0, buco massimo -, ultimo -); [sveglia] GitHub (seconda linea): ultimo giro entro 60 minuti e buco massimo nelle 24 ore sotto i 60 minuti — DECIDE, perche' il",
-  "quando": "2026-10-19T22:55:14"
+  "quando": "2026-10-21T08:26:09"
  },
  "a5c77ac6c76a": {
   "blocco": 5,
@@ -1012,13 +1012,13 @@
  "d70ecb7a31cc": {
   "blocco": 1,
   "comando": "python collaudi/esame_rimborsi.py --scrivi",
-  "commit": "2828401",
+  "commit": "e131132",
   "condizione": "i soldi tornano DAVVERO all'ospite da OGNI strada che porta a un rimborso, non solo da quella che qualcuno si e' ricordato di provare (il 2026-08-16 le strade erano due e ne funzionava una). ⛔ L'AUTOMATICO NON e' la riga d'arrivo di questo blocco: e' una decisione del fondatore, e si accende dopo -- prima si guadagna la fiducia, poi si toglie il dito",
   "denominatore": 39,
   "esito": true,
-  "impronta": "272148b40c92",
+  "impronta": "f535d6ee93a2",
   "impronte_moduli": {
-   "fase101_stripe_connect": "d1d77582dbf9",
+   "fase101_stripe_connect": "8f4784fbe330",
    "fase102_motore_autonomo": "5f821fcc906f",
    "fase104_gateway_asia": "f0f1fed87367",
    "fase131_payout_dashboard": "06cd8f312f05",
@@ -1046,7 +1046,7 @@
    "fase99_multicurrency": "61a3b5a0c820"
   },
   "motivo": "",
-  "quando": "2026-10-17T10:16:14"
+  "quando": "2026-10-21T08:24:56"
  },
  "df0678e71e35": {
   "blocco": 9,
@@ -1145,24 +1145,24 @@
  "eec63adbaf5b": {
   "blocco": 3,
   "comando": "python collaudi/esame_accessi.py --casella scrive --scrivi",
-  "commit": "160c2e3",
+  "commit": "e131132",
   "condizione": "nessuna rotta pubblica SCRIVE senza identita': l'elenco delle rotte che scrivono viene letto dal codice, e ognuna senza credenziali risponde 401/403/422, mai 200",
-  "denominatore": 62,
+  "denominatore": 63,
   "esito": true,
-  "impronta": "9ff724b36144",
+  "impronta": "92c5092c583c",
   "impronte_moduli": {
    "fase105_identity_gate": "a3ab7f1e6819",
    "fase127_checkin_digitale": "c8afe04f623b",
    "fase143_kyc_host": "9024eed56447",
    "fase179_rate_limit": "d676ae5e7797",
    "fase180_bunker": "12b50f910968",
-   "fase192_admin_accounts": "d781a60fe796",
+   "fase192_admin_accounts": "da0a9425adcf",
    "fase64_smartpass": "62f32d2a9183",
    "fase73_firma_agile": "16cd09e0ed5d",
    "fase80_sentinel": "ebc8a451110f"
   },
   "motivo": "",
-  "quando": "2026-10-02T11:32:06"
+  "quando": "2026-10-21T16:41:15"
  },
  "f10f35b6a7b3": {
   "blocco": 2,
@@ -1230,23 +1230,23 @@
  "fb42414c3b6b": {
   "blocco": 3,
   "comando": "python collaudi/esame_percorso_ruoli.py --casella giro --scrivi",
-  "commit": "160c2e3",
+  "commit": "e131132",
   "condizione": "l'admin e il super admin portano a termine il loro giro INTERO, non solo l'accesso: l'admin legge le prenotazioni, risolve una controversia, rimborsa il dovuto e rilegge i conti; il super admin crea un admin, cambia uno scaglione e rilegge gli invarianti. Ogni anello lascia una traccia, e il verde misura la DIFFERENZA fra prima e dopo, mai la presenza di una pagina che mostra sempre qualcosa",
   "denominatore": 12,
   "esito": true,
-  "impronta": "9ff724b36144",
+  "impronta": "92c5092c583c",
   "impronte_moduli": {
    "fase105_identity_gate": "a3ab7f1e6819",
    "fase127_checkin_digitale": "c8afe04f623b",
    "fase143_kyc_host": "9024eed56447",
    "fase179_rate_limit": "d676ae5e7797",
    "fase180_bunker": "12b50f910968",
-   "fase192_admin_accounts": "d781a60fe796",
+   "fase192_admin_accounts": "da0a9425adcf",
    "fase64_smartpass": "62f32d2a9183",
    "fase73_firma_agile": "16cd09e0ed5d",
    "fase80_sentinel": "ebc8a451110f"
   },
   "motivo": "",
-  "quando": "2026-10-02T11:33:44"
+  "quando": "2026-10-21T16:41:16"
  }
 }

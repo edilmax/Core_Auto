@@ -365,5 +365,31 @@ class TestNessunCodiceInternoInFacciaAllOspite(unittest.TestCase):
                          + '\n      '.join(accuse))
 
 
+class TestIlBonificoAManoDiceImportoEValutaVeri(unittest.TestCase):
+    """R1 (21/10): «Lo pago io a mano» si preme PRIMA di un bonifico vero dalla banca, e la
+    conferma dice quanto pagare. Scriveva «€» fisso e divideva l'importo per 100 per OGNI valuta
+    (`auEur`): su un annuncio in yen, che non ha decimali, una cifra cento volte piu' piccola.
+    Si formatta con `money(importo, valuta)` di app.js, che conosce i decimali di ogni valuta."""
+
+    def test_nessuna_frase_del_pulsante_scrive_l_euro_fisso(self):
+        html = _leggi('admin.html')
+        for chiave in ('au_amano_conf', 'au_amano_ok'):
+            frasi = re.findall(chiave + r':"([^"]*)"', html)
+            self.assertEqual(len(frasi), 8, '%s: non e\' nelle 8 lingue' % chiave)
+            for frase in frasi:
+                self.assertNotIn('€', frase, '%s: «€» fisso nella frase: %s' % (chiave, frase))
+
+    def test_il_pulsante_formatta_con_la_valuta_del_bonifico(self):
+        html = _leggi('admin.html')
+        corpo = re.search(r'async function pagoAMano\(.*?\n\}', html, re.S)
+        self.assertIsNotNone(corpo, 'pagoAMano non si trova piu\'')
+        self.assertNotIn('auEur(', corpo.group(0), 'il pulsante divide per 100 anche lo yen')
+        self.assertIn('money(cents, valuta)', corpo.group(0))
+        self.assertIn('money(d.importo_cents, d.valuta)', corpo.group(0))
+        chiamate = [r for r in html.splitlines() if 'onclick="pagoAMano(' in r]
+        self.assertEqual(len(chiamate), 1, 'il pulsante non si trova, o c\'e\' due volte')
+        self.assertIn('d.payout.valuta', chiamate[0], 'il pulsante non passa la valuta')
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -125,7 +125,8 @@ CHI_SCRIVE_UN_DOVUTO = ("ospite_cancella", "host_cancella", "admin_rimborso",
 
 # Quello che `_tick_garanzia` (fase83_server.avvia_server) chiama, in ordine. La copia e' in
 # `Corsa.giro_orario`; `test_A_...` la confronta col vivo.
-GIRO_ORARIO_COPIATO = ("_incassa_blocchi", "_subentro_per_disaccordo", "auto_rilascia",
+GIRO_ORARIO_COPIATO = ("_ritenta_bonifici_fermi", "_incassa_blocchi", "_subentro_per_disaccordo",
+                       "auto_rilascia",
                        "_trasferisci_all_host", "_pulizia_uploads_se_ora", "_conservazione_se_ora",
                        "_riscuoti_carta_se_ora", "sleep")
 
@@ -576,6 +577,7 @@ class Corsa:
         """COPIA di `_tick_garanzia` (fase83_server.avvia_server), nello stesso ordine; il
         confronto col vivo e' `test_A`. Piu' lo spazzino dei blocchi non pagati (`_tick_hold`)."""
         P, r, sis = _P, self.r, self.sis
+        r._ritenta_bonifici_fermi()                  # R3 (21/10): Stripe non ritenta da solo
         r._incassa_blocchi()
         P["server"]._subentro_per_disaccordo(sis)
         pp = sis.pagamenti_pendenti

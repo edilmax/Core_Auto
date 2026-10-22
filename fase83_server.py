@@ -71,6 +71,14 @@ logger = logging.getLogger("core_auto.server")
 _EMAIL_KO_LOCK = threading.Lock()
 _EMAIL_KO = {"totale": 0, "per_template": {}}
 
+# ⛔ UN BONIFICO ALL'HOST ALLA VOLTA (R1, revisione Trail of Bits del 20/10/2026, «autorizzato» del
+# 21/10). Due strade pagano l'host: Stripe (`_trasferisci_all_host`) e una persona («Lo pago io a
+# mano», `_admin_pagato_a_mano`). Se il pulsante arriva MENTRE un bonifico automatico e' in viaggio
+# verso Stripe, la rilettura non lo vede ancora e l'host verrebbe pagato due volte. Con questa
+# chiave le due strade non si sovrappongono mai: chi arriva dopo trova lo stato gia' scritto.
+# Rientrante: il pulsante la tiene e chiama `_trasferisci_all_host`, che la riprende.
+_BONIFICI_LOCK = threading.RLock()
+
 
 def _riga_registro(valore: Any, massimo: int = 80) -> str:
     """Un valore che finisce in una riga di registro non puo' contenere a-capo.
@@ -2475,6 +2483,8 @@ class RouterHTTP:
             return self._admin_rimborsi_dovuti(query, headers)   # chi aspetta i suoi soldi
         if metodo == "POST" and path == "/api/admin/rimborsa_dovuto":
             return self._admin_rimborsa_dovuto(body, headers)    # il pulsante, uno per volta
+        if metodo == "POST" and path == "/api/admin/payout/pagato_a_mano":
+            return self._admin_pagato_a_mano(body, headers)      # R1: «Lo pago io a mano»
         if metodo == "GET" and path == "/api/admin/controversie":
             return self._admin_controversie(query, headers)
         if metodo == "POST" and path == "/api/admin/controversia/risolvi":
@@ -3170,6 +3180,15 @@ class RouterHTTP:
         gz = getattr(self._sys, "garanzia", None)
         st = gz.stato(rif) if gz is not None else None
         return isinstance(st, dict) and st.get("stato") not in ("rilasciato", "risolto")
+
+    def _garanzia_chiusa(self, rif):
+        """La garanzia C'E' ed e' chiusa a favore dell'host ('rilasciato' o 'risolto')? Serve la
+        prova, non basta l'assenza: e' la regola delle due strade che pagano senza un evento del
+        soggiorno, il giro orario dei bonifici fermi (R3) e il pagamento a mano (R1, 21/10). Una
+        garanzia illeggibile SOLLEVA, come in `_garanzia_aperta`."""
+        gz = getattr(self._sys, "garanzia", None)
+        st = gz.stato(rif) if gz is not None else None
+        return isinstance(st, dict) and st.get("stato") in ("rilasciato", "risolto")
 
     def _voucher_per_admin(self, pp, p):
         """Il collegamento al voucher, per l'admin (D12 della prova vera del 29/9): l'ospite che
@@ -5641,6 +5660,65 @@ class RouterHTTP:
                      "nota": "soldi restituiti all'ospite; la riga esce dalla lista solo "
                              "perche' Stripe lo conferma, non perche' l'abbiamo tolta noi"}
 
+    def _admin_pagato_a_mano(self, body, headers):
+        """IL PULSANTE «LO PAGO IO A MANO» (R1, revisione Trail of Bits del 20/10/2026,
+        «autorizzato» del 21/10). Si preme PRIMA di fare il bonifico dalla banca: prende in carico
+        il bonifico all'host di UNA prenotazione e lo toglie da ogni giro automatico. Prima il
+        prodotto chiedeva il bonifico a mano ma nessuna azione lo registrava, e il primo sblocco
+        (verifica dell'host, dati fiscali) lo ripagava con Stripe.
+        Dal browser conta solo il riferimento: l'importo e' quello del registro dei bonifici,
+        dopo le STESSE guardie del bonifico automatico (`_trasferisci_all_host(a_mano=True)`), e
+        Stripe si rilegge prima (`_bonifico_a_mano`). Tutto dentro `_BONIFICI_LOCK`."""
+        if not self._auth_admin(headers):
+            return 401, {"errore": "unauthorized"}
+        if not self._bunker_ok_o_field(headers, azione="pagato_a_mano"):
+            return 403, {"errore": "bunker_richiesto"}
+        if not self._puo_azione(headers, "pagato_a_mano"):   # 'supporto' non muove soldi
+            return 403, {"errore": "permesso_negato_ruolo"}
+        if self._transazioni_bloccate():
+            return 503, {"errore": "transazioni_sospese"}
+        dati = self._json(body)
+        if dati is None:
+            return 400, {"errore": "json_non_valido"}
+        rif = dati.get("riferimento")
+        # il riferimento finisce nel registro che legge il Guardiano: stessa forma di
+        # `_admin_rimborsa_dovuto` (CodeQL, richiesta #59)
+        if not (isinstance(rif, str) and _RIFERIMENTO_VALIDO.match(rif)):
+            return 422, {"errore": "campi_non_validi"}
+        pd = getattr(self._sys, "payout", None)
+        if pd is None:
+            return 503, {"errore": "payout_non_attivo"}
+        with _BONIFICI_LOCK:
+            stato = pd.stato_di(rif)
+            if stato != "maturato":
+                return 409, {"errore": "non_da_pagare", "stato": stato, "riferimento": rif,
+                             "nota": "si prende in carico a mano solo un bonifico 'maturato'"}
+            try:
+                chiusa = self._garanzia_chiusa(rif)
+            except Exception:
+                logger.error("BONIFICO A MANO NON PRESO IN CARICO | RIF: %s | garanzia illeggibile",
+                             _rif_per_registro(rif), exc_info=True)
+                return 503, {"errore": "garanzia_illeggibile", "riferimento": rif}
+            if not chiusa:
+                return 409, {"errore": "garanzia_aperta", "riferimento": rif,
+                             "nota": "il soggiorno non risulta confermato: quei soldi non sono "
+                                     "ancora dell'host"}
+            esito = self._trasferisci_all_host(rif, int((pd.info(rif) or {}).get("minori") or 0),
+                                               a_mano=True)
+            riga = pd.info(rif) or {}
+        if esito != "":
+            return 409, {"errore": esito or "fermato_da_una_guardia", "riferimento": rif,
+                         "nota": "NON pagarlo a mano: il bonifico non e' stato preso in carico, "
+                                 "e il motivo e' nel registro (Stripe, incasso, ritenuta, "
+                                 "verifica o dati fiscali)"}
+        logger.warning("ADMIN_ACTION | OGGETTO: %s | AZIONE: pagato_a_mano | IP: %s",
+                       _rif_per_registro(rif), self._client_ip(headers))
+        return 200, {"stato": "preso_in_carico", "riferimento": rif,
+                     "importo_cents": int(riga.get("minori") or 0),
+                     "valuta": riga.get("valuta") or "EUR",
+                     "nota": "adesso fai il bonifico dalla banca: il sistema non lo paga piu' "
+                             "da solo"}
+
     def _admin_controversie(self, query, headers):
         """Elenco delle CONTROVERSIE aperte (garanzie contestate): l'operatore le vede, sente
         le parti, e decide lo split del rimborso. Read-only."""
@@ -7152,7 +7230,7 @@ class RouterHTTP:
                          exc_info=True)
             return False
 
-    def _trasferisci_all_host(self, rif, importo_cents, penale=False):
+    def _trasferisci_all_host(self, rif, importo_cents, penale=False, a_mano=False):
         """SOLDI ALL'HOST IN AUTOMATICO (strategia fondatore): allo sblocco dell'escrow
         (ok cliente / 24h di silenzio / esito controversia), se l'host ha Stripe collegato
         e la prenotazione era PAGATA online, il netto parte da solo verso il suo conto.
@@ -7162,7 +7240,15 @@ class RouterHTTP:
         payout resta 'maturato' (tracciato, mai perso) e si sblocca da solo quando l'host
         completa i dati (retry in _host_dati_fiscali).
         LA RITENUTA (interruttore acceso) si opera PRIMA di guardare se l'host ha Stripe: cosi'
-        vale anche per il bonifico manuale. `penale=True` dalla cancellazione con penale."""
+        vale anche per il bonifico manuale. `penale=True` dalla cancellazione con penale.
+        `a_mano=True` solo dal pulsante «Lo pago io a mano» (R1): le STESSE guardie, ma al posto
+        del bonifico Connect lo prende in carico una persona (`_bonifico_a_mano`), anche se
+        l'host non ha Stripe. Tutto sotto `_BONIFICI_LOCK`: un bonifico alla volta."""
+        with _BONIFICI_LOCK:
+            return self._trasferisci_sotto_chiave(rif, importo_cents, penale, a_mano)
+
+    def _trasferisci_sotto_chiave(self, rif, importo_cents, penale, a_mano):
+        """Il corpo di `_trasferisci_all_host`, che lo chiama tenendo `_BONIFICI_LOCK`."""
         try:
             if self._transazioni_bloccate():          # kill-switch globale: nessun bonifico
                 return                                # (payout resta 'maturato', mai perso; riparte a freeze off)
@@ -7208,14 +7294,17 @@ class RouterHTTP:
             if not self._opera_ritenuta(rif, rec, host_id, info, penale):
                 return                                # ritenuta non operata: il bonifico aspetta
             acct = (info or {}).get("stripe_account_id", "")
-            if not acct:
+            if not acct and not a_mano:
                 # host non collegato -> bonifico MANUALE: resta 'maturato' (mai perso) e il registro
                 # lo dice. Prima usciva muto e lo sapeva solo l'archivio (consegne 30, punto b).
                 # L'importo e' quello del registro dei bonifici, cioe' quello da pagare a mano
                 # (gia' al netto della ritenuta, se accesa), non quello del chiamante.
+                # R1: a mano SOLO dopo il pulsante, che lo toglie dai giri automatici; senza, il
+                # giro orario lo paga da solo appena l'host collega Stripe.
                 logger.warning("PAYOUT_HOLD_TRIGGERED | HOST_ID: %s | RIF: %s | IMPORTO: %s | "
-                               "MOTIVO: CONTO_STRIPE_NON_COLLEGATO", host_id,
-                               _rif_per_registro(rif), (pd.info(rif) or {}).get("minori"))
+                               "MOTIVO: CONTO_STRIPE_NON_COLLEGATO | per pagarlo a mano: PRIMA "
+                               "«Lo pago io a mano» nella scheda Audit, POI il bonifico dalla banca",
+                               host_id, _rif_per_registro(rif), (pd.info(rif) or {}).get("minori"))
                 return
             if pd is not None and pd.stato_di(rif) in ("in_transito", "pagato"):
                 return                                # gia' partito (guardia anti-doppio)
@@ -7283,6 +7372,8 @@ class RouterHTTP:
                 valuta = _jt.loads(rec.get("corpo_json") or "{}").get("valuta") or "EUR"
             except Exception:
                 valuta = "EUR"
+            if a_mano:                                # R1: lo paga una persona, non Stripe
+                return self._bonifico_a_mano(rif, host_id, acct, int(importo_cents), valuta)
             # COMPITO 41: il bonifico si LEGA all'addebito dell'ospite (`source_transaction`),
             # cosi' non esce dal saldo DISPONIBILE (il 4/10 -0,27 EUR, e per giorni senza i soldi
             # appena incassati): Stripe lo esegue quando quei soldi ci sono. Addebito non letto
@@ -7327,16 +7418,112 @@ class RouterHTTP:
                 except Exception:
                     logger.warning("email payout host fallita (ignorata)", exc_info=True)
             else:
-                logger.error("BONIFICO MANUALE RICHIESTO: transfer Connect fallito per '%s' "
-                             "(%d %s a %s). Il payout resta tracciato.",
+                # R1: prima diceva «BONIFICO MANUALE RICHIESTO» e lasciava il payout ai giri
+                # automatici: pagato a mano, il primo sblocco lo ripagava con Stripe. Adesso lo
+                # ritenta il giro orario (R3), e la strada a mano passa dal pulsante.
+                logger.error("BONIFICO RIFIUTATO DA STRIPE | RIF: %s | %d %s a %s | il giro orario "
+                             "lo ritenta da solo: NON pagarlo a mano senza prima premere «Lo pago "
+                             "io a mano» nella scheda Audit (da quel momento non riparte piu')",
                              _rif_per_registro(rif), importo_cents, valuta, acct)
                 # ANCHE il fallimento va nel giornale: e' ESATTAMENTE lo scenario "non ho
-                # ricevuto il bonifico" -> resta la prova che si e' tentato e serve il manuale.
+                # ricevuto il bonifico" -> resta la prova che si e' tentato. Una riga sola per
+                # prenotazione anche se il giro orario viene rifiutato ogni ora: l'evento e'
+                # 'payout_manuale:<rif>' (fase177 `movimento`, idempotente).
                 self._giornale(tipo="payout_manuale", riferimento=rif,
                                soggetto="host:" + str(host_id), importo_cents=int(importo_cents),
-                               valuta=valuta, causale="transfer Connect FALLITO: bonifico manuale richiesto")
+                               valuta=valuta, causale="transfer Connect RIFIUTATO da Stripe: si "
+                                                      "ritenta da solo; a mano solo col pulsante")
         except Exception:
             logger.warning("trasferimento automatico host fallito (ISOLATO)", exc_info=True)
+
+    def _bonifico_a_mano(self, rif, host_id, acct, importo_cents, valuta):
+        """R1 (revisione Trail of Bits del 20/10/2026, «autorizzato» del 21/10): una persona PRENDE
+        IN CARICO il bonifico all'host, e da quel momento nessun giro automatico lo paga piu'. Lo
+        chiama solo `_trasferisci_all_host(a_mano=True)`, dopo TUTTE le sue guardie (incasso vero,
+        ritenuta, debiti, verifica, DAC7) e dentro `_BONIFICI_LOCK`.
+        Prima rilegge Stripe: se l'host ha un conto e Stripe ha gia' un bonifico per questa
+        prenotazione (un esito sconosciuto partito davvero), o se Stripe non risponde, NON prende
+        in carico niente: pagare a mano li' e' il doppio pagamento. E con un conto prende in
+        carico solo dopo un RIFIUTO certo di Stripe (la riga `payout_manuale` del giornale): un
+        esito sconosciuto non scrive righe, e un bonifico partito puo' non comparire ancora nella
+        lista di Stripe; lo chiude il giro orario, che ha la chiave anti-doppio di Stripe e il
+        bonifico a mano no (revisione differenziale del 21/10, RV1). Poi il payout va in
+        'in_transito', come un bonifico Connect partito (i soldi sono in viaggio, e le guardie
+        anti-doppio che ci sono gia' lo riconoscono), e il giornale scrive `payout_host`.
+        Modern Treasury, «Edge cases in complex payment operations» (letta il 21/10/2026): un
+        pagamento rimandato dopo un fallimento e' riuscito due volte -> «block redrafts after
+        success». -> "" preso in carico, altrimenti il codice del perche' no."""
+        pd = getattr(self._sys, "payout", None)
+        if acct:
+            leggi = getattr(getattr(self._sys, "connect", None), "bonifico_di", None)
+            letto = leggi(acct, str(rif)) if leggi is not None else None
+            if not (isinstance(letto, dict) and letto.get("ok")):
+                logger.error("BONIFICO A MANO NON PRESO IN CARICO | RIF: %s | NON SO se Stripe l'ha "
+                             "gia' pagato (%s): non pagarlo a mano, riprova piu' tardi",
+                             _rif_per_registro(rif), _testo_per_registro(
+                                 letto.get("motivo") if isinstance(letto, dict)
+                                 else "il fornitore non rilegge i bonifici"))
+                return "stripe_non_risponde"
+            if letto.get("bonifico") is not None:
+                logger.error("BONIFICO A MANO NON PRESO IN CARICO | RIF: %s | Stripe ha GIA' il "
+                             "bonifico %s: NON pagarlo a mano, lo registra il giro orario",
+                             _rif_per_registro(rif),
+                             _testo_per_registro(letto["bonifico"].get("id")))
+                return "gia_su_stripe"
+            fc = getattr(self._sys, "finanza", None)
+            if not (fc is not None and any((m.get("tipo") or "") == "payout_manuale"
+                                           for m in fc.movimenti(rif))):
+                logger.error("BONIFICO A MANO NON PRESO IN CARICO | RIF: %s | Stripe non l'ha mai "
+                             "RIFIUTATO con certezza: non pagarlo a mano, lo paga il giro orario "
+                             "con la chiave anti-doppio di Stripe", _rif_per_registro(rif))
+                return "nessun_rifiuto_certo"
+        if pd is None or pd.aggiorna_stato(rif, "in_transito") is not True:
+            logger.error("BONIFICO A MANO NON PRESO IN CARICO | RIF: %s | il registro dei bonifici "
+                         "non si aggiorna: non pagarlo a mano", _rif_per_registro(rif))
+            return "registro_non_aggiornato"
+        self._giornale(tipo="payout_host", riferimento=rif, soggetto="host:" + str(host_id),
+                       importo_cents=importo_cents, valuta=valuta,
+                       causale="bonifico A MANO preso in carico da una persona (pulsante «Lo "
+                               "pago io a mano»)")
+        logger.warning("BONIFICO A MANO PRESO IN CARICO | RIF: %s | HOST_ID: %s | IMPORTO: %d %s | "
+                       "da pagare adesso dalla banca: nessun giro automatico lo paga piu'",
+                       _rif_per_registro(rif), _testo_per_registro(host_id), importo_cents, valuta)
+        return ""
+
+    def _ritenta_bonifici_fermi(self):
+        """R3 (revisione Trail of Bits del 20/10/2026, «autorizzato» del 21/10). Stripe NON
+        ritenta un bonifico fallito: «You must explicitly attempt the transfer again»
+        (docs.stripe.com/connect/account-balances, letta il 21/10/2026). Prima lo ritentavano
+        solo due sblocchi (verifica dell'host, dati fiscali): un rifiuto per saldo insufficiente
+        o un esito sconosciuto restavano 'maturato' finche' uno dei due non capitava, cioe' a
+        volte mai. Lo chiama il giro orario, per primo: ogni payout 'maturato' la cui garanzia
+        e' CHIUSA a favore dell'host ('rilasciato' o 'risolto': serve la prova, non basta che la
+        garanzia manchi) riparte con le guardie di sempre (`_trasferisci_all_host` rilegge tutto,
+        e prima di ogni bonifico chiede a Stripe se c'e' gia'). Uno preso in carico a mano e'
+        'in_transito' e qui non arriva (R1).
+        Limiti dichiarati: Stripe salva la risposta della chiave anti-doppio e la ripete a ogni
+        ritentativo, e tiene le chiavi «at least 24 hours» (docs.stripe.com/api/idempotent_requests,
+        letta il 21/10/2026): un rifiuto salvato si ripete fino ad allora, e un saldo tornato si
+        paga al primo giro dopo; al massimo i 2000 payout piu' vecchi per giro (fase131 `tutti`).
+        Un errore su un bonifico non ferma gli altri; un registro dei bonifici che non si legge
+        solleva, e lo scrive il giro orario (ERROR, il filo resta vivo)."""
+        pd = getattr(self._sys, "payout", None)
+        if pd is None:
+            return 0
+        ritentati = 0
+        for r in pd.tutti(stato="maturato"):
+            rif = r["prenotazione_id"]
+            try:
+                if not self._garanzia_chiusa(rif):
+                    continue                          # soldi non ancora dell'host, o non si sa
+                self._trasferisci_all_host(rif, int(r["minori"]))
+                ritentati += 1
+            except Exception:
+                logger.warning("BONIFICO FERMO NON RITENTATO (ISOLATO) | RIF: %s",
+                               _rif_per_registro(rif), exc_info=True)
+        if ritentati:
+            logger.info("BONIFICI FERMI RITENTATI DAL GIRO ORARIO | %d", ritentati)
+        return ritentati
 
     def _addebito_del_pagamento(self, rec):
         """L'id dell'addebito dell'ospite (ch_/py_) per il bonifico legato, letto da Stripe dal
@@ -13649,6 +13836,14 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
 
         def _tick_garanzia():
             while True:
+                try:
+                    # R3 (21/10, «autorizzato»): Stripe non ritenta un bonifico fallito. PER PRIMO,
+                    # cosi' un bonifico rifiutato piu' sotto in questo giro si ritenta al prossimo,
+                    # non due volte in un minuto. Se il registro non si legge, lo scrive l'except.
+                    router._ritenta_bonifici_fermi()
+                except Exception:
+                    logger.error("giro dei bonifici fermi fallito (thread TENUTO VIVO)",
+                                 exc_info=True)
                 try:
                     # IL BLOCCO SULLA CARTA (consegne 19): incasso a fine finestra e annullo dei
                     # blocchi rimasti su prenotazioni chiuse. PRIMA del rilascio, cosi' nello

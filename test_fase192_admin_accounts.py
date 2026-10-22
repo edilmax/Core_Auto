@@ -36,7 +36,7 @@ class TestLaMatriceDeiRuoli(unittest.TestCase):
 
     def test_la_matrice_ruolo_per_azione(self):
         self.assertEqual(RUOLI, ("admin", "supporto"))
-        self.assertEqual(len(AZIONI_SOLO_ADMIN), 6)
+        self.assertEqual(len(AZIONI_SOLO_ADMIN), 7)        # + «Lo pago io a mano» (R1, 21/10)
         for azione in AZIONI_SOLO_ADMIN:
             self.assertTrue(puo("admin", azione), azione)
             self.assertFalse(puo("supporto", azione), "il supporto NON tocca i soldi: " + azione)

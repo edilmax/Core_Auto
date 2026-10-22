@@ -83,6 +83,8 @@ class TestRuoloSupportoNonScala(unittest.TestCase):
         ("cancella_attivita", "POST", "/api/admin/cancella_attivita", {"host_id": "h_x"}),
         ("controversia_risolvi", "POST", "/api/admin/controversia/risolvi",
          {"riferimento": "r_x", "percentuale_ospite": 100}),
+        # R1 (21/10): «Lo pago io a mano» toglie un bonifico dai giri automatici: soldi veri
+        ("pagato_a_mano", "POST", "/api/admin/payout/pagato_a_mano", {"riferimento": "r_x"}),
     )
 
     def test_ogni_azione_solo_admin_e_coperta_da_una_rotta(self):

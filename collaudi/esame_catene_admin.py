@@ -486,6 +486,7 @@ BOTTONI = {
     "#btnCampagna": "/api/marketing/campagna",
     "#btnRimborsiDovuti": "/api/admin/rimborsi_dovuti",
     "eseguiRimborsoDovuto()": "/api/admin/rimborsa_dovuto",
+    "pagoAMano()": "/api/admin/payout/pagato_a_mano",   # R1 (21/10): dentro la scheda audit
     "#btnControversie": "/api/admin/controversie",
     "vediChat()": "/api/admin/messaggi",
     "risolviCtr()": "/api/admin/controversia/risolvi",
@@ -517,7 +518,13 @@ CAMPI = {
 #     gesto che si vede nel diff e va spiegato.
 #     Misurato il 2026-09-10 con `python collaudi/esame_catene_admin.py --perimetro`:
 #     21 rotte nella pagina, 2 con la catena 1 -> 19 senza.
-ROTTE_SENZA_CATENA_TETTO = 19
+#     ⚠️ ALZATO A 20 IL 2026-10-21, e spiegato: e' entrato il pulsante «Lo pago io a mano»
+#     (R1, `/api/admin/payout/pagato_a_mano`). Le sue tre colonne -- il bottone, i soldi (il
+#     payout va in 'in_transito' e nessun giro lo ripaga), l'archivio (la riga `payout_host`
+#     del giornale) -- le percorrono 12 prove di `test_fase83_server.TestIlPagamentoAMano` e
+#     vicine, NON ancora una catena di questo esame: e' debito di questa casella, scritto in
+#     RIPRENDI_QUI col suo posto, e il tetto torna a 19 quando la catena c'e'.
+ROTTE_SENZA_CATENA_TETTO = 20
 
 
 # --------------------------------------------------------------------------------------

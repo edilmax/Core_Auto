@@ -28,7 +28,8 @@ PBKDF2_ITER = 200_000
 RUOLI = ("admin", "supporto")
 # azioni RISERVATE al ruolo 'admin' (soldi / moderazione distruttiva): 'supporto' NON puo' farle
 AZIONI_SOLO_ADMIN = ("rimborso", "storno_penale", "cancella_attivita",
-                     "alloggio_stato", "controversia_risolvi", "blocco_globale")
+                     "alloggio_stato", "controversia_risolvi", "blocco_globale",
+                     "pagato_a_mano")      # R1 (21/10): «Lo pago io a mano» muove soldi veri
 
 
 def puo(ruolo: Any, azione: str) -> bool:
