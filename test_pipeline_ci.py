@@ -69,6 +69,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -6408,6 +6409,72 @@ class TestIlDeployNonPuoSALTAREIlPassoDiSicurezza(unittest.TestCase):
                          "col passo di sicurezza fatto, il deploy deve poter proseguire: %r"
                          % (testo[-400:],))
 
+    # ⛔ LA TRACCIA DELLO SCAMBIO LA SCRIVE LO SCRIPT, NON CHI LO LANCIA (22/10/2026). La casella «il
+    # deploy passa sempre dal protocollo D17» (Blocco 8, `collaudi/esame_deploy.py`) legge
+    # /root/deploy_scambio_*.log con «SCAMBIO FATTO» e «USCITA=»: le scriveva il vecchio pulsante, il
+    # protocollo D17 no. Dal 28/9 ogni deploy finiva solo in un file scelto a mano da chi lo lanciava,
+    # e il codice d'uscita c'era solo se se ne ricordava (4 su 14). Una traccia affidata alla memoria
+    # di chi lancia non misura «sempre».
+    def _finti_attrezzi(self, pull_ok=True):
+        """`git` e `docker` finti nel PATH: lo scambio arriva in fondo senza toccare niente di vero."""
+        d = os.path.join(self.dir, "finti")
+        os.makedirs(d)
+        attrezzi = {
+            "git": '#!/bin/sh\ncase "$1" in pull) %s ;; rev-parse) echo abc1234 ;; esac\n'
+                   % ("exit 0" if pull_ok else "echo pull rifiutato; exit 1"),
+            "docker": '#!/bin/sh\ncase "$*" in\n'
+                      ' *casavip-app:latest*) echo sha256:nuova ;;\n'
+                      ' *casavip-app:prec*) echo sha256:vecchia ;;\n'
+                      ' *Health.Status*) echo healthy ;;\n'
+                      ' *"{{.Image}}"*) echo sha256:nuova ;;\n'
+                      ' logs*) echo "\'money_path_pronto\': True" ;;\n'
+                      'esac\nexit 0\n'}
+        for nome, testo in attrezzi.items():
+            p = os.path.join(d, nome)
+            with io.open(p, "w", encoding="utf-8", newline="\n") as f:
+                f.write(testo)
+            os.chmod(p, stat.S_IRWXU)
+        return d
+
+    def _scambio(self, finti):
+        amb = dict(os.environ)
+        amb["RADICE_D17"] = self.dir
+        amb["GETTONE_D17"] = os.path.join(self.dir, "gettone")
+        amb["REGISTRI_D17"] = self.dir
+        self._scrivi_gettone(int(time.time()))
+        # i finti vanno DAVANTI nel PATH visto da `sh`: il `sh.exe` di Git per Windows rimette i suoi
+        # /usr/bin davanti a quello ereditato, quindi il PATH si sposta dentro `sh`, in forma POSIX
+        posix = finti.replace("\\", "/")
+        if os.name == "nt" and len(posix) > 1 and posix[1] == ":":
+            posix = "/" + posix[0].lower() + posix[2:]
+        script = os.path.join(self.RADICE, "deploy", "protocollo_d17.sh").replace("\\", "/")
+        e = subprocess.run([self.sh, "-c", 'PATH="$1:$PATH"; export PATH; exec sh "$2" scambio', "d17", posix, script],  # nosec B603 - il nostro protocollo_d17.sh con attrezzi finti in una cartella di prova  # noqa: S603
+                           cwd=self.dir, env=amb, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        registri = sorted(f for f in os.listdir(self.dir) if f.startswith("deploy_scambio_") and f.endswith(".log"))
+        testi = []
+        for f in registri:
+            with io.open(os.path.join(self.dir, f), encoding="utf-8") as g:
+                testi.append(g.read())
+        return e.returncode, e.stdout.decode("utf-8", "replace"), testi
+
+    def test_LO_SCAMBIO_RIUSCITO_LASCIA_DA_SOLO_SCAMBIO_FATTO_E_USCITA_0(self):
+        if not self.sh:
+            return self._almeno_la_struttura("deploy_scambio_")
+        uscita, testo, testi = self._scambio(self._finti_attrezzi())
+        self.assertEqual(uscita, 0, testo[-600:])
+        self.assertEqual(len(testi), 1, "lo scambio non ha lasciato la sua traccia: %r" % (testo[-300:],))
+        self.assertIn("SCAMBIO FATTO", testi[0])
+        self.assertIn("USCITA=0", testi[0])
+
+    def test_LO_SCAMBIO_FALLITO_LASCIA_USCITA_DIVERSA_DA_0_E_NIENTE_SCAMBIO_FATTO(self):
+        if not self.sh:
+            return self._almeno_la_struttura("USCITA=")
+        uscita, testo, testi = self._scambio(self._finti_attrezzi(pull_ok=False))
+        self.assertNotEqual(uscita, 0, testo[-600:])
+        self.assertEqual(len(testi), 1, "lo scambio fallito non ha lasciato la sua traccia: %r" % (testo[-300:],))
+        self.assertNotIn("SCAMBIO FATTO", testi[0])
+        self.assertRegex(testi[0], r"USCITA=[1-9]")
+
 
 class _GuardieSugliAttrezziDelLavoro(unittest.TestCase):
     """Appoggi comuni alle guardie sul PRE-VOLO e sul PRE-FATTO.
@@ -6728,7 +6795,11 @@ class TestIlPreVoloVedeIProblemiPRIMA(_GuardieSugliAttrezziDelLavoro):
         cancello che dipende dalla macchina e' un falso allarme che aspetta il suo giorno."""
         pv = self.pv()
         sana = self._pagina_sana()
-        atteso = re.search(r"Python (\d+\.\d+\.\d+)", sana)
+        # Il Python si legge DALLA RIGA `AMBIENTE:`, come fa il pre-volo: il 22/10/2026 un
+        # paragrafo di consegne che citava «Python 3.11.17» sopra quella riga lo faceva
+        # leggere a questa guardia e la rendeva rossa su una macchina sana.
+        riga = pv._RIGA_AMBIENTE.search(sana)
+        atteso = re.search(r"Python (\d+\.\d+\.\d+)", riga.group(1)) if riga else None
         self.assertIsNotNone(atteso, "la riga AMBIENTE non dichiara piu' un Python")
         stato, dettaglio = pv.controllo_4_ambiente(
             pagina=sana, radice=self.RADICE, quale_python=atteso.group(1),
@@ -6768,7 +6839,11 @@ class TestIlPreVoloVedeIProblemiPRIMA(_GuardieSugliAttrezziDelLavoro):
         """
         pv = self.pv()
         sana = self._pagina_sana()
-        atteso = re.search(r"Python (\d+\.\d+\.\d+)", sana)
+        # Il Python si legge DALLA RIGA `AMBIENTE:`, come fa il pre-volo: il 22/10/2026 un
+        # paragrafo di consegne che citava «Python 3.11.17» sopra quella riga lo faceva
+        # leggere a questa guardia e la rendeva rossa su una macchina sana.
+        riga = pv._RIGA_AMBIENTE.search(sana)
+        atteso = re.search(r"Python (\d+\.\d+\.\d+)", riga.group(1)) if riga else None
         self.assertIsNotNone(atteso, "la riga AMBIENTE non dichiara piu' un Python")
         comuni = dict(pagina=sana, radice=self.RADICE, quale_python=atteso.group(1),
                       moduli_presenti={"hypothesis", "yaml", "coverage"})
@@ -7371,7 +7446,11 @@ class TestIlPreFattoVedeIProblemiPRIMA(_GuardieSugliAttrezziDelLavoro):
         """
         pv, pf = self.pv(), self.pf()
         sana = self._pagina_sana()
-        atteso = re.search(r"Python (\d+\.\d+\.\d+)", sana)
+        # Il Python si legge DALLA RIGA `AMBIENTE:`, come fa il pre-volo: il 22/10/2026 un
+        # paragrafo di consegne che citava «Python 3.11.17» sopra quella riga lo faceva
+        # leggere a questa guardia e la rendeva rossa su una macchina sana.
+        riga = pv._RIGA_AMBIENTE.search(sana)
+        atteso = re.search(r"Python (\d+\.\d+\.\d+)", riga.group(1)) if riga else None
         self.assertIsNotNone(atteso, "la riga AMBIENTE non dichiara piu' un Python: "
                                      "questa guardia non avrebbe piu' niente da iniettare")
         # La macchina ESATTAMENTE come la dichiara il documento, costruita a mano: cosi'
@@ -13932,7 +14011,10 @@ class TestLEsameDellaSentinellaNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
             scritture.append(k)
             return {"blocco": 8, "esito": k.get("esito"), "denominatore": k.get("denominatore"), "impronta": "finta"}
         d = tempfile.mkdtemp()
+        vero_environ = dict(os.environ)
         try:
+            # senza chiave: dal 22/10 con la chiave l'esame legge il monitor VERO da solo (vedi la prova sotto)
+            os.environ.pop(esame.VARIABILE_CHIAVE, None)
             esame.scheda.registra = _registra_finta
             sveglia, dorme = os.path.join(d, "sveglia.json"), os.path.join(d, "dorme.json")
             with io.open(sveglia, "w", encoding="utf-8") as f:
@@ -13948,6 +14030,41 @@ class TestLEsameDellaSentinellaNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
             self.assertIn("monitor", scritture[1]["motivo"] or "")
         finally:
             esame.scheda.registra = vera_registra
+            os.environ.clear()
+            os.environ.update(vero_environ)
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_CON_LA_CHIAVE_NELL_AMBIENTE_IL_MONITOR_SI_LEGGE_ANCHE_SENZA_OPZIONE(self):
+        """⛔ IL MONITOR C'ERA E L'ESAME NON LO GUARDAVA (22/10/2026). Il conto UptimeRobot e la chiave di sola
+        lettura esistono dall'11/9, ma la casella si rimisura col suo COMANDO (`--scrivi`, quello della scheda e
+        di FUORI_CI), che non porta `--monitor uptimerobot`: l'esame non leggeva il monitor e scriveva ROSSO
+        «nessun monitor esterno: serve un conto». Con la chiave nell'ambiente il monitor si legge da solo; senza
+        chiave (la CI) non si legge e nulla cambia."""
+        esame = self._esame()
+        vero_leggi, vero_environ = esame.leggi_monitor, dict(os.environ)
+        letti = []
+
+        def _leggi_finto(adesso):
+            letti.append(adesso)
+            return esame.monitor_finto()
+        d = tempfile.mkdtemp()
+        try:
+            esame.leggi_monitor = _leggi_finto
+            percorso = os.path.join(d, "letture.json")
+            with io.open(percorso, "w", encoding="utf-8") as f:
+                json.dump(esame.letture_finte(esterno=None, buco=333, n=8, minuti_fa=40), f)
+            os.environ.pop(esame.VARIABILE_CHIAVE, None)
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(esame.main(["--da-file", percorso]), 1)       # senza chiave: nessun monitor, ROSSO
+            self.assertEqual(letti, [])
+            os.environ[esame.VARIABILE_CHIAVE] = "ur-chiave-di-prova-000"
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(esame.main(["--da-file", percorso]), 0)       # con la chiave: letto e VERDE
+            self.assertEqual(len(letti), 1)
+        finally:
+            esame.leggi_monitor = vero_leggi
+            os.environ.clear()
+            os.environ.update(vero_environ)
             shutil.rmtree(d, ignore_errors=True)
 
     def test_IL_MONITOR_ESTERNO_DECIDE_E_LA_CHIAVE_NON_SI_STAMPA(self):

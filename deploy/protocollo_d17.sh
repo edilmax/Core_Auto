@@ -128,6 +128,13 @@ fi
 if [ "$FASE" = "scambio" ]; then
   echo "=== [2z] IL PASSO DI SICUREZZA E' STATO FATTO? (precondizione, non consiglio)"
   pretendi_gettone || exit 1
+  # LA TRACCIA DELLO SCAMBIO LA SCRIVE LO SCRIPT (22/10/2026): «SCAMBIO FATTO» solo se si arriva in
+  # fondo, e «USCITA=» sempre, anche quando `set -e` ferma tutto a meta'. La legge
+  # `collaudi/esame_deploy.py` (casella «il deploy passa sempre dal protocollo D17»); prima stava
+  # solo nel file che chi lanciava sceglieva a mano, e il codice d'uscita solo se se ne ricordava.
+  REGISTRO="${REGISTRI_D17:-/root}/deploy_scambio_$(date -u +%Y%m%d_%H%M%S).log"
+  trap 'u=$?; { [ "$u" -eq 0 ] && echo "SCAMBIO FATTO alle $(date -u +%H:%M:%SZ) commit $(git rev-parse --short HEAD 2>/dev/null)"; echo "USCITA=$u"; } >> "$REGISTRO"' EXIT
+  echo "  traccia dello scambio: $REGISTRO"
 
   echo
   echo "=== [2a] PRENDO IL CODICE NUOVO"
