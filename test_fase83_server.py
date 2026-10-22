@@ -8,6 +8,7 @@ mai solleva. Usa un SistemaCasaVIP reale (fase81).
 """
 import datetime
 import http.client
+import io
 import json
 import os
 import re
@@ -17,6 +18,7 @@ import tempfile
 import threading
 import time
 import unittest
+import urllib.error
 from unittest import mock
 from urllib.parse import parse_qs, quote, urlencode, urlparse
 
@@ -27,6 +29,8 @@ from test_blocco_carta import StripeColBlocco
 from test_fase203_ical_orologio import _PostoInterno
 from test_rimborso_torna_da_ogni_strada import _BancoDelleStrade
 from test_fase160_escrow_garanzia import nella_finestra
+from test_movimenti_giornale import _BancoDeiBonifici, _StripeDeiBonifici
+from test_ritenuta import _Base as _BancoDellaRitenuta
 from fase83_server import (
     RouterHTTP, crea_router, percorso_statico_sicuro,
     jsonld_alloggio, pagina_alloggio_html, sitemap_xml, robots_txt, _importo,
@@ -3680,6 +3684,352 @@ class TestLaDataDelCheckInSiLeggeUgualeSuOgniPython(unittest.TestCase):
             with self.subTest(data=cattiva):
                 self.assertIsNone(fase83_server._istante_checkin_prudente(cattiva))
                 self.assertIsNone(fase83_server._istante_fine_tutela(cattiva, 24))
+
+
+class TestIlPagamentoAMano(_BancoDeiBonifici):
+    """⛔ R1 e R3 (revisione Trail of Bits della #268, 20/10; «autorizzato» del fondatore il
+    21/10). LE GUARDIE STANNO QUI, NEL TEST DEDICATO DEL SERVER, come
+    `TestIlPulsanteDellaControversia`: il giro `--diff master` del 21/10 (16:41-18:02) ha
+    lasciato 33 mutanti vivi su 37 non perche' le righe fossero scoperte, ma perche' le guardie
+    stavano in `test_movimenti_giornale`, fuori dagli 8 occhi che il Giudice accende. Il banco e'
+    quello dei bonifici (importato): un solo banco, non due copie.
+    R1: dopo un rifiuto di Stripe (o con l'host senza Stripe) il prodotto chiedeva il bonifico
+    A MANO ma lasciava il payout 'maturato', e nessuna azione registrava il pagamento fatto a
+    mano: il primo sblocco (verifica dell'host, dati fiscali) lo ripagava con Stripe. Modern
+    Treasury, «Edge cases in complex payment operations»: un pagamento rimandato dopo un
+    fallimento e' riuscito due volte -> «block redrafts after success».
+    R3: Stripe non ritenta da solo un bonifico fallito, «You must explicitly attempt the
+    transfer again» (docs.stripe.com/connect/account-balances, letta il 21/10/2026)."""
+
+    def _rifiuto_di_stripe(self):
+        corpo = json.dumps({"error": {"type": "invalid_request_error",
+                                      "code": "balance_insufficient",
+                                      "message": "Insufficient funds"}}).encode("utf-8")
+        return urllib.error.HTTPError("https://api.stripe.com/v1/transfers", 400,
+                                      "Bad Request", {}, io.BytesIO(corpo))
+
+    def _soggiorno_confermato(self, rif):
+        """«Tutto ok» dell'ospite: la garanzia e' dell'host (il bonifico lo si chiama a parte)."""
+        self.assertTrue(self.sis.garanzia.conferma_ospite(rif).get("ok"))
+
+    def _lo_pago_io_a_mano(self, rif):
+        return self.g("POST", "/api/admin/payout/pagato_a_mano", {"riferimento": rif},
+                      {"X-Admin-Key": "ak"})
+
+    def _sblocco_della_verifica(self):
+        codice, risposta = self.g("POST", "/api/admin/verifica_stato",
+                                  {"host_id": self.hid, "stato": "verificato"},
+                                  {"X-Admin-Key": "ak"})
+        self.assertEqual(codice, 200, risposta)
+
+    def test_R1_un_bonifico_preso_in_carico_A_MANO_non_lo_ripaga_Stripe(self):
+        """Il fondatore paga a mano il bonifico che il prodotto gli ha chiesto. Prima lo dice al
+        prodotto («Lo pago io a mano»), poi un giro automatico ritenta i payout 'maturato': quel
+        payout non deve ripartire con Stripe. Due strade portano al «a mano»: Stripe rifiuta il
+        bonifico, o l'host non ha collegato Stripe (e lo collega dopo)."""
+        for caso in ("Stripe rifiuta", "host senza Stripe"):
+            with self.subTest(caso):
+                stripe = _StripeDeiBonifici(self._rifiuto_di_stripe(), ricorda_chiavi=False,
+                                            eseguito_prima=False)
+                rif, netto = self._bonifico_con(stripe)
+                if caso == "host senza Stripe":
+                    self.sis.registro_host.imposta_stripe_account(self.hid, "")
+                    stripe.guasto = None                  # quando lo collega, Stripe accetta
+                self._soggiorno_confermato(rif)
+                self.r._trasferisci_all_host(rif, netto)  # il bonifico non parte
+                self.assertEqual(stripe.bonifici, [], "premessa: nessun bonifico e' partito")
+                self.assertEqual(self.sis.payout.stato_di(rif), "maturato")
+                codice, risposta = self._lo_pago_io_a_mano(rif)
+                self.sis.registro_host.imposta_stripe_account(self.hid, "acct_TEST")
+                self._sblocco_della_verifica()            # il giro che ritenta i 'maturato'
+                self.assertEqual(stripe.bonifici, [],
+                                 "%s: l'host e' stato pagato DUE volte, a mano dal fondatore e poi "
+                                 "da Stripe allo sblocco della verifica (risposta al «lo pago io a "
+                                 "mano»: %r %r)" % (caso, codice, risposta))
+                self.assertEqual(codice, 200, risposta)
+                self.assertEqual(risposta.get("stato"), "preso_in_carico")
+                self.assertEqual(risposta.get("importo_cents"), netto)
+                # 'in_transito', come un bonifico Connect partito: il bonifico dalla banca e'
+                # in viaggio, e ogni guardia anti-doppio che c'e' gia' lo riconosce
+                self.assertEqual(self.sis.payout.stato_di(rif), "in_transito")
+                self.assertEqual(self._tipi(rif).count("payout_host"), 1,
+                                 "il pagamento a mano non e' nel giornale, o c'e' due volte")
+                self.assertTrue(self.sis.finanza.verifica_catena()["ok"])
+                self.assertEqual(stripe.inattesi, [])
+
+    def test_R1_il_lo_pago_io_a_mano_rilegge_Stripe_e_si_ferma_se_non_e_sicuro(self):
+        """Il pulsante non si fida del registro: chiede a Stripe se il bonifico c'e' gia'. Se c'e'
+        (un esito sconosciuto che era partito davvero) o se Stripe non risponde, NON prende in
+        carico niente: pagare a mano li' e' esattamente il doppio pagamento. E non paga una
+        garanzia ancora aperta: quei soldi non sono ancora dell'host."""
+        # il bonifico parte, la risposta no, e nemmeno la rilettura subito dopo: esito sconosciuto
+        stripe = _StripeDeiBonifici(TimeoutError("The read operation timed out"),
+                                    ricorda_chiavi=True, letture_rotte=(2,))
+        rif, netto = self._bonifico_con(stripe)
+        self._soggiorno_confermato(rif)
+        self.r._trasferisci_all_host(rif, netto)
+        self.assertEqual(len(stripe.bonifici), 1, "premessa: il bonifico e' su Stripe")
+        self.assertEqual(self.sis.payout.stato_di(rif), "maturato", "premessa")
+        codice, risposta = self._lo_pago_io_a_mano(rif)
+        self.assertEqual(codice, 409, risposta)
+        self.assertEqual(risposta.get("errore"), "gia_su_stripe")
+        self.assertEqual(self.sis.payout.stato_di(rif), "maturato")
+        self.assertNotIn("payout_host", self._tipi(rif))
+
+        stripe2 = _StripeDeiBonifici(None, ricorda_chiavi=True, letture_rotte=(1,))
+        rif2, _ = self._bonifico_con(stripe2)
+        self._soggiorno_confermato(rif2)
+        codice, risposta = self._lo_pago_io_a_mano(rif2)
+        self.assertEqual(codice, 409, risposta)
+        self.assertEqual(risposta.get("errore"), "stripe_non_risponde")
+        self.assertEqual(self.sis.payout.stato_di(rif2), "maturato")
+
+        stripe3 = _StripeDeiBonifici(None, ricorda_chiavi=True)
+        rif3, _ = self._bonifico_con(stripe3)                # garanzia ancora aperta
+        codice, risposta = self._lo_pago_io_a_mano(rif3)
+        self.assertEqual(codice, 409, risposta)
+        self.assertEqual(risposta.get("errore"), "garanzia_aperta")
+        self.assertEqual(self.sis.payout.stato_di(rif3), "maturato")
+        self.assertEqual(stripe2.bonifici + stripe3.bonifici, [])
+        with mock.patch.object(self.r, "_puo_azione", return_value=False):
+            codice, _ = self._lo_pago_io_a_mano(rif3)
+        self.assertEqual(codice, 403, "il ruolo 'supporto' non muove soldi")
+
+    def test_R1_con_Stripe_collegato_a_mano_solo_dopo_un_RIFIUTO_certo(self):
+        """Revisione differenziale del 21/10 (RV1): un esito sconosciuto non scrive righe nel
+        giornale e lascia il payout 'maturato'. Se il bonifico e' partito ma la lista di Stripe
+        non lo mostra ancora, la rilettura del pulsante non lo vede: pagato a mano, l'host e'
+        pagato due volte. Il bonifico a mano non ha la chiave anti-doppio di Stripe, il
+        ritentativo automatico si' (docs.stripe.com/api/idempotent_requests, letta il 21/10):
+        con un conto Stripe si prende in carico a mano solo dopo un rifiuto CERTO (la riga
+        `payout_manuale`), e un esito sconosciuto lo chiude il giro orario."""
+        stripe = _StripeDeiBonifici(TimeoutError("The read operation timed out"),
+                                    ricorda_chiavi=True, eseguito_prima=False)
+        rif, netto = self._bonifico_con(stripe)
+        self._soggiorno_confermato(rif)
+        self.r._trasferisci_all_host(rif, netto)          # nessuna risposta: esito sconosciuto
+        self.assertEqual(stripe.bonifici, [], "premessa: su Stripe non c'e' (ancora) niente")
+        self.assertEqual(self.sis.payout.stato_di(rif), "maturato", "premessa")
+        self.assertNotIn("payout_manuale", self._tipi(rif), "premessa: nessun rifiuto certo")
+        codice, risposta = self._lo_pago_io_a_mano(rif)
+        self.assertEqual(codice, 409, "preso in carico a mano dopo un esito SCONOSCIUTO: se il "
+                                      "bonifico era partito l'host e' pagato due volte (%r)"
+                                      % (risposta,))
+        self.assertEqual(risposta.get("errore"), "nessun_rifiuto_certo")
+        self.assertEqual(self.sis.payout.stato_di(rif), "maturato")
+        self.assertNotIn("payout_host", self._tipi(rif))
+        self.r._ritenta_bonifici_fermi()                  # lo chiude il giro orario
+        self.assertEqual(len(stripe.bonifici), 1)
+        self.assertEqual(self.sis.payout.stato_di(rif), "in_transito")
+        self.assertEqual(stripe.inattesi, [])
+
+    def test_R1_il_pulsante_aspetta_il_bonifico_automatico_in_viaggio(self):
+        """La gara: un giro automatico ha spedito il bonifico a Stripe e aspetta la risposta, e
+        proprio allora si preme «Lo pago io a mano». Senza `_BONIFICI_LOCK` la rilettura di Stripe
+        non vede ancora niente, il pulsante prende in carico, poi Stripe esegue: l'host e' pagato
+        due volte. Col lucchetto il pulsante aspetta, e trova il bonifico gia' partito."""
+        from fase101_stripe_connect import ProviderConnect
+        stripe = _StripeDeiBonifici(None, ricorda_chiavi=True)
+        rif, netto = self._bonifico_con(stripe)
+        self._soggiorno_confermato(rif)
+        in_viaggio, arriva = threading.Event(), threading.Event()
+
+        def post_lento(url, body, headers):
+            if body is not None:                      # il POST del bonifico, non le letture
+                in_viaggio.set()
+                arriva.wait(10)
+            return stripe.post(url, body, headers)
+        self.sis.connect = ProviderConnect("sk_test_x", fetch=post_lento, fetch_get=stripe.get)
+        automatico = threading.Thread(target=self.r._trasferisci_all_host, args=(rif, netto))
+        automatico.start()
+        self.assertTrue(in_viaggio.wait(10), "premessa: il bonifico automatico e' in viaggio")
+        esito = {}
+        pulsante = threading.Thread(target=lambda: esito.update(r=self._lo_pago_io_a_mano(rif)))
+        pulsante.start()
+        pulsante.join(0.5)                            # senza lucchetto qui ha gia' risposto
+        arriva.set()
+        automatico.join(10)
+        pulsante.join(10)
+        self.assertFalse(automatico.is_alive() or pulsante.is_alive(), "un filo e' rimasto appeso")
+        self.assertEqual(len(stripe.bonifici), 1, "premessa: Stripe ha eseguito il bonifico")
+        codice, risposta = esito["r"]
+        self.assertEqual(codice, 409, "il pulsante ha preso in carico un bonifico che Stripe stava "
+                                      "gia' eseguendo: l'host viene pagato due volte (%r)"
+                                      % (risposta,))
+        self.assertEqual(risposta.get("errore"), "non_da_pagare")
+        self.assertEqual(self.sis.payout.stato_di(rif), "in_transito")
+        self.assertEqual(self._tipi(rif).count("payout_host"), 1)
+        self.assertEqual(stripe.inattesi, [])
+
+    def test_R3_un_bonifico_rifiutato_lo_ritenta_il_giro_orario(self):
+        """Stripe rifiuta (saldo insufficiente), anche al primo giro orario; poi il saldo torna.
+        Nessuno sblocco arriva: deve ripartire da solo al giro orario, una volta sola.
+        `ricorda_chiavi=False`: Stripe ripete per 24 ore il rifiuto salvato sulla chiave, e qui
+        si guarda il giro dopo. Le due direzioni: con la garanzia ancora aperta, o senza
+        garanzia, il giro orario non paga niente."""
+        stripe = _StripeDeiBonifici(self._rifiuto_di_stripe(), ricorda_chiavi=False,
+                                    eseguito_prima=False)
+        rif, netto = self._bonifico_con(stripe)
+        self._soggiorno_confermato(rif)
+        self.r._trasferisci_all_host(rif, netto)
+        self.assertEqual(stripe.bonifici, [], "premessa: rifiutato")
+        ritenta = getattr(self.r, "_ritenta_bonifici_fermi", None)
+        self.assertIsNotNone(ritenta, "nessun giro orario ritenta i bonifici rifiutati: Stripe "
+                                      "non lo fa da solo, e il payout resta 'maturato' finche' "
+                                      "non capita uno sblocco")
+        stripe._post_ricevuti, stripe.guasto = 0, self._rifiuto_di_stripe()
+        ritenta()                                         # il saldo non e' ancora tornato
+        self.assertEqual(stripe.bonifici, [], "premessa: rifiutato anche al giro orario")
+        ritenta()                                         # il saldo e' tornato
+        ritenta()
+        self.assertEqual(len(stripe.bonifici), 1, "il giro orario non ha pagato, o due volte")
+        self.assertEqual(self.sis.payout.stato_di(rif), "in_transito")
+        self.assertEqual(self._tipi(rif).count("payout_host"), 1)
+        self.assertEqual(self._tipi(rif).count("payout_manuale"), 1,
+                         "il giornale scrive un promemoria a ogni tentativo rifiutato")
+
+        stripe2 = _StripeDeiBonifici(None, ricorda_chiavi=True)
+        rif2, _ = self._bonifico_con(stripe2)                # garanzia aperta
+        ritenta()
+        with mock.patch.object(self.sis.garanzia, "stato", return_value=None):
+            ritenta()                                         # garanzia che non si trova
+        self.assertEqual(stripe2.bonifici, [], "il giro orario paga soldi non ancora dell'host")
+        self.assertEqual(self.sis.payout.stato_di(rif2), "maturato")
+        self.assertEqual(stripe.inattesi + stripe2.inattesi, [])
+
+    # ── i sopravvissuti del giro del 21/10 che nessuna guardia guardava, uno per uno ─────────
+    def test_R1_un_riferimento_storto_non_entra(self):
+        """Il riferimento finisce nel registro che legge il Guardiano: si controlla la FORMA, come
+        `_admin_rimborsa_dovuto` (sopravviveva `and` -> `or`: una stringa qualunque passava)."""
+        for storto in ("../payout", "a b", "", 123):
+            with self.subTest(storto=storto):
+                codice, risposta = self._lo_pago_io_a_mano(storto)
+                self.assertEqual((codice, risposta.get("errore")), (422, "campi_non_validi"))
+
+    def test_R1_una_garanzia_illeggibile_ferma_il_pulsante_e_lo_scrive_intero(self):
+        """Non si sa se il soggiorno e' confermato: niente pagamento a mano (503), e la riga
+        ERROR porta l'eccezione intera (sopravviveva `exc_info=True` -> `False`)."""
+        stripe = _StripeDeiBonifici(None, ricorda_chiavi=True)
+        rif, _ = self._bonifico_con(stripe)
+        with mock.patch.object(self.sis.garanzia, "stato",
+                               side_effect=RuntimeError("archivio della garanzia illeggibile")), \
+                self.assertLogs("core_auto", level="ERROR") as cattura:
+            codice, risposta = self._lo_pago_io_a_mano(rif)
+        self.assertEqual((codice, risposta.get("errore")), (503, "garanzia_illeggibile"))
+        self.assertEqual(self.sis.payout.stato_di(rif), "maturato")
+        righe = [r for r in cattura.records if "BONIFICO A MANO NON PRESO IN CARICO" in r.getMessage()]
+        self.assertEqual(len(righe), 1, cattura.output)
+        # il TIPO, non «non e' nullo»: `exc_info=False` scrive False, che non e' None
+        self.assertIsInstance(righe[0].exc_info, tuple, "la riga ERROR non porta l'eccezione: il "
+                                                        "perche' della garanzia illeggibile si perde")
+
+    def test_R1_l_host_senza_Stripe_lo_dice_col_suo_importo(self):
+        """Il registro dice QUANTO va pagato a mano e COME (prima il pulsante): sopravviveva
+        `(pd.info(rif) or {})` -> `and`, cioe' «IMPORTO: None» nella riga PAYOUT_HOLD."""
+        stripe = _StripeDeiBonifici(None, ricorda_chiavi=True)
+        rif, netto = self._bonifico_con(stripe)
+        self.sis.registro_host.imposta_stripe_account(self.hid, "")
+        with self.assertLogs("core_auto", level="WARNING") as cattura:
+            self.r._trasferisci_all_host(rif, netto)
+        righe = [r.getMessage() for r in cattura.records
+                 if "PAYOUT_HOLD_TRIGGERED" in r.getMessage()]
+        self.assertEqual(len(righe), 1, cattura.output)
+        self.assertIn("IMPORTO: %d" % netto, righe[0])
+        self.assertIn("«Lo pago io a mano»", righe[0])
+        self.assertEqual(stripe.bonifici, [])
+        self.assertEqual(self.sis.payout.stato_di(rif), "maturato")
+
+    def test_R3_un_bonifico_che_esplode_non_ferma_gli_altri(self):
+        """Il giro orario passa i bonifici uno per uno: un errore su uno lo scrive per intero
+        (sopravviveva `exc_info=True` -> `False`) e gli altri partono lo stesso."""
+        stripe = _StripeDeiBonifici(None, ricorda_chiavi=True)
+        rif, _ = self._bonifico_con(stripe)
+        rif2, _ = self._bonifico_con(stripe)
+        self._soggiorno_confermato(rif)
+        self._soggiorno_confermato(rif2)
+        vera, visti = self.r._garanzia_chiusa, []
+
+        def la_prima_esplode(r):
+            visti.append(r)
+            if len(visti) == 1:
+                raise RuntimeError("archivio della garanzia illeggibile")
+            return vera(r)
+        with mock.patch.object(self.r, "_garanzia_chiusa", side_effect=la_prima_esplode), \
+                self.assertLogs("core_auto", level="WARNING") as cattura:
+            self.r._ritenta_bonifici_fermi()
+        self.assertEqual(sorted(visti), sorted([rif, rif2]), "il giro non ha visto i due bonifici")
+        primo, altro = visti[0], visti[1]
+        self.assertEqual(self.sis.payout.stato_di(altro), "in_transito",
+                         "un bonifico che esplode ha fermato gli altri")
+        self.assertEqual(self.sis.payout.stato_di(primo), "maturato")
+        righe = [r for r in cattura.records if "BONIFICO FERMO NON RITENTATO" in r.getMessage()]
+        self.assertEqual(len(righe), 1, cattura.output)
+        self.assertIsInstance(righe[0].exc_info, tuple, "la riga non porta l'eccezione")
+        self.assertEqual(len(stripe.bonifici), 1)
+
+
+class TestIlGiroDeiBonificiFermiLasciaLaTraccia(unittest.TestCase):
+    """R3 (21/10): il giro dei bonifici fermi e' il PRIMO passo di `_tick_garanzia`, una
+    chiusura dentro `servi()`: si legge l'albero sintattico, come
+    `test_blocco_carta.TestIlGiroOrarioLasciaLaTraccia`. Se esplode, il thread resta vivo e la
+    riga ERROR porta l'eccezione intera (sopravviveva `exc_info=True` -> `False`)."""
+
+    def test_il_giro_dei_bonifici_fermi_fallito_scrive_l_eccezione(self):
+        import ast
+        with open(fase83_server.__file__, encoding="utf-8") as f:
+            albero = ast.parse(f.read())
+        tick = [n for n in ast.walk(albero)
+                if isinstance(n, ast.FunctionDef) and n.name == "_tick_garanzia"]
+        self.assertEqual(len(tick), 1, "il tick della garanzia non si trova piu'")
+        prove = [t for t in ast.walk(tick[0]) if isinstance(t, ast.Try)
+                 and any(isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute)
+                         and c.func.attr == "_ritenta_bonifici_fermi"
+                         for s in t.body for c in ast.walk(s))]
+        self.assertEqual(len(prove), 1, "il giro dei bonifici fermi non e' dentro il suo try")
+        chiamate = [c for h in prove[0].handlers for c in ast.walk(h)
+                    if isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute)
+                    and c.func.attr == "error"]
+        self.assertEqual(len(chiamate), 1)
+        exc = [k.value for k in chiamate[0].keywords if k.arg == "exc_info"]
+        self.assertTrue(len(exc) == 1 and isinstance(exc[0], ast.Constant) and exc[0].value is True,
+                        "la riga ERROR del giro dei bonifici fermi non porta l'eccezione")
+
+
+class TestIlGiroOrarioOperaLaRitenuta(_BancoDellaRitenuta):
+    """R3 (21/10): il giro orario chiama `_trasferisci_all_host` senza `penale`, quindi a
+    interruttore acceso la ritenuta si opera come al primo tentativo. Sopravviveva il default
+    `penale=False` -> `True` sulla firma: l'host avrebbe incassato anche la parte dovuta allo
+    Stato. Il banco e' quello della ritenuta (importato): casa in Italia, col CIN."""
+
+    def test_R3_il_giro_orario_opera_la_ritenuta(self):
+        self._accendi()
+        rif, _q = self._prenota_paga()
+        pieno = self._maturato(rif)
+        self.assertTrue(self.sis.garanzia.conferma_ospite(rif).get("ok"))
+        self.assertEqual(self._righe(rif, "ritenuta"), [], "premessa")
+        self.assertEqual(self.r._ritenta_bonifici_fermi(), 1)
+        ritenute = self._righe(rif, "ritenuta")
+        self.assertEqual(len(ritenute), 1, "il giro orario ha pagato l'host senza la ritenuta")
+        self.assertEqual(self.connect.chiamate,
+                         [("acct_TEST", pieno - ritenute[0]["importo_cents"], "EUR", rif)])
+
+
+class TestIlPagamentoAManoInDollari(_BancoDellaRitenuta):
+    """R1 (21/10): la risposta del pulsante porta la valuta del bonifico, che la pagina mostra
+    accanto all'importo. Sopravviveva `riga.get("valuta") or "EUR"` -> `and`: con un annuncio in
+    euro le due scritture danno lo stesso, in dollari no."""
+    VALUTA = "USD"
+
+    def test_R1_la_risposta_dice_la_valuta_del_bonifico(self):
+        rif, _q = self._prenota_paga()
+        self.assertTrue(self.sis.garanzia.conferma_ospite(rif).get("ok"))
+        self.sis.registro_host.imposta_stripe_account(self.hid, "")      # niente Stripe: a mano
+        s, out = self.g("POST", "/api/admin/payout/pagato_a_mano", {"riferimento": rif},
+                        self._bunker())
+        self.assertEqual(s, 200, out)
+        self.assertEqual((out.get("valuta"), out.get("importo_cents")),
+                         ("USD", self._maturato(rif)))
+        self.assertEqual(self.connect.chiamate, [], "un bonifico a mano e' partito con Stripe")
 
 
 if __name__ == "__main__":

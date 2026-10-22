@@ -168,7 +168,12 @@ class _StripeDeiBonifici:
         return {"object": "list", "data": dati, "has_more": False}
 
 
-class TestAgganciMoneyPath(unittest.TestCase):
+class _BancoDeiBonifici(unittest.TestCase):
+    """Il banco dei bonifici: sistema vero, host registrato, un annuncio, la prenotazione pagata
+    dal webhook firmato. Lo importa anche `test_fase83_server` (le guardie di R1 e R3 stanno
+    nel test dedicato del server, il primo occhio del Giudice): un solo banco, non due copie.
+    Non ha prove sue."""
+
     def setUp(self):
         d = self.dir = tempfile.mkdtemp()
         self.sis = crea_sistema(ConfigCasaVIP(
@@ -220,6 +225,20 @@ class TestAgganciMoneyPath(unittest.TestCase):
     def _tipi(self, rif):
         return [m["tipo"] for m in self.sis.finanza.movimenti(rif)]
 
+    def _bonifico_con(self, stripe):
+        """Prenotazione pagata, host collegato, e il Connect VERO (fase101) sopra lo Stripe
+        finto: dalla risposta mancata fino al giornale non c'e' niente di finto in mezzo."""
+        from fase101_stripe_connect import ProviderConnect
+        self.sis.registro_host.imposta_stripe_account(self.hid, "acct_TEST")
+        rif = self._prenota_paga()
+        netto = int(self.sis.payout.info(rif)["minori"])
+        self.assertGreater(netto, 0)
+        self.sis.connect = ProviderConnect("sk_test_x", fetch=stripe.post,
+                                           fetch_get=stripe.get)
+        return rif, netto
+
+
+class TestAgganciMoneyPath(_BancoDeiBonifici):
     def test_incasso_e_tassa_idempotenti(self):
         rif = self._prenota_paga()
         self.assertIn("incasso", self._tipi(rif))
@@ -297,18 +316,7 @@ class TestAgganciMoneyPath(unittest.TestCase):
         self.assertTrue(self.sis.finanza.verifica_catena()["ok"])
 
     # ── PILASTRO ZERO (ricerca del fondatore, 19/10, voce 19): l'esito AMBIGUO di Stripe ──
-    def _bonifico_con(self, stripe):
-        """Prenotazione pagata, host collegato, e il Connect VERO (fase101) sopra lo Stripe
-        finto: dalla risposta mancata fino al giornale non c'e' niente di finto in mezzo."""
-        from fase101_stripe_connect import ProviderConnect
-        self.sis.registro_host.imposta_stripe_account(self.hid, "acct_TEST")
-        rif = self._prenota_paga()
-        netto = int(self.sis.payout.info(rif)["minori"])
-        self.assertGreater(netto, 0)
-        self.sis.connect = ProviderConnect("sk_test_x", fetch=stripe.post,
-                                           fetch_get=stripe.get)
-        return rif, netto
-
+    # (il banco `_bonifico_con` sta in `_BancoDeiBonifici`)
     def test_PILASTRO_ZERO_un_bonifico_senza_risposta_non_e_un_rifiuto(self):
         """Il bonifico e' partito ma la risposta non e' arrivata. Dire «BONIFICO MANUALE
         RICHIESTO» qui significa chiedere a una persona di pagare l'host una SECONDA volta: e'
@@ -383,6 +391,8 @@ class TestAgganciMoneyPath(unittest.TestCase):
         self.assertEqual(stripe2.bonifici, [])
         self.assertIn("payout_manuale", self._tipi(rif2))
         self.assertEqual(stripe.inattesi + stripe2.inattesi, [])
+    # Le guardie di R1 e R3 (revisione Trail of Bits della #268) stanno in `test_fase83_server`,
+    # `TestIlPagamentoAMano`: il Giudice `--diff` accende per primo il test dedicato del server.
 
 
 if __name__ == "__main__":

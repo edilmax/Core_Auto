@@ -82,10 +82,16 @@ Core_Auto/
 4. **Escrow** (`fase160`) — la quota dell'host resta ferma fino al "tutto ok" dell'ospite o al
    rilascio automatico dopo 24 ore.
 5. **Bonifico** (`fase101` Stripe Connect) — al rilascio la quota parte **da sola** verso il
-   conto dell'host; senza conto collegato resta un bonifico manuale tracciato. Prima di ogni
-   bonifico si chiede a Stripe se c'è già; se Stripe non risponde (timeout, errore 5xx) l'esito
-   è **sconosciuto**, non «fallito»: non diventa mai un bonifico manuale, perché pagarlo a mano
-   vorrebbe dire pagare l'host due volte (deciso il 19/10/2026, Pilastro zero).
+   conto dell'host. Prima di ogni bonifico si chiede a Stripe se c'è già; se Stripe non risponde
+   (timeout, errore 5xx) l'esito è **sconosciuto**, non «fallito» (deciso il 19/10/2026, Pilastro
+   zero). Un bonifico che non parte (rifiutato da Stripe, esito sconosciuto, host senza Stripe)
+   resta «da pagare» e lo **ritenta il giro orario**, perché Stripe non lo fa da solo. Pagarlo
+   **a mano** si può solo così: **prima** il pulsante «Lo pago io a mano» nella scheda Audit del
+   pannello admin (rifà gli stessi controlli, rilegge Stripe, e da quel momento nessun giro lo
+   paga più), **poi** il bonifico dalla banca. Al contrario l'host verrebbe pagato due volte
+   (deciso il 21/10/2026, R1 e R3). Con l'host collegato a Stripe il pulsante funziona solo dopo
+   un **rifiuto certo** di Stripe: dopo un esito sconosciuto il bonifico può essere partito, e lo
+   chiude il giro orario, che ha la protezione anti-doppio di Stripe (il bonifico dalla banca no).
 6. **Contabilità** (`fase177`) — libro giornale **append-only** con catena di hash: ogni riga è
    firmata e una manomissione si vede. Da qui escono estratti certificati e report **DAC7**.
 
@@ -351,7 +357,9 @@ Il bonifico **non parte** — e la quota resta scritta come «da pagare», mai p
 - è acceso l'interruttore d'emergenza che ferma tutti i movimenti (`fase83_server.py:7140`);
 - i soldi dell'ospite sono ancora solo bloccati sulla carta, non presi (`fase83_server.py:7173`);
 - la ritenuta fiscale non è stata fatta, o mancano i dati fiscali DAC7 (`fase83_server.py:7181`, spiegato in `fase83_server.py:7134-7138`);
-- l'host **non ha collegato Stripe**: allora il bonifico si fa **a mano** (`fase83_server.py:7184`);
+- l'host **non ha collegato Stripe**: parte da solo al giro orario dopo che lo collega; per
+  pagarlo **a mano**, prima il pulsante «Lo pago io a mano» (`fase83_server.py:_admin_pagato_a_mano`),
+  poi il bonifico dalla banca;
 - è già partito una volta (guardia contro il doppio pagamento).
 
 Prima di pagare, i debiti aperti dell'host vengono scalati dal bonifico (`fase83_server.py:7201`).

@@ -176,6 +176,9 @@ class TestGiroOstileTutteLeRotte(unittest.TestCase):
             cls.sis.connect.crea_account = lambda email="": "acct_finto"
             cls.sis.connect.link_onboarding = lambda a, ritorno: "https://connect.finto/onb"
             cls.sis.connect.stato_account = lambda a: {"pronto": True}
+            # la rilettura dei bonifici («c'e' gia' su Stripe?») del pulsante «Lo pago io a
+            # mano» (R1, 21/10): senza, andrebbe sullo Stripe VERO con la chiave di prova
+            cls.sis.connect.bonifico_di = lambda acct, rif: {"ok": True, "bonifico": None}
         if getattr(cls.sis, "carta", None) is not None:
             cls.sis.carta.crea_link_carta = \
                 lambda host_id="", email="": "https://carta.finta/setup"
@@ -575,12 +578,23 @@ class TestGiroOstileTutteLeRotte(unittest.TestCase):
                     body={"alloggio_id": slug, "giorno": _g(24), "unita_totali": 2,
                           "prezzo_netto_cents": 30000}, headers=TOK,
                     valore={"stato": "ok"})
-        self.chiama("POST", "/api/host/dati_fiscali", 200,
-                    [("salvato", bool), ("mancanti", list)],
-                    body={"codice_fiscale": "RSSMRA80A01H501U",
-                          "indirizzo_fiscale": "Via Roma 1", "paese": "IT",
-                          "iban": "IT60X0542811101000000123456"}, headers=TOK,
-                    valore={"salvato": True, "mancanti": []})
+        # ⛔ R1 (21/10): i dati fiscali completati fanno ripartire i bonifici fermi, e qui Stripe
+        # RIFIUTA con certezza quello del soggiorno confermato sopra (conto dell'host limitato):
+        # resta 'maturato' con la riga `payout_manuale`. Lo prende in carico «Lo pago io a mano»,
+        # nel bunker qui sotto.
+        trasferisci = self.sis.connect.trasferisci
+        self.sis.connect.trasferisci = lambda *a, **k: None
+        try:
+            self.chiama("POST", "/api/host/dati_fiscali", 200,
+                        [("salvato", bool), ("mancanti", list)],
+                        body={"codice_fiscale": "RSSMRA80A01H501U",
+                              "indirizzo_fiscale": "Via Roma 1", "paese": "IT",
+                              "iban": "IT60X0542811101000000123456"}, headers=TOK,
+                        valore={"salvato": True, "mancanti": []})
+        finally:
+            self.sis.connect.trasferisci = trasferisci
+        rif_conf = b_conf["riferimento"]
+        self.assertEqual(self.sis.payout.stato_di(rif_conf), "maturato", "premessa: rifiutato")
         ics = ("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\n"
                "DTSTART;VALUE=DATE:%s\r\nDTEND;VALUE=DATE:%s\r\nSUMMARY:Occupato\r\n"
                "END:VEVENT\r\nEND:VCALENDAR\r\n"
@@ -689,6 +703,14 @@ class TestGiroOstileTutteLeRotte(unittest.TestCase):
                          [("sessione", str), ("scade_tra_sec", int)],
                          body={"codice": "SuperPw@1"}, headers=ADM, valore={"ok": True})
         BK = dict(ADM, **{"X-Bunker-Session": bl["sessione"]})
+        # «Lo pago io a mano» (R1) sul bonifico rifiutato ai dati fiscali: da qui nessun giro
+        # (la verifica qui sotto compresa) lo ripaga con Stripe
+        am = self.chiama("POST", "/api/admin/payout/pagato_a_mano", 200,
+                         [("importo_cents", int), ("valuta", str)],
+                         body={"riferimento": rif_conf}, headers=BK,
+                         valore={"stato": "preso_in_carico", "riferimento": rif_conf})
+        self.assertEqual(am["importo_cents"], int(self.sis.payout.info(rif_conf)["minori"]))
+        self.assertEqual(self.sis.payout.stato_di(rif_conf), "in_transito")
 
         self.chiama("GET", "/api/admin/verifiche/fascicolo", 200, [("fascicolo", dict)],
                     query={"host_id": host_id}, headers=BK)
@@ -848,7 +870,7 @@ class TestGiroOstileTutteLeRotte(unittest.TestCase):
         inesistenti = provate - dichiarate
         self.assertEqual(inesistenti, set(),
                          "provate rotte che il router non dichiara: %s" % sorted(inesistenti))
-        self.assertEqual(len(dichiarate), 143,
+        self.assertEqual(len(dichiarate), 144,          # + «Lo pago io a mano» (R1, 21/10)
                          "il router ha %d rotte: la mappa del collaudo va aggiornata"
                          % len(dichiarate))
         # nessuna 5xx inattesa: solo le due dormienti dichiarate
