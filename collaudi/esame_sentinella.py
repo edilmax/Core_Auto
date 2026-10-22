@@ -439,6 +439,10 @@ def main(argv=None):
         return 2
     da_file = argv[argv.index("--da-file") + 1] if "--da-file" in argv else None
     monitor = argv[argv.index("--monitor") + 1] if "--monitor" in argv and argv.index("--monitor") + 1 < len(argv) else None
+    # 22/10/2026: il COMANDO della casella non porta `--monitor`, quindi con la chiave nell'ambiente il monitor
+    # si legge da solo (fino ad allora la casella era ROSSA «serve un conto» col conto attivo dall'11/9)
+    if monitor is None and "--con-guasto" not in argv and os.environ.get(VARIABILE_CHIAVE):
+        monitor = "uptimerobot"
     if monitor is not None and monitor != "uptimerobot":
         print("⛔ monitor sconosciuto: %s (valido: uptimerobot; per altri servizi usa --da-file col campo `esterno`)" % monitor)
         return 2

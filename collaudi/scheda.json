@@ -2,24 +2,24 @@
  "0d33183e3804": {
   "blocco": 3,
   "comando": "python collaudi/esame_accessi.py --casella sonde --scrivi",
-  "commit": "160c2e3",
+  "commit": "118593e",
   "condizione": "ogni sonda negativa interroga un indirizzo che risponde diverso da 404",
-  "denominatore": 93,
+  "denominatore": 94,
   "esito": true,
-  "impronta": "9ff724b36144",
+  "impronta": "92c5092c583c",
   "impronte_moduli": {
    "fase105_identity_gate": "a3ab7f1e6819",
    "fase127_checkin_digitale": "c8afe04f623b",
    "fase143_kyc_host": "9024eed56447",
    "fase179_rate_limit": "d676ae5e7797",
    "fase180_bunker": "12b50f910968",
-   "fase192_admin_accounts": "d781a60fe796",
+   "fase192_admin_accounts": "da0a9425adcf",
    "fase64_smartpass": "62f32d2a9183",
    "fase73_firma_agile": "16cd09e0ed5d",
    "fase80_sentinel": "ebc8a451110f"
   },
   "motivo": "",
-  "quando": "2026-10-02T11:33:43"
+  "quando": "2026-10-22T10:43:31"
  },
  "0d485cbbe89e": {
   "blocco": 8,
@@ -129,13 +129,13 @@
  "16d2c823889f": {
   "blocco": 1,
   "comando": "python collaudi/mutazione_prodotto.py --modulo fase65_split_payment.py fase85_pagamenti_stripe.py fase87_stripe_webhook.py fase101_stripe_connect.py fase131_payout_dashboard.py --tetto 200 --minuti 90 --killer test_fase65_split_payment test_fase85_pagamenti_stripe test_fase87_stripe_webhook test_fase101_stripe_connect test_fase131_payout_dashboard",
-  "commit": "0a70cd8",
+  "commit": "118593e",
   "condizione": "zero punti di mutazione scoperti sul PERCORSO DEL DENARO -- i cinque moduli che un euro attraversa davvero: entra, viene confermato, va sul conto dell'host, si divide fra ospiti, esce col bonifico -- sul codice che la produzione ESEGUE",
-  "denominatore": 291,
+  "denominatore": 351,
   "esito": true,
-  "impronta": "338c84cab04f",
+  "impronta": "f535d6ee93a2",
   "impronte_moduli": {
-   "fase101_stripe_connect": "30d6d6acc8ee",
+   "fase101_stripe_connect": "8f4784fbe330",
    "fase102_motore_autonomo": "5f821fcc906f",
    "fase104_gateway_asia": "f0f1fed87367",
    "fase131_payout_dashboard": "06cd8f312f05",
@@ -143,27 +143,27 @@
    "fase149_deposito_cauzionale": "272fe8e92880",
    "fase15_idempotency": "bfcd5e8ca68b",
    "fase160_escrow_garanzia": "dbf2a26f8a0a",
-   "fase162_pagamenti_pendenti": "b1b4cf2675ad",
+   "fase162_pagamenti_pendenti": "a4775ca55252",
    "fase167_credito_single_use": "84db76bef110",
-   "fase177_financial_controller": "652287d1f8cd",
+   "fase177_financial_controller": "15d95441a5f1",
    "fase17_money": "4f56d5c69a04",
    "fase181_audit_console": "a18e05eee348",
-   "fase182_riconciliazione": "2bc38973d2df",
+   "fase182_riconciliazione": "4d24c73957ac",
    "fase183_carta_offsession": "cad1b678abff",
    "fase186_guardiano": "e1011bb3ed81",
    "fase188_paga_struttura": "b06f26f76cda",
    "fase191_blocco_globale": "0e25d2e0ab6f",
    "fase199_invarianti": "00192bca45b2",
    "fase202_invarianti_archivi": "5ad0317d12d3",
-   "fase204_eventi_stripe": "ac2f5138fc46",
+   "fase204_eventi_stripe": "428d18bde4de",
    "fase35_pagamenti": "abd2cab5c989",
    "fase65_split_payment": "2f6d24e7b1fe",
-   "fase85_pagamenti_stripe": "3efb68564b3a",
-   "fase87_stripe_webhook": "d597430f8f64",
+   "fase85_pagamenti_stripe": "c89ab4099729",
+   "fase87_stripe_webhook": "c77544db5a33",
    "fase99_multicurrency": "61a3b5a0c820"
   },
   "motivo": "",
-  "quando": "2026-09-30T13:10:43"
+  "quando": "2026-10-22T11:01:10"
  },
  "224ae0884a0b": {
   "blocco": 1,
@@ -345,11 +345,11 @@
  "3a547df3a743": {
   "blocco": 8,
   "comando": "python collaudi/esame_backup.py --file <db.gz> --sha <.sha256> --manifest <MANIFEST.txt> --scrivi",
-  "commit": "d5e5eae",
+  "commit": "118593e",
   "condizione": "il salvataggio e' stato RIPRISTINATO e letto, non solo prodotto",
   "denominatore": 19,
   "esito": true,
-  "impronta": "604d88795d07",
+  "impronta": "7d319e678e49",
   "impronte_moduli": {
    "fase13_protocollo_finale": "2dce22f058cc",
    "fase16_outbox": "a47de5874653",
@@ -362,12 +362,12 @@
    "fase39_whatsapp": "e5c341ed59c6",
    "fase42_observability": "a557645447a7",
    "fase60_mcp_server": "56ffc4364819",
-   "fase81_bootstrap_casavip": "dacbc902ed40",
-   "fase83_server": "9bc7735b57f9",
-   "fase86_email": "19069663f9d1"
+   "fase81_bootstrap_casavip": "2817a7a7da80",
+   "fase83_server": "1efd402d75ed",
+   "fase86_email": "12848db384ba"
   },
   "motivo": "",
-  "quando": "2026-09-28T23:08:26"
+  "quando": "2026-10-22T15:26:15"
  },
  "50691c557e6e": {
   "blocco": 1,
@@ -499,24 +499,24 @@
  "6bb68f1abf5b": {
   "blocco": 3,
   "comando": "python collaudi/esame_accessi.py --casella matrice --scrivi",
-  "commit": "160c2e3",
+  "commit": "118593e",
   "condizione": "la matrice dei permessi e' verde su ogni rotta riservata, provata SUL SITO VERO",
-  "denominatore": 177,
+  "denominatore": 179,
   "esito": true,
-  "impronta": "9ff724b36144",
+  "impronta": "92c5092c583c",
   "impronte_moduli": {
    "fase105_identity_gate": "a3ab7f1e6819",
    "fase127_checkin_digitale": "c8afe04f623b",
    "fase143_kyc_host": "9024eed56447",
    "fase179_rate_limit": "d676ae5e7797",
    "fase180_bunker": "12b50f910968",
-   "fase192_admin_accounts": "d781a60fe796",
+   "fase192_admin_accounts": "da0a9425adcf",
    "fase64_smartpass": "62f32d2a9183",
    "fase73_firma_agile": "16cd09e0ed5d",
    "fase80_sentinel": "ebc8a451110f"
   },
   "motivo": "",
-  "quando": "2026-10-02T11:32:52"
+  "quando": "2026-10-22T10:42:51"
  },
  "6ede8f323461": {
   "blocco": 1,
@@ -697,13 +697,13 @@
  "98ef97fd624f": {
   "blocco": 1,
   "comando": "python collaudi/esame_riconciliazione.py --da-file <letture> --scrivi",
-  "commit": "74584b0",
+  "commit": "118593e",
   "condizione": "la riconciliazione col registro di Stripe gira OGNI notte e manda una mail anche quando e' tutto a posto (la mail che non arriva e' un allarme), con URGENTE nell'oggetto se c'e' un accredito mancante o un'operazione sconosciuta",
   "denominatore": 6,
   "esito": true,
-  "impronta": "df5bab3a836a",
+  "impronta": "f535d6ee93a2",
   "impronte_moduli": {
-   "fase101_stripe_connect": "30d6d6acc8ee",
+   "fase101_stripe_connect": "8f4784fbe330",
    "fase102_motore_autonomo": "5f821fcc906f",
    "fase104_gateway_asia": "f0f1fed87367",
    "fase131_payout_dashboard": "06cd8f312f05",
@@ -711,36 +711,36 @@
    "fase149_deposito_cauzionale": "272fe8e92880",
    "fase15_idempotency": "bfcd5e8ca68b",
    "fase160_escrow_garanzia": "dbf2a26f8a0a",
-   "fase162_pagamenti_pendenti": "b1b4cf2675ad",
+   "fase162_pagamenti_pendenti": "a4775ca55252",
    "fase167_credito_single_use": "84db76bef110",
-   "fase177_financial_controller": "c49d832d573c",
+   "fase177_financial_controller": "15d95441a5f1",
    "fase17_money": "4f56d5c69a04",
    "fase181_audit_console": "a18e05eee348",
-   "fase182_riconciliazione": "2bc38973d2df",
+   "fase182_riconciliazione": "4d24c73957ac",
    "fase183_carta_offsession": "cad1b678abff",
-   "fase186_guardiano": "0dc20d8aae10",
+   "fase186_guardiano": "e1011bb3ed81",
    "fase188_paga_struttura": "b06f26f76cda",
    "fase191_blocco_globale": "0e25d2e0ab6f",
    "fase199_invarianti": "00192bca45b2",
    "fase202_invarianti_archivi": "5ad0317d12d3",
-   "fase204_eventi_stripe": "ac2f5138fc46",
+   "fase204_eventi_stripe": "428d18bde4de",
    "fase35_pagamenti": "abd2cab5c989",
    "fase65_split_payment": "2f6d24e7b1fe",
-   "fase85_pagamenti_stripe": "3efb68564b3a",
-   "fase87_stripe_webhook": "d597430f8f64",
+   "fase85_pagamenti_stripe": "c89ab4099729",
+   "fase87_stripe_webhook": "c77544db5a33",
    "fase99_multicurrency": "61a3b5a0c820"
   },
   "motivo": "",
-  "quando": "2026-09-28T22:08:52"
+  "quando": "2026-10-22T15:26:15"
  },
  "a36e3373da1d": {
   "blocco": 8,
   "comando": "python collaudi/esame_sentinella.py --scrivi",
-  "commit": "e131132",
+  "commit": "118593e",
   "condizione": "una sentinella ESTERNA (non nostra) si accorge se il sito muore",
   "denominatore": 10,
   "esito": false,
-  "impronta": "5f7ca8d9096b",
+  "impronta": "7d319e678e49",
   "impronte_moduli": {
    "fase13_protocollo_finale": "2dce22f058cc",
    "fase16_outbox": "a47de5874653",
@@ -754,11 +754,11 @@
    "fase42_observability": "a557645447a7",
    "fase60_mcp_server": "56ffc4364819",
    "fase81_bootstrap_casavip": "2817a7a7da80",
-   "fase83_server": "0fdbb3e1ba48",
+   "fase83_server": "1efd402d75ed",
    "fase86_email": "12848db384ba"
   },
   "motivo": "[esiste] un monitor ESTERNO (non GitHub) esiste e guarda bookinvip.com/api/health (nessun monitor esterno nelle letture: serve un conto (UptimeRobot o Better Stack, gratuito), lo apre il fondatore); [sveglia] il monitor esterno controlla almeno ogni 5 minuti e non e' in pausa (nessun monitor esterno); [sveglia] nelle ultime 24 ore i controlli del monitor non hanno buchi > 15 minuti e l'ultimo ha meno di 15 minuti (controlli nelle 24 ore: 0, buco massimo -, ultimo -); [sveglia] GitHub (seconda linea): ultimo giro entro 60 minuti e buco massimo nelle 24 ore sotto i 60 minuti — DECIDE, perche' il",
-  "quando": "2026-10-21T08:26:09"
+  "quando": "2026-10-22T10:43:38"
  },
  "a5c77ac6c76a": {
   "blocco": 5,
@@ -950,24 +950,24 @@
  "d22022c687dd": {
   "blocco": 3,
   "comando": "python collaudi/esame_catene_admin.py --scrivi",
-  "commit": "160c2e3",
+  "commit": "118593e",
   "condizione": "ogni gesto del pannello admin -- rotte, bottoni e campi CONTATI dalla pagina a ogni giro, non da un elenco scritto a mano -- ha le sue tre colonne dichiarate (cosa deve succedere e dove finisce il dato · quali importi si muovono e cosa deve coincidere al centesimo · in quale archivio si scrive, se ci resta, se si cancella e per quale legge) e la catena PERCORSA anello per anello, dove ogni anello e' una differenza fra prima e dopo; una voce nuova senza catena e' rossa lo stesso giorno",
-  "denominatore": 83,
+  "denominatore": 85,
   "esito": false,
-  "impronta": "9ff724b36144",
+  "impronta": "92c5092c583c",
   "impronte_moduli": {
    "fase105_identity_gate": "a3ab7f1e6819",
    "fase127_checkin_digitale": "c8afe04f623b",
    "fase143_kyc_host": "9024eed56447",
    "fase179_rate_limit": "d676ae5e7797",
    "fase180_bunker": "12b50f910968",
-   "fase192_admin_accounts": "d781a60fe796",
+   "fase192_admin_accounts": "da0a9425adcf",
    "fase64_smartpass": "62f32d2a9183",
    "fase73_firma_agile": "16cd09e0ed5d",
    "fase80_sentinel": "ebc8a451110f"
   },
-  "motivo": "19 rotte del pannello su 21 non hanno ancora una catena percorsa (debito dichiarato, tetto 19): /api/admin/audit, /api/admin/cancella_attivita, /api/admin/controversia/risolvi, /api/admin/controversie, /api/admin/messaggi, /api/admin/prenotazioni, /api/admin/rimborsa_dovuto, /api/admin/rimborsi_dovuti, /api/admin/rimborso, /api/admin/search, /api/admin/storno_penale, /api/admin/verifica_stato, /api/admin/verifiche, /api/admin/verifiche/dettaglio, /api/admin/verifiche/fascicolo, /api/bunker/login, /api/bunker/logout, /api/gate/logout, /api/marketing/campagna",
-  "quando": "2026-10-02T11:33:45"
+  "motivo": "20 rotte del pannello su 22 non hanno ancora una catena percorsa (debito dichiarato, tetto 20): /api/admin/audit, /api/admin/cancella_attivita, /api/admin/controversia/risolvi, /api/admin/controversie, /api/admin/messaggi, /api/admin/payout/pagato_a_mano, /api/admin/prenotazioni, /api/admin/rimborsa_dovuto, /api/admin/rimborsi_dovuti, /api/admin/rimborso, /api/admin/search, /api/admin/storno_penale, /api/admin/verifica_stato, /api/admin/verifiche, /api/admin/verifiche/dettaglio, /api/admin/verifiche/fascicolo, /api/bunker/login, /api/bunker/logout, /api/gate/logout, /api/marketing/campagna",
+  "quando": "2026-10-22T10:43:32"
  },
  "d4e612aafcd1": {
   "blocco": 9,

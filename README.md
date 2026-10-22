@@ -535,10 +535,29 @@ Misurato, non ricordato. Il dettaglio di ognuno sta in `RIPRENDI_QUI.md`.
 - *Perché:* il pulsante chiedeva il totale; Stripe non restituisce più di quanto ha incassato, quindi il rimborso falliva per intero (all'ospite non tornava nemmeno l'anticipo) e il giornale scriveva un debito mai incassato. Trovato da una verifica esterna (Google AI Studio) e confermato leggendo il codice.
 - *Fonte:* `fase83_server.py:5206-5207`; guardia `test_admin_rimborso_money.TestLaListaDeiRimborsiDovuti.test_IL_RIMBORSO_ADMIN_DI_UNA_PAGA_IN_STRUTTURA_RESTITUISCE_L_ANTICIPO`, vista rossa prima della riparazione.
 
+**D-14 · 2026-10-22 · Agenti IA: solo fuori dai soldi, e dicono di essere un'IA** — ✅ VALIDA, nessun agente ancora nel prodotto
+- *Chi:* il fondatore, che vuole usare gli agenti «il più possibile»; i limiti sono la sua regola del 2026-08-15 (solo codice deterministico dove passano soldi e prenotazioni).
+- *Decisione:* gli agenti si usano per parlare con ospiti e host, telefonare nelle lingue straniere, leggere gli allarmi e spiegarli; alla prima frase dicono di essere un'intelligenza artificiale e lasciano un contatto umano. Mai dentro disponibilità, pagamenti e rimborsi; mai un agente che ripara da solo sul server.
+- *Perché:* lo stesso ingresso deve dare sempre la stessa uscita dove si muovono soldi; le chiamate automatiche e l'IA che parla con le persone hanno regole di legge (UE: consenso e obbligo di dichiararsi IA).
+- *Fonte:* il piano del fondatore in `RIPRENDI_QUI.md` (sezione «dopo il verde»).
+
+**D-15 · 2026-10-22 · I soldi degli ospiti non passano mai dal conto personale del fondatore** — ✅ VALIDA, rispettata oggi
+- *Chi:* il fondatore lo aveva proposto («li deposito sul mio conto e prendo la maturazione»); scartato col motivo.
+- *Decisione:* gli incassi restano sul saldo Stripe della piattaforma fino al bonifico all'host; il versamento verso la banca della piattaforma è manuale.
+- *Perché:* tenere i soldi di altri per girarli è un servizio di pagamento che vuole un'autorizzazione; sul conto di una persona sono pignorabili dai suoi creditori; possono contare come ricavi del forfettario.
+- *Fonte:* calendario dei versamenti del conto Stripe letto dall'API il 2026-10-22: `manual`, zero versamenti fatti.
+
+**D-16 · 2026-10-22 · La frase di fiducia per gli ospiti dice solo il vero** — ✅ VALIDA, frase non ancora sul sito
+- *Chi:* il fondatore («la gente deve capire che i soldi non li prendiamo noi»), corretta su quello che Stripe permette.
+- *Decisione:* si scrive: paghi con Stripe, noi non vediamo mai la carta, il pagamento resta su Stripe e arriva all'host dopo il tuo arrivo, se qualcosa non va apri una contestazione. Non si scrive «i soldi li gestisce Stripe».
+- *Perché:* con addebiti e trasferimenti separati il saldo è della piattaforma; la «Funds segregation» di Stripe, che terrebbe i soldi separati e protetti, oggi c'è solo in BE CH DE DK ES FR GB NL SE US.
+- *Fonte:* docs.stripe.com/connect/separate-charges-and-transfers e docs.stripe.com/connect/funds-segregation, letti il 2026-10-22.
+
 ### Domande aperte — le decide il fondatore (soldi e strategia)
 
 - **(aa)** 24 ore o giorni di calendario? Si corregge la scritta del menu o il motore?
 - **(ab)** Una penale sola (la prima notte per tutti, come fanno Airbnb e Booking) o le due di oggi?
 - **(r)** Il Credito Viaggio: oggi vale zero con gli host nei primi 90 giorni (B9) ed è al portatore (B10). Come deve funzionare?
 - **Le 48 ore**: uguali in tutto il mondo o legate al luogo dell'alloggio? La ricerca del 2026-08-20 dice: troppe per l'Europa, il doppio di quanto chiede la California, forse poche per il Brasile (`REGISTRO_INGEGNERIA.md:7192`).
+- **L'IVA nel confronto con Airbnb e il forfettario** (il fondatore, 2026-10-22): Airbnb prende il 15,5% e sulla sua commissione si applica l'IVA del 22% (le fonti lette non dicono se è dentro o si aggiunge: se si aggiunge, l'host italiano paga circa il 18,9%); noi, in regime forfettario, sulla commissione non mettiamo IVA. Da far confermare al commercialista: il limite degli 85.000 € di ricavi, e se le commissioni di Stripe (fornitore irlandese) chiedono un'autofattura o l'IVA integrata.
 - **Il contratto dell'host** deve nominare le 48 ore? Cambiarlo prima che firmino host veri costa poco; dopo, vorrà dire farlo riaccettare a ognuno.
