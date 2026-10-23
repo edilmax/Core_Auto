@@ -285,7 +285,9 @@ class TestConnectEscrow(unittest.TestCase):
         self.assertEqual(len(self.rete.transfers()), 0, "transfer senza conto collegato!")
         self.assertEqual(self.sys.payout.stato_di(rif), "maturato")
         attese = ("PAYOUT_HOLD_TRIGGERED", "HOST_ID: %s" % self.hid, "RIF: %s" % rif,
-                  "IMPORTO: %d" % quota, "MOTIVO: CONTO_STRIPE_NON_COLLEGATO")
+                  # r2-bis (23/10/2026): in euro, non in centesimi
+                  "IMPORTO: %d.%02d EUR |" % (quota // 100, quota % 100),
+                  "MOTIVO: CONTO_STRIPE_NON_COLLEGATO")
         righe = [r for r in reg.records if all(a in r.getMessage() for a in attese)]
         self.assertEqual(len(righe), 1,
                          "il bonifico all'host e' fermo perche' manca il conto Stripe, e il "

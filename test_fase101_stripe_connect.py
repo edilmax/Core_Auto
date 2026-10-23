@@ -411,6 +411,15 @@ class TestIlRegistroDeiBonificiScriveEuroENonCentesimi(unittest.TestCase):
         riga = [r for r in reg.output if "ESITO SCONOSCIUTO" in r]
         self.assertIn("(riferimento 'R', 8700 JPY)", riga[0])
 
+    def test_r2bis_il_dinaro_ha_tre_decimali_nel_registro(self):
+        # GML compito 19 (e): «esponente 0 niente divisione, altrimenti /100» passava tutte le
+        # prove; per un host in dinari (KWD, BHD) la riga d'errore scriveva 87.00 invece di 8.700.
+        with self.assertLogs("core_auto.stripe_connect", level="ERROR") as reg:
+            p = ProviderConnect("sk", fetch=PostFinto({ProviderConnect.TRANSFERS: {}}))
+            self.assertEqual(p.trasferisci("acct_1", 8700, "kwd", "R"), "")
+        riga = [r for r in reg.output if "ESITO SCONOSCIUTO" in r]
+        self.assertIn("(riferimento 'R', 8.700 KWD)", riga[0])
+
     def test_una_valuta_illeggibile_non_fa_saltare_la_riga_d_errore(self):
         # La riga d'errore sta sul percorso dei soldi: se sollevasse, il chiamante non
         # riceverebbe «esito sconosciuto» ("") e potrebbe pagare una seconda volta.

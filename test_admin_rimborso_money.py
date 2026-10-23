@@ -1588,10 +1588,18 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
                                    valuta="EUR", causale="prova: dovuto maggiore del pagato")
         s, canc = self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
         self.assertEqual(s, 200, canc)
-        riga = self._riga(self._lista(), rif)
+        with self.assertLogs("core_auto", level="ERROR") as cattura:
+            riga = self._riga(self._lista(), rif)
         self.assertIsNotNone(riga, "setup: la riga dev'essere in lista")
         self.assertGreater(riga["dovuto_cents"], riga["pagato_cents"],
                            "setup: il giornale doveva dichiarare piu' dell'incassato: %r" % (riga,))
+        # r2-bis (23/10/2026): la riga d'allarme dice le due cifre in euro, non in centesimi
+        allarmi = [r.getMessage() for r in cattura.records
+                   if "RIMBORSO DOVUTO INCOERENTE" in r.getMessage()]
+        self.assertTrue(allarmi, cattura.output)
+        d, p = riga["dovuto_cents"], riga["pagato_cents"]
+        self.assertIn("dovuto %d.%02d EUR > pagato %d.%02d EUR:"
+                      % (d // 100, d % 100, p // 100, p % 100), allarmi[0])
         self.assertIn("dovuto_maggiore_del_pagato", riga.get("manca") or [],
                       "la lista propone di restituire piu' di quanto l'ospite ha versato e "
                       "non lo dichiara: %r" % (riga,))

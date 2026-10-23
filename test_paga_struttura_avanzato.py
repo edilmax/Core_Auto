@@ -293,7 +293,8 @@ class TestFusoOrario(_Base):
     def _prova_fuso(self, fuso, giorni):
         slug = "casa-tz-" + fuso.split("/")[-1].lower()
         self.pubblica(slug, giorni_da_oggi=0, fuso=fuso)
-        ci, co = self.dd(giorni, notti=1)
+        # GML compito 21 (c): range e arrivo dallo stesso «oggi», quello dell'alloggio
+        ci, co = self.dd(giorni, notti=1, fuso=fuso)
         # zoneinfo e' stdlib (3.9+): deve esserci. Niente skip (sarebbe una zona cieca): se
         # manca e' un difetto d'ambiente vero, e vogliamo vederlo, non nasconderlo.
         ore_prima = self._ore_reali(fuso, ci)     # limite ALTO: `now` PRIMA del flusso
