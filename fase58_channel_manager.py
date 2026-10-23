@@ -734,8 +734,10 @@ class ChannelManager:
         pannello admin (D16 della prova vera del 29/9: senza, dalla 101esima sparivano)."""
         limit = limit if (isinstance(limit, int) and not isinstance(limit, bool)
                           and 0 < limit <= 500) else 50
-        offset = offset if (isinstance(offset, int) and not isinstance(offset, bool)
-                            and offset > 0) else 0
+        # `max(offset, 0)` e non `offset > 0` nella condizione: su 0 «>» e «>=» davano lo
+        # stesso risultato, e il mutante del confine era vivo per costruzione (giro 2, 22/10).
+        offset = max(offset, 0) if (isinstance(offset, int)
+                                    and not isinstance(offset, bool)) else 0
         sql = ("SELECT m.idem_key, m.alloggio_id, m.check_in, m.check_out, m.origine, "
                "m.ts, (SELECT COUNT(*) FROM movimenti r WHERE r.idem_key = "
                "'rilascio:' || m.idem_key) AS rilasciato "

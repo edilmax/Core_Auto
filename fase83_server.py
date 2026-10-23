@@ -7390,18 +7390,19 @@ class RouterHTTP:
                 # Il bonifico PUO' essere partito (fase101 `trasferisci`): una riga «bonifico
                 # manuale» qui farebbe pagare l'host due volte. Resta 'maturato', e ogni nuovo
                 # tentativo rilegge Stripe prima di rifarlo.
-                logger.error("BONIFICO ESITO SCONOSCIUTO | RIF: %s | HOST_ID: %s | IMPORTO: %d %s "
+                logger.error("BONIFICO ESITO SCONOSCIUTO | RIF: %s | HOST_ID: %s | IMPORTO: %s "
                              "| CONTO: %s | messaggio: Stripe non ha dato una risposta certa (il "
                              "motivo e' nella riga di Connect qui sopra) e il bonifico PUO' essere "
                              "partito: NON pagarlo a mano, prima si guarda su Stripe; ogni nuovo "
                              "tentativo rilegge Stripe prima di rifarlo", _rif_per_registro(rif),
-                             host_id, int(importo_cents), valuta, acct)
+                             host_id, self._fmt_importo(int(importo_cents), valuta), acct)
                 return
             if tid:
                 if pd is not None:
                     pd.aggiorna_stato(rif, "in_transito")     # soldi partiti verso l'host
-                logger.info("Connect: transfer %s -> host %s (%d %s) per %s",
-                            tid, host_id, importo_cents, valuta, _rif_per_registro(rif))
+                logger.info("Connect: transfer %s -> host %s (%s) per %s",
+                            tid, host_id, self._fmt_importo(int(importo_cents), valuta),
+                            _rif_per_registro(rif))
                 # SCATOLA NERA: il bonifico e' partito -> riga immutabile e datata (risponde
                 # per sempre a "ma il bonifico e' stato inviato?", anche dopo N deploy).
                 self._giornale(tipo="payout_host", riferimento=rif,
@@ -7421,10 +7422,11 @@ class RouterHTTP:
                 # R1: prima diceva «BONIFICO MANUALE RICHIESTO» e lasciava il payout ai giri
                 # automatici: pagato a mano, il primo sblocco lo ripagava con Stripe. Adesso lo
                 # ritenta il giro orario (R3), e la strada a mano passa dal pulsante.
-                logger.error("BONIFICO RIFIUTATO DA STRIPE | RIF: %s | %d %s a %s | il giro orario "
+                logger.error("BONIFICO RIFIUTATO DA STRIPE | RIF: %s | %s a %s | il giro orario "
                              "lo ritenta da solo: NON pagarlo a mano senza prima premere «Lo pago "
                              "io a mano» nella scheda Audit (da quel momento non riparte piu')",
-                             _rif_per_registro(rif), importo_cents, valuta, acct)
+                             _rif_per_registro(rif),
+                             self._fmt_importo(int(importo_cents), valuta), acct)
                 # ANCHE il fallimento va nel giornale: e' ESATTAMENTE lo scenario "non ho
                 # ricevuto il bonifico" -> resta la prova che si e' tentato. Una riga sola per
                 # prenotazione anche se il giro orario viene rifiutato ogni ora: l'evento e'
