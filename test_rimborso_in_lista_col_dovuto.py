@@ -90,7 +90,10 @@ class _Banco(unittest.TestCase):
                        "doc_sha256": doc_sha256(), "versione": CONTRATTO_HOST_VERSIONE})
         self.assertEqual(s, 201, c)
         self.tok = c["token"]
-        self.oggi = datetime.date.today()
+        # t1 (23/10/2026): «oggi» nel fuso dell'alloggio (citta' «Roma»), non della macchina:
+        # fra le 22:00 e le 24:00 UTC un arrivo «oggi» preso in UTC tornava date_passate.
+        from zoneinfo import ZoneInfo
+        self.oggi = datetime.datetime.now(ZoneInfo("Europe/Rome")).date()
         self.g("POST", "/api/host/pubblica",
                {"slug": "casa", "titolo": "C", "citta": "Roma", "prezzo_notte_cents": 20000,
                 "capacita": 4, "tassa_pp_notte_cents": 200}, {"X-Host-Token": self.tok})
