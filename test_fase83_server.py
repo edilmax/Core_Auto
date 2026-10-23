@@ -3734,6 +3734,8 @@ class TestR2bisIRegistriDeiRimborsiScrivonoInValuta(_BancoDeiSoldiDelServer):
         self.assertEqual(f(8700, "EUR"), "87.00 EUR")
         self.assertEqual(f(-1050, "EUR"), "-10.50 EUR")
         self.assertEqual(f(-5, "EUR"), "-0.05 EUR")
+        # il confine: zero non ha segno (mutante `< 0` -> `<= 0` del giro --diff della PR #274)
+        self.assertEqual(f(0, "EUR"), "0.00 EUR")
 
 
 class TestLaDataDelCheckInSiLeggeUgualeSuOgniPython(unittest.TestCase):
