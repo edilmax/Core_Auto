@@ -398,9 +398,13 @@ class FinancialController:
         if (isinstance(rimborso_cents, int) and not isinstance(rimborso_cents, bool)
                 and 0 < rimborso_cents < incassato):
             fatto["parziale"] = True
-            logger.info("storno prenotazione %s NON eseguito: rimborso parziale (%d di %d). "
+            # r2-bis: le cifre nella loro valuta (stesso attrezzo delle righe dei bonifici, r2)
+            from fase101_stripe_connect import _importo_per_registro
+            logger.info("storno prenotazione %s NON eseguito: rimborso parziale (%s di %s). "
                         "La quota trattenuta dall'host resta guadagnata: il caso parziale non "
-                        "e' ancora coperto.", riferimento, rimborso_cents, incassato)
+                        "e' ancora coperto.", riferimento,
+                        _importo_per_registro(rimborso_cents, valuta),
+                        _importo_per_registro(incassato, valuta))
             return fatto
         # Il debito residuo verso l'host e' cio' che e' entrato meno cio' che gli abbiamo
         # gia' trattenuto. Non puo' essere negativo: se la commissione superasse l'incasso
@@ -1047,8 +1051,10 @@ class FinancialController:
                 self._segna_nota_saldata(nota_id)
                 esito["incassati_cents"] += residuo
                 esito["debiti_saldati"] += 1
-                logger.warning("DEBITO SALDATO SU CARTA | HOST_ID: %s | NOTA: %s | %d %s | PI: %s",
-                               host_id, nota_id, residuo, valuta, r.get("pi", ""))
+                from fase101_stripe_connect import _importo_per_registro   # r2-bis
+                logger.warning("DEBITO SALDATO SU CARTA | HOST_ID: %s | NOTA: %s | %s | PI: %s",
+                               host_id, nota_id, _importo_per_registro(residuo, valuta),
+                               r.get("pi", ""))
             elif stato == "richiede_azione":
                 self._debito_backoff(nota_id, host_id, rif_deb, residuo, valuta,
                                      tentativi + 1, ora)
@@ -1149,10 +1155,11 @@ class FinancialController:
                 logger.warning("storno: restituzione in da_pagare fallita (ISOLATA: "
                                "il riscosso resta documentato nel giornale)",
                                exc_info=True)
-        logger.warning("PENALE_STORNATA | NOTA: %s | NC: %s | HOST: %s | IMPORTO: %d | "
-                       "RISCOSSO_DA_RESTITUIRE: %d | MOTIVO: %s | EMITTENTE: %s",
-                       nid, nc.get("nota_id"), host_id, imp, riscosso,
-                       (motivo or "-")[:120], emittente)
+        from fase101_stripe_connect import _importo_per_registro   # r2-bis: non in centesimi
+        logger.warning("PENALE_STORNATA | NOTA: %s | NC: %s | HOST: %s | IMPORTO: %s | "
+                       "RISCOSSO_DA_RESTITUIRE: %s | MOTIVO: %s | EMITTENTE: %s",
+                       nid, nc.get("nota_id"), host_id, _importo_per_registro(imp, val),
+                       _importo_per_registro(riscosso, val), (motivo or "-")[:120], emittente)
         return {"nota_id": nid, "nc_id": nc.get("nota_id"),
                 "riscosso_cents": riscosso, "restituito_in_da_pagare": restituito,
                 "gia_stornata": False}

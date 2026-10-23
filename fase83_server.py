@@ -5287,15 +5287,15 @@ class RouterHTTP:
                 _es = _sp.rimborsa(_pi, _tot, "rimborso:" + rif)
                 if isinstance(_es, dict) and _es.get("ok"):
                     _rimborso = "eseguito (%s)" % (_es.get("id") or "")
-                    logger.info("RIMBORSO ESEGUITO rif=%s importo=%d %s stripe=%s",
-                                _rif_per_registro(rif), _tot, _valuta,
+                    logger.info("RIMBORSO ESEGUITO rif=%s importo=%s stripe=%s",
+                                _rif_per_registro(rif), self._fmt_importo(_tot, _valuta),
                                 _es.get("id") or "")
                 else:
                     motivo = (_es or {}).get("motivo") if isinstance(_es, dict) else "risposta_non_dict"
                     _rimborso = "NON eseguito (%s): da restituire A MANO" % motivo
                     _falliti.append("soldi_restituiti")
-                    logger.error("RIMBORSO FALLITO rif=%s importo=%d %s -> %s",
-                                 _rif_per_registro(rif), _tot, _valuta,
+                    logger.error("RIMBORSO FALLITO rif=%s importo=%s -> %s",
+                                 _rif_per_registro(rif), self._fmt_importo(_tot, _valuta),
                                  _testo_per_registro(motivo))
         if _falliti:
             # Le date SONO libere (il rilascio e' riuscito, e' la prima cosa che si fa), ma i
@@ -5409,9 +5409,10 @@ class RouterHTTP:
         # ── FRENO 1: mai piu' di quanto ha pagato (aritmetica, non opinione) ──
         if 0 < pagato < dovuto:
             manca.append("dovuto_maggiore_del_pagato")
-            logger.error("RIMBORSO DOVUTO INCOERENTE | rif %s | dovuto %d > pagato %d: la "
-                         "differenza la metteremmo noi",
-                         _rif_per_registro(rif), dovuto, pagato)
+            logger.error("RIMBORSO DOVUTO INCOERENTE | rif %s | dovuto %s > pagato %s: la "
+                         "differenza la metteremmo noi", _rif_per_registro(rif),
+                         self._fmt_importo(dovuto, mov.get("valuta")),
+                         self._fmt_importo(pagato, mov.get("valuta")))
         # ── FRENO 3: se l'host e' gia' stato pagato, rimborsare paga DUE volte (D16) ──
         passi_ok = False
         try:
@@ -5647,12 +5648,13 @@ class RouterHTTP:
         esito = sp.rimborsa(riga["payment_intent"], int(riga["dovuto_cents"]), "rimborso:" + rif)
         if not (isinstance(esito, dict) and esito.get("ok")):
             motivo = (esito or {}).get("motivo") if isinstance(esito, dict) else "risposta_non_dict"
-            logger.error("RIMBORSO DOVUTO FALLITO rif=%s importo=%d %s -> %s",
-                         _rif_per_registro(rif), riga["dovuto_cents"], riga["valuta"], motivo)
+            logger.error("RIMBORSO DOVUTO FALLITO rif=%s importo=%s -> %s", _rif_per_registro(rif),
+                         self._fmt_importo(int(riga["dovuto_cents"]), riga["valuta"]), motivo)
             return 502, {"stato": "non_eseguito", "riferimento": rif, "motivo": motivo,
                          "nota": "la riga resta in lista: nessun rimborso e' partito"}
-        logger.info("RIMBORSO DOVUTO ESEGUITO rif=%s importo=%d %s stripe=%s",
-                    _rif_per_registro(rif), riga["dovuto_cents"], riga["valuta"],
+        logger.info("RIMBORSO DOVUTO ESEGUITO rif=%s importo=%s stripe=%s",
+                    _rif_per_registro(rif),
+                    self._fmt_importo(int(riga["dovuto_cents"]), riga["valuta"]),
                     esito.get("id") or "")
         return 200, {"stato": "rimborsato", "riferimento": rif,
                      "importo_cents": riga["dovuto_cents"], "valuta": riga["valuta"],
@@ -7294,6 +7296,13 @@ class RouterHTTP:
             if not self._opera_ritenuta(rif, rec, host_id, info, penale):
                 return                                # ritenuta non operata: il bonifico aspetta
             acct = (info or {}).get("stripe_account_id", "")
+            # r2-bis: la valuta si legge QUI (prima stava piu' sotto) perche' le righe di registro
+            # dei bonifici fermi qui sotto scrivano l'importo nella sua valuta, non in centesimi.
+            import json as _jt
+            try:
+                valuta = _jt.loads(rec.get("corpo_json") or "{}").get("valuta") or "EUR"
+            except Exception:
+                valuta = "EUR"
             if not acct and not a_mano:
                 # host non collegato -> bonifico MANUALE: resta 'maturato' (mai perso) e il registro
                 # lo dice. Prima usciva muto e lo sapeva solo l'archivio (consegne 30, punto b).
@@ -7301,10 +7310,12 @@ class RouterHTTP:
                 # (gia' al netto della ritenuta, se accesa), non quello del chiamante.
                 # R1: a mano SOLO dopo il pulsante, che lo toglie dai giri automatici; senza, il
                 # giro orario lo paga da solo appena l'host collega Stripe.
+                _m = (pd.info(rif) or {}).get("minori")   # r2-bis: «None» resta scritto com'e'
                 logger.warning("PAYOUT_HOLD_TRIGGERED | HOST_ID: %s | RIF: %s | IMPORTO: %s | "
                                "MOTIVO: CONTO_STRIPE_NON_COLLEGATO | per pagarlo a mano: PRIMA "
                                "«Lo pago io a mano» nella scheda Audit, POI il bonifico dalla banca",
-                               host_id, _rif_per_registro(rif), (pd.info(rif) or {}).get("minori"))
+                               host_id, _rif_per_registro(rif),
+                               self._fmt_importo(_m, valuta) or repr(_m))
                 return
             if pd is not None and pd.stato_di(rif) in ("in_transito", "pagato"):
                 return                                # gia' partito (guardia anti-doppio)
@@ -7341,16 +7352,18 @@ class RouterHTTP:
                                    int(importo_cents), int(_rp["minori"]))
                 importo_cents = int(_rp["minori"])
             if tetto_penale is not None and int(importo_cents) > tetto_penale:
-                logger.error("BONIFICO FERMATO | RIF: %s | il registro chiede %d, oltre la quota "
-                             "della penale che la garanzia assegna all'host (%d): decide una "
-                             "persona", _rif_per_registro(rif), int(importo_cents), tetto_penale)
+                logger.error("BONIFICO FERMATO | RIF: %s | il registro chiede %s, oltre la quota "
+                             "della penale che la garanzia assegna all'host (%s): decide una "
+                             "persona", _rif_per_registro(rif),
+                             self._fmt_importo(int(importo_cents), valuta),
+                             self._fmt_importo(int(tetto_penale), valuta))
                 return
             if self._verifica_payout_bloccato(host_id):
                 import datetime as _dtv
-                logger.warning("PAYOUT_HOLD_TRIGGERED | HOST_ID: %s | RIF: %s | IMPORTO: %d"
+                logger.warning("PAYOUT_HOLD_TRIGGERED | HOST_ID: %s | RIF: %s | IMPORTO: %s"
                                " | MOTIVO: VERIFICA_REVOCATA | DATA: %s", host_id,
                                _rif_per_registro(rif),
-                               int(importo_cents),
+                               self._fmt_importo(int(importo_cents), valuta),
                                _dtv.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%SZ"))
                 return                     # resta 'maturato': si sblocca alla ri-verifica
             bloccato, manca = self._dac7_payout_bloccato(host_id)
@@ -7361,17 +7374,12 @@ class RouterHTTP:
                 # un arbitro) e NIENTE riga nel giornale (nessun denaro si e' mosso).
                 # Log formato kimi, finisce nei log del Bunker (app.log persistente).
                 import datetime as _dt
-                logger.warning("PAYOUT_HOLD_TRIGGERED | HOST_ID: %s | RIF: %s | IMPORTO: %d | "
-                               "MOTIVO: MANCANZA_DATI_FISCALI (%s) | DATA: %s",
-                               host_id, _rif_per_registro(rif), int(importo_cents),
+                logger.warning("PAYOUT_HOLD_TRIGGERED | HOST_ID: %s | RIF: %s | IMPORTO: %s | "
+                               "MOTIVO: MANCANZA_DATI_FISCALI (%s) | DATA: %s", host_id,
+                               _rif_per_registro(rif), self._fmt_importo(int(importo_cents), valuta),
                                ",".join(manca),
                                _dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%SZ"))
                 return
-            import json as _jt
-            try:
-                valuta = _jt.loads(rec.get("corpo_json") or "{}").get("valuta") or "EUR"
-            except Exception:
-                valuta = "EUR"
             if a_mano:                                # R1: lo paga una persona, non Stripe
                 return self._bonifico_a_mano(rif, host_id, acct, int(importo_cents), valuta)
             # COMPITO 41: il bonifico si LEGA all'addebito dell'ospite (`source_transaction`),
@@ -7703,8 +7711,9 @@ class RouterHTTP:
             self._giornale(tipo="rimborso", riferimento=ref, soggetto="ospite:" + ref,
                            importo_cents=int(guest), valuta=valuta,
                            causale="rimborso 100% per cancellazione host")
-        logger.info("HOST ha cancellato %s: cliente rimborso %d, penale host %d %s",
-                    _rif_per_registro(ref), guest if pagata else 0, penale, valuta)
+        logger.info("HOST ha cancellato %s: cliente rimborso %s, penale host %s",
+                    _rif_per_registro(ref), self._fmt_importo(guest if pagata else 0, valuta),
+                    self._fmt_importo(penale, valuta))
         corpo_ok = {"stato": "cancellata_host", "riferimento": ref,
                     "rimborso_cliente_cents": (guest if pagata else 0),
                     "penale_host_cents": penale, "valuta": valuta,
@@ -9211,7 +9220,9 @@ class RouterHTTP:
             e = 2
         if e <= 0:
             return "%d %s" % (cents, v)
-        return "%d.%0*d %s" % (cents // 10 ** e, e, cents % 10 ** e, v)
+        # r2-bis: il segno a parte (come fase99.Denaro.formatta): -1050 // 100 fa -11, non -10
+        segno, a = ("-" if cents < 0 else ""), abs(cents)
+        return "%s%d.%0*d %s" % (segno, a // 10 ** e, e, a % 10 ** e, v)
 
     def _preventivo_email(self, body):
         """RECUPERO PREVENTIVO onesto (senza tracking): l'ospite CHIEDE la sua quote

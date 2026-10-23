@@ -206,7 +206,8 @@ class TestAccesa(_Base):
         # della ritenuta, non l'importo che il chiamante aveva in mano prima di trattenerla
         righe = [r.getMessage() for r in reg.records if "CONTO_STRIPE_NON_COLLEGATO" in r.getMessage()]
         self.assertEqual(len(righe), 1, reg.output)
-        self.assertIn("IMPORTO: %d |" % (pieno - 4200), righe[0])
+        netto = pieno - 4200          # r2-bis (23/10/2026): in euro, non in centesimi
+        self.assertIn("IMPORTO: %d.%02d EUR |" % (netto // 100, netto % 100), righe[0])
 
     def test_UNA_volta_sola_per_quanti_ritentativi(self):
         self._accendi()

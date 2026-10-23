@@ -289,6 +289,27 @@ class TestIRimborsiARRIVANOAlGateway(_BancoGateway):
             "IL GATEWAY HA RICEVUTO IL PAGAMENTO SBAGLIATO (%r): i soldi partirebbero da "
             "un'altra transazione." % (c["payment_intent"],))
 
+    def test_r2bis_il_rimborso_dovuto_FALLITO_scrive_euro(self):
+        """r2-bis (23/10/2026): «RIMBORSO DOVUTO FALLITO ... importo=20000 EUR» si leggeva
+        20000 euro da restituire a mano. La cifra e' quella che una persona restituira'."""
+        rif, voucher, _totale, _ci, _co = self.prenota_paga("f@gw.it", pi="pi_fallito")
+        s1, _ = self.g("POST", "/api/concierge/cancella", {"voucher_token": voucher})
+        self.assertEqual(s1, 200, "PREMESSA NON VALIDA: la cancellazione ospite non riesce.")
+        _s, lista = self.g("GET", "/api/admin/rimborsi_dovuti", None, {"X-Admin-Key": "ak"})
+        righe = [r for r in (lista or {}).get("rimborsi", []) if r.get("riferimento") == rif]
+        self.assertTrue(righe, "PREMESSA NON VALIDA: niente riga dovuta: %r" % (lista,))
+        dovuto = righe[0]["dovuto_cents"]
+        self.spia.rimborsa = lambda pi, imp, chiave=None: {"ok": False, "id": "",
+                                                            "motivo": "carta_chiusa"}
+        with self.assertLogs("core_auto", level="ERROR") as cattura:
+            s3, o3 = self.g("POST", "/api/admin/rimborsa_dovuto", {"riferimento": rif},
+                            {"X-Admin-Key": "ak"})
+        self.assertEqual(s3, 502, "%r" % (o3,))
+        falliti = [r.getMessage() for r in cattura.records
+                   if "RIMBORSO DOVUTO FALLITO" in r.getMessage()]
+        self.assertEqual(len(falliti), 1, cattura.output)
+        self.assertIn("importo=%d.%02d EUR ->" % (dovuto // 100, dovuto % 100), falliti[0])
+
     def test_STRADA_2_su_7_il_pulsante_dei_rimborsi_dovuti_arriva_al_gateway(self):
         """Strada «rimborsa_dovuto» (`/api/admin/rimborsa_dovuto`), percorsa fino in fondo.
 
@@ -313,9 +334,15 @@ class TestIRimborsiARRIVANOAlGateway(_BancoGateway):
         self.assertEqual(self.spia.chiamate, [],
                          "PREMESSA NON VALIDA: il gateway ha gia' ricevuto qualcosa.")
 
-        s3, o3 = self.g("POST", "/api/admin/rimborsa_dovuto", {"riferimento": rif},
-                        {"X-Admin-Key": "ak"})
+        with self.assertLogs("core_auto", level="INFO") as cattura:
+            s3, o3 = self.g("POST", "/api/admin/rimborsa_dovuto", {"riferimento": rif},
+                            {"X-Admin-Key": "ak"})
         self.assertEqual(s3, 200, "il pulsante non ha eseguito: %r" % (o3,))
+        # r2-bis (23/10/2026): la riga del registro dice euro, non centesimi
+        eseguiti = [r.getMessage() for r in cattura.records
+                    if "RIMBORSO DOVUTO ESEGUITO" in r.getMessage()]
+        self.assertEqual(len(eseguiti), 1, cattura.output)
+        self.assertIn("importo=%d.%02d EUR stripe=" % (dovuto // 100, dovuto % 100), eseguiti[0])
 
         self.assertEqual(
             len(self.spia.chiamate), 1,

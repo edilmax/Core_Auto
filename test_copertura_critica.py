@@ -1988,6 +1988,20 @@ class TestLibroDeiSoldiZoneDiConfine(_BaseFC):
         self.assertIn("host ricoverato in ospedale", annunci[0],
                       "il motivo dello storno e' sparito dalla riga di registro: %r"
                       % (annunci,))
+        # r2-bis (23/10/2026): «IMPORTO: 2000» si leggeva 2000 euro
+        self.assertIn("IMPORTO: 20.00 EUR |", annunci[0])
+
+    def test_r2bis_lo_storno_parziale_scrive_le_cifre_nella_valuta(self):
+        """r2-bis (23/10/2026): «rimborso parziale (3000 di 8700)» senza unita'. In yen, che non
+        ha decimali, la cifra giusta e' proprio 3000: la prova lo distingue da un «/100»."""
+        self.fc.movimento(tipo="incasso", riferimento="RJ", soggetto="host:hj",
+                          importo_cents=8700, valuta="JPY", causale="prova r2-bis")
+        with self.assertLogs("core_auto.financial_controller", level="INFO") as reg:
+            fatto = self.fc.storna_prenotazione(riferimento="RJ", rimborso_cents=3000)
+        self.assertTrue(fatto["parziale"], "PREMESSA: doveva essere un rimborso parziale")
+        righe = [r.getMessage() for r in reg.records if "rimborso parziale" in r.getMessage()]
+        self.assertEqual(len(righe), 1, reg.output)
+        self.assertIn("rimborso parziale (3000 JPY di 8700 JPY)", righe[0])
 
     def test_senza_niente_da_compensare_i_bonifici_non_si_toccano(self):
         """`if residuo > 0:` con `>=` interroga il ledger dei payout anche quando non c'e'

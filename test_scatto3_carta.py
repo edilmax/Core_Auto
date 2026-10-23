@@ -77,6 +77,15 @@ class TestScatto3Carta(unittest.TestCase):
         self.assertEqual(int(inc[0]["importo_cents"]), 5000)
         self.assertTrue(self.fc.verifica_catena().get("ok"))
 
+    def test_r2bis_il_debito_saldato_su_carta_si_legge_in_euro(self):
+        """r2-bis (23/10/2026): «DEBITO SALDATO SU CARTA ... | 5000 EUR |» si leggeva 5000 euro."""
+        with self.assertLogs("core_auto.financial_controller", level="WARNING") as reg:
+            self.fc.riscuoti_da_carta(host_id="h1", provider_carta=self._prov("succeeded"),
+                                      customer="cus_1", payment_method="pm_1")
+        righe = [r.getMessage() for r in reg.records if "DEBITO SALDATO SU CARTA" in r.getMessage()]
+        self.assertEqual(len(righe), 1, reg.output)
+        self.assertIn("| 50.00 EUR | PI:", righe[0])
+
     def test_idempotente_non_raddoppia(self):
         prov = self._prov("succeeded")
         self.fc.riscuoti_da_carta(host_id="h1", provider_carta=prov,

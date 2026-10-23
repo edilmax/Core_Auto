@@ -3521,6 +3521,11 @@ class TestLaPenaleFermataPartePoiQuandoLHostSiSblocca(_BancoDelBonificoLegato):
                          % (quota, self.connect.bonifici))
         self.assertTrue(self.errori_con(righe, "BONIFICO FERMATO", "oltre la quota"),
                         "%r" % (righe,))
+        # r2-bis (23/10/2026): le due cifre in euro, non in centesimi
+        chiesto = quota + 500
+        self.assertTrue(self.errori_con(
+            righe, "chiede %d.%02d EUR," % (chiesto // 100, chiesto % 100),
+            "(%d.%02d EUR)" % (quota // 100, quota % 100)), "%r" % (righe,))
 
 
 class TestLeRiparazioniDel16OttobreSottoGliOcchiDelGiudice(_BancoDeiSoldiDelServer):
@@ -3665,6 +3670,72 @@ class TestLeRiparazioniDel16OttobreSottoGliOcchiDelGiudice(_BancoDeiSoldiDelServ
         s, c = self._cancella_host(rif)
         self.assertEqual((200, "cancellata_host"), (s, (c or {}).get("stato")),
                          "il freno ha fermato una cancellazione legittima: %s %r" % (s, c))
+
+
+class TestR2bisIRegistriDeiRimborsiScrivonoInValuta(_BancoDeiSoldiDelServer):
+    """r2-bis (23/10/2026, «autorizzato»), stessa malattia di r1 e r2: le righe dei rimborsi
+    stampavano le UNITA' MINORI accanto alla valuta («importo=20000 EUR»): chi legge il registro
+    crede 20000 euro. Trovate da GML (compito 19, punto d); l'oracolo qui sotto e' scritto a
+    parte, senza chiamare il formattatore del server."""
+
+    _pagata = TestLeRiparazioniDel16OttobreSottoGliOcchiDelGiudice._pagata
+
+    @staticmethod
+    def _eur(c):
+        return "%d.%02d EUR" % (c // 100, c % 100)
+
+    def _rimborso_admin(self, slug, pi, esito):
+        b = self._pagata(slug, pi)
+        chiesti = []
+        idem = self.sis.firma.decodifica(b["voucher_token"]).get("idem_key", "")
+        with mock.patch.object(self.sis.stripe, "rimborsa",
+                               lambda p, imp, chiave=None: (chiesti.append(imp), esito)[1]), \
+                self.ascolta() as righe:
+            s, c = self.g("POST", "/api/admin/rimborso",
+                          {"alloggio_id": slug, "check_in": _fra(20), "check_out": _fra(22),
+                           "idem_key": idem}, {"X-Admin-Key": "ak"})
+        _deve(len(chiesti) == 1, "PREMESSA: il rimborso doveva arrivare a Stripe", s, c, chiesti)
+        return righe, chiesti[0]
+
+    def test_il_rimborso_ESEGUITO_scrive_euro(self):
+        righe, imp = self._rimborso_admin("casa-r2b1", "pi_r2b1", {"ok": True, "id": "re_r2b"})
+        trovate = [r for r in righe if "RIMBORSO ESEGUITO" in r]
+        self.assertEqual(len(trovate), 1, "%r" % (righe,))
+        self.assertIn("importo=%s stripe=" % self._eur(imp), trovate[0])
+
+    def test_il_rimborso_FALLITO_scrive_euro(self):
+        righe, imp = self._rimborso_admin("casa-r2b2", "pi_r2b2",
+                                          {"ok": False, "id": "", "motivo": "carta_chiusa"})
+        trovate = self.errori_con(righe, "RIMBORSO FALLITO")
+        self.assertEqual(len(trovate), 1, "%r" % (righe,))
+        self.assertIn("importo=%s ->" % self._eur(imp), trovate[0])
+
+    def test_la_cancellazione_dell_host_scrive_euro(self):
+        b = self._pagata("casa-r2b3", "pi_r2b3")
+        with self.ascolta() as righe:
+            s, c = self.g("POST", "/api/host/cancella", {"riferimento": b["riferimento"]},
+                          {"X-Host-Token": self.tok})
+        _deve(s == 200 and c.get("rimborso_cliente_cents", 0) > 0,
+              "PREMESSA: cancellazione dell'host con rimborso all'ospite", s, c)
+        trovate = [r for r in righe if "HOST ha cancellato" in r]
+        self.assertEqual(len(trovate), 1, "%r" % (righe,))
+        # la penale dipende dalla politica (qui moderata): basta che sia scritta in euro
+        self.assertRegex(trovate[0], r"cliente rimborso %s, penale host \d+\.\d\d EUR \|"
+                         % re.escape(self._eur(c["rimborso_cliente_cents"])))
+
+    def test_il_formattatore_conosce_yen_dinari_e_il_segno(self):
+        """GML compito 19 (e): «sempre /100» in `_fmt_importo` passava tutte le prove (lo yen
+        sulla riga del bonifico a mano diventava 870.00 JPY); compito 22 (e): coi negativi la
+        divisione intera dava -11.50 per -1050."""
+        f = self.r._fmt_importo
+        self.assertEqual(f(8700, "JPY"), "8700 JPY")
+        self.assertEqual(f(8700, "KWD"), "8.700 KWD")
+        self.assertEqual(f(5, "KWD"), "0.005 KWD")
+        self.assertEqual(f(8700, "EUR"), "87.00 EUR")
+        self.assertEqual(f(-1050, "EUR"), "-10.50 EUR")
+        self.assertEqual(f(-5, "EUR"), "-0.05 EUR")
+        # il confine: zero non ha segno (mutante `< 0` -> `<= 0` del giro --diff della PR #274)
+        self.assertEqual(f(0, "EUR"), "0.00 EUR")
 
 
 class TestLaDataDelCheckInSiLeggeUgualeSuOgniPython(unittest.TestCase):
@@ -3934,10 +4005,34 @@ class TestIlPagamentoAMano(_BancoDeiBonifici):
         righe = [r.getMessage() for r in cattura.records
                  if "PAYOUT_HOLD_TRIGGERED" in r.getMessage()]
         self.assertEqual(len(righe), 1, cattura.output)
-        self.assertIn("IMPORTO: %d" % netto, righe[0])
+        # r2-bis (23/10/2026): in euro, non in centesimi («IMPORTO: 8700» si leggeva 8700 euro)
+        self.assertIn("IMPORTO: %d.%02d EUR |" % (netto // 100, netto % 100), righe[0])
         self.assertIn("«Lo pago io a mano»", righe[0])
         self.assertEqual(stripe.bonifici, [])
         self.assertEqual(self.sis.payout.stato_di(rif), "maturato")
+
+    def _hold_scritto(self, motivo):
+        stripe = _StripeDeiBonifici(None, ricorda_chiavi=True)
+        rif, netto = self._bonifico_con(stripe)
+        with self.assertLogs("core_auto", level="WARNING") as cattura:
+            self.r._trasferisci_all_host(rif, netto)
+        righe = [r.getMessage() for r in cattura.records
+                 if "PAYOUT_HOLD_TRIGGERED" in r.getMessage() and motivo in r.getMessage()]
+        self.assertEqual(len(righe), 1, cattura.output)
+        self.assertEqual(stripe.bonifici, [], "premessa: il bonifico doveva restare fermo")
+        return righe[0], netto
+
+    def test_r2bis_la_verifica_revocata_scrive_l_importo_in_euro(self):
+        """r2-bis: «PAYOUT_HOLD_TRIGGERED ... IMPORTO: 8700 | MOTIVO: VERIFICA_REVOCATA» si
+        leggeva 8700 euro fermi. E' la riga che dice a una persona quanti soldi aspettano."""
+        self.r._verifica_payout_bloccato = lambda hid: True
+        riga, netto = self._hold_scritto("VERIFICA_REVOCATA")
+        self.assertIn("IMPORTO: %d.%02d EUR |" % (netto // 100, netto % 100), riga)
+
+    def test_r2bis_i_dati_fiscali_mancanti_scrivono_l_importo_in_euro(self):
+        self.r._dac7_payout_bloccato = lambda hid: (True, ["iban"])
+        riga, netto = self._hold_scritto("MANCANZA_DATI_FISCALI")
+        self.assertIn("IMPORTO: %d.%02d EUR |" % (netto // 100, netto % 100), riga)
 
     def test_R3_un_bonifico_che_esplode_non_ferma_gli_altri(self):
         """Il giro orario passa i bonifici uno per uno: un errore su uno lo scrive per intero
