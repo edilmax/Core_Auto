@@ -7487,9 +7487,10 @@ class RouterHTTP:
                        importo_cents=importo_cents, valuta=valuta,
                        causale="bonifico A MANO preso in carico da una persona (pulsante «Lo "
                                "pago io a mano»)")
-        logger.warning("BONIFICO A MANO PRESO IN CARICO | RIF: %s | HOST_ID: %s | IMPORTO: %d %s | "
+        logger.warning("BONIFICO A MANO PRESO IN CARICO | RIF: %s | HOST_ID: %s | IMPORTO: %s | "
                        "da pagare adesso dalla banca: nessun giro automatico lo paga piu'",
-                       _rif_per_registro(rif), _testo_per_registro(host_id), importo_cents, valuta)
+                       _rif_per_registro(rif), _testo_per_registro(host_id),
+                       self._fmt_importo(int(importo_cents), valuta))
         return ""
 
     def _ritenta_bonifici_fermi(self):

@@ -4031,6 +4031,20 @@ class TestIlPagamentoAManoInDollari(_BancoDellaRitenuta):
                          ("USD", self._maturato(rif)))
         self.assertEqual(self.connect.chiamate, [], "un bonifico a mano e' partito con Stripe")
 
+    def test_r2_la_riga_del_bonifico_a_mano_scrive_dollari_e_non_centesimi(self):
+        # r2 (23/10/2026): «IMPORTO: %d %s» stampava i centesimi accanto alla valuta.
+        rif, _q = self._prenota_paga()
+        self.assertTrue(self.sis.garanzia.conferma_ospite(rif).get("ok"))
+        self.sis.registro_host.imposta_stripe_account(self.hid, "")
+        minori = self._maturato(rif)
+        with self.assertLogs("core_auto.server", level="WARNING") as reg:
+            s, out = self.g("POST", "/api/admin/payout/pagato_a_mano", {"riferimento": rif},
+                            self._bunker())
+        self.assertEqual(s, 200, out)
+        riga = [r for r in reg.output if "BONIFICO A MANO PRESO IN CARICO" in r]
+        self.assertEqual(len(riga), 1, reg.output)
+        self.assertIn("IMPORTO: %d.%02d USD |" % (minori // 100, minori % 100), riga[0])
+
 
 if __name__ == "__main__":
     unittest.main()
