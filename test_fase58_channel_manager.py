@@ -830,5 +830,111 @@ class TestLeGuardieDeiPuntiScoperti(unittest.TestCase):
         self.assertEqual(esiti, [True])
 
 
+class TestLeGuardieDelGiro2(unittest.TestCase):
+    """Una guardia per ogni punto SOPRAVVISSUTO al giro 2 di mutazione del Blocco 2
+    (22/10/2026, commit 118593e): 22 punti, quasi tutti nel feed esterno nei due versi
+    (`feed_giorni`, `stato_prima_del_blocco`, `chi_chiude`, `feed_applica`) che i test
+    attraversavano solo passando da fase82 -- e fase82 ripiega in silenzio se fase58 esplode."""
+
+    G1, G2 = "2026-07-01", "2026-07-02"
+
+    def setUp(self):
+        self.cm = _cm()
+        _carica(self.cm, alloggio="a", giorni=(self.G1, self.G2), unita=1, prezzo=10000)
+
+    def test_un_id_che_non_e_una_stringa_non_si_interroga_e_non_si_cancella(self):
+        # righe 239, 525, 527, 548, 566, 597, 599: `isinstance(...) and ...`. Con `or` un
+        # numero passa il controllo: o esplode su `.strip()`, o -- per svuota_calendario --
+        # SQLite lo confronta col testo «123» e cancella il calendario di un ALTRO alloggio.
+        _carica(self.cm, alloggio="123", giorni=(self.G1,))
+        self.assertEqual(self.cm.svuota_calendario(123), 0)
+        self.assertIsNotNone(self.cm.stato_giorno("123", self.G1))
+        self.assertEqual(self.cm.feed_giorni(123, "airbnb"), [])
+        self.assertEqual(self.cm.feed_giorni("a", 123), [])
+        self.assertIsNone(self.cm.stato_prima_del_blocco(123, self.G1))
+        self.assertEqual(self.cm.chi_chiude(123, self.G1), [])
+        vuoto = {"chiusi": 0, "riaperte": 0, "tenute_da_altri": 0,
+                 "mano_dell_host": 0, "occupate": 0}
+        self.assertEqual(self.cm.feed_applica(123, "airbnb", [self.G1]), vuoto)
+        self.assertEqual(self.cm.feed_applica("a", 123, [self.G1]), vuoto)
+        self.assertEqual(self.cm.feed_giorni("a", "airbnb"), [])
+
+    def test_una_notte_chiusa_dal_feed_si_puo_interrogare(self):
+        # righe 550 e 568: `_data_iso(giorno) is None` -- con `is not` una data VALIDA
+        # risponderebbe «nessuno stato» e «nessun feed»: la difesa diventa muta.
+        self.assertEqual(self.cm.feed_applica("a", "airbnb", [self.G1])["chiusi"], 1)
+        prima = self.cm.stato_prima_del_blocco("a", self.G1)
+        self.assertIsNotNone(prima)
+        self.assertEqual((prima["unita_totali"], prima["prezzo_netto_cents"]), (1, 10000))
+        self.assertEqual(self.cm.chi_chiude("a", self.G1), ["airbnb"])
+        self.assertIsNone(self.cm.stato_prima_del_blocco("a", "non-una-data"))
+        self.assertEqual(self.cm.chi_chiude("a", "non-una-data"), [])
+
+    def test_un_giorno_che_non_e_una_data_non_entra_nel_feed(self):
+        # riga 604: `isinstance(g, str) and _data_iso(g) is not None`.
+        r = self.cm.feed_applica("a", "airbnb", [self.G1, "domani"])
+        self.assertEqual(r["chiusi"], 1)
+        self.assertEqual(self.cm.feed_giorni("a", "airbnb"), [self.G1])
+
+    def test_una_notte_senza_riga_si_chiude_e_una_gia_chiusa_dall_host_no(self):
+        # riga 652: `riga is not None and ...` -- una notte mai caricata si chiude senza
+        # esplodere; righe 652-653: `== 0 ... == 0` -- una notte che l'host ha GIA' chiuso
+        # (0 unita', 0 prezzo) non si «chiude di nuovo» e non le si salva uno stato finto
+        # che un giorno la riaprirebbe a zero euro.
+        r = self.cm.feed_applica("a", "airbnb", ["2026-08-01"])
+        self.assertEqual(r["chiusi"], 1)
+        self.assertEqual(self.cm.stato_giorno("a", "2026-08-01")["unita_totali"], 0)
+        self.assertTrue(self.cm.imposta_disponibilita("a", self.G2, unita_totali=0,
+                                                      prezzo_netto_cents=0))
+        r = self.cm.feed_applica("a", "airbnb", ["2026-08-01", self.G2])
+        self.assertEqual(r["chiusi"], 0)
+        self.assertIsNone(self.cm.stato_prima_del_blocco("a", self.G2))
+
+    def test_la_notte_sparita_dal_feed_torna_com_era(self):
+        # righe 682, 688, 689: `salvato is None`, `riga is None or ... != 0 or ... != 0`.
+        # Il percorso della RIAPERTURA non lo attraversava nessun test diretto.
+        self.cm.feed_applica("a", "airbnb", [self.G1])
+        r = self.cm.feed_applica("a", "airbnb", [])
+        self.assertEqual((r["riaperte"], r["mano_dell_host"]), (1, 0))
+        g = self.cm.stato_giorno("a", self.G1)
+        self.assertEqual((g["unita_totali"], g["prezzo_netto_cents"]), (1, 10000))
+        self.assertIsNone(self.cm.stato_prima_del_blocco("a", self.G1))
+
+    def test_se_l_host_ha_toccato_la_notte_la_sua_mano_vince(self):
+        # riga 688 `or -> and` (le due): basta che UNO dei due numeri non sia piu' il nostro
+        # zero perche' la notte sia dell'host. Due notti, una per ciascun numero.
+        self.cm.feed_applica("a", "airbnb", [self.G1, self.G2])
+        self.assertTrue(self.cm.imposta_disponibilita("a", self.G1, unita_totali=1,
+                                                      prezzo_netto_cents=0))
+        self.assertTrue(self.cm.imposta_disponibilita("a", self.G2, unita_totali=0,
+                                                      prezzo_netto_cents=500))
+        r = self.cm.feed_applica("a", "airbnb", [])
+        self.assertEqual((r["riaperte"], r["mano_dell_host"]), (0, 2))
+        g1, g2 = self.cm.stato_giorno("a", self.G1), self.cm.stato_giorno("a", self.G2)
+        self.assertEqual((g1["unita_totali"], g1["prezzo_netto_cents"]), (1, 0))
+        self.assertEqual((g2["unita_totali"], g2["prezzo_netto_cents"]), (0, 500))
+
+    def test_la_vetrina_si_avvisa_anche_quando_si_chiude_soltanto(self):
+        # riga 718: `chiusi or riaperte` -- con `and` la vetrina restava a «da 100 EUR» su
+        # una notte che il feed aveva appena chiuso.
+        avvisi = []
+        self.cm._avvisa_lo_specchio = avvisi.append
+        self.assertEqual(self.cm.feed_applica("a", "airbnb", [self.G1])["chiusi"], 1)
+        self.assertEqual(avvisi, ["a"])
+        self.assertEqual(self.cm.feed_applica("a", "airbnb", [])["riaperte"], 1)
+        self.assertEqual(avvisi, ["a", "a"])
+        self.cm.feed_applica("a", "airbnb", [])            # niente cambia: niente avviso
+        self.assertEqual(avvisi, ["a", "a"])
+
+    def test_offset_booleano_e_alloggio_vuoto_non_cambiano_la_lista(self):
+        # riga 737: `isinstance(offset, int) and not isinstance(offset, bool) and ...` --
+        # True e' un int: con `or` saltava la prima prenotazione. Riga 764: un alloggio
+        # vuoto non filtra, e il totale resta il totale.
+        self.assertTrue(self.cm.blocca("a", self.G1, self.G2, idem_key="k1").ok)
+        self.assertTrue(self.cm.blocca("a", self.G2, "2026-07-03", idem_key="k2").ok)
+        self.assertEqual(len(self.cm.elenco_prenotazioni(offset=True)), 2)
+        self.assertEqual(self.cm.conta_elenco_prenotazioni(alloggio_id=""), 2)
+
+
 if __name__ == "__main__":
     unittest.main()

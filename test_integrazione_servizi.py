@@ -2295,6 +2295,43 @@ class TestApiDbConnectPayout(_BaseIntegrazione):
         self.assertEqual(manuale, [], "un esito sconosciuto e' diventato «bonifico da fare a "
                                       "mano»: pagarlo a mano lo pagherebbe due volte")
 
+    def _importo_leggibile(self):
+        netto = int(self.b["netto_host_cents"])
+        return "%d.%02d EUR" % (netto // 100, netto % 100)
+
+    def test_IL_REGISTRO_DEI_BONIFICI_SCRIVE_EURO_E_NON_CENTESIMI(self):
+        """r1 del 22/10/2026: il watchdog ha mandato al fondatore «BONIFICO RIFIUTATO DA STRIPE
+        | ... | 11 EUR» per un bonifico di 11 CENTESIMI -- il registro stampava i minori con la
+        parola della valuta. Chi legge «11 EUR» crede di dover 11 euro all'host. Le tre righe
+        che portano l'importo (partito, rifiutato, esito sconosciuto) lo scrivono in euro."""
+        atteso = self._importo_leggibile()
+        with self.assertLogs("core_auto.server", level="INFO") as registro:
+            self.assertEqual(self.conferma()[0], 200)
+        riga = [r for r in registro.output if "Connect: transfer" in r]
+        self.assertEqual(len(riga), 1, registro.output)
+        self.assertIn("(%s)" % atteso, riga[0])
+
+    def test_IL_BONIFICO_RIFIUTATO_SCRIVE_EURO_E_NON_CENTESIMI(self):
+        atteso = self._importo_leggibile()
+        self.sis.connect._fetch = FintoStripeForm(risposta={"error": {
+            "type": "invalid_request_error", "code": "balance_insufficient",
+            "message": "saldo insufficiente"}})
+        with self.assertLogs("core_auto.server", level="ERROR") as registro:
+            self.assertEqual(self.conferma()[0], 200)
+        riga = [r for r in registro.output if "BONIFICO RIFIUTATO DA STRIPE" in r]
+        self.assertEqual(len(riga), 1, registro.output)
+        self.assertIn("| %s a acct_HOST1 |" % atteso, riga[0])
+
+    def test_IL_BONIFICO_DALL_ESITO_SCONOSCIUTO_SCRIVE_EURO_E_NON_CENTESIMI(self):
+        atteso = self._importo_leggibile()
+        self.sis.connect._fetch = FintoStripeForm(guasto=urllib.error.HTTPError(
+            "https://api.stripe.com", 500, "boom", {}, None))
+        with self.assertLogs("core_auto.server", level="ERROR") as registro:
+            self.assertEqual(self.conferma()[0], 200)
+        riga = [r for r in registro.output if "BONIFICO ESITO SCONOSCIUTO" in r]
+        self.assertEqual(len(riga), 1, registro.output)
+        self.assertIn("| IMPORTO: %s |" % atteso, riga[0])
+
     def test_secondo_sblocco_non_manda_un_secondo_bonifico(self):
         primo, secondo = self.conferma(), self.conferma()
         # il secondo e' rifiutato dalla garanzia gia' rilasciata, non dall'orologio

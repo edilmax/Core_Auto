@@ -131,5 +131,79 @@ class TestLeGuardieDeiPuntiScoperti(unittest.TestCase):
         self.assertIs(traccia[0], RuntimeError)
 
 
+class TestLeGuardieDelGiro2(unittest.TestCase):
+    """Una guardia per ogni punto SOPRAVVISSUTO al giro 2 di mutazione del Blocco 2
+    (22/10/2026, commit 118593e): 8 punti, tutti in `prodid` e nei cinque risultati di
+    `sincronizza`. Il flag `eco_ignorata` e i `exc_info` erano scritti e nessuno li leggeva."""
+
+    ICS_NOSTRO = ICS_BASE.replace("PRODID:-//Airbnb//EN", "PRODID:-//BookinVIP//Calendario//IT")
+    ICS_VUOTO = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Airbnb//EN\nEND:VCALENDAR\n"
+
+    def test_il_prodid_e_proprio_quello_della_riga_PRODID(self):
+        # riga 119: `== "PRODID"` -- con `!=` si prenderebbe la PRIMA riga che non e'
+        # PRODID («BEGIN:VCALENDAR» -> «VCALENDAR») e l'eco non si riconoscerebbe piu'.
+        from fase82_ical_sync import prodid
+        self.assertEqual(prodid(ICS_BASE), "-//Airbnb//EN")
+        self.assertEqual(prodid(self.ICS_NOSTRO), "-//BookinVIP//Calendario//IT")
+
+    def test_il_nostro_feed_riesportato_e_ignorato_e_lo_dice(self):
+        # riga 170: `eco_ignorata: True` -- chi legge il risultato deve sapere PERCHE'
+        # nessuna notte e' stata chiusa; e l'inventario resta intatto.
+        inv = crea_channel_manager()
+        r = sincronizza(inv, "casa", self.ICS_NOSTRO)
+        self.assertIs(r["eco_ignorata"], True)
+        self.assertEqual(r["eventi"], 0)
+        self.assertIsNone(inv.stato_giorno("casa", "2026-07-01"))
+
+    def test_un_feed_estraneo_non_e_mai_un_eco_in_nessun_ramo(self):
+        # righe 191, 211, 239, 253: `eco_ignorata: False` in ognuna delle quattro uscite
+        # che NON sono l'eco. Un True li' direbbe al pannello «era il nostro calendario».
+        class SoloVecchio:                       # ramo un_verso_solo (riga 191)
+            def imposta_disponibilita(self, *a, **k):
+                return True
+        r = sincronizza(SoloVecchio(), "casa", ICS_BASE)
+        self.assertIn("un_verso_solo", r)
+        self.assertIs(r["eco_ignorata"], False)
+
+        inv = crea_channel_manager()             # ramo normale (riga 253)
+        r = sincronizza(inv, "casa", ICS_BASE, feed_id="airbnb")
+        self.assertEqual(r["anomalia"], "")
+        self.assertIs(r["eco_ignorata"], False)
+        # riga 204: `prima and not giorni` -- lo STESSO feed riletto con le sue notti non e'
+        # un feed azzerato. Con `or` ogni secondo giro gridava «feed_azzerato» e non chiudeva
+        # niente di nuovo: falso allarme e calendario fermo.
+        r = sincronizza(inv, "casa", ICS_BASE, feed_id="airbnb")
+        self.assertEqual(r["anomalia"], "")
+        self.assertEqual(r["giorni_bloccati"], 2)
+
+        r = sincronizza(inv, "casa", self.ICS_VUOTO, feed_id="airbnb")   # da N a zero (211)
+        self.assertTrue(r["anomalia"].startswith("feed_azzerato"))
+        self.assertIs(r["eco_ignorata"], False)
+
+    def test_se_feed_applica_esplode_si_blocca_lo_stesso_e_resta_la_traccia(self):
+        # righe 227 e 236: `exc_info=True` sull'errore di feed_applica e sull'avviso del
+        # singolo giorno; riga 239: `eco_ignorata: False` anche nel ripiego.
+        class ApplicaRotta:
+            def feed_giorni(self, *a):
+                return []
+            def feed_applica(self, *a):
+                raise ValueError("feed_applica giu'")
+            def imposta_disponibilita(self, *a, **k):
+                raise RuntimeError("giorno giu'")
+        with self.assertLogs("core_auto.ical_sync", level="WARNING") as registro:
+            r = sincronizza(ApplicaRotta(), "casa", ICS_BASE)
+        self.assertIs(r["eco_ignorata"], False)
+        self.assertEqual(r["giorni_bloccati"], 0)
+        errori = [x for x in registro.records if x.levelname == "ERROR"]
+        avvisi = [x for x in registro.records if x.levelname == "WARNING"]
+        self.assertEqual(len(errori), 1)
+        self.assertIsInstance(errori[0].exc_info, tuple)
+        self.assertIs(errori[0].exc_info[0], ValueError)
+        self.assertEqual(len(avvisi), 2)         # i due giorni, 01 e 02
+        for a in avvisi:
+            self.assertIsInstance(a.exc_info, tuple)
+            self.assertIs(a.exc_info[0], RuntimeError)
+
+
 if __name__ == "__main__":
     unittest.main()
