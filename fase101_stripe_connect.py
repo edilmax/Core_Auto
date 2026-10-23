@@ -25,6 +25,18 @@ def _intero_pos(v: Any) -> bool:
     return isinstance(v, int) and not isinstance(v, bool) and v > 0
 
 
+def _importo_per_registro(minori: int, valuta: str) -> str:
+    """r2 (23/10/2026, «autorizzato»): il registro scrive «87.00 EUR», non «8700 eur» -- chi
+    legge le unita' minori come euro paga cento volte tanto. Con l'esponente vero della valuta
+    (fase99: JPY 0, BHD 3). Una riga d'errore non solleva mai: valuta illeggibile -> le unita'
+    minori, dette per nome."""
+    try:
+        from fase99_multicurrency import Denaro
+        return Denaro(minori, str(valuta).upper()).formatta()
+    except (TypeError, ValueError):
+        return "%r unita' minori di %r" % (minori, valuta)
+
+
 def _esito_sconosciuto(exc: BaseException) -> bool:
     """⛔ PILASTRO ZERO (19/10/2026). Una chiamata a Stripe finita in errore ha l'esito SCONOSCIUTO
     -- puo' essere stata ESEGUITA -- salvo un rifiuto certo: una risposta 4xx, tranne 409 (la
@@ -301,9 +313,9 @@ class ProviderConnect:
         if esito.get("sconosciuto") is False or (isinstance(r, dict)
                                                  and isinstance(r.get("error"), dict)):
             return None                               # rifiuto certo: non e' partito niente
-        logger.error("Connect: bonifico con ESITO SCONOSCIUTO verso %s (riferimento %r, %d %s): "
+        logger.error("Connect: bonifico con ESITO SCONOSCIUTO verso %s (riferimento %r, %s): "
                      "la risposta di Stripe non e' arrivata o non si legge, si rilegge Stripe",
-                     account_id, rif, amount_cents, params["currency"])
+                     account_id, rif, _importo_per_registro(amount_cents, params["currency"]))
         return (self._bonifico_esistente(account_id, rif, amount_cents, params["currency"])
                 or "") if rif else ""
 
@@ -327,8 +339,8 @@ class ProviderConnect:
                            "ne fa un altro", b["id"], riferimento, account_id)
             return b["id"]
         logger.error("Connect: per %r verso %s Stripe ha GIA' il bonifico %s ma non torna (%r, "
-                     "atteso %d %s): niente secondo bonifico, decide una persona",
-                     riferimento, account_id, b["id"], b, amount_cents, valuta)
+                     "atteso %s): niente secondo bonifico, decide una persona",
+                     riferimento, account_id, b["id"], b, _importo_per_registro(amount_cents, valuta))
         return ""
 
     # Pagine da 100 lette al massimo per ritrovare un bonifico: oltre, la risposta e' «non so».

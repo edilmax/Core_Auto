@@ -375,6 +375,53 @@ class TestIBuchiDelGiudice(unittest.TestCase):
                 self.assertEqual(len(spy4.letture), 2, "una lettura prima e una dopo il POST")
 
 
+class TestIlRegistroDeiBonificiScriveEuroENonCentesimi(unittest.TestCase):
+    """r2 (23/10/2026), stessa malattia di r1: due righe d'errore del Connect stampavano i
+    CENTESIMI accanto alla parola della valuta («... 8700 eur») -- chi legge crede 8700 euro.
+    Ora l'importo si scrive nella sua valuta, coi decimali veri (fase99: JPY 0, BHD 3)."""
+
+    def test_l_esito_sconosciuto_scrive_l_importo_nella_valuta(self):
+        with self.assertLogs("core_auto.stripe_connect", level="ERROR") as reg:
+            p = ProviderConnect("sk", fetch=PostFinto({ProviderConnect.TRANSFERS: {}}))
+            self.assertEqual(p.trasferisci("acct_1", 8700, "eur", "R"), "")
+        riga = [r for r in reg.output if "ESITO SCONOSCIUTO" in r]
+        self.assertEqual(len(riga), 1, reg.output)
+        self.assertIn("(riferimento 'R', 87.00 EUR)", riga[0])
+
+    def test_un_bonifico_su_stripe_che_non_torna_scrive_l_atteso_nella_valuta(self):
+        class LetturaDiversa(PostFinto):
+            def __call__(self, url, body, headers):
+                if body is None and url.startswith(ProviderConnect.TRANSFERS + "?"):
+                    self.letture.append(url)
+                    return {"object": "list", "has_more": False, "data": [{
+                        "id": "tr_vecchio", "amount": 50, "currency": "eur", "reversed": False,
+                        "amount_reversed": 0, "metadata": {"riferimento": "R"}}]}
+                return super().__call__(url, body, headers)
+        with self.assertLogs("core_auto.stripe_connect", level="ERROR") as reg:
+            p = ProviderConnect("sk", fetch=LetturaDiversa())
+            self.assertEqual(p.trasferisci("acct_1", 8700, "eur", "R"), "")
+        riga = [r for r in reg.output if "non torna" in r]
+        self.assertEqual(len(riga), 1, reg.output)
+        self.assertIn("atteso 87.00 EUR)", riga[0])
+
+    def test_lo_yen_non_ha_decimali_nel_registro(self):
+        with self.assertLogs("core_auto.stripe_connect", level="ERROR") as reg:
+            p = ProviderConnect("sk", fetch=PostFinto({ProviderConnect.TRANSFERS: {}}))
+            self.assertEqual(p.trasferisci("acct_1", 8700, "jpy", "R"), "")
+        riga = [r for r in reg.output if "ESITO SCONOSCIUTO" in r]
+        self.assertIn("(riferimento 'R', 8700 JPY)", riga[0])
+
+    def test_una_valuta_illeggibile_non_fa_saltare_la_riga_d_errore(self):
+        # La riga d'errore sta sul percorso dei soldi: se sollevasse, il chiamante non
+        # riceverebbe «esito sconosciuto» ("") e potrebbe pagare una seconda volta.
+        with self.assertLogs("core_auto.stripe_connect", level="ERROR") as reg:
+            p = ProviderConnect("sk", fetch=PostFinto({ProviderConnect.TRANSFERS: {}}))
+            self.assertEqual(p.trasferisci("acct_1", 8700, "eu", "R"), "")
+        riga = [r for r in reg.output if "ESITO SCONOSCIUTO" in r]
+        self.assertEqual(len(riga), 1, reg.output)
+        self.assertIn("8700 unita' minori di 'eu'", riga[0])
+
+
 class TestCollegaStripe_IlContoDellHostNasceComeLoAccettaStripe(unittest.TestCase):
     """Busta 1, 2026-10-04. Il fondatore ha scelto «Dashboard Express» e la piattaforma responsabile
     delle perdite (conferma data il 4/10): con gli addebiti indiretti e' l'unica strada che Stripe
