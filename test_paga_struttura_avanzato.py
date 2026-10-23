@@ -114,9 +114,18 @@ class _Base(unittest.TestCase):
     def g(self, m, p, b=None, h=None):
         return self.r.gestisci(m, p, {}, json.dumps(b) if b is not None else None, h or {})
 
+    @staticmethod
+    def oggi(fuso="Europe/Rome"):
+        # t1 (23/10/2026): «oggi» nel fuso dell'ALLOGGIO (citta' «Roma» -> Europe/Rome), non
+        # della macchina: fra le 22:00 e le 24:00 UTC il giorno d'arrivo a Roma e' gia' finito
+        # (fase59._fine_giorno_arrivo) e un arrivo «oggi» preso in UTC tornava date_passate.
+        import datetime
+        from zoneinfo import ZoneInfo
+        return datetime.datetime.now(ZoneInfo(fuso)).date()
+
     def pubblica(self, slug, valuta="EUR", prezzo=30000, giorni_da_oggi=0, giorni_range=40, fuso=""):
         import datetime
-        oggi = datetime.date.today()
+        oggi = self.oggi(fuso or "Europe/Rome")
         corpo = {"slug": slug, "titolo": slug, "citta": "Roma", "prezzo_notte_cents": prezzo,
                  "capacita": 4, "valuta": valuta, "politica_cancellazione": "flessibile"}
         if fuso:
@@ -142,9 +151,9 @@ class _Base(unittest.TestCase):
         return self.r.gestisci("POST", "/api/payments/webhook", {}, pl,
                                {"Stripe-Signature": firma_di_test(pl, WH, int(time.time()))})
 
-    def dd(self, giorni, notti=1):
+    def dd(self, giorni, notti=1, fuso="Europe/Rome"):
         import datetime
-        ci = datetime.date.today() + datetime.timedelta(days=giorni)
+        ci = self.oggi(fuso) + datetime.timedelta(days=giorni)
         return ci.isoformat(), (ci + datetime.timedelta(days=notti)).isoformat()
 
 
