@@ -178,6 +178,29 @@ class TestLaRottaPubblicaDelConcierge(unittest.TestCase):
         self.assertEqual(429, s,
                          "il concierge e' rimasto aperto a raffica: %r" % (c,))
 
+    def test_la_mail_in_chat_legge_solo_il_testo_cappato(self):
+        # CodeQL py/polynomial-redos (24/10, GML 30): il testo si cappa a 500, ma il
+        # controllo «e' un'email?» rileggeva il campo GREZZO. Un indirizzo che sta
+        # tutto OLTRE il cap non e' cio' che il desk ha letto: non si registra.
+        s, c = self.g("POST", "/api/chatbot", {"testo": "a" * 600 + "@posta.it"},
+                      h={"X-Forwarded-For": "203.0.113.81"})
+        self.assertEqual(200, s, c)
+        self.assertNotEqual("attesa", c.get("intento"),
+                            "il controllo della mail ha letto oltre il cap: %r" % (c,))
+
+    def test_un_testo_enorme_non_blocca_il_desk(self):
+        # la regex della mail e' quadratica su «a@b.b.b...@»: misurato 16003
+        # caratteri = 0,37 s, e nginx lascia passare 1 MB. Col cap gira su 500.
+        import time
+        testo = "a@" + "b." * 20000 + "@"
+        t0 = time.perf_counter()
+        s, c = self.g("POST", "/api/chatbot", {"testo": testo},
+                      h={"X-Forwarded-For": "203.0.113.82"})
+        durata = time.perf_counter() - t0
+        self.assertEqual(200, s, c)
+        self.assertLess(durata, 1.0,
+                        "40 KB di testo hanno tenuto il desk %.2f s" % durata)
+
 
 
 class TestIlDeskDellaHome(unittest.TestCase):
