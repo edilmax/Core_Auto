@@ -38,6 +38,13 @@ def _provider_finto():
     import re
     from urllib.parse import unquote
     def fetch_finto(url, body, headers):
+        # IL RIMBORSO (pw1, 24/10): risponde come Stripe a un rimborso riuscito, con l'id
+        # derivato dalla chiave d'idempotenza (stessa chiave -> stesso re_, come Stripe).
+        # `collaudi/admin_rimborsa_browser.js` e' il suo cliente.
+        if url.endswith("/v1/refunds"):
+            k = str((headers or {}).get("Idempotency-Key") or "")
+            return {"id": "re_test_" + hashlib.sha256(k.encode("utf-8")).hexdigest()[:16],
+                    "object": "refund", "status": "succeeded"}
         if not isinstance(body, (bytes, bytearray)) or b"client_reference_id=" not in body:
             return {}                      # tutto il resto del provider: non servito qui
         m = re.search(rb"client_reference_id=([^&]+)", body)
