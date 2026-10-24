@@ -8752,7 +8752,7 @@ class RouterHTTP:
         #    domanda — e' la richiesta d'attesa che il desk gli ha appena chiesto. Si
         #    registra con lo STESSO percorso ufficiale della waitlist (stessa validazione,
         #    stesso Credito Fondatore firmato, stesso allarme domanda): zero inventato.
-        testo_mail = str(dati.get("testo") or "").strip()
+        testo_mail = testo  # lo stesso testo CAPPATO: la regex qui sotto e' quadratica
         if _re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", testo_mail):
             import json as _j
             corpo_attesa = {"email": testo_mail,
