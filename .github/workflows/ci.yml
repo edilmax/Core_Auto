@@ -1014,6 +1014,14 @@ jobs:
           BASE_VISIVO: http://127.0.0.1:8095
         run: node collaudi/riaccetta_browser.js
 
+      # «RIMBORSA» DAL PANNELLO ADMIN (pw1, 24/10): il primo pulsante dei SOLDI premuto da un
+      # browser. Due prenotazioni pagate col webhook firmato; a cose ferme la pagina deve dire
+      # il rimborso eseguito (re_) per una, e l'allarme «da restituire A MANO» per l'altra.
+      - name: Rimborsa dal pannello admin (la pagina dice il vero)
+        env:
+          BASE_VISIVO: http://127.0.0.1:8095
+        run: node collaudi/admin_rimborsa_browser.js
+
       - name: Spegni il terzo banco
         if: always()
         run: kill "$(cat server_pin.pid)" 2>/dev/null || true

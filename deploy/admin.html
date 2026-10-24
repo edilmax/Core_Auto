@@ -250,7 +250,10 @@ async function sbloccaBunker(){
     else{ st.textContent='❌ '+T('bk_ko'); }
   }catch(e){ st.textContent='❌ '+fraseErrore(codRete(e)); }
 }
-function msg(t,ok){ const m=document.getElementById('msg'); m.className='msg '+(ok?'ok':'err'); m.textContent=t; }
+// l'ultimo guasto scritto qui resta in memoria: chi scrive dopo (es. l'esito di un rimborso) lo
+// riporta invece di coprirlo (pw1, rilievi 4-5 di Kimi)
+let ULTIMO_GUASTO='';
+function msg(t,ok){ const m=document.getElementById('msg'); m.className='msg '+(ok?'ok':'err'); m.textContent=t; if(!ok) ULTIMO_GUASTO=t; }
 function stat(t){ document.getElementById('autostat').textContent = t; }
 
 // Escape di sicurezza + valute: FONTE UNICA in app.js (BV.esc copre & < > " ' —
@@ -335,9 +338,9 @@ async function cambiaStatoAdmin(slug,stato){
 }
 async function carica(){
   if(!key()){ stat(''); return; }
-  caricaVerifiche();   // 🛡️ la PRIMA cosa: chi è in regola e chi no (KYC dashboard)
-  caricaAlloggi();
-  await caricaPrenotazioniAdmin();
+  // 🛡️ la PRIMA cosa: chi è in regola e chi no (KYC dashboard). Partono insieme e si aspettano
+  // TUTTE: chi scrive un esito dopo carica() non deve vederselo coprire da una ricarica in ritardo.
+  await Promise.all([caricaVerifiche(), caricaAlloggi(), caricaPrenotazioniAdmin()]);
 }
 // A PAGINE, 20 alla volta (D16 della prova vera del 29/9: prima arrivava tutto in una volta,
 // «un pannello lungo chilometri», e dalla 101esima le prenotazioni sparivano senza avviso).
@@ -395,7 +398,18 @@ async function rimborsa(d){
       headers:bunkerHdr({'Content-Type':'application/json','X-Admin-Key':key()}),
       body:JSON.stringify({alloggio_id:d.a, check_in:d.ci, check_out:d.co, idem_key:d.k})});
     const r = await res.json();
-    if(res.status===200){ msg(T('rimb_ok')+' '+(r.nota||''), true); carica(); }
+    // pw1 (24/10): PRIMA si ricarica l'elenco, che scrive a sua volta in questo riquadro, POI
+    // l'esito: al contrario l'esito spariva subito sotto «N prenotazioni». Un 200 con passi
+    // falliti (soldi da restituire A MANO), o senza l'elenco dei passi, e' un allarme, mai un
+    // «✅ Rimborsato» verde; e se la ricarica ha scritto un guasto, l'esito non lo copre.
+    // Guardia: collaudi/admin_rimborsa_browser.js (job browser).
+    if(res.status===200){
+      const ko = !Array.isArray(r.passi_falliti) || r.passi_falliti.length>0;
+      ULTIMO_GUASTO='';
+      await carica();
+      const guasto = ULTIMO_GUASTO ? ' · '+ULTIMO_GUASTO : '';
+      msg((ko ? '⚠️ ' : T('rimb_ok')+' ')+(r.nota||fraseErrore('risposta_non_valida'))+guasto,
+          !ko && !guasto); }
     else if(res.status===403 && r && r.errore==='bunker_richiesto'){ msg('🔒 '+T('bk_serve'), false); }
     else msg('❌ '+(r.motivo||(r.errore?fraseErrore(r.errore):res.status)), false);
   }catch(e){ msg('❌ '+fraseErrore(codRete(e)),false); }
