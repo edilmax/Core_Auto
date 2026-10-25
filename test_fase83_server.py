@@ -3387,7 +3387,7 @@ class TestDopoUnaContestazioneDiCartaLaCancellazioneNonLasciaUnBonificoFantasma(
     def test_contestazione_poi_il_pannello_admin_NON_offre_Rimborsa(self):
         # pacco 1, voce 2 (25/10): lo stesso freno nell'elenco dell'admin (mutante della #279,
         # fase83 `_admin_prenotazioni`: la chiave del calendario resa vuota sopravviveva)
-        b = self._contestata("casa-d1d", "pi_d1d")
+        self._contestata("casa-d1d", "pi_d1d")
         s, adm = self.g("GET", "/api/admin/prenotazioni", None, {"X-Admin-Key": "ak"})
         self.assertEqual(200, s, adm)
         riga = [p for p in adm["prenotazioni"] if p.get("alloggio_id") == "casa-d1d"]

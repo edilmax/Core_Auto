@@ -1757,6 +1757,28 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
         self.assertIsNotNone(riga, "riuscito + in corso: la riga deve restare finche' Stripe decide")
         self.assertIn("rimborso_in_corso", riga.get("manca") or [], riga)
 
+    def test_PACCO1_con_un_dovuto_NON_POSITIVO_e_nessun_rimborso_la_riga_non_e_restituita(self):
+        """Mutante della #279 sopravvissuto nel job `caselle` (fase83 `_rimborso_dovuto_scheda`,
+        `fatti > 0` -> `fatti >= 0`): un dovuto <= 0 non nasce mai, perche' `_giornale` rifiuta
+        gli importi non positivi. D19: lo stato impossibile si costruisce a mano. La regola scritta
+        accanto alla riga dice che con un dovuto non positivo serve almeno un rimborso riuscito:
+        con ZERO rimborsi su Stripe la riga non puo' dirsi «gia' rimborsata»."""
+        rif, _ = self._cancella_da_ospite("2026-09-02", "2026-09-04", "pi_pacco1_zero")
+        self.assertIsNotNone(self._riga(self._lista(), rif), "setup: la riga dev'essere in lista")
+        fc = self.sys.finanza
+        veri = fc.movimenti
+
+        def _dovuto_a_zero(r):
+            return [dict(m, importo_cents=0) if m.get("tipo") == "rimborso" else m
+                    for m in veri(r)]
+        with mock.patch.object(fc, "movimenti", side_effect=_dovuto_a_zero):
+            riga, stripe_ok = self.r._rimborso_dovuto_scheda(rif)
+        self.assertTrue(stripe_ok and riga is not None and riga.get("dovuto_cents") == 0,
+                        "PREMESSA: la scheda col dovuto a zero e Stripe letto: %r" % (riga,))
+        self.assertIs(riga["gia_rimborsato"], False,
+                      "dovuto a zero e nessun rimborso su Stripe detto «gia' rimborsato»: %r"
+                      % (riga,))
+
     def test_PACCO1_un_rimborso_PENDING_su_una_prenotazione_VIVA_e_una_divergenza(self):
         """Stripe sta restituendo soldi su una prenotazione che per noi e' ancora pagata e viva:
         anche se non e' ancora 'succeeded' i conti divergono (mutante #279, :5581)."""
