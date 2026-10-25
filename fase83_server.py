@@ -3079,6 +3079,11 @@ class RouterHTTP:
             p["stato"] = self._stato_vero_prenotazione(pp, p)
             try:
                 deciso = self._garanzia_gia_divisa(p.get("idem_key"))
+                # pacco 1, voce 2 (25/10): con una controversia aperta «Rimborsa» non si offre,
+                # lo stesso freno di `_admin_rimborso` (decide l'arbitro o la banca)
+                _k = str(p.get("idem_key") or "")
+                deciso = deciso or self._controversia_aperta(
+                    _k[len("reblock:"):] if _k.startswith("reblock:") else _k[:24])
             except Exception:
                 deciso = True        # garanzia illeggibile: niente pulsante, decide una persona
                 logger.error("admin prenotazioni: garanzia illeggibile, «Rimborsa» non offerto",
@@ -5179,6 +5184,14 @@ class RouterHTTP:
         # solleva qui e la richiesta finisce in 500 senza effetti: nel dubbio non si rimborsa.
         if self._garanzia_gia_divisa(idem):
             return 409, {"errore": "escrow_gia_liquidato"}
+        # ⛔ PACCO 1, voce 2 (25/10, «autorizzato»; Kimi K10): con una controversia aperta -- la
+        # segnalazione dell'ospite o la contestazione della banca -- decide l'arbitro o la banca,
+        # come gia' per la cancellazione dell'ospite e dell'host (F1/F2). Prima l'admin
+        # rimborsava lo stesso e chiudeva la garanzia: con la banca che contesta l'ospite riceve
+        # i soldi due volte (da noi e dalla sua banca). Si risolve con «Risolvi controversia».
+        _rif_c = idem[len("reblock:"):] if idem.startswith("reblock:") else idem[:24]
+        if self._controversia_aperta(_rif_c):
+            return 409, {"errore": "controversia_aperta"}
         try:
             e = self._sys.inventario.rilascia(alloggio, ci, co, idem_key=idem)
         except Exception:
@@ -5285,7 +5298,19 @@ class RouterHTTP:
                 # Chiave STABILE per questa prenotazione: un ritentativo di rete o un doppio
                 # clic non possono restituire i soldi due volte (Stripe scarta il duplicato).
                 _es = _sp.rimborsa(_pi, _tot, "rimborso:" + rif)
-                if isinstance(_es, dict) and _es.get("ok"):
+                if isinstance(_es, dict) and (_es.get("in_corso") or _es.get("sconosciuto")):
+                    # PACCO 1 (25/10): non riuscito ma nemmeno «da restituire A MANO», che
+                    # pagherebbe due volte. Il movimento «rimborso» e' gia' nel giornale, quindi
+                    # la riga sta nella lista dei rimborsi dovuti e si ricalcola da Stripe.
+                    _rimborso = ("IN LAVORAZIONE su Stripe (%s): NON restituire a mano, si segue "
+                                 "dalla lista dei rimborsi dovuti" % (_es.get("id") or "")
+                                 if _es.get("in_corso") else
+                                 "ESITO SCONOSCIUTO (%s): NON restituire a mano, la lista dei "
+                                 "rimborsi dovuti lo rilegge da Stripe" % _es.get("motivo"))
+                    logger.error("RIMBORSO NON CONFERMATO rif=%s importo=%s -> %s",
+                                 _rif_per_registro(rif), self._fmt_importo(_tot, _valuta),
+                                 _testo_per_registro(_es.get("motivo")))
+                elif isinstance(_es, dict) and _es.get("ok"):
                     _rimborso = "eseguito (%s)" % (_es.get("id") or "")
                     logger.info("RIMBORSO ESEGUITO rif=%s importo=%s stripe=%s",
                                 _rif_per_registro(rif), self._fmt_importo(_tot, _valuta),
@@ -5445,6 +5470,10 @@ class RouterHTTP:
             stripe_ok = bool(isinstance(esito, dict) and esito.get("ok"))
             motivo_stripe = "" if stripe_ok else str((esito or {}).get("motivo") or "")
             gia = bool(stripe_ok and int((esito or {}).get("rimborsato_cents") or 0) > 0)
+            # PACCO 1 (25/10): un rimborso 'pending' NON e' restituito, ma non si rifa': la riga
+            # resta in lista col pulsante spento finche' Stripe dice riuscito o fallito.
+            if stripe_ok and not gia and int((esito or {}).get("in_corso_cents") or 0) > 0:
+                manca.append("rimborso_in_corso")
         if not stripe_ok:
             manca.append("verifica_stripe")
         # ── LA CONTESTAZIONE DELLA BANCA (S4, 16/10): con una contestazione Stripe non rimborsa
@@ -5548,7 +5577,8 @@ class RouterHTTP:
                 motivi.append("%s: %s" % (rec.get("riferimento"),
                                           (esito or {}).get("motivo") or "lettura fallita"))
                 continue
-            quanto = int(esito.get("rimborsato_cents") or 0)
+            # restituito O in uscita (pacco 1): anche un 'pending' su una prenotazione viva diverge
+            quanto = int(esito.get("rimborsato_cents") or 0) + int(esito.get("in_corso_cents") or 0)
             if quanto <= 0:
                 continue
             # ⛔ UN RIMBORSO DECISO DA NOI NON E' UNA DIVERGENZA (2026-09-15). Una controversia
@@ -5646,6 +5676,20 @@ class RouterHTTP:
         # Chiave STABILE: la stessa di `_admin_rimborso`, cosi' le due strade non possono
         # restituire due volte gli stessi soldi nemmeno usando rotte diverse.
         esito = sp.rimborsa(riga["payment_intent"], int(riga["dovuto_cents"]), "rimborso:" + rif)
+        # PACCO 1 (25/10, «autorizzato»), tre risposte e non due. IN CORSO: Stripe l'ha preso ma
+        # non l'ha ancora restituito; SCONOSCIUTO: la risposta non e' arrivata e puo' essere
+        # partito. In tutti e due i casi NON e' «nessun rimborso e' partito»: rifarlo a mano
+        # dalla Dashboard pagherebbe due volte. La riga resta in lista (si ricalcola da Stripe).
+        if isinstance(esito, dict) and (esito.get("in_corso") or esito.get("sconosciuto")):
+            stato = "in_lavorazione" if esito.get("in_corso") else "esito_sconosciuto"
+            logger.error("RIMBORSO DOVUTO %s rif=%s importo=%s stripe=%s -> %s", stato.upper(),
+                         _rif_per_registro(rif),
+                         self._fmt_importo(int(riga["dovuto_cents"]), riga["valuta"]),
+                         esito.get("id") or "", _testo_per_registro(esito.get("motivo")))
+            return 202, {"stato": stato, "riferimento": rif, "motivo": esito.get("motivo"),
+                         "stripe_refund_id": esito.get("id") or "",
+                         "nota": "NON rifarlo a mano dalla Dashboard: la riga resta in lista e "
+                                 "si ricalcola da Stripe (se il rimborso e' partito, lo vede)"}
         if not (isinstance(esito, dict) and esito.get("ok")):
             motivo = (esito or {}).get("motivo") if isinstance(esito, dict) else "risposta_non_dict"
             logger.error("RIMBORSO DOVUTO FALLITO rif=%s importo=%s -> %s", _rif_per_registro(rif),

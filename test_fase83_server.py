@@ -3364,18 +3364,25 @@ class TestDopoUnaContestazioneDiCartaLaCancellazioneNonLasciaUnBonificoFantasma(
                           self.sis.payout.info(rif)),
                          "la cancellazione rifiutata ha mosso pagamento, garanzia o bonifico")
 
-    def test_contestazione_poi_l_ADMIN_rimborsa_la_riga_del_bonifico_sparisce(self):
+    def test_contestazione_poi_l_ADMIN_rimborso_e_rifiutato_e_non_muove_niente(self):
+        # RISCRITTA il 25/10 (pacco 1, voce 2, «autorizzato»; Kimi K10). Prima questa prova
+        # pretendeva che l'admin rimborsasse con la banca che contesta (garanzia 'annullato',
+        # riga del bonifico tolta): l'ospite riceveva i soldi da noi E dalla sua banca. Ora
+        # decide la banca, come per la cancellazione dell'ospite qui sopra.
         b = self._contestata("casa-d1b", "pi_d1b")
         rif = b["riferimento"]
+        riga = self.sis.payout.info(rif)
         idem = self.sis.firma.decodifica(b["voucher_token"]).get("idem_key", "")
         s, c = self.g("POST", "/api/admin/rimborso",
                       {"alloggio_id": "casa-d1b", "check_in": _fra(20), "check_out": _fra(22),
                        "idem_key": idem}, {"X-Admin-Key": "ak"})
-        _deve(s == 200 and self.sis.garanzia.stato(rif)["stato"] == "annullato",
-              "PREMESSA: rimborso dell'admin a host zero", s, c, self.sis.garanzia.stato(rif))
-        self.assertIsNone(self.sis.payout.info(rif),
-                          "BONIFICO FANTASMA dopo il rimborso dell'admin: %r"
-                          % (self.sis.payout.info(rif),))
+        self.assertEqual((409, "controversia_aperta"), (s, (c or {}).get("errore")),
+                         "RIMBORSATO CON LA BANCA CHE CONTESTA: %s %r" % (s, c))
+        self.assertEqual(("pagato", "contestato", "trattenuto", riga),
+                         (self.sis.pagamenti_pendenti.info(rif)["stato"],
+                          self.sis.garanzia.stato(rif)["stato"], self.sis.payout.stato_di(rif),
+                          self.sis.payout.info(rif)),
+                         "il rimborso rifiutato ha mosso pagamento, garanzia o bonifico")
 
     def test_un_bonifico_GIA_PARTITO_resta_trattenuto_e_visibile(self):
         # D19, lo stato si costruisce a mano: i soldi sono usciti (riga `payout_host`)

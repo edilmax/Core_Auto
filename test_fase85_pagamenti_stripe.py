@@ -202,7 +202,8 @@ class TestIBuchiDelGiudice(unittest.TestCase):
             ("crea_link", (DATI,), None, "WARNING"),
             ("crea_link_anticipo", (ANT,), None, "WARNING"),
             ("rimborsa", ("pi_1", 100, "k-1"),
-             {"ok": False, "id": "", "motivo": "RuntimeError: stripe giu'"}, "ERROR"),
+             {"ok": False, "id": "", "motivo": "RuntimeError: stripe giu'",
+              "sconosciuto": True}, "ERROR"),      # un'eccezione senza codice: non so (pacco 1)
             ("rimborsi_di", ("pi_1",),
              {"ok": False, "rimborsi": [], "rimborsato_cents": 0, "motivo": "RuntimeError: stripe giu'"},
              "ERROR"),
@@ -237,17 +238,16 @@ class TestIBuchiDelGiudice(unittest.TestCase):
         self.assertEqual(f.chiamate, [], "un rimborso rifiutato non deve toccare Stripe")
 
     def test_riga160_165_rimborsa_dice_ok_solo_su_un_re_vero_e_riporta_lo_stato_di_Stripe(self):
-        f = FetchFinto({RIMBORSI_URL: {"id": "re_1", "status": "pending"}})
+        # RISCRITTA il 25/10 (pacco 1, voce 1, «autorizzato»): prima pretendeva ok=True anche su
+        # 'pending' e senza status, cioe' il difetto. Ora «riuscito» e' SOLO 'succeeded'.
+        f = FetchFinto({RIMBORSI_URL: {"id": "re_1", "status": "succeeded"}})
         self.assertEqual(_p(f).rimborsa("pi_1", 2500, " chiave-77 "),
-                         {"ok": True, "id": "re_1", "motivo": "pending"})          # 161, 162
+                         {"ok": True, "id": "re_1", "motivo": "succeeded"})
         url, body, headers = f.chiamate[0]
         self.assertEqual(url, RIMBORSI_URL)
         self.assertEqual(headers["Idempotency-Key"], "chiave-77")
         self.assertIn("payment_intent=pi_1", body.decode())
         self.assertIn("amount=2500", body.decode())
-        f2 = FetchFinto({RIMBORSI_URL: {"id": "re_2"}})
-        self.assertEqual(_p(f2).rimborsa("pi_1", 2500, "k"),
-                         {"ok": True, "id": "re_2", "motivo": "creato"})           # 162: senza status
         for risposta in ({"id": "xx_1"}, {"id": None}, {"error": "no"}, "stringa", None):
             with self.subTest(risposta=risposta):
                 esito = _p(FetchFinto({RIMBORSI_URL: risposta})).rimborsa("pi_1", 2500, "k")
@@ -267,7 +267,8 @@ class TestIBuchiDelGiudice(unittest.TestCase):
         esito = _p(f).rimborsi_di("pi_1")
         self.assertIs(esito["ok"], True)                                             # 214
         self.assertEqual([r["id"] for r in esito["rimborsi"]], ["re_a", "re_b", "re_e"])   # 213
-        self.assertEqual(esito["rimborsato_cents"], 1000)                            # 215
+        # pacco 1 (25/10): restituito e' solo 'succeeded'; pending e requires_action sono IN CORSO
+        self.assertEqual((esito["rimborsato_cents"], esito["in_corso_cents"]), (700, 300))   # 215
         self.assertEqual(esito["motivo"], "")
         url, body, _headers = f.chiamate[0]
         self.assertIsNone(body, "leggere i rimborsi e' una GET: senza corpo")
@@ -730,6 +731,66 @@ class TestLaContestazioneDellaBanca(unittest.TestCase):
         self.assertEqual([r.levelname for r in reg.records], ["ERROR"], reg.output)
         self.assertIn("pi_ok", reg.output[0])
         self.assertIsInstance(reg.records[0].exc_info[1], RuntimeError)
+
+
+class _ErroreHttp(Exception):
+    """Come `urllib.error.HTTPError`: il codice sta in `code`."""
+    def __init__(self, code):
+        super().__init__("HTTP %s" % code)
+        self.code = code
+
+
+class TestRimborsaDiceRiuscitoSoloSeLoE(unittest.TestCase):
+    """PACCO 1, voce 1 (25/10, «autorizzato»; Kimi K1/K7/K9, Claude, GML). Prima `rimborsa` dava
+    ok=True per QUALUNQUE `re_`: anche 'failed' e 'canceled', cioe' un rimborso che Stripe dice NON
+    fatto diventava «eseguito» nel pannello (viste ROSSE il 25/10 su 7d62217: 13 casi su 13).
+    Fonte: docs.stripe.com/refunds («pending» puo' finire 'failed' o 'canceled')."""
+
+    def test_succeeded_e_l_unico_riuscito(self):
+        esito = _p(FetchFinto({RIMBORSI_URL: {"id": "re_1", "status": "succeeded"}})).rimborsa("pi_1", 2500, "k")
+        self.assertIs(esito["ok"], True, esito)
+        self.assertEqual(esito["id"], "re_1")
+
+    def test_pending_e_in_corso_non_riuscito(self):
+        for stato in ("pending", "requires_action", None):
+            with self.subTest(stato=stato):
+                risp = {"id": "re_2"} if stato is None else {"id": "re_2", "status": stato}
+                esito = _p(FetchFinto({RIMBORSI_URL: risp})).rimborsa("pi_1", 2500, "k")
+                self.assertIs(esito["ok"], False, "%s preso per restituito: %r" % (stato, esito))
+                self.assertIs(esito.get("in_corso"), True, esito)
+                self.assertEqual(esito["id"], "re_2", "il re_ va conservato: e' l'unico modo di ritrovarlo")
+
+    def test_failed_e_canceled_non_sono_in_corso(self):
+        for stato in ("failed", "canceled"):
+            with self.subTest(stato=stato):
+                esito = _p(FetchFinto({RIMBORSI_URL: {"id": "re_3", "status": stato}})).rimborsa("pi_1", 2500, "k")
+                self.assertIs(esito["ok"], False, esito)
+                self.assertIs(esito.get("in_corso"), False, esito)
+                self.assertEqual((esito["id"], esito["motivo"]), ("re_3", stato))
+
+
+class TestRimborsaDistingueRifiutoDaEsitoSconosciuto(unittest.TestCase):
+    """PACCO 1, voce 4 (25/10, «autorizzato»): un timeout o un 5xx NON dicono che il rimborso non
+    e' partito (docs.stripe.com/error-low-level); e' la stessa famiglia del bonifico A19 (#268), con
+    la stessa regola `_esito_sconosciuto`, ora in un posto solo (fase85, fase101 la importa)."""
+
+    def test_timeout_5xx_e_409_sono_sconosciuti(self):
+        for exc in (TimeoutError("timed out"), ConnectionError("reset"), _ErroreHttp(500),
+                    _ErroreHttp(503), _ErroreHttp(409)):
+            with self.subTest(exc=exc):
+                with self.assertLogs("core_auto.pagamenti_stripe", level="ERROR"):
+                    esito = _p(FetchFinto(solleva=exc)).rimborsa("pi_1", 2500, "k")
+                self.assertIs(esito["ok"], False)
+                self.assertIs(esito.get("sconosciuto"), True,
+                              "%r: un timeout NON dice che il rimborso non e' partito: %r" % (exc, esito))
+
+    def test_un_4xx_e_un_rifiuto_certo(self):
+        for code in (400, 402, 404):
+            with self.subTest(code=code):
+                with self.assertLogs("core_auto.pagamenti_stripe", level="ERROR"):
+                    esito = _p(FetchFinto(solleva=_ErroreHttp(code))).rimborsa("pi_1", 2500, "k")
+                self.assertIs(esito["ok"], False)
+                self.assertIs(esito.get("sconosciuto"), False, esito)
 
 
 if __name__ == "__main__":

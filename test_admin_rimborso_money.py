@@ -574,15 +574,20 @@ def _fetch_stripe_con_memoria(url, body, headers):
                 barriera.wait()
             except Exception:
                 pass
+        if STRIPE_FINTO.get("esplode_sul_rimborso"):
+            # pacco 1 (25/10): la risposta non arriva. Come un timeout vero, senza `code`.
+            raise TimeoutError("The read operation timed out")
+        # pacco 1 (25/10): lo stato con cui Stripe crea il rimborso ('pending' col saldo negativo)
+        stato = STRIPE_FINTO.get("stato_rimborso") or "succeeded"
         with _SERRATURA_FINTO_STRIPE:
             if chiave and chiave in STRIPE_FINTO["per_chiave"]:
                 return dict(STRIPE_FINTO["per_chiave"][chiave])
             rid = "re_" + secrets.token_hex(4)
-            risposta = {"id": rid, "status": "succeeded", "object": "refund"}
+            risposta = {"id": rid, "status": stato, "object": "refund"}
             if chiave:
                 STRIPE_FINTO["per_chiave"][chiave] = risposta
             STRIPE_FINTO["rimborsi_per_pi"].setdefault(pi, []).append(
-                {"id": rid, "status": "succeeded",
+                {"id": rid, "status": stato,
                  "amount": int((campi.get("amount") or ["0"])[0] or 0)})
         return dict(risposta)
     return {"url": "https://t/" + secrets.token_hex(4), "id": "cs_" + secrets.token_hex(4)}
@@ -632,6 +637,8 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
         STRIPE_FINTO["barriera_rimborso"] = None
         STRIPE_FINTO["contestati"] = set()
         STRIPE_FINTO["muti_sulla_contestazione"] = set()
+        STRIPE_FINTO["stato_rimborso"] = None
+        STRIPE_FINTO["esplode_sul_rimborso"] = False
         self.dir = tempfile.mkdtemp()
         d = self.dir
         # ⛔ `db_finanza` NON e' un dettaglio del banco: il giornale immutabile e' la sola
@@ -1651,6 +1658,56 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
             "la lista propone di restituire piu' di quanto l'ospite ha versato: la differenza "
             "la mettiamo noi (D16, mai in perdita)")
 
+    # ── PACCO 1 (25/10, «autorizzato»): voci 1 e 4 dell'elenco unico ─────────────────────
+    def _pulisci_stripe_finto(self):
+        STRIPE_FINTO["stato_rimborso"] = None
+        STRIPE_FINTO["esplode_sul_rimborso"] = False
+
+    def test_PACCO1_un_rimborso_PENDING_non_e_restituito_e_la_riga_resta_col_pulsante_spento(self):
+        """Col saldo Stripe negativo un rimborso con carta resta 'pending' (e puo' finire 'failed').
+        Prima il pulsante rispondeva 200 «soldi restituiti» e la riga spariva come gia' rimborsata."""
+        self.addCleanup(self._pulisci_stripe_finto)
+        STRIPE_FINTO["stato_rimborso"] = "pending"
+        rif, _ = self._cancella_da_ospite("2026-09-11", "2026-09-13", "pi_pacco1_p")
+        s, res = self.g("POST", "/api/admin/rimborsa_dovuto", {"riferimento": rif},
+                        {"X-Admin-Key": "ak"})
+        self.assertEqual((202, "in_lavorazione"), (s, (res or {}).get("stato")),
+                         "un rimborso NON ancora restituito detto restituito: %s %r" % (s, res))
+        riga = self._riga(self._lista(), rif)
+        self.assertIsNotNone(riga, "la riga e' sparita dalla lista con i soldi ancora in viaggio")
+        self.assertIn("rimborso_in_corso", riga.get("manca") or [], riga)
+        self.assertFalse(riga.get("bottone"), "il pulsante rifarebbe un rimborso gia' in corso")
+
+    def test_PACCO1_un_timeout_sul_rimborso_e_ESITO_SCONOSCIUTO_non_nessun_rimborso(self):
+        """La risposta di Stripe non arriva: il rimborso PUO' essere partito. Prima: 502
+        «nessun rimborso e' partito», cioe' l'invito a rifarlo a mano e pagare due volte."""
+        self.addCleanup(self._pulisci_stripe_finto)
+        rif, _ = self._cancella_da_ospite("2026-09-14", "2026-09-16", "pi_pacco1_t")
+        STRIPE_FINTO["esplode_sul_rimborso"] = True
+        s, res = self.g("POST", "/api/admin/rimborsa_dovuto", {"riferimento": rif},
+                        {"X-Admin-Key": "ak"})
+        self.assertEqual((202, "esito_sconosciuto"), (s, (res or {}).get("stato")),
+                         "un timeout detto «non partito»: %s %r" % (s, res))
+        self.assertNotIn("nessun rimborso", json.dumps(res))
+
+    def test_PACCO1_il_rimborso_dell_ADMIN_pending_non_dice_eseguito(self):
+        """`_admin_rimborso` (la decisione dell'admin, il totale): con 'pending' diceva «eseguito»."""
+        self.addCleanup(self._pulisci_stripe_finto)
+        STRIPE_FINTO["stato_rimborso"] = "pending"
+        rif, _ = self._prenota_e_paga("2026-09-17", "2026-09-19", "pi_pacco1_a")
+        s, adm = self.g("GET", "/api/admin/prenotazioni", None, {"X-Admin-Key": "ak"})
+        idem = [p for p in adm["prenotazioni"] if p.get("check_in") == "2026-09-17"][0]["idem_key"]
+        s, res = self.g("POST", "/api/admin/rimborso",
+                        {"alloggio_id": "casa", "check_in": "2026-09-17", "check_out": "2026-09-19",
+                         "idem_key": idem}, {"X-Admin-Key": "ak"})
+        self.assertEqual(s, 200, res)
+        self.assertTrue(str(res.get("rimborso_stripe") or "").startswith("IN LAVORAZIONE"),
+                        "il pannello dice eseguito un rimborso che Stripe non ha ancora fatto: %r"
+                        % (res,))
+        riga = self._riga(self._lista(), rif)
+        self.assertIsNotNone(riga, "la lista dei rimborsi dovuti deve seguire quel rimborso")
+        self.assertIn("rimborso_in_corso", riga.get("manca") or [], riga)
+
     def test_FRENO_IL_PULSANTE_PREMUTO_DUE_VOLTE_NON_RIMBORSA_DUE_VOLTE(self):
         """Freno 2: chiave d'idempotenza stabile. Rete che cade o doppio clic non raddoppiano.
         E dopo il primo clic la riga esce dalla lista perche' STRIPE la conferma, non perche'
@@ -2109,6 +2166,18 @@ class TestIlPannelloEDAVVEROCollegato(unittest.TestCase):
             "ctr_host", self.HTML,
             "il pannello non mostra quanto resta all'host: l'arbitro decide due cifre e ne "
             "vede una sola")
+
+    def test_PACCO1_il_pannello_non_chiama_rimborsato_un_rimborso_in_lavorazione(self):
+        """Pacco 1 (25/10): la rotta risponde 200 con «IN LAVORAZIONE»/«ESITO SCONOSCIUTO», 202
+        dal pulsante dei dovuti, e 409 `controversia_aperta`. Il pannello deve dirlo, non mostrare
+        «✅ Rimborsato» o un «❌» generico. Guardia statica: la prova nel browser e' la voce 26/27."""
+        self.assertRegex(self.HTML, r"IN LAVORAZIONE\|ESITO SCONOSCIUTO",
+                         "«Rimborsa» mostra ✅ anche su un rimborso che Stripe non ha ancora fatto")
+        self.assertIn("res.status===202", self.HTML,
+                      "il pulsante dei rimborsi dovuti non distingue «in attesa di Stripe»")
+        self.assertIn("r.errore==='controversia_aperta'){ msg(T('rimb_contr')", self.HTML)
+        self.assertEqual(self.HTML.count("rimb_contr:\""), 8,
+                         "il messaggio della controversia aperta non c'e' in tutte le 8 lingue")
 
     def test_il_pannello_chiama_le_due_rotte(self):
         self.assertIn("/api/admin/rimborsi_dovuti", self.HTML,

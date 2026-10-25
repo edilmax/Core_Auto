@@ -95,6 +95,23 @@ def _motivo_errore(exc: BaseException) -> str:
         testo += " | corpo dell'errore illeggibile"
     return testo
 
+
+def _esito_sconosciuto(exc: BaseException) -> bool:
+    """⛔ PILASTRO ZERO (19/10/2026). Una chiamata a Stripe finita in errore ha l'esito SCONOSCIUTO
+    -- puo' essere stata ESEGUITA -- salvo un rifiuto certo: una risposta 4xx, tranne 409 (la
+    stessa chiave e' ancora in lavorazione). Timeout, connessione caduta, 5xx e una risposta che
+    non si legge restano sconosciuti (docs.stripe.com/error-low-level, letta il 19/10/2026:
+    «Considera indeterminato l'esito di una richiesta che restituisce 500»). Il codice si legge
+    da `code` come fa la diagnostica di `_post` (l'HTTPError vero e gli errori finti delle prove),
+    dentro un `try`: nel dubbio e' sconosciuto, perche' un rifiuto inventato fa pagare due volte.
+    Sta QUI dal 25/10 (pacco 1): la usano il bonifico (fase101, che la importa) e il rimborso."""
+    try:
+        codice = getattr(exc, "code", None)
+        return not (isinstance(codice, int) and not isinstance(codice, bool)
+                    and 400 <= codice < 500 and codice != 409)
+    except Exception:
+        return True
+
 STRIPE_URL = "https://api.stripe.com/v1/checkout/sessions"
 RIMBORSI_URL = "https://api.stripe.com/v1/refunds"
 # Le tre tappe per sapere quanto si e' preso Stripe DAVVERO (vedi `commissione_effettiva`):
@@ -310,7 +327,14 @@ class ProviderStripe:
         Ritorna sempre un dict, mai None: `{'ok': bool, 'id': 're_...', 'motivo': str}`.
         Il motivo c'e' anche quando va male, perche' un osservabile debole e' un difetto
         (regola ferrea 9): «rimborso fallito» senza il perche' non si sa nemmeno se ritentare.
-        """
+
+        ⛔ PACCO 1 (25/10, «autorizzato»): `ok` e' True SOLO se Stripe dice 'succeeded'. Prima
+        bastava un `re_`, e un rimborso 'failed' o 'canceled' diventava «eseguito» nel pannello
+        mentre all'ospite non arrivava niente. Fuori da 'succeeded' due campi in piu':
+          `in_corso`    True = 'pending'/'requires_action'/senza stato: puo' ancora riuscire, NON
+                        si rifa' a mano (l'id `re_` resta nella risposta per ritrovarlo);
+          `sconosciuto` True = timeout, 5xx, 409: la richiesta puo' essere stata ESEGUITA
+                        (`_esito_sconosciuto`, la stessa regola del bonifico)."""
         if not (isinstance(payment_intent, str) and payment_intent.startswith("pi_")):
             return {"ok": False, "id": "", "motivo": "payment_intent_assente"}
         if not _intero_pos(importo_cents):
@@ -331,8 +355,11 @@ class ProviderStripe:
             resp = self._fetch(RIMBORSI_URL, body, headers)
             rid = resp.get("id") if isinstance(resp, dict) else None
             if isinstance(rid, str) and rid.startswith("re_"):
-                return {"ok": True, "id": rid,
-                        "motivo": str((resp or {}).get("status") or "creato")}
+                stato = resp.get("status")
+                if stato == "succeeded":
+                    return {"ok": True, "id": rid, "motivo": stato}
+                return {"ok": False, "id": rid, "motivo": str(stato or "senza_stato"),
+                        "in_corso": stato not in ("failed", "canceled")}
             # Non e' un'eccezione: Stripe ha risposto qualcosa che non e' un rimborso.
             # Va detto per intero, non ridotto a un booleano.
             return {"ok": False, "id": "", "motivo": "risposta_inattesa: %r" % (resp,)}
@@ -341,7 +368,8 @@ class ProviderStripe:
                          payment_intent, importo_cents, exc.__class__.__name__, exc,
                          exc_info=True)
             return {"ok": False, "id": "",
-                    "motivo": "%s: %s" % (exc.__class__.__name__, exc)}
+                    "motivo": "%s: %s" % (exc.__class__.__name__, exc),
+                    "sconosciuto": _esito_sconosciuto(exc)}
 
     def impronta_carta(self, payment_intent: Any) -> str:
         """LOCK 1-CARTA=1-SCONTO: l'impronta STABILE della carta usata in un pagamento.
@@ -452,7 +480,8 @@ class ProviderStripe:
         esiste nel nostro prodotto; se un giorno esistesse, questa funzione ne vedrebbe solo
         una parte -- e la sottostima porta a rimborsare di nuovo, quindi va rifatta prima.
 
-        Ritorna sempre un dict: {'ok', 'rimborsi', 'rimborsato_cents', 'motivo'}."""
+        Ritorna sempre un dict: {'ok', 'rimborsi', 'rimborsato_cents', 'motivo'}, e con ok=True
+        anche 'in_corso_cents' (rimborsi 'pending'/'requires_action': non ancora restituiti)."""
         if not (isinstance(payment_intent, str) and payment_intent.startswith("pi_")):
             return {"ok": False, "rimborsi": [], "rimborsato_cents": 0,
                     "motivo": "payment_intent_assente"}
@@ -468,8 +497,15 @@ class ProviderStripe:
                         "motivo": "risposta_inattesa: %r" % (resp,)}
             vivi = [r for r in resp["data"] if isinstance(r, dict)
                     and str(r.get("status") or "") in self.STATI_RIMBORSO_VIVO]
+            # ⛔ PACCO 1 (25/10, «autorizzato»): RESTITUITO e' solo 'succeeded'. Un 'pending'
+            # (col saldo Stripe negativo un rimborso con carta resta li') faceva dire alla lista
+            # «Stripe conferma che i soldi sono gia' tornati» e la riga spariva. Ora sta a parte,
+            # in `in_corso_cents`: la riga resta col pulsante spento finche' Stripe decide.
             return {"ok": True, "rimborsi": vivi, "motivo": "",
-                    "rimborsato_cents": sum(int(r.get("amount") or 0) for r in vivi)}
+                    "rimborsato_cents": sum(int(r.get("amount") or 0) for r in vivi
+                                            if r.get("status") == "succeeded"),
+                    "in_corso_cents": sum(int(r.get("amount") or 0) for r in vivi
+                                          if r.get("status") != "succeeded")}
         except Exception as exc:
             logger.error("Stripe: LETTURA RIMBORSI FALLITA pi=%s -> %s: %s",
                          payment_intent, exc.__class__.__name__, exc, exc_info=True)

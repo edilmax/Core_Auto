@@ -280,7 +280,7 @@ class TestEscrowGiaLiquidato(unittest.TestCase):
                          "PREMESSA NON VALIDA: la decisione dell'arbitro non e' scritta dove si "
                          "legge")
 
-        # dopo la partenza: l'host rientra (la sessione di quattro mesi fa e' scaduta) e cancella
+        # dopo la partenza: l'host rientra (la sessione del primo accesso e' scaduta) e cancella
         dopo_partenza = _istante_checkin(co, "Europe/Rome") + 86400
         with mock.patch("time.time", return_value=float(dopo_partenza)):
             s, acc = self.g("POST", "/api/host/login",
