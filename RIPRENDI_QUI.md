@@ -26,6 +26,64 @@
 
 ---
 
+## 🎯 IL POSTO SOLO — si legge PER PRIMO (25/10, sessione 870a14a1)
+
+> Il fondatore, 24/10 sera: «le memorie si perdono e ogni volta siamo a punto a capo», «perdete tutto, chi scrive a destra e chi
+> scrive a sinistra», «è ora di fare chiarezza in tutto e fare un posto solo, eliminare gli altri». **Il posto è questo.** Una
+> memoria di sessione, il canale con Kimi o con GML, un file del Desktop **non sono un posto**: quello che hanno di vero entra
+> qui, oppure non esiste. Perché serviva, misurato: il 24/10 quattro caselle decise il 22/10 stavano SOLO in memoria; il 25/10
+> l'inventario delle 142 memorie (Kimi K11 la prima metà, Claude la seconda, ogni candidato cercato con una parola chiave nelle
+> righe dell'elenco) ne ha trovate altre: sono le voci **91-136** dell'elenco unico qui sotto, ognuna col file d'origine.
+
+**🏁 IL TRAGUARDO: «FINITO» IN 7 PUNTI** (il fondatore, 24/10 21:15: «non ho soldi per fare revisione da un umano, voglio
+terminarlo»; e subito dopo: «io voglio finirlo e voglio il massimo, siete in tre»). Il perimetro è FISSO, la profondità è la
+MASSIMA che si può avere gratis con gli attrezzi già installati. ⛔ Mai proporre spese, mai spostare il traguardo.
+1. niente funzionalità nuove: si riparano i difetti (TUTTI, D27: «se sono errori vanno riparati»);
+2. soldi protetti con prove vere: doppio rimborso, rimborso durante una contestazione della banca, bonifico durante una
+   controversia, oltre l'incassato, webhook doppi o tardivi, gare fra admin, host e webhook, giornale riconciliabile;
+3. accessi protetti;
+4. suite intera + browser sui flussi principali + Stripe di prova, zero rossi;
+5. crash prima e dopo rimborso, bonifico, conferma del pagamento;
+6. un backup ripristinato davvero + il ritorno alla versione precedente;
+7. un collaudo finale limitato a questi punti.
+Quando sono 7 su 7: **FERMO E CONSEGNATO**, il resto è manutenzione (le voci segnate «DOPO IL FINITO»). L'audit umano lo
+sostituisce la busta chiusa a tre. **Contatore: 0 su 7** (25/10: nessun punto ha ancora la sua misura scritta qui).
+
+**🧭 IL METODO** (deciso col fondatore il 24/10 sera: «finiamo una cosa senza tornare più indietro»):
+- il blocco 1 (soldi, gruppo A) in 4 PACCHI: (1) rimborsi, voci 1, 2, 4, 24 · (2) bonifici all'host, voci 5, 6, 7, 12, 14, 17,
+  21, 89 · (3) bunker, DAC7, credito, money_lint, voci 10, 11, 13, 15 · (4) da ricontrollare in sola lettura, voci 9, 16, 18, 22,
+  23 · del fondatore, una domanda alla volta: voci 3, 19, 20, 25. Più le voci A nuove 91-97, nel pacco che le tocca;
+- ogni pacco: per ogni voce la guardia vista ROSSA → tutte le riparazioni → UNA suite PC + Linux → CI → unione → deploy D17;
+- ogni difetto chiude la FAMIGLIA, non l'esemplare (METODO V4: si cercano i fratelli con un controllo meccanico);
+- poi la BUSTA CHIUSA A TRE su tutto il blocco 1; poi il GIRO DI TUTTI GLI ATTREZZI, una volta: i 10 collaudi (mutazione per
+  ultima), i 3 strati sopra (mutazione, simulazione deterministica con guasti, verifica matematica leggera), METODO V4 parte 12
+  «LA PORTA» sezione Soldi, le 44 della ricerca del 30/7 (ognuna col suo «si verifica»), il piano «livello bancario» di Kimi
+  (10 invarianti, crash dopo ogni effetto, gare a processi con barriere, mutazione, riconciliazione), le 23 verifiche delle
+  ricerche del fondatore e i 14 gruppi MONEY-CONTROLS; poi UNA sola misura delle 15 caselle del blocco 1;
+- a ogni voce chiusa, una riga: «Blocco 1: chiuse X su 26» (più le nuove).
+
+**👥 CHI FA COSA.** Claude COSTRUISCE (invariante, guardia rossa, riparazione minima, suite, PR) · Kimi ATTACCA (cerca come
+perdere soldi, non dà ragione) · GML VERIFICA (che il dichiarato sia stato eseguito davvero: file e registri, non «dovrebbe»).
+Kimi e GML solo in SOLA LETTURA; ⛔ non leggono da soli: il fondatore scrive loro «leggi il file». Compiti PICCOLI (una o due
+ore), risultati scritti a pezzi: il 25/10 un compito da 143 memorie ha tenuto Kimi fermo quasi quattro ore. Decide l'evidenza,
+mai «siamo d'accordo in tre». Canali: `Desktop\claude&kimi.txt` e `Desktop\claude&gml fhash.txt` (sono corrispondenza, non liste).
+
+**📚 I DOCUMENTI CHE VALGONO, una riga ciascuno** (tutto il resto è storia):
+- questo file: la lista e lo stato · `collaudi/piano.py` e `collaudi/scheda.py --blocco 1`: le caselle misurate (se si
+  contraddicono, vince la macchina);
+- `CLAUDE.md` le regole · `README.md` com'è fatta la macchina · `REGISTRO_INGEGNERIA.md` il diario · `DEPLOY.md` la messa online;
+- `collaudi/METODO_v4.md`: la cornice del lavoro (parti 2, 12, 18);
+- `Desktop\PIANO DI COLLAUDO DEFINITIVO - 15-10-2026.txt`: le fasi 0-14, voce per voce più sotto. ⚠️ La fase 14 si interrompe
+  a «Email di benvenu»: cercato il 25/10 in TUTTI i .md e .txt del computer, il resto non esiste da nessuna parte (le «Fase 14»
+  in `Desktop\PROVISORIA` sono di un altro progetto): si completa dalle email vere del codice, voce 113;
+- `Desktop\VERDETTO_V4_POTENZIATO.txt`: cosa mancava secondo i revisori (B1-B4 sono ora le voci 92, 112, 105, 104);
+- le ricerche del fondatore (memoria `reference-ricerche-del-fondatore`) e il portafoglio AWS (`bookinvip-ricerca-industriale`):
+  si usano nel giro degli attrezzi; quello che avevano di aperto è entrato qui;
+- la memoria di sessione: da oggi SOLO puntatori a questo file, mai una lista. `Desktop\METODO (1).md` è una copia superata del
+  METODO (vale quella in `collaudi/`).
+
+---
+
 ## 🌍 IL PIANO DEL FONDATORE PER DOPO IL VERDE — dettato il 22/10 (sessione 0e97b200)
 
 ⛔ **PRIMA IL VERDE, POI QUESTO** (parole sue: «prima tutto verde, poi gli host»): le caselle della
@@ -75,7 +133,7 @@ del fondatore del 15/8: solo codice deterministico); i soldi degli ospiti sul co
 
 > Il fondatore, 17/10: «UNISCI IN UN ELENCO SOLO, in RIPRENDI_QUI.md, la scaletta S0-S25 con le fasi 0-14 del mio PIANO DI COLLAUDO DEFINITIVO». Sotto: la tabella S (i passi, nell'ordine), poi le fasi 0-14 voce per voce (sezione «IL PIANO DEFINITIVO, VOCE PER VOCE»), poi i suoi documenti del Desktop. Un passo S e una voce P sono la stessa lista: ogni voce P dice in quale S si fa.
 
-### 🔢 1-90: TUTTO L'APERTO, IN UN ELENCO SOLO (scritto il 24/10, sessione 870a14a1; riletto a busta chiusa da Kimi, compito K8: 5 correzioni, e da GML, compito 29: 2 correzioni; tutte verificate sul codice ed entrate)
+### 🔢 1-136: TUTTO L'APERTO, IN UN ELENCO SOLO (1-90 scritte il 24/10, sessione 870a14a1; rilette a busta chiusa da Kimi, compito K8: 5 correzioni, e da GML, compito 29: 2 correzioni; tutte verificate sul codice ed entrate. 91-136 aggiunte il 25/10 dall'inventario delle memorie K11, da GML 32 sui documenti del Desktop e dalle caselle del 22/10)
 
 > Il fondatore, 24/10 ~13:40: «UN SOLO elenco [...] con TUTTO l'aperto di TUTTE le chat», «troppo casino così». Da qui: **ogni chat lavora SOLO su questo elenco e NON aggiunge paragrafi «APERTI»** in fondo al file. Una voce riparata si segna qui **«✅ RIPARATO (#PR)»** nello stesso commit della riparazione; una voce nuova si aggiunge qui, col numero dopo l'ultimo e la chat d'origine.
 
@@ -110,6 +168,13 @@ del fondatore del 15/8: solo codice deterministico); i soldi degli ospiti sul co
 24. **(S24 = pw1-r3)** (1) dopo la cancellazione dell'host il 200 di `_admin_rimborso` dice «non risulta pagata» davanti a «✅ Rimborsato.»; (2) il commento «la sessione di quattro mesi fa e' scaduta» in `test_escrow_gia_liquidato.py`; (3) `_host_cancella` con il giornale non scrivibile risponde 503 «registro_contabile_non_disponibile» DOPO aver gia' marcato la cancellazione (fase83_server.py:7666 marca, :7690 il 503; voluto e commentato: lo sweeper completa): l'host legge «riprova», ma riprovando riceve 409 `gia_cancellata`; la risposta deve dire che la cancellazione e' fatta (GML 27 punto 5, ricordato da GML 29 (e)). Origine: 16/10, Kimi e GML 24/10. APERTO (piccoli).
 25. Decisioni rimaste «per il fondatore» il 4/9: il ripensamento 48 ore (chiavi `rimborso_cosa_torna`/`rimborso_ripensamento`), il centesimo degli sconti (fase59) e i due punti di fase72 non uccidibili senza riscrittura. DA RIVERIFICARE (le 48 ore sono decise: memoria `bookinvip-ripensamento-48-ore`).
 89. **Ritenuta con il componente ASSENTE = bonifico intero.** `_opera_ritenuta` fa `if interruttore is None or not interruttore.attivo(): return True` (fase83_server.py:7175-7176, letto il 24/10): se il componente della ritenuta non c'e' (non caricato, guasto all'avvio) il bonifico all'host parte intero, mentre a interruttore acceso un guasto lo ferma (fail-closed, :7229-7233). Spento PER SCELTA (oggi in produzione, decide il commercialista) e' un'altra cosa: il difetto e' che «assente» e «spento» danno lo stesso esito. Una ritenuta non trattenuta la dobbiamo allo Stato noi. Origine: Kimi K4 (24/10), mancava nell'elenco (Kimi K8 (e)). APERTO.
+91. **La rampa 0/8/10% riparte da zero se l'host si cancella e si iscrive di nuovo**: promesso il riconoscimento del vecchio host (solo un'impronta antifrode) e la continuità della rampa. Origine: memoria `bookinvip-paga-in-struttura` righe 30-31 (inventario K11, Kimi, 25/10). DA RIVERIFICARE sul codice di oggi.
+92. **Riconciliazione: ogni notte e a TRE vie.** Oggi al massimo due vie (nostro giornale e Stripe; l'estratto della banca CAMT.053/MT940: grep 0); `fase182_riconciliazione.py` esiste ma nessun giro notturno con l'email anche quando va tutto bene (VERDETTO B1; ricerche del fondatore, verifiche 7 e 16). Origine: memoria `reference-ricerche-del-fondatore` righe 21 e 33, GML 32 (24/10). APERTO.
+93. **Pagamenti orfani**: nessun ricontrollo periodico da Stripe (PULL) per i pagamenti il cui webhook non è arrivato dopo la fine dei ritentativi di Stripe. Origine: memoria `bookinvip-premortem-backlog` righe 35-37 (K11 Kimi). DA RIVERIFICARE.
+94. Il giornale non porta ancora la parte escrow, credito e split (l'export certificato invece è fatto). Origine: memorie `bookinvip-financial-controller` righe 76-84 e `bookinvip-premortem-backlog` righe 22-27 (K11 Kimi). DA RIVERIFICARE.
+95. Il costo di Connect (circa 2 EUR al mese per host attivo) manca da `collaudi/conti_stripe.py`; alla cancellazione dell'host il suo conto Stripe non si chiude. Origine: memoria `bookinvip-deploy-160c2e3-20261002` riga 14 (K11 Kimi). DA RIVERIFICARE.
+96. Le decisioni del 4/9 che la voce 25 non nomina: i punti `fase106:59` e `fase125:24` sopravvissuti per costruzione (si riscrive la riga ridondante con «autorizzato») e `PAGAMENTO_BPS=0` dall'ambiente che porta la tariffa tecnica a zero senza rumore (fase98:91, oggi pinnato). Origine: righe di consegne più sotto in questo file («Decisioni del fondatore sui soldi, in un giro solo») e memoria `bookinvip-chat-a-2026-09-07-guardie-132` righe 15-23 (K11 Kimi). APERTO.
+97. Una riga fantasma `8a448a3a` nei rimborsi dovuti. Origine: memoria `bookinvip-deploy-6bac451-20261003` riga 18 (K11 Kimi). DA RIVERIFICARE.
 
 **B. PANNELLI CHE MOSTRANO SBAGLIATO I SOLDI** (non muovono soldi da soli, ma fanno prendere decisioni sbagliate)
 26. **(pw1-b)** quattro pulsanti dei SOLDI dell'admin perdono l'esito: «Lo pago io a mano» e «Storna penale» SUBITO (`auditApri` riscrive #sr_stat, admin.html ~503/~508), «Risolvi controversia» e «Restituisci» dopo 1,2 s (il setTimeout ricostruisce la lista); con loro i 3 di GML su «Rimborsa» (json() rotto letto come «rete»; vecchio esito visibile fino a 15 s durante `await carica()`; asserzioni deboli). Prova di «Restituisci» pronta FUORI dal progetto in `scratchpad\pw1b\admin_restituisci_browser.js` della sessione fcfe12fd (il finto Stripe deve RICORDARE i rimborsi; la prova deve esigere `gia_rimborsato===true` e un 200 al secondo invio). Origine: rilievo 1 del 24/10. APERTO.
@@ -123,6 +188,10 @@ del fondatore del 15/8: solo codice deterministico); i soldi degli ospiti sul co
 34. **Telegram** (il webhook vuoto e' stato riparato a mano in produzione il 22/10): (t1) nessun controllo automatico che l'url del webhook sia quello giusto (grep `setWebhook|getWebhookInfo` nel codice e negli script del 24/10: 0); (t2) il pannello host non mostra mai se Telegram e' collegato; (t3) `window.open` dopo una chiamata asincrona viene bloccato dal browser; (t4) prova vera «Approva da Telegram» (pagamento vero piccolo: decide il fondatore); (t5) nei registri del 29/9 nessuna traccia dell'avviso all'host. Origine: 22/10. APERTO.
 35. Catene del pannello admin (blocco 3 del piano): 20 rotte su 22 senza catena percorsa (tetto 20), compresa quella del pulsante «Lo pago io a mano» (debito nuovo del 21/10: fatta, il tetto torna a 19). Origine: 4/9 «PUNTO 1», 8/10, 21/10, 22/10. APERTO.
 36. **(g2)** una sessione del bunker scaduta conta come «guasto» nel Guardiano (7 su 8 stati anomali del 22/10, quasi certo il telefono del fondatore): dovrebbe mandare al login. Origine: 23/10. APERTO (da confermare col fondatore da dove veniva).
+98. **Il pannello host conta come incasso le prenotazioni MAI pagate**: `/api/host/metriche` `revenue_cents` cresce per un hold non pagato (20000 → 40000, misurato da `collaudi/esame_pannello_soldi.py`): fase58:583 somma `unita_occupate × prezzo` sul calendario, e l'hold occupa le notti prima del pagamento; ed è il lordo dell'ospite accanto al netto del mastro (16400). La casella del Blocco 7 resta ROSSA per questo. Origine: consegne più sotto in questo file e memoria `bookinvip-chat-a-2026-09-07-guardie-132` righe 20-21 (K11 Kimi, verificato da Claude 25/10). APERTO.
+99. Il pannello host deve mostrare «già collegato» anche per Stripe (la voce 34 copre Telegram, la 23 il ricontrollo al ritorno). Origine: memoria `bookinvip-consegne-20261022` riga 36 (K11 Kimi). APERTO.
+100. Il filtro «Max prezzo» confronta in EUR/centesimi anche con valute miste. Origine: memoria `bookinvip-host-panel` riga 51 (K11 Kimi). DA RIVERIFICARE.
+101. Voucher cancellato senza dire all'ospite rimborso e tempi; la chat voucher/host non si aggiorna da sola; «Ritrova prenotazione» con riferimento + PIN e la ricerca per nome dell'annuncio promesse. Origine: memoria `bookinvip-deploy-6bac451-20261003` riga 18 (K11 Kimi). DA RIVERIFICARE.
 
 **C. SICUREZZA E DATI**
 37. Leaflet da unpkg senza SRI (`integrity`) in deploy/index.html e host.html (grep del 24/10: 4 righe senza); scelta: copia locale; `deploy/` = produzione, serve «autorizzato». Origine: 18/10 (B). APERTO.
@@ -138,6 +207,13 @@ del fondatore del 15/8: solo codice deterministico); i soldi degli ospiti sul co
 46. Attrezzi gratis come SECONDA opinione, via Docker: trufflehog (con gitleaks), osv-scanner (con pip-audit), nuclei (con ZAP); poi dimensional-analysis, variant-analysis, insecure-defaults di Trail of Bits; e le skill installate e mai usate sui soldi (click-path-audit, production-audit, security-testing sulla copia Docker). Origine: rilievo 12 del 24/10, 18-19/10 (G). APERTO.
 47. Cambiare la chiave dell'admin NON chiude le sessioni gia' aperte (cookie `bv_admin` firmato), scritto il 21/9. DA RIVERIFICARE (D3 della #257 ha chiuso lo stesso buco per l'host).
 48. «Legal hold»: la cancellazione dei dati si ferma solo se la controversia e' aperta dentro il nostro sistema (fine agosto, regole GDPR/2220 c.c.). DA RIVERIFICARE.
+102. **(K3-4)** la CSP senza nonce: da misurare sulle intestazioni vere del sito. Origine: documenti del Desktop, GML 32 (24/10). APERTO.
+103. **(K3-2)** CORS `*`: va limitato, o documentato perché è sicuro. Origine: GML 32 (24/10). APERTO.
+104. **(VERDETTO B4)** il controllo privacy COMPLETO dei log (dati personali, gettoni, email in chiaro), non solo la parola password della voce 10. Origine: `Desktop\VERDETTO_V4_POTENZIATO.txt`, GML 32 (24/10). APERTO.
+105. **(VERDETTO B3)** la mappa delle minacce scritta (chi può attaccare, da dove, cosa protegge cosa), mai fatta. Origine: VERDETTO, GML 32 (24/10). APERTO.
+106. `fail2ban` assente sul VPS (vale poco: la password è spenta) e il repository era PUBBLICO su GitHub: da rimisurare. Origine: memoria `bookinvip-server-accetta-password` righe 62 e 72 (K11 Claude, 25/10). DA RIVERIFICARE.
+107. `_puo_azione` fail-open se l'import fallisce. Origine: memoria `bookinvip-metodo-chirurgico` righe 224-226 (K11 Kimi). DA RIVERIFICARE.
+108. **Obbligo «contattaci»** (deciso il 22/10): pagina contatti e punto di contatto del DSA (artt. 11-12), segnalazione degli illeciti (art. 16), dati del D.Lgs. 70/2003 art. 7. Origine: memoria `bookinvip-piano-innovazioni-20261022` (rimasta fuori da E1, trovata il 24/10 sera). APERTO.
 
 **D. PRENOTAZIONI, DATE E ORE**
 49. Caccia alle varianti di DATE-311: 48 letture `fromisoformat` in fase*.py (grep del 24/10: 48), fra cui `fase187_fuso_orario.py` `_istante_checkin`; anche `datetime` (CPython #115783, #155175). Strumento: skill variant-analysis. Origine: 19/10. APERTO.
@@ -150,6 +226,9 @@ del fondatore del 15/8: solo codice deterministico); i soldi degli ospiti sul co
 56. **(S0, ap)** sulla copia Docker il pagamento consegnato dal banco non conferma la prenotazione («evento senza identificativo»); poi P0.13-0.17 (15 giri) e P0.18-0.20. Origine: 15/10. APERTO.
 57. **(S20, S21, S23)** le 14 righe 401 dei server del carico mai lette; Stripe Checkout sulla PAGINA VERA con le carte di prova e il 3D Secure (P1.10-1.22); interruzioni e riavvii a meta' pagamento/rimborso/bonifico/arbitro. Origine: 15/10. APERTO.
 58. **(q)** in `_cancella_prenotazione` i giorni della politica si contano dall'ora VERA e il preventivo dal SUO orologio: nelle prove col preventivo fermo non coincidono. Origine: 10/10. APERTO.
+109. **Doppia prenotazione: il giudice deve essere il DATABASE**, non solo un `if` nell'applicazione (vincolo UNIQUE o transazione IMMEDIATE sulle notti): da verificare sul codice (le gare dei 24 agenti erano verdi, ma questo non lo dicono). Origine: memoria `reference-ricerche-del-fondatore` riga 19, verifica 5 (K11 Claude, 25/10). APERTO.
+110. Il calendario vende un giorno oltre la disponibilità; il preventivo non confronta ospiti e capienza; le valute a tre decimali non sono trattate. Origine: memoria `bookinvip-metodo-chirurgico` righe 216-226 (K11 Kimi). DA RIVERIFICARE.
+111. Una prova pulita che la modalità «su richiesta» blocchi le date e mostri la prenotazione all'host. Origine: memoria `bookinvip-host-panel` righe 46 e 49 (K11 Kimi). DA RIVERIFICARE.
 
 **E. PROVE, ATTREZZI, CI E SORVEGLIANZA**
 59. Caselle da 33 (01a9c8c) a 28: cinque SCADUTE per r2/r2-bis (esame_produzione ogni-ora, esame_rimborsi, esame_riconciliazione, mutazione del percorso del denaro, esame_backup); `scheda.py --cricchetto` le dichiara senza fermare: si rimisurano. Comprende le «17 rimisure» delle consegne 41. Origine: rilievo 11 del 24/10. APERTO.
@@ -171,6 +250,16 @@ del fondatore del 15/8: solo codice deterministico); i soldi degli ospiti sul co
 75. **(ae) (af) (ag)** conti host con `/v1/accounts` (Stripe dice Accounts v2), «host pronto» = `payouts_enabled` (campo v1), codice SPENTO di «destination charge» in fase101 non adatto alla garanzia. Origine: 14/10. APERTO.
 76. Python 3.11.17 (1/10, falle ssl/tarfile/zipfile/urllib/IDNA): il server e' 3.11.16; aggiornare l'immagine e' una PR con «autorizzato». Origine: 22/10. APERTO.
 77. Nessuno ha mai misurato se le email dell'APPLICAZIONE arrivino al fondatore (3/9); gli avvisi di UptimeRobot vanno a una Gmail piena (17/10). APERTO.
+112. **(VERDETTO B2, FINITO punto 6)** un ripristino DA ZERO cronometrato, su una macchina vuota, seguendo SOLO `DEPLOY.md`, fatto da chi non conosce il progetto (gratis: Kimi o GML che leggono e dicono dove il testo non basta); il ripristino isolato già fatto non lo copre. Origine: VERDETTO, GML 32, memoria `bookinvip-premortem-backlog` righe 38-40 (K11 Kimi). APERTO.
+113. **La fase 14 del piano del fondatore (email e notifiche)** si interrompe a «Email di benvenu» e il resto non esiste in nessun file (cercato il 25/10): Claude la completa dalle email che il codice manda davvero, Kimi attacca, GML verifica. Origine: GML 32 e ricerca del 25/10. APERTO.
+114. Cinque giudici di Stripe non sono automatici; le prove sono solo in EUR, la misura in JPY mai eseguita. Origine: memoria `bookinvip-casella3-premessa-sbagliata` righe 74-90 (K11 Kimi). DA RIVERIFICARE.
+115. `gstack-canary` promesso dopo ogni deploy (la voce 46 non lo nomina). Origine: memoria `bookinvip-consegne-20261022` riga 35 (K11 Kimi). APERTO.
+116. Playwright planner/generator/healer sulla copia per i quattro pannelli (insieme alla voce 27). Origine: memoria `bookinvip-piano-innovazioni-20261022` riga 14 (K11 Kimi). APERTO.
+117. Le quote dei 4 livelli mai scritte qui: MC/DC, 100.000 sequenze, guasti di RAM e disco, 12 ore di carico continuo, isolamento fra host sotto carico. Si confrontano col piano 0-14 e col FINITO: si fa quello che è gratis. Origine: memoria `bookinvip-programma-4-livelli` righe 34-58 (K11 Kimi). DA RIVERIFICARE.
+118. **Audit delle librerie che BLOCCA** e dipendenze con impronta (hash), deciso il 22/10 (in parte è la voce 45). Origine: memoria `bookinvip-piano-innovazioni-20261022`. APERTO.
+119. «casa-test» da sospendere davvero e `raccogli_letture.py` (GML 32; con la voce 84). APERTO.
+120. Una CI uscita con `exit 135`/SIGBUS mai spiegata. Origine: memoria `bookinvip-deploy-d0ade67-20261001` riga 18 (K11 Kimi). DA RIVERIFICARE.
+121. Attrezzi promessi e mai fatti: la scheda autonoma del Giudice con le tre uscite (la voce 63 copre solo il `--diff`), la skill `/riprendi`, `deploy/hooks/* text eol=lf` nel `.gitattributes`, il recupero del parcheggio dell'onda 2. Origine: memorie `bookinvip-piano-dieci-pezzi`, `bookinvip-prevolo-guardia-sul-lavoro`, `bookinvip-metodo-chirurgico` (K11 Kimi). DA RIVERIFICARE.
 
 **F. SOLO IL FONDATORE** (strategia, soldi veri, segreti: si portano uno alla volta)
 78. **(A del 18/10)** le pagine /affitta/ si confrontano con un'OTA al 25%: Airbnb prende all'host 15,5%; sotto i 50 EUR a notte costiamo piu' di Airbnb; tocca la regola «da noi deve costare meno». Un confronto in piu' (letto il 24/10 su richiesta del fondatore, www.dolcebot.com): DolceBot S.R.L. (Milano) NON e' un sito di prenotazione, gestisce per l'host le case che restano su Booking/Airbnb (channel manager, assistente IA «Maya» su WhatsApp/Booking/Airbnb, serrature, Alloggiati Web, cedolare secca) e prende «il 6% del fatturato al netto delle commissioni OTA», cioe' IN PIU' dell'OTA: per un host il costo vero di quella strada e' OTA + 6%. Non e' un concorrente diretto; puo' essere un canale. APERTO.
@@ -181,13 +270,30 @@ del fondatore del 15/8: solo codice deterministico); i soldi degli ospiti sul co
 83. **(aa) (ab)** il menu dell'host promette «24h», il motore conta giorni di calendario; il paga-in-struttura usa un'altra penale (prima notte): una regola sola o due? (ac) il README non nomina le 4 politiche. APERTO.
 84. Le altre decisioni ⚖️: un credito/voucher piu' grande del totale oggi perde il resto (5/10); B4 la commissione sul rimborso pieno; chi perde quando vince la banca (3); le voci ⚖️ del piano qui sotto (P3.29, P3.35-36, P4.5, P4.13, P4.16, P4.20-21, P4.29-30, P5.5, P5.9-5.12, P6.7, P6.26-27); il cambio date e il cambio ospiti non esistono (P8.20-8.23); «casa-test» (sospesa il 18/10) col prezzo vero o nascosta. APERTO.
 85. Il pannello host ha 27 sezioni con doppioni (2 chat, 3 calendari, 2 elenchi alloggi): cosa nascondere (Telegram resta); la proposta corta sugli agenti AI fuori da soldi e serrature (H del 19/10); IL PIANO PER DOPO IL VERDE in cima al file. APERTO (dopo il verde).
+122. **Contratto e 48 ore**: il contratto, i termini e il README non dicono che il calendario si blocca ALLA PRENOTAZIONE (prima del pagamento) né che anche `non_rimborsabile` rimborsa dentro la finestra; la FAQ della landing è incoerente; la finestra deve dipendere dal paese dell'alloggio, resta la domanda legale sul Brasile. Origine: memoria `bookinvip-ripensamento-48-ore` righe 23-44 (K11 Kimi, verificato da Claude 25/10: in questo elenco c'era solo la decisione, voce 25). APERTO (avvocato, voce 79).
+123. **Dati fiscali dell'host**: (D23) il codice fiscale non lo verifica nessuno, chi non ha una partita IVA dell'UE ha solo il documento guardato dall'admin; la frase del contratto «i dati fiscali sono veri, se falsi ritenute e sanzioni sono a carico dell'host» (versione nuova, il fondatore ri-accetta); (D24) la scheda per paese: un paese si apre solo con le sue regole. Origine: consegne 24-25 più sotto in questo file e memoria `bookinvip-prova-vera-20260929` riga 19 (K11 Claude, 25/10; la voce 87 cita solo D1-D22). APERTO.
+124. **Commercialista**, una lista sola: con il pagamento diretto all'host (direct charge) la ritenuta resta?; IVA e autofattura sulle fatture di Stripe, la soglia degli 85.000 EUR, il codice ATECO. Origine: memorie `bookinvip-prova-vera-20260929` riga 19 e `bookinvip-piano-fondatore-asia` riga 17 (K11). APERTO.
+125. **(K3-1)** `/api/mcp` risponde senza autenticazione: si chiude o si dichiara pubblico (cosa espone). Origine: GML 32 (24/10). APERTO.
+126. I 63 moduli SPENTI: quali si accendono, quali si tolgono (spento non è morto: memoria `bookinvip-morti-o-solo-spenti`). Origine: `Desktop\63_MODULI_SPENTI.txt`, GML 32. APERTO.
+127. **Segreti fuori posto**: tre file di chiavi in chiaro sul Desktop (OpenRouter, Stripe di prova, conto Connect di prova) e le password dell'admin e del Bunker apparse in chat da cambiare (distinto dalla voce 47). Origine: GML 32 e memoria `bookinvip-bunker-field` righe 71-73 (K11 Kimi). APERTO (gesto del fondatore).
+128. Il convertitore delle valute (fase99) è spento perché manca `OXR_APP_ID`: si dà la chiave o lo si spegne per sempre. Origine: memorie `bookinvip-da-fare-lingue-valute` righe 72-80 e `bookinvip-deploy-truth` righe 60-64 (K11 Kimi). APERTO.
+129. **Invio dei dati alle autorità, Reg. UE 2024/1028** (Blocco 5; il fondatore il 22/10: «segnala anche questo come casella»; il CIN è già fatto). Origine: memoria `bookinvip-piano-innovazioni-20261022`. APERTO.
+130. **Le recensioni solo da chi ha soggiornato, fino alla pagina** (Blocco 6, 22/10); la risposta dell'host alle recensioni è una funzione nuova: DOPO IL FINITO. Origine: memoria `bookinvip-piano-innovazioni-20261022`. APERTO.
+131. Lo sconto del 12% nel preventivo firmato e la clausola di forza maggiore e di posizione dell'host. Origine: memoria `bookinvip-cancellazione` riga 26 (K11 Kimi). DA RIVERIFICARE.
+132. Strategia di lancio e pagamenti: partire da una zona sola; lo «Scatto 3» (SetupIntent, carta dell'host); un secondo server; la scelta del servizio di pagamento (`on_behalf_of`, Mangopay o Lemonway, IVASS). Origine: memorie `bookinvip-audit-esterno-20261018` riga 24, `bookinvip-bunker-field` righe 24-25, `bookinvip-financial-controller` righe 72-75, `bookinvip-deploy-160c2e3-20261002` righe 18-21 (K11 Kimi). DA RIVERIFICARE (strategia).
+133. Il connettore Stripe di claude.ai (OAuth): si autorizza o no (potrebbe non essere di sola lettura). Origine: memoria `bookinvip-piano-innovazioni-20261022` riga 16 (K11 Kimi). APERTO.
 
 **G. STORICO DI AGOSTO-SETTEMBRE, DA RIVERIFICARE** (scritto «aperto» allora, mai rimisurato da allora: si guarda quando si arriva al suo blocco e si chiude con la misura o si sposta sopra)
 86. Sezioni in fondo al file: B2-B11 del 22-23/8 (chiavi provvisorie, rimborso mai provato con soldi veri, fase59 mai giudicato, oracolo sul payout, riconciliazione contro se stessa, B8 la homepage, B11 «nessuno somma»); B24-B31 del 27-28/8 (la «seconda copia» della regola dei soldi e' gia' la voce 22); B36-B37 del 29-30/8 (la classificazione delle email dovute, l'email senza `@`, dove vanno gli esiti); il passaggio del 29/8 e il «COSA RESTA APERTO» della bomba a tempo; il pezzo 3 di B1 (una casella prezzo sola) e il confine dei 100 km in fase83 (4/9); il promemoria 7 e la PARTE 20 del METODO; le PR di Dependabot #190/#191 (python 3.14); le caselle del 23-25/9 (plausibilita', rimborsi, webhook-caselle). Molte sono quasi certamente chiuse da lavori successivi (per esempio il rimborso vero del 3/10, il Giudice verde sul blocco 1): finche' non c'e' la misura restano qui.
 87. Consegne 23-29 (29/9-1/10): i difetti della prova vera D1-D22 rimasti aperti dopo C16 (D6, D9+D17, D10, D19), il check-in online (1) e (3) «APERTO, prima di accendere» (il check-in e' spento), «senza `oggi`» nella rotta della questura (GML), l'elenco dei paesi aperti, la decisione sui prezzi dell'8/9, «expire» della Checkout Session aperta, il tetto 500 di `blocchi_aperti`, la prova vera Satispay a 48 ore (consegne 37). DA RIVERIFICARE.
 88. (I del 19/10) GML senza token per il pagamento z.ai: SUPERATO (GML lavora su GLM-5.3 Flash dal 23/10); resta solo il reset del pieno al 26/10.
+134. I termini dell'ospite tradotti e verificati in 8 lingue ma mai messi in pagina. Origine: memoria `bookinvip-deploy-d5ed231-20261003` riga 18 (K11 Kimi). DA RIVERIFICARE.
+135. 1.034 parole e 78 voci del pannello host che ricadono sull'inglese (la voce 68 copre solo le 13 traduzioni della tariffa). Origine: memoria `bookinvip-da-fare-lingue-valute` righe 47-59 (K11 Kimi). DA RIVERIFICARE.
 
-**✅ GIA' RIPARATI** (erano scritti «aperti» in qualche paragrafo qui sotto; si chiudono qui col numero della PR unita, letto dalla storia di git il 24/10): V1 POST /api/messaggi di una prenotazione altrui (P9.31-9.39, P10.45) — **RIPARATO (#252)** · D2 prove foto pubbliche — **(#254)** · V2, V3, V4 — **(#256)** · D3, B1-1/2/4/5/7/9/10 — **(#257)** · lotto D: (c) date passate in vendita, (a) foto verso indirizzi interni, (b) «24h» nel link scaduto — **(#258)** · (h) (i) (j) bombe a tempo e verdi finti — **(#259)** · difetto A, Compito 41 (`source_transaction`), D1 e D2 dei bonifici, (m1) (m2) — **(#260)** · Compito 38 doppio conteggio del pagamento manuale — **(#249)** · F1, F2, (ad), (p) i pulsanti della garanzia prima dell'arrivo — **(#262)** · (al), (aq), S4 parte del pulsante, S18 — **(#263)** · S25 rimborso dell'anticipo nel paga-in-struttura — **(#265)** · le pagine /affitta/ senza la tariffa tecnica — **(#266)** · DATE-311 (e il debito su 3.11) — **(#267)** · A19 esito sconosciuto del bonifico — **(#268)** · R1, R3, RV1, RV2, la conferma del pagamento a mano in «€» — **(#269)** · (c1) sentinella con la chiave, (c2) traccia dello scambio D17 — **(#270)** · i 30 sopravvissuti del blocco 2 e (r1) — **(#271)** · (r2) — **(#272)** · (t1) l'orologio delle prove — **(#273)** · (r2-bis) — **(#274)** · (pw1-a) «Rimborsa» nel browser e i rilievi 2, 4, 5, 6 di Kimi K1 — **(#275)**. Chiusi con la misura (non erano difetti): (g) gli «unable to open database file» (solo il PC), la CI rossa del 22/10 (rete di un runner), Telegram «APERTO» di GML del 6/10 (il segreto c'era), (d) delle consegne 38 (le impronte dei file nascosti, chiuso l'8/10). Riparato a mano in produzione senza PR: il webhook di Telegram vuoto (22/10; il controllo automatico e' la voce 34).
+**DOPO IL FINITO** (funzioni nuove o strategia: fuori dal perimetro dei 7 punti, si aprono solo a FINITO consegnato, una alla volta, col fondatore)
+136. Dall'inventario K11 (25/10), in un posto solo: i canali video e social e la loro rotazione (YouTube, Instagram Business, TikTok, Bluesky, Reddit, Hugging Face, LINE, Zalo, Viber; memorie `bookinvip-ai-rotazione`, `bookinvip-marketing`, `bookinvip-campagna-lancio`); i connettori dormienti (Sentry, cache, Cloudflare/WAF, SendGrid, OpenTelemetry; `bookinvip-connettori-dormienti`); la chat della home con la voce che traduce la domanda in una ricerca vera; GML sorvegliante continuo in sola lettura; i costi WhatsApp prima di accendere WABA; l'esenzione microimpresa dall'Accessibility Act da far confermare; PSD3/PSR/SCA e l'esenzione «agente commerciale»; prenotare da Google (UCP/AI Mode), ChatGPT e un MCP pubblico di ricerca, col pagamento sempre sul checkout di Stripe (tutte `bookinvip-piano-innovazioni-20261022`); i motori Affitti/Ville/Business su quattro domini (`bookinvip-motori-multi`); la risposta dell'host alle recensioni (voce 130); IL PIANO DEL FONDATORE PER DOPO IL VERDE in cima al file.
+
+**✅ GIA' RIPARATI** (erano scritti «aperti» in qualche paragrafo qui sotto; si chiudono qui col numero della PR unita, letto dalla storia di git il 24/10): V1 POST /api/messaggi di una prenotazione altrui (P9.31-9.39, P10.45) — **RIPARATO (#252)** · D2 prove foto pubbliche — **(#254)** · V2, V3, V4 — **(#256)** · D3, B1-1/2/4/5/7/9/10 — **(#257)** · lotto D: (c) date passate in vendita, (a) foto verso indirizzi interni, (b) «24h» nel link scaduto — **(#258)** · (h) (i) (j) bombe a tempo e verdi finti — **(#259)** · difetto A, Compito 41 (`source_transaction`), D1 e D2 dei bonifici, (m1) (m2) — **(#260)** · Compito 38 doppio conteggio del pagamento manuale — **(#249)** · F1, F2, (ad), (p) i pulsanti della garanzia prima dell'arrivo — **(#262)** · (al), (aq), S4 parte del pulsante, S18 — **(#263)** · S25 rimborso dell'anticipo nel paga-in-struttura — **(#265)** · le pagine /affitta/ senza la tariffa tecnica — **(#266)** · DATE-311 (e il debito su 3.11) — **(#267)** · A19 esito sconosciuto del bonifico — **(#268)** · R1, R3, RV1, RV2, la conferma del pagamento a mano in «€» — **(#269)** · (c1) sentinella con la chiave, (c2) traccia dello scambio D17 — **(#270)** · i 30 sopravvissuti del blocco 2 e (r1) — **(#271)** · (r2) — **(#272)** · (t1) l'orologio delle prove — **(#273)** · (r2-bis) — **(#274)** · (pw1-a) «Rimborsa» nel browser e i rilievi 2, 4, 5, 6 di Kimi K1 — **(#275)**. Chiusi con la misura (non erano difetti): (g) gli «unable to open database file» (solo il PC), la CI rossa del 22/10 (rete di un runner), Telegram «APERTO» di GML del 6/10 (il segreto c'era), (d) delle consegne 38 (le impronte dei file nascosti, chiuso l'8/10), (K3-3) le versioni vecchie di TLS (24/10, `openssl s_client` dal VPS: TLS 1.0 e 1.1 ricevono «alert protocol version»). Riparato a mano in produzione senza PR: il webhook di Telegram vuoto (22/10; il controllo automatico e' la voce 34).
 
 Parole del fondatore (15/10, sessione b625d383): «qua ci dimentichiamo sempre tutto, bisogna salvare tutto, fare una scaletta, finita una cosa si parte con un'altra, con un'altra, con un'altra, e tenere sempre un file [...] con l'ID, cosa abbiamo fatto, cosa, risultati, così lo terminiamo, facciamo un capolavoro»; e prima: «dobbiamo scrivere tutto bene nel libro, tutto, e poi metterci al lavoro per terminare questo software, insieme a tutti i test [...] controllare se i moduli sono attivi [...] dobbiamo terminarlo entro 10 giorni».
 
@@ -3934,7 +4040,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: d1b0d50
+CONSEGNE AGGIORNATE A: 7d62217
 
 - ⛔ DECISIONE DEL METODO (8/10, presa da Claude come progettista su delega esplicita del fondatore: «Questo lo devi decidere tu [...] Dobbiamo terminare e correggere ogni singola cosa»). Le caselle scadevano perche' si misurava PRIMA di aver finito di riparare, e rimisurare era a mano. Da qui in poi, TRE REGOLE:
   1. UN BLOCCO ALLA VOLTA, in quest'ordine: caccia completa -> TUTTE le riparazioni confermate, a lotti (piu' riparazioni sotto UNA suite) -> UNA sola misura delle caselle. Non si rimisura un blocco che ha ancora difetti noti aperti.
