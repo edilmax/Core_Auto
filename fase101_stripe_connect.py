@@ -14,7 +14,7 @@ import logging
 import urllib.parse
 from typing import Any, Callable, Dict, List, Optional
 
-from fase85_pagamenti_stripe import _motivo_errore
+from fase85_pagamenti_stripe import _esito_sconosciuto, _motivo_errore
 
 logger = logging.getLogger("core_auto.stripe_connect")
 
@@ -35,22 +35,6 @@ def _importo_per_registro(minori: int, valuta: str) -> str:
         return Denaro(minori, str(valuta).upper()).formatta()
     except (TypeError, ValueError):
         return "%r unita' minori di %r" % (minori, valuta)
-
-
-def _esito_sconosciuto(exc: BaseException) -> bool:
-    """⛔ PILASTRO ZERO (19/10/2026). Una chiamata a Stripe finita in errore ha l'esito SCONOSCIUTO
-    -- puo' essere stata ESEGUITA -- salvo un rifiuto certo: una risposta 4xx, tranne 409 (la
-    stessa chiave e' ancora in lavorazione). Timeout, connessione caduta, 5xx e una risposta che
-    non si legge restano sconosciuti (docs.stripe.com/error-low-level, letta il 19/10/2026:
-    «Considera indeterminato l'esito di una richiesta che restituisce 500»). Il codice si legge
-    da `code` come fa la diagnostica di `_post` (l'HTTPError vero e gli errori finti delle prove),
-    dentro un `try`: nel dubbio e' sconosciuto, perche' un rifiuto inventato fa pagare due volte."""
-    try:
-        codice = getattr(exc, "code", None)
-        return not (isinstance(codice, int) and not isinstance(codice, bool)
-                    and 400 <= codice < 500 and codice != 409)
-    except Exception:
-        return True
 
 
 def costruisci_params(prezzo_guest_cents: int, application_fee_cents: int,
