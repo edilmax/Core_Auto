@@ -1669,10 +1669,18 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
         self.addCleanup(self._pulisci_stripe_finto)
         STRIPE_FINTO["stato_rimborso"] = "pending"
         rif, _ = self._cancella_da_ospite("2026-09-11", "2026-09-13", "pi_pacco1_p")
-        s, res = self.g("POST", "/api/admin/rimborsa_dovuto", {"riferimento": rif},
-                        {"X-Admin-Key": "ak"})
+        with self.assertLogs(level="ERROR") as reg:
+            s, res = self.g("POST", "/api/admin/rimborsa_dovuto", {"riferimento": rif},
+                            {"X-Admin-Key": "ak"})
+        # il registro porta il re_ (mutante #279, :5688): chi lo rilegge sa quale rimborso seguire
+        righe = [r for r in reg.output if "RIMBORSO DOVUTO IN_LAVORAZIONE" in r]
+        rid_log = STRIPE_FINTO["rimborsi_per_pi"]["pi_pacco1_p"][0]["id"]
+        self.assertTrue(righe and ("stripe=" + rid_log) in righe[0], reg.output)
         self.assertEqual((202, "in_lavorazione"), (s, (res or {}).get("stato")),
                          "un rimborso NON ancora restituito detto restituito: %s %r" % (s, res))
+        # il re_ di Stripe resta nella risposta: e' l'unico modo di ritrovarlo (mutante #279, :5690)
+        rid = STRIPE_FINTO["rimborsi_per_pi"]["pi_pacco1_p"][0]["id"]
+        self.assertEqual(rid, res.get("stripe_refund_id"), res)
         riga = self._riga(self._lista(), rif)
         self.assertIsNotNone(riga, "la riga e' sparita dalla lista con i soldi ancora in viaggio")
         self.assertIn("rimborso_in_corso", riga.get("manca") or [], riga)
@@ -1704,9 +1712,61 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
         self.assertTrue(str(res.get("rimborso_stripe") or "").startswith("IN LAVORAZIONE"),
                         "il pannello dice eseguito un rimborso che Stripe non ha ancora fatto: %r"
                         % (res,))
+        # e porta il re_ da seguire (mutante #279, :5306)
+        rid = STRIPE_FINTO["rimborsi_per_pi"]["pi_pacco1_a"][0]["id"]
+        self.assertIn(rid, res.get("rimborso_stripe"), res)
+        # Kimi K12 sulla #279: l'attesa si legge anche da un campo, non solo da una frase
+        self.assertIs(res.get("rimborso_in_attesa"), True, res)
         riga = self._riga(self._lista(), rif)
         self.assertIsNotNone(riga, "la lista dei rimborsi dovuti deve seguire quel rimborso")
         self.assertIn("rimborso_in_corso", riga.get("manca") or [], riga)
+
+    def test_PACCO1_bonifico_all_host_IN_TRANSITO_ferma_il_rimborso_dovuto(self):
+        """Kimi K12 sulla #279: un bonifico riuscito scrive 'in_transito' e nessuno in produzione
+        scrive mai 'pagato' (voce 17): il freno 3 guardava solo 'pagato', quindi con l'host gia'
+        pagato il pulsante rimborsava anche l'ospite. Lo stato si costruisce come lo scrive il
+        bonifico vero (`trattenuto -> in_transito`), non con un 'pagato' che il prodotto non usa."""
+        rif, _ = self._cancella_da_ospite("2026-09-23", "2026-09-25", "pi_pacco1_tr")
+        self.assertTrue(self.sys.payout.aggiorna_stato(rif, "in_transito"), "setup")
+        riga = self._riga(self._lista(), rif)
+        self.assertIsNotNone(riga, "setup: la riga dev'essere in lista")
+        self.assertIn("payout_gia_pagato", riga.get("manca") or [], riga)
+        self.assertFalse(riga.get("bottone"), riga)
+        s, res = self.g("POST", "/api/admin/rimborsa_dovuto", {"riferimento": rif},
+                        {"X-Admin-Key": "ak"})
+        self.assertEqual(s, 409, res)
+        self.assertEqual(self._rimborsi_inviati(), [],
+                         "DOPPIO ESBORSO: host gia' pagato e ospite rimborsato")
+
+    def test_PACCO1_un_rimborso_PARZIALE_non_e_un_rimborso_fatto(self):
+        """Kimi K12 sulla #279: «gia' rimborsato» voleva dire «almeno un centesimo»: 40 restituiti
+        su 100 dovuti toglievano la riga e i 60 sparivano. E con 40 riusciti + 60 in corso il
+        pending non teneva la riga. Ora: restituito solo se copre il dovuto."""
+        rif, _ = self._cancella_da_ospite("2026-09-26", "2026-09-28", "pi_pacco1_pz")
+        dovuto = int(self._riga(self._lista(), rif)["dovuto_cents"])
+        self.addCleanup(self._pulisci_stripe_finto)
+        STRIPE_FINTO["rimborsi_per_pi"]["pi_pacco1_pz"] = [
+            {"id": "re_parte", "status": "succeeded", "amount": dovuto * 2 // 5}]
+        riga = self._riga(self._lista(), rif)
+        self.assertIsNotNone(riga, "un rimborso parziale ha tolto la riga: il resto sparisce")
+        self.assertIn("rimborso_parziale", riga.get("manca") or [], riga)
+        self.assertFalse(riga.get("bottone"), "la chiave e' la stessa: ripremere non da' il resto")
+        STRIPE_FINTO["rimborsi_per_pi"]["pi_pacco1_pz"].append(
+            {"id": "re_resto", "status": "pending", "amount": dovuto - dovuto * 2 // 5})
+        riga = self._riga(self._lista(), rif)
+        self.assertIsNotNone(riga, "riuscito + in corso: la riga deve restare finche' Stripe decide")
+        self.assertIn("rimborso_in_corso", riga.get("manca") or [], riga)
+
+    def test_PACCO1_un_rimborso_PENDING_su_una_prenotazione_VIVA_e_una_divergenza(self):
+        """Stripe sta restituendo soldi su una prenotazione che per noi e' ancora pagata e viva:
+        anche se non e' ancora 'succeeded' i conti divergono (mutante #279, :5581)."""
+        self.addCleanup(self._pulisci_stripe_finto)
+        rif, _ = self._prenota_e_paga("2026-09-20", "2026-09-22", "pi_pacco1_v")
+        STRIPE_FINTO["rimborsi_per_pi"]["pi_pacco1_v"] = [
+            {"id": "re_fuori_da_noi", "status": "pending", "amount": 5000}]
+        allarmi = self._lista().get("allarmi") or []
+        self.assertIn(rif, [a.get("riferimento") for a in allarmi],
+                      "un rimborso in corso su una prenotazione viva non e' segnalato: %r" % allarmi)
 
     def test_FRENO_IL_PULSANTE_PREMUTO_DUE_VOLTE_NON_RIMBORSA_DUE_VOLTE(self):
         """Freno 2: chiave d'idempotenza stabile. Rete che cade o doppio clic non raddoppiano.

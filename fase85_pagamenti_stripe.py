@@ -361,8 +361,12 @@ class ProviderStripe:
                 return {"ok": False, "id": rid, "motivo": str(stato or "senza_stato"),
                         "in_corso": stato not in ("failed", "canceled")}
             # Non e' un'eccezione: Stripe ha risposto qualcosa che non e' un rimborso.
-            # Va detto per intero, non ridotto a un booleano.
-            return {"ok": False, "id": "", "motivo": "risposta_inattesa: %r" % (resp,)}
+            # Va detto per intero, non ridotto a un booleano. E una risposta che non so leggere
+            # NON prova che il rimborso non sia partito (Kimi K12 sulla #279): e' sconosciuto,
+            # salvo l'oggetto `error` di Stripe, che e' un rifiuto certo (come fase101).
+            return {"ok": False, "id": "", "motivo": "risposta_inattesa: %r" % (resp,),
+                    "sconosciuto": not (isinstance(resp, dict)
+                                        and isinstance(resp.get("error"), dict))}
         except Exception as exc:
             logger.error("Stripe: RIMBORSO FALLITO pi=%s importo=%r -> %s: %s",
                          payment_intent, importo_cents, exc.__class__.__name__, exc,

@@ -254,6 +254,13 @@ class TestIBuchiDelGiudice(unittest.TestCase):
                 self.assertIs(esito["ok"], False)                                   # 165
                 self.assertEqual(esito["id"], "")
                 self.assertTrue(esito["motivo"].startswith("risposta_inattesa"), esito)   # 160
+                # Kimi K12 sulla #279: una risposta che non so leggere NON prova che il rimborso
+                # non sia partito: e' un esito sconosciuto, mai «rifallo a mano»
+                self.assertIs(esito.get("sconosciuto"), True, esito)
+        # l'unico rifiuto certo in una risposta letta: l'oggetto `error` di Stripe
+        esito = _p(FetchFinto({RIMBORSI_URL: {"error": {"code": "charge_disputed"}}})).rimborsa(
+            "pi_1", 2500, "k")
+        self.assertEqual((esito["ok"], esito.get("sconosciuto")), (False, False), esito)
 
     def test_riga199_215_rimborsi_di_conta_solo_i_rimborsi_VIVI_e_distingue_non_lo_so_da_zero(self):
         f = FetchFinto({RIMBORSI_URL: {"data": [
@@ -783,6 +790,17 @@ class TestRimborsaDistingueRifiutoDaEsitoSconosciuto(unittest.TestCase):
                 self.assertIs(esito["ok"], False)
                 self.assertIs(esito.get("sconosciuto"), True,
                               "%r: un timeout NON dice che il rimborso non e' partito: %r" % (exc, esito))
+
+    def test_un_errore_il_cui_codice_non_si_legge_e_sconosciuto(self):
+        # fase85 `_esito_sconosciuto`, ramo `except`: nel dubbio e' sconosciuto (mutante del
+        # gate sulla #279: `return True` -> `return False` sopravviveva)
+        class _CodiceIlleggibile(Exception):
+            @property
+            def code(self):
+                raise RuntimeError("codice illeggibile")
+        with self.assertLogs("core_auto.pagamenti_stripe", level="ERROR"):
+            esito = _p(FetchFinto(solleva=_CodiceIlleggibile("x"))).rimborsa("pi_1", 2500, "k")
+        self.assertIs(esito.get("sconosciuto"), True, esito)
 
     def test_un_4xx_e_un_rifiuto_certo(self):
         for code in (400, 402, 404):

@@ -5332,6 +5332,9 @@ class RouterHTTP:
                      "idempotente": bool(getattr(e, "idempotente", False)),
                      "passi_falliti": _falliti,
                      "rimborso_stripe": _rimborso,
+                     # Kimi K12 sulla #279: l'attesa di Stripe in un campo, non solo in una frase
+                     "rimborso_in_attesa": _rimborso.startswith(("IN LAVORAZIONE",
+                                                                 "ESITO SCONOSCIUTO")),
                      "nota": ("date liberate; payout trattenuto ed escrow chiuso; "
                               "soldi all'ospite: " + _rimborso) if not _falliti
                              else ("date liberate, ma ATTENZIONE: questi passi NON sono riusciti "
@@ -5452,7 +5455,10 @@ class RouterHTTP:
             else:
                 pd = getattr(self._sys, "payout", None)
                 stato_payout = str(pd.stato_di(str(rif)) or "") if pd is not None else ""
-                passi_ok = stato_payout != "pagato"
+                # Kimi K12 sulla #279: il bonifico riuscito scrive 'in_transito' e in produzione
+                # nessuno scrive 'pagato' (voce 17): guardare solo 'pagato' lasciava rimborsare
+                # l'ospite con l'host gia' pagato. Stessa coppia di `_garanzia_gia_divisa`.
+                passi_ok = stato_payout not in ("in_transito", "pagato")
                 if not passi_ok:
                     manca.append("payout_gia_pagato")
         except Exception:
@@ -5469,11 +5475,20 @@ class RouterHTTP:
             esito = sp.rimborsi_di(pi_)
             stripe_ok = bool(isinstance(esito, dict) and esito.get("ok"))
             motivo_stripe = "" if stripe_ok else str((esito or {}).get("motivo") or "")
-            gia = bool(stripe_ok and int((esito or {}).get("rimborsato_cents") or 0) > 0)
+            fatti = int((esito or {}).get("rimborsato_cents") or 0) if stripe_ok else 0
+            in_corso = int((esito or {}).get("in_corso_cents") or 0) if stripe_ok else 0
+            # Kimi K12 sulla #279: restituito vuol dire «copre il dovuto», non «almeno un
+            # centesimo» (40 su 100 toglievano la riga e i 60 sparivano). Con un dovuto non
+            # positivo resta la regola di prima (qualunque rimborso riuscito chiude).
+            gia = bool(stripe_ok and fatti > 0 and fatti >= dovuto)
             # PACCO 1 (25/10): un rimborso 'pending' NON e' restituito, ma non si rifa': la riga
             # resta in lista col pulsante spento finche' Stripe dice riuscito o fallito.
-            if stripe_ok and not gia and int((esito or {}).get("in_corso_cents") or 0) > 0:
+            if stripe_ok and not gia and in_corso > 0:
                 manca.append("rimborso_in_corso")
+            elif stripe_ok and not gia and fatti > 0:
+                # parziale: ripremere usa la STESSA chiave e Stripe ridarebbe il vecchio esito,
+                # non il resto. Decide una persona.
+                manca.append("rimborso_parziale")
         if not stripe_ok:
             manca.append("verifica_stripe")
         # ── LA CONTESTAZIONE DELLA BANCA (S4, 16/10): con una contestazione Stripe non rimborsa
