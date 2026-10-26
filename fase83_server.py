@@ -5415,17 +5415,22 @@ class RouterHTTP:
         # pulsante la esegue esatta. Nel dubbio (garanzia illeggibile, cifra diversa) la riga
         # resta senza pulsante: decide una persona.
         arbitrato = None
+        risolta = None
         try:
             gz = getattr(self._sys, "garanzia", None)
             st_g = gz.stato(str(rif)) if gz is not None else None
             # (`dovuto > 0` qui sarebbe ridondante: un movimento «rimborso» nel giornale ha
             #  sempre importo > 0, perche' `_giornale` rifiuta gli importi non positivi. Il
             #  Giudice della mutazione l'ha mostrato: un `>=` al suo posto sopravviveva.)
-            if (isinstance(st_g, dict) and st_g.get("stato") == "risolto"
-                    and int(st_g.get("ospite_rimborso_cents") or 0) == dovuto):
-                arbitrato = {"host_riceve_cents": int(st_g.get("host_riceve_cents") or 0)}
+            if isinstance(st_g, dict) and st_g.get("stato") == "risolto":
+                # 'risolto' = la garanzia e' stata DIVISA: dall'arbitro, o dalla cancellazione
+                # dell'ospite con penale (`chiudi_proporzionale`). In tutti e due i casi la quota
+                # dell'host parte da sola e il suo payout risulta pagato (freno 3 qui sotto).
+                risolta = {"host_riceve_cents": int(st_g.get("host_riceve_cents") or 0)}
+                if int(st_g.get("ospite_rimborso_cents") or 0) == dovuto:
+                    arbitrato = risolta
         except Exception:
-            arbitrato = None
+            arbitrato = risolta = None
         if not pi_:
             manca.append("payment_intent")
         if pagato <= 0:
@@ -5444,14 +5449,26 @@ class RouterHTTP:
         # ── FRENO 3: se l'host e' gia' stato pagato, rimborsare paga DUE volte (D16) ──
         passi_ok = False
         try:
-            if arbitrato is not None:
+            if risolta is not None:
                 # Nella controversia la quota dell'host parte DA SOLA alla risoluzione, quindi
                 # il suo payout risulta legittimamente pagato: non e' «pagato due volte», e'
                 # «pagato la SUA parte». Il freno che vale qui e' l'aritmetica: quota host +
                 # rimborso all'ospite non possono superare quanto l'ospite ha pagato (D16).
-                passi_ok = (dovuto + int(arbitrato["host_riceve_cents"])) <= pagato
+                # ⛔ E vale anche per la PENALE (regressione della #279 trovata da PROTON il
+                # 26/10): li' la cifra della garanzia (netto + tassa) non e' quella della riga
+                # (prezzo + tassa), il ramo `arbitrato` non scattava e il bonifico legittimo
+                # della quota dell'host toglieva il pulsante all'ospite.
+                quota = int(risolta["host_riceve_cents"])
+                passi_ok = (dovuto + quota) <= pagato
                 if not passi_ok:
                     manca.append("arbitrato_supera_il_pagato")
+                # ...e il bonifico gia' partito non deve superare la quota decisa: se all'host e'
+                # uscito di piu', rimborsare l'ospite e' il doppio esborso che il freno ferma.
+                pd = getattr(self._sys, "payout", None)
+                if pd is not None and str(pd.stato_di(str(rif)) or "") in ("in_transito", "pagato"):
+                    if int((pd.info(str(rif)) or {}).get("minori") or 0) > quota:
+                        passi_ok = False
+                        manca.append("payout_gia_pagato")
             else:
                 pd = getattr(self._sys, "payout", None)
                 stato_payout = str(pd.stato_di(str(rif)) or "") if pd is not None else ""
@@ -7729,24 +7746,60 @@ class RouterHTTP:
             vinta = False
         if not vinta:
             return 409, {"errore": "gia_cancellata"}
-        # FINANCIAL CONTROLLER (fase177, scatto ①): la NOTA DI DEBITO 15% nasce nel
-        # GIORNALE prima di ogni effetto sui soldi e della conferma al client — senza
-        # registro contabile scrivibile, la cancellazione NON riceve il 200 (503
-        # onesto: il CAS e' gia' vinto e la RIASSERZIONE dello sweeper completa
-        # giornale+offset appena possibile, pattern #32). L'offset compensa subito
-        # la penale dai payout maturati dell'host (contratto art. 6).
+        # FINANCIAL CONTROLLER (fase177, scatto ①): la NOTA DI DEBITO 15% nel GIORNALE;
+        # l'offset compensa subito la penale dai payout maturati dell'host (contratto art. 6).
+        # ⛔ VOCE 137: col giornale non scrivibile qui si tornava 503 DOPO il CAS gia' vinto, e le
+        # date, il bonifico dell'host e il rimborso dell'ospite restavano fermi (il «Riprova»
+        # prendeva 409). Ora la cancellazione va in fondo e la nota la riprende lo sweeper
+        # (`_penale_finita`): la risposta lo dice con `nota_debito_in_attesa`.
+        # ⛔ Sotto `_BONIFICI_LOCK`, come la ripresa dello sweeper (Proton P1-SEXIES): due
+        # `processa_penale` in gara fanno due note e riscuotono la penale due volte, e l'offset
+        # consuma i bonifici dell'host che quella chiave protegge.
         esito_fin = None
         fc = getattr(self._sys, "finanza", None)
-        if fc is not None and penale > 0:
-            esito_fin = fc.processa_penale(
-                riferimento=ref, host_id=(host_id or rec.get("host_id") or ""),
-                penale_cents=penale, valuta=valuta,
-                payout=getattr(self._sys, "payout", None))
-            if esito_fin is None:
-                logger.error("host cancella %s: GIORNALE non scrivibile, 503 (la "
-                             "riasserzione dello sweeper completera')",
-                             _rif_per_registro(ref))
-                return 503, {"errore": "registro_contabile_non_disponibile"}
+        with _BONIFICI_LOCK:
+            if fc is not None and penale > 0:
+                # Kimi K18 (26/10): `processa_penale` puo' anche SOLLEVARE (database bloccato
+                # sulla nota o sul debito), non solo tornare None: dopo il CAS si va in fondo
+                # lo stesso, e la nota la riprende lo sweeper.
+                try:
+                    esito_fin = fc.processa_penale(
+                        riferimento=ref, host_id=(host_id or rec.get("host_id") or ""),
+                        penale_cents=penale, valuta=valuta,
+                        payout=getattr(self._sys, "payout", None))
+                except Exception:
+                    logger.error("host cancella %s: codice: nota_debito_rinviata | messaggio: la "
+                                 "nota della penale e' ESPLOSA, la cancellazione prosegue e la "
+                                 "nota la scrive lo sweeper", _rif_per_registro(ref), exc_info=True)
+                else:
+                    if esito_fin is None:
+                        logger.error("host cancella %s: codice: nota_debito_rinviata | messaggio: "
+                                     "GIORNALE non scrivibile, la cancellazione prosegue e la nota "
+                                     "la scrive lo sweeper", _rif_per_registro(ref))
+            self._completa_cancellazione_host(ref, rec, pagata=pagata, guest=guest, valuta=valuta,
+                                              dal_vivo=True)
+        logger.info("HOST ha cancellato %s: cliente rimborso %s, penale host %s",
+                    _rif_per_registro(ref), self._fmt_importo(guest if pagata else 0, valuta),
+                    self._fmt_importo(penale, valuta))
+        corpo_ok = {"stato": "cancellata_host", "riferimento": ref,
+                    "rimborso_cliente_cents": (guest if pagata else 0),
+                    "penale_host_cents": penale, "valuta": valuta,
+                    "nota": ("cliente rimborsato al 100%; penale a carico host; date liberate"
+                             if pagata else "cliente non aveva pagato: nessuna penale; date liberate")}
+        if esito_fin is not None:
+            corpo_ok["nota_debito"] = esito_fin.get("nota_id")
+            corpo_ok["penale_compensata_cents"] = esito_fin.get("offset_cents", 0)
+            corpo_ok["penale_residua_cents"] = esito_fin.get("residuo_cents", 0)
+        elif fc is not None and penale > 0:
+            corpo_ok["nota_debito_in_attesa"] = True
+        return 200, corpo_ok
+
+    def _completa_cancellazione_host(self, ref, rec, *, pagata, guest, valuta, dal_vivo):
+        """VOCE 137: i passi DOPO il CAS 'cancellata_host', ognuno ripetibile senza danno (date
+        per idem_key, bonifico tolto, tassa e check-in idempotenti, garanzia gia' chiusa = ok
+        False, riga del rimborso con l'evento di serie `rimborso:<rif>`). Li fa la rotta
+        (`dal_vivo`: l'unica che parla con Stripe per il blocco sulla carta) e li RIPRENDE lo
+        sweeper quando una cancellazione e' rimasta a meta' (`_cancellazione_host_a_meta`)."""
         try:
             self._sys.inventario.rilascia(rec["alloggio_id"], rec["check_in"], rec["check_out"],
                                           idem_key=(rec.get("idem_key") or ("hcanc_" + ref)))
@@ -7763,26 +7816,24 @@ class RouterHTTP:
                 gz.annulla(ref)
             except Exception:
                 pass
+        if not pagata:
+            return
         # BLOCCO SULLA CARTA: cancellazione dell'host = tutto all'ospite -> si ANNULLA, e senza
         # soldi entrati non c'e' riga di rimborso (la penale dell'host resta: e' un deterrente).
-        if pagata and guest > 0 and not self._chiudi_blocco(ref, rec):
+        # Lo sweeper non chiama Stripe: un blocco ancora 'aperto' lo annulla il giro orario, e se
+        # Stripe dice che era gia' incassato il blocco diventa 'incassato' e la riga la scrive il
+        # giro dello sweeper dopo (voce 143, meta' 'cancellata_host').
+        if dal_vivo:
+            senza_incasso = self._chiudi_blocco(ref, rec)
+        else:
+            senza_incasso = _blocco(rec)["stato"] in ("aperto", "annullato")
+        # `guest > 0`: una riga da zero euro non si CHIEDE (D19: `_giornale` che la rifiuta e' la
+        # seconda difesa, non la prima; test_blocco_carta e G16, trovato da PROTON il 26/10)
+        if not senza_incasso and guest > 0:
             # SCATOLA NERA del RIMBORSO all'ospite (cancellazione host = rimborso 100%)
             self._giornale(tipo="rimborso", riferimento=ref, soggetto="ospite:" + ref,
                            importo_cents=int(guest), valuta=valuta,
                            causale="rimborso 100% per cancellazione host")
-        logger.info("HOST ha cancellato %s: cliente rimborso %s, penale host %s",
-                    _rif_per_registro(ref), self._fmt_importo(guest if pagata else 0, valuta),
-                    self._fmt_importo(penale, valuta))
-        corpo_ok = {"stato": "cancellata_host", "riferimento": ref,
-                    "rimborso_cliente_cents": (guest if pagata else 0),
-                    "penale_host_cents": penale, "valuta": valuta,
-                    "nota": ("cliente rimborsato al 100%; penale a carico host; date liberate"
-                             if pagata else "cliente non aveva pagato: nessuna penale; date liberate")}
-        if esito_fin is not None:
-            corpo_ok["nota_debito"] = esito_fin.get("nota_id")
-            corpo_ok["penale_compensata_cents"] = esito_fin.get("offset_cents", 0)
-            corpo_ok["penale_residua_cents"] = esito_fin.get("residuo_cents", 0)
-        return 200, corpo_ok
 
     def _payout_trattieni(self, rif):
         """Prenotazione cancellata o rimborsata, host a zero -> l'host non vede piu' un incasso
@@ -13111,35 +13162,104 @@ def sweep_hold_una_passata(sistema: Any, router: Any) -> None:
                                    _o.get("check_in"), _o.get("check_out"))
         except Exception:
             logger.warning("chiusura stanze fantasma fallita (ignorata)", exc_info=True)
-        # RIASSERZIONE PENALI (fase177, pattern #32): crash tra il CAS della
-        # cancellazione-host e il giornale = penale annotata nel pendente ma senza
-        # Nota di Debito -> qui si sana (idempotente: chi ce l'ha gia' viene saltato
-        # con un lookup O(1); processa_penale replayato non tocca due volte i payout).
+        # RIASSERZIONE DELLE CANCELLAZIONI DELL'HOST (fase177, pattern #32; voce 137): crash
+        # dopo il CAS, o giornale giu' durante la cancellazione -> qui si finiscono i passi
+        # mancanti e la Nota di Debito (idempotenti: processa_penale replayato non tocca due
+        # volte i payout). A macchina sana si LEGGE soltanto: niente lucchetto dell'inventario,
+        # niente scritture. Una prenotazione alla volta sotto `_BONIFICI_LOCK`, come la rotta.
         try:
-            fc = getattr(sistema, "finanza", None)
-            if fc is not None and hasattr(pp, "cancellate_host"):
-                import json as _j
+            if hasattr(pp, "cancellate_host"):
                 for rec in pp.cancellate_host(limit=50):
-                    rif = rec.get("riferimento")
-                    if not rif or fc.esiste_evento("penale:" + rif):
-                        continue
+                    # Kimi K18 (26/10): un guasto nella penale di UNA (`_penale_finita`,
+                    # `processa_penale`) non ferma la ripresa delle altre
                     try:
-                        dj = _j.loads(rec.get("corpo_json") or "{}")
+                        with _BONIFICI_LOCK:
+                            _riprendi_cancellazione_host(sistema, router, rec)
                     except Exception:
-                        dj = {}
-                    pen = dj.get("penale_host_cents")
-                    if not (isinstance(pen, int) and pen > 0):
-                        continue
-                    fc.processa_penale(
-                        riferimento=rif, host_id=str(rec.get("host_id") or ""),
-                        penale_cents=pen, valuta=str(dj.get("valuta") or "EUR"),
-                        payout=getattr(sistema, "payout", None))
-                    logger.warning("riasserzione penale %s: ND emessa dallo sweeper",
-                                   _rif_per_registro(rif))
+                        logger.error("cancellazione host %s: codice: ripresa_fallita | messaggio: "
+                                     "ripresa esplosa, ritenta al giro dopo",
+                                     _rif_per_registro(rec.get("riferimento")), exc_info=True)
         except Exception:
             logger.warning("riasserzione penali fallita (ignorata)", exc_info=True)
     except Exception:
         logger.warning("sweep hold fallito (ignorato)", exc_info=True)
+
+
+def _riprendi_cancellazione_host(sistema: Any, router: Any, rec: Dict[str, Any]) -> None:
+    """VOCE 137: una 'cancellata_host' rimasta a meta' -> i passi mancanti, poi la Nota di
+    Debito se non e' FINITA. Chi chiama tiene `_BONIFICI_LOCK`."""
+    rif = rec.get("riferimento")
+    if not rif:
+        return
+    try:
+        dj = json.loads(rec.get("corpo_json") or "{}")
+    except Exception:
+        dj = {}
+    pen = dj.get("penale_host_cents")
+    # la penale nasce solo su una prenotazione PAGATA (`_host_cancella`)
+    pagata = isinstance(pen, int) and pen > 0
+    guest = int(dj.get("totale_cents", 0) or dj.get("prezzo_guest_cents", 0) or 0)
+    valuta = str(dj.get("valuta") or "EUR")
+    try:
+        if _cancellazione_host_a_meta(sistema, rec, rif, pagata=pagata, guest=guest):
+            router._completa_cancellazione_host(rif, rec, pagata=pagata, guest=guest,
+                                                valuta=valuta, dal_vivo=False)
+            # PROTON sul diff finale (26/10): «ripresi» si dice solo se e' vero. Col giornale giu'
+            # la riga del rimborso non entra e la cancellazione e' ancora a meta': si grida.
+            if _cancellazione_host_a_meta(sistema, rec, rif, pagata=pagata, guest=guest):
+                logger.error("cancellazione host %s: codice: ripresa_incompleta | messaggio: lo "
+                             "sweeper ha rifatto i passi ma resta a meta' (giornale non "
+                             "scrivibile?), ritenta al giro dopo", _rif_per_registro(rif))
+            else:
+                logger.warning("cancellazione host %s rimasta a meta': passi ripresi dallo "
+                               "sweeper", _rif_per_registro(rif))
+    except Exception:
+        logger.warning("ripresa cancellazione host fallita (ritenta al giro dopo)", exc_info=True)
+    fc = getattr(sistema, "finanza", None)
+    if fc is None or not pagata or _penale_finita(fc, rif):
+        return
+    esito = fc.processa_penale(riferimento=rif, host_id=str(rec.get("host_id") or ""),
+                               penale_cents=pen, valuta=valuta,
+                               payout=getattr(sistema, "payout", None))
+    if esito is None:
+        # (None anche con host o penale non validi, fase177: la causa non e' sempre il giornale)
+        logger.error("riasserzione penale %s: codice: nota_debito_rinviata | messaggio: nota non "
+                     "emessa (giornale non scrivibile o dati della prenotazione incompleti), la "
+                     "riprova il giro dopo", _rif_per_registro(rif))
+    else:
+        logger.warning("riasserzione penale %s: ND emessa dallo sweeper", _rif_per_registro(rif))
+
+
+def _penale_finita(fc: Any, rif: str) -> bool:
+    """VOCE 137 (Kimi K14): `esiste_evento("penale:")` dice che la nota e' INIZIATA -- fase177
+    `emetti_nota` scrive la riga del giornale PRIMA della nota. FINITA e' quando c'e' la riga del
+    suo debito, l'ultimo passo di `processa_penale`."""
+    for n in fc.note_per_riferimento(rif):
+        if n.get("tipo") == "debito" and not n.get("storno_di"):
+            host = str(n.get("soggetto") or "").split(":", 1)[-1]
+            if any(d.get("debito_id") == n.get("nota_id") for d in fc.debiti_host(host)):
+                return True
+    return False
+
+
+def _cancellazione_host_a_meta(sistema: Any, rec: Dict[str, Any], rif: str, *,
+                               pagata: bool, guest: int) -> bool:
+    """VOCE 137: una 'cancellata_host' e' rimasta a meta' se si vede ancora un suo effetto
+    mancante: il bonifico dell'host c'e' ancora, la garanzia e' ancora aperta, o i soldi
+    dell'ospite sono entrati e la riga del suo rimborso non c'e'. Solo letture.
+    ⛔ LIMITE DICHIARATO: un rilascio delle date FALLITO da solo, con tutto il resto fatto, qui non
+    si vede (le date restano bloccate: lato sicuro, nessun overbooking)."""
+    pd = getattr(sistema, "payout", None)
+    if pd is not None and pd.info(rif) is not None:
+        return True
+    gz = getattr(sistema, "garanzia", None)
+    st = gz.stato(rif) if gz is not None else None
+    if isinstance(st, dict) and st.get("stato") == "in_garanzia":
+        return True
+    fc = getattr(sistema, "finanza", None)
+    return bool(pagata and guest > 0 and fc is not None
+                and _blocco(rec)["stato"] in ("nessuno", "incassato")
+                and not fc.esiste_evento("rimborso:" + rif))
 
 
 def promemoria_una_passata(sistema: Any, router: Any, *,

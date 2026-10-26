@@ -14,6 +14,7 @@ import os
 import re
 import shutil
 import socket
+import sqlite3
 import tempfile
 import threading
 import time
@@ -31,6 +32,7 @@ from test_rimborso_torna_da_ogni_strada import _BancoDelleStrade
 from test_fase160_escrow_garanzia import nella_finestra
 from test_movimenti_giornale import _BancoDeiBonifici, _StripeDeiBonifici
 from test_ritenuta import _Base as _BancoDellaRitenuta
+from test_financial_controller import _BancoOffset, HK as _HK_FC, CI as _CI_FC, CO as _CO_FC
 from fase83_server import (
     RouterHTTP, crea_router, percorso_statico_sicuro,
     jsonld_alloggio, pagina_alloggio_html, sitemap_xml, robots_txt, _importo,
@@ -2499,6 +2501,533 @@ class TestLaPenaleNonDiventaUnBonificoPieno(_BancoDeiSoldiDelServer):
                          "la penale e' stata trattata come un canone")
         self.assertEqual([], [m for m in self.sis.finanza.movimenti(rif)
                               if m.get("tipo") == "ritenuta"])
+
+
+class TestDopoUnaPenaleLaParteDellOspiteSiRimborsaAncora(_BancoDeiSoldiDelServer):
+    """REGRESSIONE del pacco 1 (#279, gia' in produzione), trovata da PROTON il 26/10 rileggendo il
+    freno 3 dei rimborsi dovuti (Kimi K12): 'in_transito' ferma il pulsante perche' «l'host e'
+    gia' stato pagato». Ma nella cancellazione dell'ospite con PENALE l'host riceve SUBITO la sua
+    quota (bonifico Connect riuscito -> 'in_transito') e all'ospite spetta il resto: quel bonifico
+    e' legittimo, non un doppio. Il ramo dell'arbitro non scattava perche' la garanzia ragiona su
+    netto + tassa e la riga del rimborso su prezzo + tassa: le due cifre non coincidono."""
+
+    def test_la_quota_dell_host_pagata_non_blocca_il_rimborso_della_parte_dell_ospite(self):
+        self.pubblica("casa-pq", "moderata")
+        b = self.prenota("casa-pq", 2)                 # moderata a 2 giorni: meta' e meta'
+        rif = b["riferimento"]
+        s, c = self.paga(rif, "pi_pq")
+        _deve(s == 200, s, c)
+        s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": b["voucher_token"]})
+        _deve(s == 200, s, c)
+        _deve(int(c.get("rimborso_cents", 0)) > 0, "PREMESSA: all'ospite spetta una parte", c)
+        quota = int(self.sis.garanzia.stato(rif)["host_riceve_cents"])
+        _deve([("acct_banco", quota, "EUR", rif)] == self.connect.bonifici,
+              "PREMESSA: la quota-penale dell'host e' partita", self.connect.bonifici)
+        _deve(self.sis.payout.stato_di(rif) == "in_transito", self.sis.payout.stato_di(rif))
+        s, lista = self.g("GET", "/api/admin/rimborsi_dovuti", None, {"X-Admin-Key": "ak"})
+        _deve(s == 200, s, lista)
+        riga = next((r for r in lista.get("rimborsi", []) if r.get("riferimento") == rif), None)
+        _deve(riga is not None, "PREMESSA: la parte dell'ospite e' fra i rimborsi dovuti", lista)
+        self.assertNotIn("payout_gia_pagato", riga.get("manca") or [],
+                         "IL RIMBORSO DELL'OSPITE E' BLOCCATO dalla quota-penale dell'host, che era "
+                         "sua: all'ospite spettano %d e il pulsante non c'e' (%r)"
+                         % (int(riga.get("dovuto_cents", 0)), riga.get("manca")))
+        self.assertNotIn("arbitrato_supera_il_pagato", riga.get("manca") or [],
+                         "quota dell'host + parte dell'ospite superano il pagato: %r" % (riga,))
+        # PROTON sul diff finale (26/10): il pulsante qui e' spento anche per un altro motivo (lo
+        # Stripe finto del banco non risponde a `rimborsi_di`/`contestazione_di`), quindi guardare
+        # solo due motivi non basta: l'uscita del freno 3 si legge per intero.
+        self.assertIs(True, riga.get("passi_sicurezza_ok"),
+                      "il freno 3 ferma la parte dell'ospite: %r" % (riga,))
+
+
+class TestLaCancellazioneDellHostArrivaSempreInFondo(_BancoOffset):
+    """VOCE 137 (piano di GML 35, busta di Claude, Kimi K14, PROTON P1-SEXIES): dopo il CAS
+    'cancellata_host' la rotta tornava 503 se la nota di debito non si scriveva, PRIMA di liberare
+    le date, togliere il bonifico all'host e scrivere il rimborso dell'ospite; e lo sweeper rifaceva
+    SOLO la nota, e solo se la riga `penale:<rif>` mancava. G1-G7 viste ROSSE su e6ed3c2 (D20).
+    Stanno QUI, nel test DEDICATO di fase83: il Giudice accende per primo questo file, e in
+    test_financial_controller.py 47 righe nuove su 60 passavano senza occhi (giro del 26/10).
+    G8-G13 e la classe sotto sono nate da quel giro: una per ogni gruppo di righe non viste."""
+
+    def _sweep(self):
+        fase83_server.sweep_hold_una_passata(self.sis, self.r)
+
+    def _cancella(self, rif, **altro):
+        corpo = {"riferimento": rif, "host_id": "demo"}
+        corpo.update(altro)
+        return self.g("POST", "/api/host/cancella", corpo, _HK_FC)
+
+    def _solo_il_cas(self, rif):
+        # il CAS di `_host_cancella` e niente altro: il processo e' morto alla riga dopo
+        from fase98_policy_commissione import commissione_cents
+        dj = json.loads(self.sis.pagamenti_pendenti.info(rif).get("corpo_json") or "{}")
+        guest = int(dj.get("totale_cents", 0)) or int(dj.get("prezzo_guest_cents", 0))
+        self.assertTrue(self.sis.pagamenti_pendenti.marca_cancellata_host(
+            rif, commissione_cents(guest, fase83_server.PENALE_HOST_BPS)))
+        return guest
+
+    def _corpo(self, rif, **campi):
+        # D19: lo stato che il flusso di oggi non produce si scrive a mano nel corpo del pendente
+        pp = self.sis.pagamenti_pendenti
+        dj = json.loads(pp.info(rif).get("corpo_json") or "{}")
+        for k, v in campi.items():
+            if v is None:
+                dj.pop(k, None)
+            else:
+                dj[k] = v
+        con = pp._apri()
+        try:
+            with con:
+                con.execute("UPDATE pendenti SET corpo_json=? WHERE riferimento=?",
+                            (json.dumps(dj), rif))
+        finally:
+            con.close()
+
+    def _rimborsi(self, rif):
+        return [m for m in self.sis.finanza.movimenti(rif) if m.get("tipo") == "rimborso"]
+
+    def _con_gli_errori(self, fai):
+        # gli ERROR «nota_debito_rinviata» scritti mentre gira `fai`
+        with mock.patch.object(fase83_server.logger, "error",
+                               wraps=fase83_server.logger.error) as err:
+            esito = fai()
+        return esito, [c for c in err.call_args_list if "nota_debito_rinviata" in str(c)]
+
+    def test_137_G1_la_cancellazione_arriva_in_fondo_anche_se_la_penale_non_si_scrive(self):
+        rif = self._prenota_paga()
+        self.assertEqual("maturato", self.sis.payout.stato_di(rif),
+                         "PREMESSA: il bonifico all'host e' maturato")
+        with mock.patch.object(self.sis.finanza, "processa_penale", return_value=None):
+            (s, c), rinviate = self._con_gli_errori(lambda: self._cancella(rif))
+        # (1) l'host sa che la cancellazione e' FATTA (prima: 503 e «Riprova», con il CAS gia' vinto)
+        self.assertEqual(200, s, c)
+        self.assertEqual("cancellata_host", c.get("stato"), c)
+        self.assertIs(True, c.get("nota_debito_in_attesa"), c)
+        self.assertNotIn("nota_debito", c, c)
+        self.assertEqual(1, len(rinviate), "la nota rinviata non grida col suo codice")
+        # (2) i soldi sono a posto SUBITO: niente bonifico all'host, rimborso dell'ospite a giornale
+        self.assertIsNone(self.sis.payout.info(rif), "l'host resta pagabile su una cancellata")
+        self.assertEqual([int(c["rimborso_cliente_cents"])],
+                         [int(m["importo_cents"]) for m in self._rimborsi(rif)],
+                         "l'ospite non ha la riga del rimborso")
+        # (3) la nota di debito la scrive lo sweeper, UNA volta sola
+        self._sweep()
+        self._sweep()
+        self.assertEqual(1, len(self._note_debito(rif)), self._note_debito(rif))
+        # (4) ripetere dice la verita': la cancellazione c'e' gia'
+        s2, c2 = self._cancella(rif)
+        self.assertEqual((409, "gia_cancellata"), (s2, c2.get("errore")), c2)
+
+    def test_137_G2_col_giornale_giu_lo_sweeper_scrive_poi_rimborso_e_nota_una_volta(self):
+        rif = self._prenota_paga()
+        self.assertEqual("maturato", self.sis.payout.stato_di(rif), "PREMESSA: bonifico maturato")
+        self.assertIn("incasso", self._tipi(rif), "PREMESSA: l'incasso e' nel giornale")
+        with mock.patch.object(self.sis.finanza, "registra", return_value=None):
+            s, c = self._cancella(rif)
+        self.assertEqual(200, s, c)
+        self.assertIsNone(self.sis.payout.info(rif), "host ancora pagabile su una cancellata")
+        self.assertNotIn("rimborso", self._tipi(rif), "PREMESSA: col giornale giu' la riga manca")
+        self._sweep()
+        self._sweep()
+        self.assertEqual(1, self._tipi(rif).count("rimborso"),
+                         "l'ospite resta senza riga di rimborso: %r" % self._tipi(rif))
+        self.assertEqual(1, len(self._note_debito(rif)), self._note_debito(rif))
+        self.assertTrue(self.sis.finanza.verifica_catena()["ok"])
+
+    def test_137_G3_il_processo_muore_dopo_il_CAS_e_lo_sweeper_finisce_il_lavoro(self):
+        rif = self._prenota_paga()
+        guest = self._solo_il_cas(rif)
+        inv = self.sis.inventario
+        with mock.patch.object(inv, "rilascia", wraps=inv.rilascia) as ril:
+            self._sweep()
+        self.assertGreaterEqual(ril.call_count, 1, "le date della cancellata restano bloccate")
+        self.assertIsNone(self.sis.payout.info(rif), "host ancora pagabile su una cancellata")
+        st = (self.sis.garanzia.stato(rif) or {}).get("stato")
+        self.assertNotEqual("in_garanzia", st, "garanzia ancora aperta: %r" % st)
+        self.assertEqual([(guest, "EUR")], [(int(m["importo_cents"]), m.get("valuta"))
+                                            for m in self._rimborsi(rif)],
+                         "l'ospite resta senza la riga del rimborso intero")
+        note = self._note_debito(rif)
+        self.assertEqual(["host:demo"], [n.get("soggetto") for n in note], note)
+        tipi = self._tipi(rif)
+        with mock.patch.object(inv, "rilascia", wraps=inv.rilascia) as ril2:
+            self._sweep()
+        self.assertEqual(0, ril2.call_count, "lo sweeper riapre il lucchetto dell'inventario a ogni giro")
+        self.assertEqual(tipi, self._tipi(rif), "il secondo giro ha scritto ancora nel giornale")
+
+    def test_137_G4_una_cancellazione_riuscita_lo_sweeper_non_la_ritocca(self):
+        # il silenzio a macchina sana (ferrea 10): verde anche PRIMA della riparazione, e deve restarlo
+        rif = self._prenota_paga()
+        (s, c), rinviate = self._con_gli_errori(lambda: self._cancella(rif))
+        self.assertEqual(200, s, c)
+        self.assertTrue(str(c.get("nota_debito") or "").startswith("ND-"), c)
+        self.assertNotIn("nota_debito_in_attesa", c, c)
+        self.assertEqual([], rinviate, "una nota scritta grida «rinviata»")
+        prima = self._tipi(rif)
+        inv, pd = self.sis.inventario, self.sis.payout
+        with mock.patch.object(inv, "rilascia", wraps=inv.rilascia) as ril, \
+                mock.patch.object(pd, "rimuovi", wraps=pd.rimuovi) as rim, \
+                mock.patch.object(self.sis.finanza, "processa_penale",
+                                  wraps=self.sis.finanza.processa_penale) as pen:
+            self._sweep()
+        self.assertEqual((0, 0, 0), (ril.call_count, rim.call_count, pen.call_count),
+                         "lo sweeper ritocca una cancellazione gia' finita")
+        self.assertEqual(prima, self._tipi(rif))
+
+    def test_137_G5_la_penale_scritta_solo_nel_giornale_lo_sweeper_la_finisce(self):
+        # Kimi K14: `emetti_nota` scrive PRIMA la riga `penale:<rif>` del giornale e POI la nota;
+        # se la nota non entra nella sua tabella, `esiste_evento("penale:")` dice «iniziata» e lo
+        # sweeper non ci tornava piu'. D19: il guasto vero, l'INSERT della nota che fallisce.
+        rif = self._prenota_paga()
+        fc = self.sis.finanza
+        with mock.patch.object(fc, "_prossimo_nota_id", side_effect=RuntimeError("nota giu'")):
+            self._cancella(rif)
+        self.assertTrue(fc.esiste_evento("penale:" + rif), "PREMESSA: la riga del giornale c'e'")
+        self.assertEqual([], self._note_debito(rif), "PREMESSA: la nota NON e' nella sua tabella")
+        self._sweep()
+        self._sweep()
+        note = self._note_debito(rif)
+        self.assertEqual(1, len(note), "la nota della penale non nasce piu': %r" % note)
+        deb = [d for d in fc.debiti_host("demo") if d.get("debito_id") == note[0]["nota_id"]]
+        self.assertEqual(1, len(deb), "il debito della penale non e' scritto: %r" % deb)
+        self.assertEqual(1, self._tipi(rif).count("nota_debito"), self._tipi(rif))
+
+    def test_137_G6_la_penale_si_scrive_sotto_il_lucchetto_dei_bonifici(self):
+        # Proton P1-SEXIES (a): due `processa_penale` in gara sullo stesso riferimento (la rotta e
+        # lo sweeper che la riprende) fanno DUE note per una riga di giornale (nessun UNIQUE su
+        # note.giornale_seq) e riscuotono la penale due volte (lo storico degli offset si legge una
+        # volta sola). Una alla volta, sotto la stessa chiave dei bonifici che la penale consuma.
+        fc = self.sis.finanza
+        vera = fc.processa_penale
+        sotto = []
+
+        def _spia(**kw):
+            sotto.append(fase83_server._BONIFICI_LOCK._is_owned())
+            return vera(**kw)
+        rif = self._prenota_paga()
+        with mock.patch.object(fc, "processa_penale", side_effect=_spia):
+            s, c = self._cancella(rif)
+        self.assertEqual(200, s, c)
+        rif2 = self._prenota_paga()
+        self.assertTrue(self.sis.pagamenti_pendenti.marca_cancellata_host(rif2, 3000))
+        with mock.patch.object(fc, "processa_penale", side_effect=_spia):
+            self._sweep()
+        self.assertEqual([True, True], sotto,
+                         "la penale si scrive FUORI dal lucchetto (rotta, sweeper): %r" % sotto)
+
+    def test_137_G7_la_ripresa_vede_una_prenotazione_vecchia_cancellata_adesso(self):
+        # PROTON P1-SEXIES (b): `cancellate_host` prendeva le 50 piu' recenti per data di
+        # PRENOTAZIONE, e 'cancellata_host' non si purga mai: dopo 50 cancellazioni dell'host una
+        # prenotazione di un mese fa cancellata OGGI, col processo morto dopo il CAS, restava fuori
+        # dall'elenco per sempre (ospite senza rimborso, host pagabile, in silenzio).
+        pp = self.sis.pagamenti_pendenti
+        rif = self._prenota_paga()
+        con = pp._apri()
+        try:
+            with con:
+                con.execute("UPDATE pendenti SET creato_ts = creato_ts - 2592000 WHERE riferimento=?",
+                            (rif,))
+        finally:
+            con.close()
+        ora = int(time.time())
+        with mock.patch.object(pp, "_now", return_value=ora - 3600):
+            for i in range(51):
+                self.assertTrue(pp.registra("ALTRA%02d" % i, alloggio_id="hotel", check_in=_CI_FC,
+                                            check_out=_CO_FC, host_id="demo"))
+                self.assertTrue(pp.marca_cancellata_host("ALTRA%02d" % i, 0))
+        self._solo_il_cas(rif)
+        self.assertEqual("maturato", self.sis.payout.stato_di(rif), "PREMESSA: bonifico ancora li'")
+        self._sweep()
+        self.assertIsNone(self.sis.payout.info(rif),
+                          "la cancellazione di una prenotazione vecchia non viene ripresa: host "
+                          "ancora pagabile")
+        self.assertEqual(1, self._tipi(rif).count("rimborso"), self._tipi(rif))
+
+    def test_137_G8_una_prenotazione_NON_pagata_si_cancella_senza_penale_ne_rimborso(self):
+        _s, q = self.g("POST", "/api/concierge/quote", {"alloggio_id": "hotel", "check_in": _CI_FC,
+                       "check_out": _CO_FC, "party": 2})
+        _s, b = self.g("POST", "/api/concierge/book", {"quote_token": q["quote_token"],
+                       "email": "np@collaudo.invalid"})
+        rif = b["riferimento"]
+        self.assertEqual("in_attesa", self.sis.pagamenti_pendenti.info(rif)["stato"],
+                         "PREMESSA: non pagata")
+        (s, c), rinviate = self._con_gli_errori(lambda: self._cancella(rif))
+        self.assertEqual(200, s, c)
+        self.assertEqual((0, 0), (c.get("penale_host_cents"), c.get("rimborso_cliente_cents")), c)
+        self.assertNotIn("nota_debito_in_attesa", c, c)
+        self.assertEqual([], rinviate, "una cancellazione senza penale grida «nota rinviata»")
+        self.assertEqual([], self._rimborsi(rif), "rimborso per soldi mai entrati")
+        fc = self.sis.finanza
+        with mock.patch.object(fc, "processa_penale", wraps=fc.processa_penale) as pen:
+            self._sweep()
+        self.assertEqual(0, pen.call_count, "lo sweeper cerca una penale che non c'e'")
+        self.assertEqual([], self._rimborsi(rif), "lo sweeper rimborsa soldi mai entrati")
+        self.assertEqual([], self._note_debito(rif))
+
+    def test_137_G9_senza_giornale_la_cancellazione_va_in_fondo_e_lo_sweeper_non_si_ferma(self):
+        # D19: il componente del giornale ASSENTE (un avvio senza db_finanza)
+        rif = self._prenota_paga()
+        meta = [self._prenota_paga(), self._prenota_paga()]
+        for r in meta:
+            self._solo_il_cas(r)
+        self.sis.finanza = None
+        s, c = self._cancella(rif)
+        self.assertEqual(200, s, c)
+        self.assertEqual(set(), {"nota_debito", "nota_debito_in_attesa"} & set(c), c)
+        self.assertIsNone(self.sis.payout.info(rif), "host ancora pagabile su una cancellata")
+        self._sweep()
+        self.assertEqual([None, None], [self.sis.payout.info(r) for r in meta],
+                         "senza giornale la ripresa si ferma alla prima cancellazione")
+
+    def test_137_G10_senza_host_nel_corpo_la_penale_va_all_host_della_prenotazione(self):
+        rif = self._prenota_paga()
+        s, c = self.g("POST", "/api/host/cancella", {"riferimento": rif}, _HK_FC)
+        self.assertEqual(200, s, c)
+        self.assertTrue(str(c.get("nota_debito") or "").startswith("ND-"), c)
+        self.assertEqual(["host:demo"], [n.get("soggetto") for n in self._note_debito(rif)])
+
+    def test_137_G11_il_blocco_sulla_carta_lo_annulla_la_rotta_non_lo_sweeper(self):
+        pp = self.sis.pagamenti_pendenti
+        rif, rif2 = self._prenota_paga(), self._prenota_paga()
+        dopo = int(time.time()) + 86400
+        # D19: due pagamenti BLOCCATI sulla carta (soldi autorizzati, non incassati)
+        self.assertTrue(pp.segna_blocco(rif, blocco_pi="pi_g11", blocco_incassa_dal_ts=dopo))
+        self.assertTrue(pp.segna_blocco(rif2, blocco_pi="pi_g11b", blocco_incassa_dal_ts=dopo))
+        self._solo_il_cas(rif2)
+        stripe = mock.Mock()
+        stripe.annulla.return_value = {"ok": True, "id": "pi_g11"}
+        self.sis.stripe = stripe
+        self._sweep()
+        self.assertEqual([], stripe.annulla.call_args_list, "lo sweeper ha chiamato Stripe")
+        self.assertIsNone(self.sis.payout.info(rif2), "PREMESSA: la ripresa e' passata")
+        self.assertEqual([], self._rimborsi(rif2), "blocco aperto: soldi mai entrati, niente riga")
+        s, c = self._cancella(rif)
+        self.assertEqual(200, s, c)
+        self.assertEqual([mock.call("pi_g11", "annullo:" + rif)], stripe.annulla.call_args_list,
+                         "la rotta non annulla il blocco sulla carta")
+        self.assertEqual([], self._rimborsi(rif), "blocco annullato: niente riga di rimborso")
+
+    def test_137_G12_lo_sweeper_scrive_il_rimborso_del_TOTALE_nella_sua_valuta(self):
+        rif, rif2 = self._prenota_paga(), self._prenota_paga()
+        g1, g2 = self._solo_il_cas(rif), self._solo_il_cas(rif2)
+        # D19: un totale diverso dal prezzo (tassa, costi), una valuta che non e' l'euro, e una
+        # riga vecchia senza `totale_cents`
+        self._corpo(rif, prezzo_guest_cents=g1 - 1000, valuta="USD")
+        self._corpo(rif2, totale_cents=None)
+        self._sweep()
+        self.assertEqual([(g1, "USD")], [(int(m["importo_cents"]), m.get("valuta"))
+                                         for m in self._rimborsi(rif)])
+        self.assertEqual([g2], [int(m["importo_cents"]) for m in self._rimborsi(rif2)])
+
+    def test_137_G13_una_ripresa_che_esplode_lascia_la_traccia_e_non_ferma_le_altre(self):
+        rif, rif2 = self._prenota_paga(), self._prenota_paga()
+        self._solo_il_cas(rif)
+        self._solo_il_cas(rif2)
+        vera = self.r._completa_cancellazione_host
+
+        def _esplode_su_rif(ref, *a, **k):
+            if ref == rif:
+                raise RuntimeError("archivio giu'")
+            return vera(ref, *a, **k)
+        with mock.patch.object(self.r, "_completa_cancellazione_host", side_effect=_esplode_su_rif), \
+                self.assertLogs("core_auto.server", level="WARNING") as registro:
+            self._sweep()
+        tracce = [r for r in registro.records if "ripresa cancellazione host fallita" in r.getMessage()]
+        self.assertEqual(1, len(tracce), [r.getMessage() for r in registro.records])
+        # Giudice del 26/10 (contenitore): con `exc_info=False` la prova restava verde, perche'
+        # False «non e' None». La traccia e' la tupla dell'eccezione vera.
+        ei = tracce[0].exc_info
+        self.assertTrue(isinstance(ei, tuple) and ei[0] is RuntimeError,
+                        "il guasto della ripresa non lascia la sua traccia: %r" % (ei,))
+        self.assertIsNone(self.sis.payout.info(rif2), "un guasto su una ferma le altre")
+        self.assertEqual(1, len(self._note_debito(rif)), "la penale non si riprende dopo il guasto")
+
+    def test_137_G14_lo_sweeper_non_rimborsa_un_blocco_gia_ANNULLATO(self):
+        # PROTON sul diff finale (26/10): con `("aperto",)` al posto di `("aperto", "annullato")`
+        # nel ramo dello sweeper nessuna prova diventava rossa. La strada vera: il processo muore
+        # dopo il CAS col blocco aperto, il giro orario lo annulla, lo sweeper riprende. D19: il
+        # blocco annullato si scrive a mano, come in G11.
+        pp = self.sis.pagamenti_pendenti
+        rif = self._prenota_paga()
+        dopo = int(time.time()) + 86400
+        self.assertTrue(pp.segna_blocco(rif, blocco_pi="pi_g14", blocco_incassa_dal_ts=dopo))
+        self._solo_il_cas(rif)
+        self.assertTrue(pp.segna_blocco(rif, blocco_annullato_ts=int(time.time())))
+        self.assertEqual("annullato", fase83_server._blocco(pp.info(rif))["stato"], "PREMESSA")
+        self._sweep()
+        self.assertIsNone(self.sis.payout.info(rif), "PREMESSA: la ripresa e' passata")
+        self.assertEqual([], self._rimborsi(rif),
+                         "blocco annullato = soldi mai entrati, e lo sweeper scrive la riga del "
+                         "rimborso: finisce nella lista dei rimborsi dovuti")
+
+    def test_137_G15_lo_sweeper_non_dice_fatto_quello_che_non_ha_fatto(self):
+        # PROTON sul diff finale (26/10), misurato: col giornale giu' anche durante lo sweeper il
+        # registro diceva «passi ripresi» e «ND emessa» (WARNING, a ogni giro) senza una nota ne'
+        # una riga di rimborso. Il Guardiano legge gli ERROR: si grida, col suo codice.
+        rif = self._prenota_paga()
+        self._solo_il_cas(rif)
+        with mock.patch.object(self.sis.finanza, "registra", return_value=None), \
+                self.assertLogs("core_auto.server", level="WARNING") as registro:
+            self._sweep()
+        msg = [r.getMessage() for r in registro.records]
+        self.assertEqual([], self._rimborsi(rif), "PREMESSA: col giornale giu' la riga non c'e'")
+        self.assertEqual([], self._note_debito(rif), "PREMESSA: col giornale giu' la nota non c'e'")
+        self.assertEqual([], [m for m in msg if "ND emessa" in m or "passi ripresi" in m],
+                         "il registro dice fatto quello che non e' stato fatto")
+        errori = [r.getMessage() for r in registro.records if r.levelname == "ERROR"]
+        self.assertEqual(1, len([m for m in errori if "codice: ripresa_incompleta" in m]), msg)
+        self.assertEqual(1, len([m for m in errori if "codice: nota_debito_rinviata" in m]), msg)
+
+    def test_137_G16_col_totale_a_zero_non_si_chiede_una_riga_di_rimborso(self):
+        # PROTON sul diff finale (26/10): il `guest > 0` tolto in `_completa_cancellazione_host`
+        # faceva chiedere una riga di rimborso da zero euro, e test_blocco_carta lo vieta gia' (D19:
+        # la prima difesa e' chi chiama, `_giornale` e' la seconda). Quel file il Giudice non lo
+        # accende: la stessa regola sta anche qui.
+        rif = self._prenota_paga()
+        self._corpo(rif, totale_cents=0, prezzo_guest_cents=0)
+        with mock.patch.object(self.r, "_giornale", wraps=self.r._giornale) as gio:
+            s, c = self._cancella(rif)
+        self.assertEqual(200, s, c)
+        self.assertEqual([], [k for k in gio.call_args_list if k.kwargs.get("tipo") == "rimborso"],
+                         "chiesta una riga di rimborso da zero euro")
+
+    def test_137_G17_una_ripresa_riuscita_non_grida(self):
+        # PROTON (26/10, N9 e N10): G15 pretende l'ERROR col giornale giu', ma nessuna prova
+        # pretendeva il SILENZIO quando la ripresa riesce. Un allarme che grida sempre passava, e
+        # un allarme che grida sempre si spegne (ferrea 10).
+        rif = self._prenota_paga()
+        self._solo_il_cas(rif)
+        with self.assertLogs("core_auto.server", level="WARNING") as registro:
+            self._sweep()
+        msg = [r.getMessage() for r in registro.records]
+        self.assertEqual(1, len(self._note_debito(rif)), "PREMESSA: la ripresa e' riuscita")
+        self.assertEqual([], [r.getMessage() for r in registro.records if r.levelname == "ERROR"
+                              and "codice: " in r.getMessage()],
+                         "una ripresa riuscita grida come una fallita: %r" % msg)
+        self.assertEqual(1, len([m for m in msg if "passi ripresi" in m]), msg)
+        self.assertEqual(1, len([m for m in msg if "ND emessa" in m]), msg)
+
+    def test_137_G18_la_penale_che_ESPLODE_non_ferma_la_cancellazione(self):
+        # Kimi K18 punto 4 (26/10): `processa_penale` puo' anche SOLLEVARE (l'UPDATE della nota e
+        # il debito, fase177, non hanno try: database bloccato), non solo tornare None. Dopo il
+        # CAS la rotta non lo prendeva: l'host vedeva un errore con la cancellazione gia' fatta.
+        # PROTON (26/10): il guasto e' quello VERO di SQLite, `OperationalError`, che non e' un
+        # RuntimeError: un `except RuntimeError` restava verde con una prova che esplodeva cosi'.
+        rif = self._prenota_paga()
+        with mock.patch.object(self.sis.finanza, "processa_penale",
+                               side_effect=sqlite3.OperationalError("database is locked")):
+            (s, c), rinviate = self._con_gli_errori(lambda: self._cancella(rif))
+        self.assertEqual(200, s, c)
+        self.assertEqual("cancellata_host", c.get("stato"), c)
+        self.assertIs(True, c.get("nota_debito_in_attesa"), c)
+        self.assertEqual(1, len(rinviate), "la penale esplosa non grida col suo codice")
+        self.assertIs(True, rinviate[0].kwargs.get("exc_info"), "il guasto non lascia la traccia")
+        self.assertIn(fase83_server._rif_per_registro(rif), rinviate[0].args,
+                      "l'allarme non dice QUALE prenotazione (ferrea 9)")
+        self.assertIsNone(self.sis.payout.info(rif), "host ancora pagabile su una cancellata")
+        self.assertEqual(1, len(self._rimborsi(rif)), "l'ospite resta senza la riga del rimborso")
+        self._sweep()
+        self.assertEqual(1, len(self._note_debito(rif)), "la nota non la riprende lo sweeper")
+
+    def test_137_G19_una_penale_che_esplode_nello_sweeper_non_ferma_le_altre(self):
+        # Kimi K18 su G13 (26/10): `_riprendi_cancellazione_host` proteggeva solo i passi; un guasto
+        # nella penale (`_penale_finita`, `processa_penale`) usciva dal giro, e le cancellazioni
+        # dietro restavano a meta'. Esplode la PRIMA ripresa, qualunque sia l'ordine.
+        rif, rif2 = self._prenota_paga(), self._prenota_paga()
+        self._solo_il_cas(rif)
+        self._solo_il_cas(rif2)
+        fc = self.sis.finanza
+        vera, chiamate = fc.processa_penale, []
+
+        def _la_prima_esplode(**kw):
+            chiamate.append(kw.get("riferimento"))
+            if len(chiamate) == 1:
+                raise sqlite3.OperationalError("database is locked")    # il guasto vero (G18)
+            return vera(**kw)
+        with mock.patch.object(fc, "processa_penale", side_effect=_la_prima_esplode), \
+                self.assertLogs("core_auto.server", level="WARNING") as registro:
+            self._sweep()
+        self.assertEqual(2, len(chiamate), "il guasto della prima ferma la ripresa delle altre")
+        self.assertEqual({rif, rif2}, set(chiamate))
+        self.assertEqual(1, len(self._note_debito(chiamate[1])), "la seconda nota non e' nata")
+        tracce = [r for r in registro.records
+                  if r.levelname == "ERROR" and "codice: ripresa_fallita" in r.getMessage()]
+        self.assertEqual(1, len(tracce), [r.getMessage() for r in registro.records])
+        ei = tracce[0].exc_info
+        self.assertTrue(isinstance(ei, tuple) and ei[0] is sqlite3.OperationalError,
+                        "il guasto della ripresa non lascia la sua traccia: %r" % (ei,))
+        self.assertIn(fase83_server._rif_per_registro(chiamate[0]), tracce[0].getMessage(),
+                      "l'allarme non dice QUALE prenotazione e' rimasta indietro (ferrea 9)")
+
+
+class TestLeLettureDellaRipresaDellaCancellazione(unittest.TestCase):
+    """VOCE 137: le due letture con cui lo sweeper decide se toccare una 'cancellata_host', ogni
+    ramo da solo, con componenti finti -- anche gli stati che il flusso non produce (D19)."""
+
+    class _Giornale:
+        def __init__(self, note=(), debiti=None, eventi=()):
+            self._note, self._debiti, self._eventi = list(note), dict(debiti or {}), set(eventi)
+            self.chiesti = []
+
+        def note_per_riferimento(self, rif):
+            return list(self._note)
+
+        def debiti_host(self, host):
+            self.chiesti.append(host)
+            return list(self._debiti.get(host, []))
+
+        def esiste_evento(self, ev):
+            return ev in self._eventi
+
+    def test_la_penale_e_finita_solo_con_la_riga_del_debito_della_sua_nota(self):
+        G, finita = self._Giornale, fase83_server._penale_finita
+        nd = {"tipo": "debito", "nota_id": "ND-1", "soggetto": "host:demo", "storno_di": None}
+        g = G([nd], {"demo": [{"debito_id": "ND-1"}]})
+        self.assertIs(True, finita(g, "R"))
+        self.assertEqual(["demo"], g.chiesti, "il debito si cerca fra quelli dell'host della nota")
+        self.assertIs(False, finita(G([nd], {"demo": [{"debito_id": "ND-9"}]}), "R"))
+        self.assertIs(False, finita(G([], {"demo": [{"debito_id": "ND-1"}]}), "R"))
+        nc = {"tipo": "credito", "nota_id": "NC-1", "soggetto": "host:demo", "storno_di": None}
+        self.assertIs(False, finita(G([nc], {"demo": [{"debito_id": "NC-1"}]}), "R"))
+        storno = dict(nd, storno_di="NC-0")
+        self.assertIs(False, finita(G([storno], {"demo": [{"debito_id": "ND-1"}]}), "R"))
+
+    def test_una_cancellazione_e_a_meta_solo_se_si_vede_un_effetto_mancante(self):
+        import types
+        a_meta = fase83_server._cancellazione_host_a_meta
+
+        def sis(payout, garanzia, finanza):
+            return types.SimpleNamespace(payout=payout, garanzia=garanzia, finanza=finanza)
+
+        def componente(metodo, valore):
+            m = mock.Mock()
+            getattr(m, metodo).return_value = valore
+            return m
+        pd_c, pd_v = componente("info", {"stato": "maturato"}), componente("info", None)
+        gz_a = componente("stato", {"stato": "in_garanzia"})
+        gz_c = componente("stato", {"stato": "annullato"})
+        gz_n = componente("stato", None)
+        g_si, g_no = self._Giornale(eventi={"rimborso:R"}), self._Giornale()
+        nessuno = {"corpo_json": "{}"}
+        aperto = {"corpo_json": json.dumps({"blocco_pi": "pi_x"})}
+        incassato = {"corpo_json": json.dumps({"blocco_pi": "pi_x", "blocco_incassato_ts": 5})}
+        casi = [
+            ("tutto finito", sis(pd_v, gz_c, g_si), nessuno, True, 100, False),
+            ("bonifico ancora li'", sis(pd_c, gz_c, g_si), nessuno, True, 100, True),
+            ("garanzia aperta", sis(pd_v, gz_a, g_si), nessuno, True, 100, True),
+            ("soldi entrati senza riga", sis(pd_v, gz_c, g_no), nessuno, True, 100, True),
+            ("non pagata", sis(pd_v, gz_c, g_no), nessuno, False, 100, False),
+            ("pagata a zero", sis(pd_v, gz_c, g_no), nessuno, True, 0, False),
+            ("senza giornale", sis(pd_v, gz_c, None), nessuno, True, 100, False),
+            ("blocco aperto", sis(pd_v, gz_c, g_no), aperto, True, 100, False),
+            ("blocco incassato", sis(pd_v, gz_c, g_no), incassato, True, 100, True),
+            ("componenti assenti", sis(None, None, g_si), nessuno, True, 100, False),
+            ("garanzia illeggibile", sis(pd_v, gz_n, g_si), nessuno, True, 100, False),
+        ]
+        for nome, s, rec, pagata, guest, atteso in casi:
+            with self.subTest(nome):
+                self.assertIs(atteso, a_meta(s, rec, "R", pagata=pagata, guest=guest))
 
 
 class TestUnPagamentoConfermatoNonLasciaIlBonificoFermo(_BancoDeiSoldiDelServer):
