@@ -305,6 +305,40 @@ class TestLaCancellazioneNelleQuarantottoOreAnnulla(_Base):
         self.assertEqual(self.movimenti(rif, "rimborso"), [])
         self.assertEqual(self.stripe.rimborsi, [])
 
+    def test_143_cancellata_host_blocco_che_risulta_incassato_si_restituisce(self):
+        """VOCE 143, meta' 'cancellata_host' (Claude; Kimi K13 4.2 e K14 punto 10; Proton
+        P1-QUINQUIES, che ha scritto questa prova; GML 40): l'annullo fallisce alla cancellazione
+        dell'host, poi il giro orario trova su Stripe il blocco GIA' INCASSATO, scrive l'incasso e
+        promette «si restituisce col rimborso di sempre» -- ma la riga del rimborso non la scriveva
+        nessuno, e la lista dei rimborsi dovuti nasce da quella riga. Ora la scrive lo sweeper
+        (voce 137) al giro dopo."""
+        from fase83_server import sweep_hold_una_passata
+        rif, _vt, tot = self.prenota("2027-04-10", "2027-04-12")
+        _s, _c, pi = self.paga_bloccato(rif, tot)
+        self.stripe.esito_annullo = {"ok": False, "id": "", "motivo": "URLError: rete"}
+        self.stripe.pagamenti.pop(pi)                       # e nemmeno la rilettura risponde
+        s, c = self.g("POST", "/api/host/cancella", {"riferimento": rif, "host_id": "demo"}, HK)
+        self.assertEqual(s, 200, "%r" % (c,))
+        self.assertEqual(self.movimenti(rif, "rimborso"), [],
+                         "PREMESSA: annullo non riuscito, nessuna riga (giusto: non si sa ancora)")
+        dovuto = int(c.get("rimborso_cliente_cents", 0))
+        self.assertGreater(dovuto, 0, "PREMESSA: all'ospite e' stato promesso il rimborso: %r" % (c,))
+        sweep_hold_una_passata(self.sis, self.r)
+        self.assertEqual(self.movimenti(rif, "rimborso"), [],
+                         "col blocco ancora aperto lo sweeper NON scrive la riga (i soldi non si sa)")
+        # su Stripe il blocco risulta INCASSATO (un incasso partito prima, con la risposta persa)
+        self.stripe.esito_annullo = None
+        self.stripe.pagamenti[pi] = "succeeded"
+        self.r._incassa_blocchi(ora_ts=int(time.time()) + 3600)
+        sweep_hold_una_passata(self.sis, self.r)
+        sweep_hold_una_passata(self.sis, self.r)
+        righe = [int(m["importo_cents"]) for m in self.movimenti(rif, "rimborso")]
+        self.assertEqual([dovuto], righe,
+                         "L'HOST HA CANCELLATO, STRIPE HA INCASSATO E NESSUNO RESTITUISCE: promessi %d, "
+                         "righe %r" % (dovuto, righe))
+        _s, lista = self.g("GET", "/api/admin/rimborsi_dovuti", None, AK)
+        self.assertIn(rif, [x.get("riferimento") for x in lista.get("rimborsi", [])])
+
     def test_UN_ANNULLO_FALLITO_LO_RIFA_IL_GIRO_ORARIO(self):
         rif, vt, tot = self.prenota("2027-04-10", "2027-04-12")
         _s, _c, pi = self.paga_bloccato(rif, tot)

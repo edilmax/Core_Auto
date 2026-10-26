@@ -469,6 +469,12 @@ jobs:
   #     dei sorveglianti di fase83 184 s, di fase57 29 s (sul PC del fondatore, Windows).
   #     Caso peggiore visto: 45 x 184 s = 138 minuti; il tetto del job e' 300. Un diff oltre
   #     i 60 punti e' ROSSO, non tagliato: si divide la PR, o si alza il tetto QUI dicendolo.
+  #  ⛔ 26/10/2026, ALZATO A 80, DETTO QUI: la PR #280 (voce 137, la cancellazione dell'host
+  #     arriva in fondo) genera 64 punti. Col tetto 60 questo job: 60 provati, 60 uccisi, 0
+  #     sopravvissuti, ma «4 punti NON ESAMINATI (oltre il tetto 4)» = ROSSO, in 50 minuti
+  #     (17:41:58 -> 18:32:06 UTC). Lo stesso Giudice col tetto 80 nel contenitore della suite
+  #     Linux: 64 provati, 64 uccisi. 80 punti a questo passo stanno sotto i 70 minuti, il
+  #     tetto del job resta 300. Dividere la PR avrebbe separato la riparazione dalle sue prove.
   #     ⚠️ Il tempo degli esami rifatti da --riesegui NON e' misurato: dipende da quali righe
   #     della scheda la PR scrive (nessuna, in una PR che non rimisura).
   caselle:
@@ -489,7 +495,7 @@ jobs:
       - name: Il cricchetto delle caselle (e le misure della PR rifatte qui)
         run: python collaudi/scheda.py --cricchetto HEAD^1 --riesegui
       - name: Mutazione sulle righe cambiate
-        run: python collaudi/mutazione_prodotto.py --diff HEAD^1 --tetto 60
+        run: python collaudi/mutazione_prodotto.py --diff HEAD^1 --tetto 80
 
   # ==========================================================================
   #  QUALITA' STATICA — qui ci sono i GATE VERI del lint (blocca sul certo)

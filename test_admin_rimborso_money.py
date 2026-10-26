@@ -1627,6 +1627,11 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
         soldi nostri. Il percorso e' quello vero (`trattenuto -> in_transito -> pagato`), non
         una scrittura a mano nel database: le transizioni sono quelle che il modulo consente."""
         rif, _ = self._cancella_da_ospite("2026-09-08", "2026-09-10", "pi_ospite_15")
+        # ⛔ 26/10 (regressione della #279 trovata da PROTON): questa cancellazione ha una PENALE,
+        # e la QUOTA dell'host pagata e' sua (`TestDopoUnaPenaleLaParteDellOspiteSiRimborsaAncora`
+        # in test_fase83_server). Il doppio esborso vero e' l'host pagato PER INTERO: si costruisce.
+        pagato = int(self._riga(self._lista(), rif)["pagato_cents"])
+        self.assertTrue(self.sys.payout.imposta_importo(rif, pagato), "setup")
         self.assertTrue(self.sys.payout.aggiorna_stato(rif, "in_transito"), "setup")
         self.assertTrue(self.sys.payout.aggiorna_stato(rif, "pagato"), "setup")
         self.assertEqual(self.sys.payout.stato_di(rif), "pagato",
@@ -1727,6 +1732,9 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
         pagato il pulsante rimborsava anche l'ospite. Lo stato si costruisce come lo scrive il
         bonifico vero (`trattenuto -> in_transito`), non con un 'pagato' che il prodotto non usa."""
         rif, _ = self._cancella_da_ospite("2026-09-23", "2026-09-25", "pi_pacco1_tr")
+        # host pagato PER INTERO (non la sua quota della penale, che e' sua: vedi la prova sopra)
+        pagato = int(self._riga(self._lista(), rif)["pagato_cents"])
+        self.assertTrue(self.sys.payout.imposta_importo(rif, pagato), "setup")
         self.assertTrue(self.sys.payout.aggiorna_stato(rif, "in_transito"), "setup")
         riga = self._riga(self._lista(), rif)
         self.assertIsNotNone(riga, "setup: la riga dev'essere in lista")
@@ -1737,6 +1745,94 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
         self.assertEqual(s, 409, res)
         self.assertEqual(self._rimborsi_inviati(), [],
                          "DOPPIO ESBORSO: host gia' pagato e ospite rimborsato")
+
+    def test_PACCO1B_garanzia_NON_divisa_e_host_pagato_il_freno_resta_lo_stato_del_bonifico(self):
+        """Giudice sul diff della voce 173 (26/10): con `or` al posto di `and` in «garanzia dict E
+        'risolto'» la prova sopravviveva. D19: una garanzia NON divisa (rilasciata all'host) che
+        dichiara una quota larga, e il bonifico partito: il freno e' lo stato del bonifico, non il
+        conto della divisione (che qui non c'e')."""
+        rif, _ = self._cancella_da_ospite("2026-09-12", "2026-09-14", "pi_pacco1b_nd")
+        pagato = int(self._riga(self._lista(), rif)["pagato_cents"])
+        self.assertTrue(self.sys.payout.aggiorna_stato(rif, "in_transito"), "setup")
+        vera = self.sys.garanzia.stato
+
+        def _rilasciata(r):
+            st = dict(vera(r) or {})
+            st.update(stato="rilasciato", host_riceve_cents=pagato)
+            return st
+        with mock.patch.object(self.sys.garanzia, "stato", side_effect=_rilasciata):
+            riga = self._riga(self._lista(), rif)
+        self.assertIn("payout_gia_pagato", riga.get("manca") or [], riga)
+        self.assertFalse(riga.get("bottone"), riga)
+
+    def test_PACCO1B_con_la_penale_un_bonifico_NON_partito_non_ferma_la_parte_dell_ospite(self):
+        """Giudice sul diff della voce 173 (26/10): con `or` al posto di `and` in «payout presente
+        E gia' partito» la prova sopravviveva. D19: la garanzia divisa dalla penale e la riga del
+        bonifico rimasta all'importo pieno ma NON partita: nessun soldo e' uscito verso l'host, il
+        pulsante dell'ospite non si ferma per un bonifico che non c'e' stato."""
+        rif, _ = self._cancella_da_ospite("2026-09-15", "2026-09-17", "pi_pacco1b_np")
+        self.assertEqual("risolto", (self.sys.garanzia.stato(rif) or {}).get("stato"),
+                         "PREMESSA: la penale ha diviso la garanzia")
+        pagato = int(self._riga(self._lista(), rif)["pagato_cents"])
+        self.assertTrue(self.sys.payout.imposta_importo(rif, pagato), "setup")
+        self.assertNotIn(self.sys.payout.stato_di(rif), ("in_transito", "pagato"),
+                         "PREMESSA: il bonifico non e' partito")
+        riga = self._riga(self._lista(), rif)
+        self.assertNotIn("payout_gia_pagato", riga.get("manca") or [], riga)
+
+    def test_PACCO1B_quota_dell_host_piu_parte_dell_ospite_UGUALE_al_pagato_e_ammessa(self):
+        """PROTON sul diff finale della 137 (26/10): con `<` al posto di `<=` in «dovuto + quota
+        <= pagato» nessuna prova diventava rossa. D19: la garanzia divisa con ESATTAMENTE la quota
+        che manca all'ospite per arrivare al pagato. Il confine e' ammesso: esce quanto e' entrato,
+        nessun soldo nostro (D16)."""
+        rif, _ = self._cancella_da_ospite("2026-09-15", "2026-09-17", "pi_pacco1b_cf")
+        self.assertEqual("risolto", (self.sys.garanzia.stato(rif) or {}).get("stato"),
+                         "PREMESSA: la penale ha diviso la garanzia")
+        prima = self._riga(self._lista(), rif)
+        pagato, dovuto = int(prima["pagato_cents"]), int(prima["dovuto_cents"])
+        self.assertLess(0, dovuto, "PREMESSA")
+        self.assertLess(dovuto, pagato, "PREMESSA: all'host resta una quota")
+        self.assertNotIn(self.sys.payout.stato_di(rif), ("in_transito", "pagato"),
+                         "PREMESSA: il bonifico non e' partito")
+        vera = self.sys.garanzia.stato
+
+        def _divisa_al_confine(r):
+            st = dict(vera(r) or {})
+            st.update(stato="risolto", host_riceve_cents=pagato - dovuto)
+            return st
+        with mock.patch.object(self.sys.garanzia, "stato", side_effect=_divisa_al_confine):
+            riga = self._riga(self._lista(), rif)
+        self.assertNotIn("arbitrato_supera_il_pagato", riga.get("manca") or [], riga)
+        self.assertIs(True, riga.get("passi_sicurezza_ok"),
+                      "quota + dovuto == pagato fermato come se superasse il pagato: %r" % (riga,))
+
+    def test_PACCO1B_garanzia_divisa_con_un_ALTRA_cifra_non_salta_il_freno_delle_date(self):
+        """PROTON sul diff finale della 137 (26/10): con `arbitrato = risolta` sempre (al posto di
+        «solo se la garanzia da' all'ospite ESATTAMENTE il dovuto») nessuna prova diventava rossa.
+        D19: una garanzia 'risolto' con una cifra all'ospite DIVERSA dal dovuto, e le date NON
+        liberate (pendente ancora 'pagato'): non e' l'arbitrato di questa riga, il freno delle date
+        resta."""
+        rif, _ = self._cancella_da_ospite("2026-09-18", "2026-09-20", "pi_pacco1b_ac")
+        dovuto = int(self._riga(self._lista(), rif)["dovuto_cents"])
+        pp, gz = self.sys.pagamenti_pendenti, self.sys.garanzia
+        vero_info, vera_stato = pp.info, gz.stato
+
+        def _ancora_pagata(r):
+            rec = vero_info(r)
+            return dict(rec, stato="pagato") if (r == rif and rec) else rec
+
+        def _divisa_altrove(r):
+            st = dict(vera_stato(r) or {})
+            st.update(stato="risolto", ospite_rimborso_cents=dovuto + 1)
+            return st
+        with mock.patch.object(pp, "info", side_effect=_ancora_pagata), \
+                mock.patch.object(gz, "stato", side_effect=_divisa_altrove):
+            riga = self._riga(self._lista(), rif)
+        self.assertIsNotNone(riga, "PREMESSA: la riga e' in lista")
+        self.assertIs(False, riga.get("date_liberate"), "PREMESSA: date non liberate")
+        self.assertIs(False, riga.get("arbitrato"), riga)
+        self.assertIn("date_liberate", riga.get("manca") or [],
+                      "una divisione con un'altra cifra salta il freno delle date: %r" % (riga,))
 
     def test_PACCO1_un_rimborso_PARZIALE_non_e_un_rimborso_fatto(self):
         """Kimi K12 sulla #279: «gia' rimborsato» voleva dire «almeno un centesimo»: 40 restituiti

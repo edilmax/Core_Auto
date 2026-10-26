@@ -1087,7 +1087,9 @@ class TestContrattoPendentiFase162(BaseContratto, unittest.TestCase):
                      "corpo_json TEXT NOT NULL", "scadenza_ts INTEGER NOT NULL",
                      "stato TEXT NOT NULL", "promemoria_ts INTEGER NOT NULL",
                      "creato_ts INTEGER NOT NULL",
-                     "invito_recensione_ts INTEGER NOT NULL"),
+                     "invito_recensione_ts INTEGER NOT NULL",
+                     # voce 137 (26/10): quando l'host ha cancellato, l'ordine di `cancellate_host`
+                     "cancellata_ts INTEGER NOT NULL"),
     }
     INDICI = {}
     UNICI = {"pendenti": ("pk(riferimento)",)}

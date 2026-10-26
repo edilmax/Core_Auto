@@ -145,8 +145,9 @@ class PagamentiPendenti:
                         con.execute("ALTER TABLE pendenti ADD COLUMN %s TEXT NOT NULL DEFAULT ''" % _c)
                     except sqlite3.OperationalError:
                         pass
-                # colonne INTEGER separate (promemoria check-in / invito recensione inviati)
-                for _c in ("promemoria_ts", "invito_recensione_ts"):
+                # colonne INTEGER separate (promemoria check-in / invito recensione inviati;
+                # `cancellata_ts`: quando l'host ha cancellato, l'ordine di `cancellate_host`)
+                for _c in ("promemoria_ts", "invito_recensione_ts", "cancellata_ts"):
                     try:
                         con.execute("ALTER TABLE pendenti ADD COLUMN %s INTEGER NOT NULL DEFAULT 0" % _c)
                     except sqlite3.OperationalError:
@@ -613,10 +614,10 @@ class PagamentiPendenti:
                 import json as _j2
                 cur = con.execute(
                     # noqa: vedi la nota su `scaduto` -- si interpolano solo segnaposto `?`
-                    "UPDATE pendenti SET stato='cancellata_host', corpo_json=? "  # nosec B608  # noqa: S608
+                    "UPDATE pendenti SET stato='cancellata_host', corpo_json=?, cancellata_ts=? "  # nosec B608  # noqa: S608
                     "WHERE riferimento=? AND stato IN (%s)"
                     % ",".join("?" * len(_AMMESSI["cancellata_host"])),
-                    (_j2.dumps(cj), riferimento) + _AMMESSI["cancellata_host"])
+                    (_j2.dumps(cj), self._now(), riferimento) + _AMMESSI["cancellata_host"])
             return bool(cur.rowcount)
         finally:
             con.close()
@@ -624,12 +625,16 @@ class PagamentiPendenti:
     def cancellate_host(self, *, limit: int = 50) -> List[Dict[str, Any]]:
         """Le cancellazioni-host piu' recenti (per la RIASSERZIONE penali del Financial
         Controller fase177: un crash tra il CAS e il giornale lascia la penale annotata
-        qui ma senza Nota di Debito -> lo sweeper la sana, pattern #32)."""
+        qui ma senza Nota di Debito -> lo sweeper la sana, pattern #32).
+        ⛔ Recenti per ora di CANCELLAZIONE, non di prenotazione (voce 137, PROTON P1-SEXIES):
+        'cancellata_host' non si purga mai, e una prenotazione di mesi fa cancellata oggi a
+        meta' restava fuori dalle 50. Le righe di prima della colonna hanno 0: vanno in fondo."""
         lim = limit if isinstance(limit, int) and 0 < limit <= 500 else 50
         con = self._apri()
         try:
             righe = con.execute("SELECT * FROM pendenti WHERE stato='cancellata_host' "
-                                "ORDER BY creato_ts DESC LIMIT ?", (lim,)).fetchall()
+                                "ORDER BY cancellata_ts DESC, creato_ts DESC LIMIT ?",
+                                (lim,)).fetchall()
             return [self._riga(r) for r in righe]
         finally:
             con.close()

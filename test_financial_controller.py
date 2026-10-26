@@ -136,8 +136,17 @@ class TestGiornale(unittest.TestCase):
         self.assertTrue(self.fc.verifica_catena()["ok"])
 
 
-class TestOffsetEFlusso(unittest.TestCase):
+class _BancoOffset(unittest.TestCase):
+    """Il sistema vero col giornale (fase177), pendenti, bonifici e garanzia, e il router. Lo usa
+    anche test_fase83_server per le guardie della voce 137: il Giudice della mutazione accende per
+    primo il test DEDICATO del modulo (`scegli_sorveglianti`), e questo file per fase83 restava
+    fuori dagli otto occhi. L'orologio del preventivo fermo sta qui dentro (non solo nel
+    `setUpModule` di questo file), cosi' vale per chiunque usi il banco."""
+
     def setUp(self):
+        _orologio = mock.patch.object(fase59_concierge, "time", mock.Mock(time=lambda: 1767225600))
+        _orologio.start()
+        self.addCleanup(_orologio.stop)
         d = self.dir = tempfile.mkdtemp()
         self.sis = crea_sistema(ConfigCasaVIP(
             abilitato=True, segreto_hmac=SEG, db_catalogo=f"{d}/c.db",
@@ -180,6 +189,17 @@ class TestOffsetEFlusso(unittest.TestCase):
                                {"Stripe-Signature": "t=%s,v1=%s" % (ts, mac)})
         self.assertEqual(s, 200)
         return rif
+
+    def _tipi(self, rif):
+        return [m["tipo"] for m in self.sis.finanza.movimenti(rif)]
+
+    def _note_debito(self, rif):
+        # PROTON P1-SEXIES (b): la riga `penale:<rif>` del giornale e' UNICA per costruzione, quindi
+        # contarla non vede la nota DOPPIA, che vive nella tabella `note`: si conta li'.
+        return [n for n in self.sis.finanza.note_per_riferimento(rif) if n.get("tipo") == "debito"]
+
+
+class TestOffsetEFlusso(_BancoOffset):
 
     def test_offset_al_centesimo_fifo_e_valute(self):
         fc = self.sis.finanza
@@ -280,6 +300,9 @@ class TestOffsetEFlusso(unittest.TestCase):
         self.assertEqual(sum(1 for m in self.sis.finanza.movimenti(rif)
                              if m["tipo"] == "nota_debito"), 1)
         self.assertTrue(self.sis.finanza.verifica_catena()["ok"])
+
+    # ⛔ VOCE 137: le guardie G1-G7 (e quelle nate dal Giudice) stanno in test_fase83_server.py,
+    # classe `TestLaCancellazioneDellHostArrivaSempreInFondo`, sopra il banco `_BancoOffset`.
 
 
 if __name__ == "__main__":
