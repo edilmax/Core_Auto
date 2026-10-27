@@ -247,6 +247,50 @@ class TestDebtStatus(unittest.TestCase):
         s, d = self.g("GET", "/api/host/payout", None, {"X-Host-Token": self.tok})
         self.assertEqual(d["debiti_aperti_cents"], {})
 
+    # ── 8) voce 139: un bonifico FERMATO mentre la penale gira non paga la penale ─
+    def _fermato_al_primo_tocco(self, pid):
+        """Avvolge `rimuovi` e `imposta_importo` del ledger VERO: al primo tocco su `pid` lo mette
+        'trattenuto' (l'ospite apre una contestazione proprio adesso), poi scrive davvero."""
+        fermati = []
+
+        def avvolgi(vero):
+            def f(p, *a, **k):
+                if p == pid and not fermati:
+                    fermati.append(p)
+                    self.assertTrue(self.pd.aggiorna_stato(pid, "trattenuto"),
+                                    "PREMESSA: il bonifico doveva poter essere fermato")
+                return vero(p, *a, **k)
+            return f
+        self.pd.rimuovi = avvolgi(self.pd.rimuovi)
+        self.pd.imposta_importo = avvolgi(self.pd.imposta_importo)
+        return fermati
+
+    def test_139_la_penale_non_cancella_un_bonifico_fermato_nel_frattempo(self):
+        self.pd.registra_maturato("B1", self.hid, 1000, "EUR")
+        fermati = self._fermato_al_primo_tocco("B1")
+        out = self.fc.processa_penale(riferimento="A-PEN", host_id=self.hid,
+                                      penale_cents=5000, valuta="EUR", payout=self.pd)
+        self.assertEqual(fermati, ["B1"], "PREMESSA: la compensazione doveva toccare B1")
+        self.assertEqual((self.pd.stato_di("B1"), (self.pd.info("B1") or {}).get("minori")),
+                         ("trattenuto", 1000),
+                         "LA PENALE HA CANCELLATO UN BONIFICO FERMATO DA UNA CONTESTAZIONE")
+        self.assertEqual(out["residuo_cents"], 5000,
+                         "la penale conta come riscossi soldi fermati da una contestazione: %r"
+                         % (out,))
+        self.assertEqual(self.fc.debiti_host(self.hid, stato="aperto")[0]["residuo_cents"], 5000)
+
+    def test_139_la_riscossione_non_riduce_un_bonifico_fermato_nel_frattempo(self):
+        self._debito_diretto(cents=2550)
+        self.pd.registra_maturato("B2", self.hid, 17000, "EUR")
+        fermati = self._fermato_al_primo_tocco("B2")
+        ris = self.fc.riscuoti_debiti(host_id=self.hid, payout=self.pd)
+        self.assertEqual(fermati, ["B2"], "PREMESSA: la riscossione doveva toccare B2")
+        self.assertEqual((self.pd.stato_di("B2"), self.pd.info("B2")["minori"]),
+                         ("trattenuto", 17000),
+                         "LA RISCOSSIONE HA RIDOTTO UN BONIFICO FERMATO DA UNA CONTESTAZIONE")
+        self.assertEqual(ris["riscossi_cents"], 0, "%r" % (ris,))
+        self.assertEqual(self.fc.debiti_host(self.hid, stato="aperto")[0]["residuo_cents"], 2550)
+
 
 if __name__ == "__main__":
     unittest.main()

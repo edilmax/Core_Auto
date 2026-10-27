@@ -3030,6 +3030,400 @@ class TestLeLettureDellaRipresaDellaCancellazione(unittest.TestCase):
                 self.assertIs(atteso, a_meta(s, rec, "R", pagata=pagata, guest=guest))
 
 
+class _ConnectCheRifiutaLaPrima(_ConnectCheRicorda):
+    """Come Stripe col saldo insufficiente: il PRIMO bonifico e' rifiutato con certezza (None), il
+    payout resta 'maturato' e lo ritentano i giri. I successivi partono."""
+
+    def __init__(self):
+        super().__init__()
+        self.rifiutati = []
+
+    def trasferisci(self, acct, importo, valuta, rif):
+        if not self.rifiutati:
+            self.rifiutati.append((acct, importo, valuta, rif))
+            return None
+        return super().trasferisci(acct, importo, valuta, rif)
+
+
+class TestUnBonificoTrattenutoNonPartePiu(_BancoDeiSoldiDelServer):
+    """Voce 138 (a) (Kimi K12, rivista da PROTON il 25/10): dopo il rilascio della garanzia un
+    chargeback della banca lascia la garanzia 'rilasciato' (`contesta` risponde stato_non_valido)
+    e scrive 'trattenuto' SOLO sul payout. Il bonifico guardava solo 'in_transito'/'pagato': chi
+    arrivava dopo con un elenco (il giro dei bonifici fermi, la verifica, i dati fiscali) pagava
+    l'host coi soldi che la banca si riprende. Il gemello che deve restare verde (l'arbitro:
+    'trattenuto' con la garanzia 'risolto' paga) e' `TestUnaControversiaApertaFermaISoldi.
+    test_F1_segnala_cancella_arbitro_e_l_host_collegato_RICEVE_la_sua_quota`."""
+
+    def setUp(self):
+        super().setUp()
+        self.connect = _ConnectCheRifiutaLaPrima()
+        self.sis.connect = self.connect
+
+    def _rilasciata_e_ferma(self, slug, pi):
+        self.pubblica(slug)
+        b = self.prenota(slug, 10)
+        rif = b["riferimento"]
+        s, c = self.paga(rif, pi)
+        _deve(s == 200, s, c)
+        for r in self.sis.garanzia.auto_rilascia(ora_ts=int(time.time()) + 40 * 86400,
+                                                 dettagli=True) or []:
+            self.r._trasferisci_all_host(r["prenotazione_id"], r["host_riceve_cents"])
+        _deve(self.connect.rifiutati and not self.connect.bonifici,
+              "PREMESSA: il primo bonifico doveva essere RIFIUTATO", self.connect.rifiutati,
+              self.connect.bonifici)
+        _deve(self.sis.garanzia.stato(rif)["stato"] == "rilasciato", self.sis.garanzia.stato(rif))
+        _deve(self.sis.payout.stato_di(rif) == "maturato", self.sis.payout.stato_di(rif))
+        return rif
+
+    def test_138a_dopo_il_chargeback_un_bonifico_TRATTENUTO_non_parte_piu(self):
+        rif = self._rilasciata_e_ferma("casa-t1", "pi_t1")
+        s, c = self.contestazione("pi_t1", dp="dp_t1")
+        _deve(s == 200, s, c)
+        _deve(self.sis.payout.stato_di(rif) == "trattenuto",
+              "PREMESSA: il chargeback doveva trattenere il bonifico", self.sis.payout.stato_di(rif))
+        with self.ascolta() as righe:
+            self.r._trasferisci_all_host(rif, int(self.sis.payout.info(rif)["minori"]))
+        self.assertEqual([], self.connect.bonifici,
+                         "BONIFICO PARTITO SOTTO CHARGEBACK: payout 'trattenuto', garanzia "
+                         "'rilasciato', partiti %r: la banca si riprende i soldi dell'ospite e "
+                         "l'host li ha gia' avuti" % (self.connect.bonifici,))
+        self.assertEqual("trattenuto", self.sis.payout.stato_di(rif))
+        # ...e lo dice (Kimi K17, 138 a (c)): un bonifico fermo in silenzio non lo guarda nessuno
+        self.assertTrue(self.errori_con(righe, "BONIFICO FERMATO", "codice: payout_trattenuto"),
+                        "IL BONIFICO FERMATO NON LO DICE NESSUNO: manca l'allarme "
+                        "payout_trattenuto %r" % (righe,))
+
+    def test_138a_gemello_TRATTENUTO_con_la_garanzia_RISOLTA_paga_e_tace(self):
+        # ferrea 10: l'allarme qui sopra tace quando 'trattenuto' paga davvero, con la garanzia
+        # divisa dall'arbitro. Lo stato si costruisce a mano (D19): la rotta dell'arbitro
+        # riscrive il bonifico 'maturato' prima di pagare e non passerebbe di qui.
+        self.connect = _ConnectCheRicorda()
+        self.sis.connect = self.connect
+        self.pubblica("casa-t5")
+        rif = self.prenota("casa-t5", 10)["riferimento"]
+        s, c = self.paga(rif, "pi_t5")
+        _deve(s == 200, s, c)
+        _deve(self.sis.garanzia.contesta(rif, "non corrisponde").get("ok"),
+              "PREMESSA: la garanzia doveva poter diventare contestata")
+        _deve(self.sis.payout.aggiorna_stato(rif, "trattenuto") is True,
+              "PREMESSA: il bonifico doveva fermarsi")
+        _deve(self.sis.garanzia.risolvi(rif, rimborso_ospite_cents=0).get("ok"),
+              "PREMESSA: l'arbitro doveva dare tutto all'host", self.sis.garanzia.stato(rif))
+        pieno = int(self.sis.payout.info(rif)["minori"])
+        with self.ascolta() as righe:
+            self.r._trasferisci_all_host(rif, pieno)
+        self.assertEqual([("acct_banco", pieno, "EUR", rif)], self.connect.bonifici,
+                         "la garanzia divisa dall'arbitro non paga piu' un 'trattenuto'")
+        self.assertEqual([], self.errori_con(righe, "payout_trattenuto"),
+                         "FALSO ALLARME: il bonifico e' partito e il registro dice fermato")
+
+    def test_138a_il_giro_dei_bonifici_fermi_con_l_elenco_VECCHIO_non_paga(self):
+        rif = self._rilasciata_e_ferma("casa-t2", "pi_t2")
+        vero_tutti = self.sis.payout.tutti
+
+        def tutti_poi_chargeback(*a, **k):
+            elenco = vero_tutti(*a, **k)
+            _deve(any(r["prenotazione_id"] == rif for r in elenco),
+                  "PREMESSA: il bonifico fermo doveva essere nell'elenco del giro", elenco)
+            s, c = self.contestazione("pi_t2", dp="dp_t2")      # arriva MENTRE il giro lavora
+            _deve(s == 200, s, c)
+            return elenco
+        self.sis.payout.tutti = tutti_poi_chargeback
+        with self.ascolta() as righe:
+            self.r._ritenta_bonifici_fermi()
+        self.assertEqual([], self.connect.bonifici,
+                         "IL GIRO ORARIO HA PAGATO UN BONIFICO SOTTO CHARGEBACK con l'elenco preso "
+                         "prima: %r" % (self.connect.bonifici,))
+        self.assertTrue(self.errori_con(righe, "BONIFICO FERMATO", "codice: payout_trattenuto"),
+                        "IL GIRO HA SALTATO IL BONIFICO FERMATO IN SILENZIO: manca l'allarme "
+                        "payout_trattenuto %r" % (righe,))
+
+    def _a_mano(self, rif):
+        return self.g("POST", "/api/admin/payout/pagato_a_mano", {"riferimento": rif},
+                      {"X-Admin-Key": "ak"})
+
+    def test_138a_LO_PAGO_IO_A_MANO_su_un_trattenuto_non_prende_in_carico(self):
+        # GML compito 40: «il pulsante paga SEMPRE un 'trattenuto'». Il pulsante pretende un
+        # bonifico 'maturato' PRIMA di chiamare il bonifico (`_admin_pagato_a_mano`, sotto
+        # `_BONIFICI_LOCK`): questa prova lo tiene fermo li'.
+        self.connect.bonifico_di = lambda acct, rif: {"ok": True, "bonifico": None}
+        rif = self._rilasciata_e_ferma("casa-t3", "pi_t3")
+        s, c = self.contestazione("pi_t3", dp="dp_t3")
+        _deve(s == 200, s, c)
+        _deve(self.sis.payout.stato_di(rif) == "trattenuto",
+              "PREMESSA: il chargeback doveva trattenere il bonifico", self.sis.payout.stato_di(rif))
+        s, c = self._a_mano(rif)
+        self.assertEqual((409, "non_da_pagare", "trattenuto"),
+                         (s, (c or {}).get("errore"), (c or {}).get("stato")),
+                         "«LO PAGO IO A MANO» HA PRESO IN CARICO UN BONIFICO TRATTENUTO PER "
+                         "CONTESTAZIONE: %s %r" % (s, c))
+        self.assertEqual("trattenuto", self.sis.payout.stato_di(rif))
+        self.assertEqual([], [m for m in self.sis.finanza.movimenti(rif)
+                              if m.get("tipo") == "payout_host"])
+
+    def test_138a_gemello_LO_PAGO_IO_A_MANO_su_un_maturato_rifiutato_prende_in_carico(self):
+        # senza contestazione lo stesso banco si prende in carico: il 409 qui sopra non viene
+        # da un banco che non sa pagare a mano
+        self.connect.bonifico_di = lambda acct, rif: {"ok": True, "bonifico": None}
+        rif = self._rilasciata_e_ferma("casa-t4", "pi_t4")
+        s, c = self._a_mano(rif)
+        self.assertEqual((200, "preso_in_carico"), (s, (c or {}).get("stato")), c)
+        self.assertEqual("in_transito", self.sis.payout.stato_di(rif))
+
+
+class TestIlChargebackDuranteIlBonificoNonMente(_BancoDeiSoldiDelServer):
+    """Voce 138 (b): `_contestazione_carta` scriveva 'trattenuto' FUORI da `_BONIFICI_LOCK`, mentre
+    il bonifico aveva gia' letto stato e importo: il registro diceva «garanzia_fermata» e il
+    bonifico partiva subito dopo. Aggancio deterministico, niente fortuna dei thread: il chargeback
+    parte da un ALTRO thread nel punto in cui il bonifico ha letto tutto e sta per chiedere a
+    Stripe. Col lucchetto il chargeback aspetta, trova 'in_transito' e lo dice."""
+
+    def test_138b_il_chargeback_in_mezzo_al_bonifico_dice_bonifico_gia_partito(self):
+        self.pubblica("casa-g138b")
+        b = self.prenota("casa-g138b", 10)
+        rif = b["riferimento"]
+        s, c = self.paga(rif, "pi_g138b")
+        _deve(s == 200, s, c)
+        _deve(self.sis.payout.stato_di(rif) == "maturato", self.sis.payout.stato_di(rif))
+        fili = []
+
+        def addebito_col_chargeback_in_mezzo(rec):
+            f = threading.Thread(target=lambda: self.contestazione("pi_g138b", dp="dp_g138b"))
+            fili.append(f)
+            f.start()
+            f.join(2)            # col lucchetto il chargeback resta fermo: si prosegue dopo 2 s
+            return ""
+        self.r._addebito_del_pagamento = addebito_col_chargeback_in_mezzo
+        with self.ascolta() as righe:
+            for r in self.sis.garanzia.auto_rilascia(ora_ts=int(time.time()) + 40 * 86400,
+                                                     dettagli=True) or []:
+                self.r._trasferisci_all_host(r["prenotazione_id"], r["host_riceve_cents"])
+            for f in fili:
+                f.join(10)
+        _deve(fili and not any(f.is_alive() for f in fili), "PREMESSA: il chargeback doveva finire")
+        _deve(len(self.connect.bonifici) == 1, "PREMESSA: il bonifico aveva gia' deciso, deve partire",
+              self.connect.bonifici)
+        self.assertEqual([], self.errori_con(righe, "garanzia_fermata", "dp_g138b"),
+                         "IL REGISTRO MENTE: dice la garanzia fermata e il bonifico e' partito %r"
+                         % (self.connect.bonifici,))
+        self.assertTrue(self.errori_con(righe, "codice: chargeback", "sottocodice: "
+                                        "bonifico_gia_partito", "dp_g138b", "bonifico: in_transito"),
+                        "il chargeback su un bonifico partito non lo dice: %r" % (righe,))
+        # Kimi K17, 138 b (a): anche lo stato FINALE. Il bonifico e' partito: il registro resta
+        # 'in_transito', non torna 'trattenuto' come se i soldi fossero ancora qui
+        self.assertEqual("in_transito", self.sis.payout.stato_di(rif),
+                         "IL REGISTRO DEI BONIFICI MENTE: il bonifico e' partito %r e il chargeback "
+                         "l'ha riscritto" % (self.connect.bonifici,))
+
+
+class TestIlRimborsoAdminNonCorreColBonifico(_BancoDeiSoldiDelServer):
+    """Voce 142 (PROTON, 25/10): `_admin_rimborso` non prendeva `_BONIFICI_LOCK`. Il freno della
+    garanzia gia' divisa guardava PRIMA dei passi lenti; se il giro orario rilasciava la garanzia e
+    leggeva l'importo nel mezzo, il rimborso toglieva il payout, `gz.annulla` falliva in silenzio
+    e i soldi partivano a tutti e due. Aggancio deterministico: il giro parte da un altro thread
+    subito DOPO il freno (al rilascio delle date) e il rimborso aspetta che il bonifico abbia letto."""
+
+    def test_142_rimborso_admin_e_bonifico_insieme_MAI_tutti_e_due(self):
+        slug = "casa-g142"
+        self.pubblica(slug)
+        b = self.prenota(slug, 10)
+        rif = b["riferimento"]
+        s, c = self.paga(rif, "pi_g142")
+        _deve(s == 200, s, c)
+        _deve(self.sis.garanzia.stato(rif)["stato"] == "in_garanzia", self.sis.garanzia.stato(rif))
+        _deve(self.sis.payout.stato_di(rif) == "maturato", self.sis.payout.stato_di(rif))
+        _deve(self.connect.bonifici == [], self.connect.bonifici)
+        incassato = sum(int(m["importo_cents"]) for m in self.incassi(rif))
+        _deve(incassato > 0, "PREMESSA: l'incasso doveva essere nel giornale", self.incassi(rif))
+        chiesti = []
+
+        def rimborsa(pi, importo, chiave):
+            chiesti.append((pi, importo, chiave))
+            return {"ok": True, "id": "re_g142", "motivo": "succeeded"}
+        self.sis.stripe.rimborsa = rimborsa
+        letto, fatto = threading.Event(), threading.Event()
+
+        def rimborsata(r):
+            return (self.sis.pagamenti_pendenti.info(r) or {}).get("stato") in ("rimborsato",
+                                                                               "cancellata_host")
+
+        def giro_orario():       # la stessa forma del giro della garanzia del server
+            for x in self.sis.garanzia.auto_rilascia(ora_ts=int(time.time()) + 40 * 86400,
+                                                     dettagli=True, salta_se=rimborsata) or []:
+                self.r._trasferisci_all_host(x["prenotazione_id"], x["host_riceve_cents"])
+        filo = threading.Thread(target=giro_orario)
+        vero_rilascia = self.sis.inventario.rilascia
+
+        def rilascia_col_giro_in_mezzo(*a, **k):      # subito DOPO il freno della garanzia
+            if filo.ident is None:
+                filo.start()
+                letto.wait(2)    # col lucchetto il bonifico non arriva a leggere: si prosegue dopo 2 s
+            return vero_rilascia(*a, **k)
+        self.sis.inventario.rilascia = rilascia_col_giro_in_mezzo
+
+        def addebito(rec):       # il bonifico ha GIA' letto stato e importo
+            letto.set()
+            fatto.wait(2)
+            return ""
+        self.r._addebito_del_pagamento = addebito
+        idem = self.sis.firma.decodifica(b["voucher_token"]).get("idem_key", "")
+        s, c = self.g("POST", "/api/admin/rimborso",
+                      {"alloggio_id": slug, "check_in": _fra(10), "check_out": _fra(12),
+                       "idem_key": idem}, {"X-Admin-Key": "ak"})
+        fatto.set()
+        filo.join(10)
+        _deve(filo.ident is not None and not filo.is_alive(),
+              "PREMESSA: il giro orario doveva girare e finire")
+        self.assertFalse(chiesti and self.connect.bonifici,
+                         "OSPITE RIMBORSATO E HOST PAGATO: rimborso chiesto a Stripe %r e bonifico %r "
+                         "sulla stessa prenotazione (risposta dell'admin %s %r): perdiamo l'intero "
+                         "bonifico" % (chiesti, self.connect.bonifici, s, c))
+        # Kimi K17, 142 (a): «non tutti e due» passa anche con NESSUN rimborso e l'host pagato
+        # (date liberate, prenotazione che resta in piedi). Qui il rimborso tiene il lucchetto
+        # prima che il giro parta, quindi il bonifico non puo' vincere: si pretende l'unico esito.
+        self.assertEqual((200, "rimborsato", True, [("pi_g142", incassato, "rimborso:" + rif)], []),
+                         (s, (c or {}).get("stato"),
+                          str((c or {}).get("rimborso_stripe") or "").startswith("eseguito"),
+                          chiesti, self.connect.bonifici),
+                         "IL RIMBORSO DELL'ADMIN NON E' ANDATO IN FONDO: risposta %s %r, rimborsi "
+                         "chiesti %r, bonifici %r" % (s, c, chiesti, self.connect.bonifici))
+
+
+class TestLaPenaleNonSiPrendeDaUnBonificoGiaPartito(_BancoDeiSoldiDelServer):
+    """Voce 139 (Kimi K12 + D-B1-7, PROTON 25-26/10): `processa_penale` legge i payout 'maturato'
+    dell'host e poi li riduce o li toglie. Due strade per prendere la penale da soldi che non ci
+    sono piu':
+    (a) il bonifico di B ha gia' letto l'importo pieno e sta parlando con Stripe: nel registro B
+        e' ancora 'maturato' ('in_transito' arriva solo dopo la risposta). La chiude il lucchetto
+        dei bonifici intorno alla penale (voce 137);
+    (b) B cambia FUORI dal lucchetto mentre la penale gira (l'ospite di B apre una contestazione,
+        `_garanzia_contesta`): `imposta_importo`/`rimuovi` lo riducevano senza guardare se era
+        ancora 'maturato'. L'aggancio di (b) sta su `imposta_importo`/`rimuovi` (il momento esatto
+        della compensazione), non su `elenca`, che altre letture chiamano prima."""
+
+    def _il_debito_e_la_penale_INTERA(self, rif_a):
+        # Kimi K17, 139 (a): «c'e' un debito» non basta, il residuo dev'essere la penale intera e
+        # la compensazione netta su TUTTI i bonifici zero (in queste gare nessun soldo dell'host
+        # era davvero compensabile)
+        nd = [n for n in self.sis.finanza.note_per_riferimento(rif_a) if n.get("tipo") == "debito"]
+        _deve(len(nd) == 1, "PREMESSA: serve UNA nota di debito della penale", nd)
+        mov = self.sis.finanza.movimenti(rif_a)
+        netto = (sum(int(m["importo_cents"]) for m in mov if m["tipo"] == "penale_offset")
+                 - sum(int(m["importo_cents"]) for m in mov if m["tipo"] == "storno"
+                       and str(m["evento_id"]).startswith("storno-offset:")))
+        debiti = [(d["riferimento"], int(d["residuo_cents"]), d["stato"])
+                  for d in self.sis.finanza.debiti_host(self.hid)]
+        self.assertEqual((0, [(rif_a, int(nd[0]["importo_cents"]), "aperto")]), (netto, debiti),
+                         "IL DEBITO DELLA PENALE NON E' INTERO: penale %d, compensato %d, debiti %r"
+                         % (int(nd[0]["importo_cents"]), netto, debiti))
+
+    def _penale_con_B_fermato_nel_mezzo(self, sigla, minori_b=None):
+        """(b): l'host cancella A mentre la compensazione sta per toccare B, che l'ospite di B
+        ferma proprio in quel momento. Ritorna (rif_a, rif_b, importo di B quando e' stato
+        fermato). `minori_b` rimpicciolisce B prima (D19): la compensazione lo toglie tutto."""
+        self.pubblica("casa-b" + sigla)
+        self.pubblica("casa-a" + sigla)
+        rif_b = self.prenota("casa-b" + sigla, 10)["riferimento"]
+        s, c = self.paga(rif_b, "pi_b" + sigla)
+        _deve(s == 200, s, c)
+        rif_a = self.prenota("casa-a" + sigla, 10)["riferimento"]
+        s, c = self.paga(rif_a, "pi_a" + sigla)
+        _deve(s == 200, s, c)
+        _deve(self.sis.payout.stato_di(rif_b) == "maturato", self.sis.payout.stato_di(rif_b))
+        if minori_b is not None:
+            _deve(self.sis.payout.imposta_importo(rif_b, minori_b) is True,
+                  "PREMESSA: B doveva rimpicciolire")
+        fermati = []
+
+        def fermato_prima(vero):
+            def f(pid, *a, **k):
+                if pid == rif_b and not fermati:   # l'ospite di B apre una contestazione proprio ora
+                    fermati.append(int(self.sis.payout.info(rif_b)["minori"]))
+                    _deve(self.sis.payout.aggiorna_stato(rif_b, "trattenuto") is True,
+                          "PREMESSA: B doveva poter essere fermato")
+                return vero(pid, *a, **k)
+            return f
+        self.sis.payout.imposta_importo = fermato_prima(self.sis.payout.imposta_importo)
+        self.sis.payout.rimuovi = fermato_prima(self.sis.payout.rimuovi)
+        s, c = self.g("POST", "/api/host/cancella", {"riferimento": rif_a},
+                      {"X-Host-Token": self.tok})
+        _deve(s == 200, "PREMESSA: l'host doveva poter cancellare", s, c)
+        _deve(self.sis.finanza.note_per_riferimento(rif_a),
+              "PREMESSA: serve la nota di debito della penale")
+        _deve(fermati, "PREMESSA: la compensazione doveva toccare B")
+        return rif_a, rif_b, fermati[0]
+
+    def _B_non_compensato(self, rif_a, rif_b, fermato):
+        mov = self.sis.finanza.movimenti(rif_a)
+        off = sum(int(m["importo_cents"]) for m in mov if m["tipo"] == "penale_offset"
+                  and str(m["evento_id"]).endswith(":" + rif_b))
+        sto = sum(int(m["importo_cents"]) for m in mov if m["tipo"] == "storno"
+                  and str(m["evento_id"]).startswith("storno-offset:")
+                  and str(m["evento_id"]).endswith(":" + rif_b))
+        self.assertEqual(0, off - sto,
+                         "PENALE PRESA DA UN BONIFICO FERMATO PER CONTESTAZIONE: B era trattenuto "
+                         "con %d e il giornale dice compensati %d" % (fermato, off - sto))
+        self.assertEqual(("trattenuto", fermato),
+                         (self.sis.payout.stato_di(rif_b), int(self.sis.payout.info(rif_b)["minori"])),
+                         "IL BONIFICO FERMATO DI B E' STATO RIDOTTO DALLA PENALE")
+
+    def test_139_la_compensazione_su_un_payout_FERMATO_nel_frattempo_non_conta(self):
+        rif_a, rif_b, fermato = self._penale_con_B_fermato_nel_mezzo("139")
+        self._B_non_compensato(rif_a, rif_b, fermato)
+        self._il_debito_e_la_penale_INTERA(rif_a)
+
+    def test_139_b_bis_B_PIU_PICCOLO_della_penale_fermato_il_debito_resta_INTERO(self):
+        # B copre solo una parte della penale: la compensazione lo toglie (`rimuovi`) e il resto
+        # va in debito. Qui un residuo ridotto per un compenso mai avvenuto resta 'aperto', e
+        # «c'e' un debito» non lo vede (Kimi K17, 139 (a))
+        rif_a, rif_b, fermato = self._penale_con_B_fermato_nel_mezzo("139p", minori_b=100)
+        _deve(fermato == 100, "PREMESSA: B doveva valere 100 quando e' stato fermato", fermato)
+        self._B_non_compensato(rif_a, rif_b, fermato)
+        self._il_debito_e_la_penale_INTERA(rif_a)
+
+    def test_139_la_penale_aspetta_il_bonifico_che_sta_partendo(self):
+        # (a): A arriva fra 50 giorni, cosi' il rilascio a +40 giorni sblocca solo B (`pubblica`
+        # apre il calendario fino a 60)
+        self.pubblica("casa-b139l")
+        self.pubblica("casa-a139l")
+        rif_b = self.prenota("casa-b139l", 10)["riferimento"]
+        s, c = self.paga(rif_b, "pi_b139l")
+        _deve(s == 200, s, c)
+        rif_a = self.prenota("casa-a139l", 50)["riferimento"]
+        s, c = self.paga(rif_a, "pi_a139l")
+        _deve(s == 200, s, c)
+        pieno = int(self.sis.payout.info(rif_b)["minori"])
+        fili, esiti = [], []
+
+        def addebito_con_la_cancellazione_in_mezzo(rec):     # B ha GIA' letto l'importo pieno
+            f = threading.Thread(target=lambda: esiti.append(self.g(
+                "POST", "/api/host/cancella", {"riferimento": rif_a}, {"X-Host-Token": self.tok})))
+            fili.append(f)
+            f.start()
+            f.join(2)            # col lucchetto la penale aspetta: si prosegue dopo 2 s
+            return ""
+        self.r._addebito_del_pagamento = addebito_con_la_cancellazione_in_mezzo
+        for r in self.sis.garanzia.auto_rilascia(ora_ts=int(time.time()) + 40 * 86400,
+                                                 dettagli=True) or []:
+            self.r._trasferisci_all_host(r["prenotazione_id"], r["host_riceve_cents"])
+        for f in fili:
+            f.join(10)
+        _deve(fili and not any(f.is_alive() for f in fili), "PREMESSA: la cancellazione doveva finire")
+        _deve(esiti and esiti[0][0] == 200, "PREMESSA: l'host doveva poter cancellare", esiti)
+        _deve([x[1] for x in self.connect.bonifici if x[3] == rif_b] == [pieno],
+              "PREMESSA: il bonifico di B doveva partire pieno", self.connect.bonifici)
+        mov = self.sis.finanza.movimenti(rif_a)
+        off = sum(int(m["importo_cents"]) for m in mov if m["tipo"] == "penale_offset"
+                  and str(m["evento_id"]).endswith(":" + rif_b))
+        sto = sum(int(m["importo_cents"]) for m in mov if m["tipo"] == "storno"
+                  and str(m["evento_id"]).startswith("storno-offset:")
+                  and str(m["evento_id"]).endswith(":" + rif_b))
+        self.assertEqual(0, off - sto,
+                         "PENALE PRESA DA UN BONIFICO CHE STAVA PARTENDO: Stripe ha mandato %d e il "
+                         "giornale dice compensati %d" % (pieno, off - sto))
+        self._il_debito_e_la_penale_INTERA(rif_a)
+
+
 class TestUnPagamentoConfermatoNonLasciaIlBonificoFermo(_BancoDeiSoldiDelServer):
     """C53-B1-5 (busta 8): dopo la conferma il bonifico dell'host passa da 'in_attesa' a
     'maturato'. Se quel passo falliva (archivio bloccato: `aggiorna_stato` risponde False) il
