@@ -305,5 +305,63 @@ class TestOffsetEFlusso(_BancoOffset):
     # classe `TestLaCancellazioneDellHostArrivaSempreInFondo`, sopra il banco `_BancoOffset`.
 
 
+class _Payout:
+    """Ledger dei payout finto: ricorda con quale «solo se lo stato e'» gli si chiede di
+    scrivere."""
+
+    def __init__(self, righe=None):
+        self.righe = righe or []
+        self.stati = []
+
+    def elenca(self, host_id, stato=None, valuta=None):
+        return list(self.righe)
+
+    def imposta_importo(self, pid, n, solo_se_stato=None):
+        self.stati.append(("imposta_importo", solo_se_stato))
+        return True
+
+    def rimuovi(self, pid, solo_se_stato=None):
+        self.stati.append(("rimuovi", solo_se_stato))
+        return True
+
+
+class TestLeCompensazioniScrivonoSoloSuUnBonificoAncoraMaturato(unittest.TestCase):
+    """Voce 139. Era in test_scatto3_carta.py: per fase177 il Giudice accende il test dedicato,
+    che non c'e', e poi gli 8 file che lo importano in ordine alfabetico; quello e' l'undicesimo,
+    e un mutante su `solo_se_stato` sopravviveva anche con la prova scritta."""
+
+    def setUp(self):
+        self.fc = crea_financial_controller(":memory:")
+        self.fc.inizializza_schema()
+
+    def _debito(self, valuta="EUR", cents=5000, rif="RIF1", host="h1"):
+        class _NoPayout:
+            def elenca(self, *a, **k):
+                return []
+        self.fc.processa_penale(riferimento=rif, host_id=host, penale_cents=cents,
+                                valuta=valuta, payout=_NoPayout())
+        return self.fc.debiti_host(host, stato="aperto")
+
+    def test_139_le_due_compensazioni_scrivono_SOLO_SE_il_bonifico_e_ancora_maturato(self):
+        """Voce 139: fra la lettura dei 'maturato' e la scrittura il bonifico puo' essere stato
+        fermato (contestazione) o tolto. La penale (`processa_penale`) e la riscossione
+        (`riscuoti_debiti`) chiedono al registro di scrivere solo se e' ancora 'maturato': senza,
+        riducono o cancellano soldi fermati. Le righe sono in ordine apposta: la prima (100) si
+        consuma intera (`rimuovi`), la seconda si riduce (`imposta_importo`)."""
+        attese = [("rimuovi", "maturato"), ("imposta_importo", "maturato")]
+        righe = [{"prenotazione_id": "P_PICCOLO", "minori": 100},
+                 {"prenotazione_id": "P_GRANDE", "minori": 9999}]
+        p = _Payout(list(righe))
+        self.fc.processa_penale(riferimento="RIF_PEN", host_id="h1", penale_cents=5000,
+                                valuta="EUR", payout=p)
+        self.assertEqual(attese, p.stati, "la PENALE scrive sui bonifici senza chiedere che "
+                                          "siano ancora 'maturato': %r" % (p.stati,))
+        self._debito(cents=5000, rif="RIF_DEB")
+        p2 = _Payout(list(righe))
+        self.fc.riscuoti_debiti(host_id="h1", payout=p2)
+        self.assertEqual(attese, p2.stati, "la RISCOSSIONE scrive sui bonifici senza chiedere "
+                                           "che siano ancora 'maturato': %r" % (p2.stati,))
+
+
 if __name__ == "__main__":
     unittest.main()

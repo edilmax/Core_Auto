@@ -132,15 +132,22 @@ class PayoutDashboard:
         finally:
             con.close()
 
-    def rimuovi(self, prenotazione_id: str) -> bool:
+    def rimuovi(self, prenotazione_id: str, solo_se_stato: Optional[str] = None) -> bool:
         """Elimina il payout di una prenotazione (hold scaduto/non pagato -> niente incasso).
-        Idempotente."""
+        Idempotente. Voce 139: con `solo_se_stato` toglie solo se il payout e' ANCORA in quello
+        stato, e dice False se non ha tolto niente (la compensazione della penale deve saperlo)."""
         con = self._apri()
         try:
+            # il testo del DELETE resta DENTRO la chiamata: il censimento delle cancellazioni
+            # (test_pipeline_ci) le trova leggendo gli argomenti di `execute`
             with con:
-                con.execute("DELETE FROM payout WHERE prenotazione_id=?",
-                            (str(prenotazione_id),))
-            return True
+                if solo_se_stato is None:
+                    cur = con.execute("DELETE FROM payout WHERE prenotazione_id=?",
+                                      (str(prenotazione_id),))
+                else:
+                    cur = con.execute("DELETE FROM payout WHERE prenotazione_id=? AND stato=?",
+                                      (str(prenotazione_id), solo_se_stato))
+            return True if solo_se_stato is None else bool(cur.rowcount)
         except Exception:
             logger.warning("rimuovi payout fallita (ISOLATA)", exc_info=True)
             return False
@@ -308,20 +315,26 @@ class PayoutDashboard:
         finally:
             con.close()
 
-    def imposta_importo(self, prenotazione_id: str, minori: int) -> bool:
+    def imposta_importo(self, prenotazione_id: str, minori: int,
+                        solo_se_stato: Optional[str] = None) -> bool:
         """Riallinea l'importo del payout alla quota DECISA per l'host (split di una
         controversia, penale trattenuta su cancellazione): il ledger deve dire quanto
         l'host riceve DAVVERO. Senza, il record restava all'importo PIENO: dashboard
         gonfiata e — per i bonifici manuali fatti da `da_pagare` — pagamento all'host
-        anche della quota gia' rimborsata all'ospite (perdita reale)."""
+        anche della quota gia' rimborsata all'ospite (perdita reale).
+        Voce 139: con `solo_se_stato` scrive solo se il payout e' ANCORA in quello stato (la
+        compensazione legge i 'maturato' e scrive dopo: nel mezzo puo' essere stato fermato)."""
         m = _pos(minori)
         if m <= 0 or not (isinstance(prenotazione_id, str) and prenotazione_id):
             return False
         con = self._apri()
         try:
+            sql, par = ("UPDATE payout SET minori=?, ts=? WHERE prenotazione_id=?",
+                        [m, self._now(), prenotazione_id])
+            if solo_se_stato is not None:
+                sql, par = sql + " AND stato=?", par + [solo_se_stato]
             with con:
-                cur = con.execute("UPDATE payout SET minori=?, ts=? WHERE prenotazione_id=?",
-                                  (m, self._now(), prenotazione_id))
+                cur = con.execute(sql, par)
             return bool(cur.rowcount)
         except Exception:
             logger.warning("imposta_importo fallita (ISOLATA)", exc_info=True)

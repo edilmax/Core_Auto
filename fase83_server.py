@@ -5179,6 +5179,15 @@ class RouterHTTP:
         idem = dati.get("idem_key")
         if not all(isinstance(x, str) and x for x in (alloggio, ci, co, idem)):
             return 422, {"errore": "campi_non_validi"}
+        # Voce 142, 26/10 («autorizzato» per delega): dal freno della garanzia alla chiamata a
+        # Stripe sotto `_BONIFICI_LOCK`, come il bonifico. Fuori, il giro orario poteva rilasciare
+        # la garanzia e pagare l'host fra il freno e il rimborso: tutti e due pagati.
+        with _BONIFICI_LOCK:
+            return self._admin_rimborso_sotto_chiave(alloggio, ci, co, idem)
+
+    def _admin_rimborso_sotto_chiave(self, alloggio, ci, co, idem):
+        """Il corpo di `_admin_rimborso` dal freno della garanzia in poi; lo chiama tenendo
+        `_BONIFICI_LOCK`."""
         # ⛔ GARANZIA GIA' DIVISA (arbitro o penale; consegne 30, punto c), PRIMA di toccare date
         # e soldi: lo stesso freno della cancellazione dell'host. Una garanzia illeggibile
         # solleva qui e la richiesta finisce in 500 senza effetti: nel dubbio non si rimborsa.
@@ -7393,8 +7402,22 @@ class RouterHTTP:
                                host_id, _rif_per_registro(rif),
                                self._fmt_importo(_m, valuta) or repr(_m))
                 return
-            if pd is not None and pd.stato_di(rif) in ("in_transito", "pagato"):
+            _stato_pay = pd.stato_di(rif) if pd is not None else None
+            if _stato_pay in ("in_transito", "pagato"):
                 return                                # gia' partito (guardia anti-doppio)
+            # Voce 138 (a), 26/10 («autorizzato» per delega): un chargeback dopo il rilascio
+            # lascia la garanzia 'rilasciato' e scrive 'trattenuto' solo qui; chi arriva dopo
+            # con un elenco (R3, verifica, dati fiscali) lo pagava. 'trattenuto' paga solo con
+            # la garanzia divisa dall'arbitro ('risolto'), la strada di `_admin_controversia_risolvi`.
+            if _stato_pay == "trattenuto":
+                _gz = getattr(self._sys, "garanzia", None)
+                _st = _gz.stato(rif) if _gz is not None else None
+                if not (isinstance(_st, dict) and _st.get("stato") == "risolto"):
+                    logger.error("BONIFICO FERMATO | RIF: %s | codice: payout_trattenuto | il "
+                                 "bonifico e' trattenuto (contestazione) e la garanzia non e' "
+                                 "divisa dall'arbitro: non parte, decide una persona",
+                                 _rif_per_registro(rif))
+                    return
             # SCATTO ② (Debt Status): PRIMA di pagare, i debiti 'aperto' dell'host si
             # saldano ALLA FONTE (riscossione sui maturato, fase177). Puo' ridurre o
             # consumare anche QUESTO payout. Isolata: se fallisce, si paga.
@@ -9902,18 +9925,22 @@ class RouterHTTP:
             rif = rec["riferimento"]
             perso = ""
             gz = getattr(self._sys, "garanzia", None)
-            esito = (gz.contesta(rif, motivo="chargeback:" + dp) if gz is not None
-                     else {"motivo": "non_trovata"})
-            # gia' decisa (rilasciata, risolta, gia' contestata) o mai aperta non si ritenta:
-            # ritentare non la cambia. Un altro fallimento (l'archivio) si'.
-            if not esito.get("ok") and esito.get("motivo") not in ("stato_non_valido",
-                                                                   "non_trovata"):
-                perso = "garanzia_non_fermata"
-            pd = getattr(self._sys, "payout", None)
-            bonifico = pd.stato_di(rif) if pd is not None else ""
-            if bonifico in ("in_attesa", "maturato"):
-                if pd.aggiorna_stato(rif, "trattenuto") is not True:
-                    perso = perso or "bonifico_non_trattenuto"
+            # Voce 138 (b), 26/10 («autorizzato» per delega): sotto `_BONIFICI_LOCK`, come il
+            # bonifico. Fuori, un bonifico che aveva gia' letto 'maturato' partiva dopo il
+            # 'trattenuto' scritto qui, e questa riga diceva «garanzia_fermata».
+            with _BONIFICI_LOCK:
+                esito = (gz.contesta(rif, motivo="chargeback:" + dp) if gz is not None
+                         else {"motivo": "non_trovata"})
+                # gia' decisa (rilasciata, risolta, gia' contestata) o mai aperta non si
+                # ritenta: ritentare non la cambia. Un altro fallimento (l'archivio) si'.
+                if not esito.get("ok") and esito.get("motivo") not in ("stato_non_valido",
+                                                                       "non_trovata"):
+                    perso = "garanzia_non_fermata"
+                pd = getattr(self._sys, "payout", None)
+                bonifico = pd.stato_di(rif) if pd is not None else ""
+                if bonifico in ("in_attesa", "maturato"):
+                    if pd.aggiorna_stato(rif, "trattenuto") is not True:
+                        perso = perso or "bonifico_non_trattenuto"
             logger.error("CHARGEBACK | codice: chargeback | sottocodice: %s | contestazione: %s "
                          "| RIF: %s | importo: %s %s | motivo: %s | garanzia: %s | bonifico: %s "
                          "-> decide una persona: rispondere su Stripe (un bonifico gia' partito "

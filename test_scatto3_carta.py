@@ -261,11 +261,11 @@ class _Payout:
         self.chiamate.append({"host_id": host_id, "stato": stato, "valuta": valuta})
         return list(self.righe)
 
-    def imposta_importo(self, pid, n):
+    def imposta_importo(self, pid, n, solo_se_stato=None):
         self.impostati.append((pid, n))
         return True
 
-    def rimuovi(self, pid):
+    def rimuovi(self, pid, solo_se_stato=None):
         self.tolti.append(pid)
         return True
 
@@ -385,6 +385,10 @@ class TestRiscossioneNonPuoSbagliareIDENTIFICATIVI(unittest.TestCase):
         p2 = _Payout([{"prenotazione_id": "P_ALTRA", "minori": 9999}])
         e2 = self.fc.riscuoti_debiti(host_id="h1", payout=p2)
         self.assertEqual(5000, e2["riscossi_cents"], "non riscuote nemmeno dove dovrebbe")
+
+    # Voce 139: la prova delle due compensazioni («scrivono SOLO SE il bonifico e' ancora
+    # 'maturato'») sta in test_financial_controller.py: per fase177 il Giudice accende quel
+    # file, non questo.
 
     def test_una_carta_RIFIUTATA_non_si_martella(self):
         """`prossimo > ora` diventa `>=`: un debito ancora in attesa (backoff) verrebbe

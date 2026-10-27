@@ -76,7 +76,12 @@ SERVER = os.path.join(RADICE, "fase83_server.py")
 # prenotazione col credito; importo = totale/prezzo_guest del record pendente; idempotente =
 # chiave stabile "lock-carta:<rif>". Nessuno resta indebito: ospite tutto indietro, host
 # mai pagato, la piattaforma paga la commissione Stripe del rimborso.
-PARTENZE_CENSITE = {"_admin_rimborso", "_admin_rimborsa_dovuto", "_lock_carta_credito"}
+# Voce 142 (pacco 2, 26/10): il pulsante `_admin_rimborso` controlla accesso e campi, poi chiama
+# il suo corpo `_admin_rimborso_sotto_chiave` tenendo `_BONIFICI_LOCK`, ed e' li' che sta la
+# chiamata al gateway. Innesco, importo e chiave d'idempotenza sono quelli del pulsante (il
+# codice e' spostato, non cambiato); che il corpo lo chiami SOLO il pulsante lo pretende
+# `test_il_corpo_del_rimborso_admin_lo_chiama_SOLO_il_pulsante`.
+PARTENZE_CENSITE = {"_admin_rimborso_sotto_chiave", "_admin_rimborsa_dovuto", "_lock_carta_credito"}
 
 
 def metodi_che_chiamano_il_gateway():
@@ -95,6 +100,16 @@ def metodi_che_chiamano_il_gateway():
             if isinstance(nodo, ast.Call) and getattr(nodo.func, "attr", None) == "rimborsa":
                 dentro.add(fn.name)
     return dentro
+
+
+def chiamanti_di(metodo):
+    """I metodi di `fase83_server.py` che chiamano `.<metodo>(...)`, letti dall'AST come sopra."""
+    with open(SERVER, "r", encoding="utf-8") as f:
+        albero = ast.parse(f.read(), filename=SERVER)
+    return {fn.name for fn in ast.walk(albero)
+            if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and any(isinstance(n, ast.Call) and getattr(n.func, "attr", None) == metodo
+                    for n in ast.walk(fn))}
 
 
 class _SpiaGateway:
@@ -250,6 +265,15 @@ class TestDaDoveIsoldiPossonoPARTIRE(unittest.TestCase):
             "⛔ UN PUNTO DI PARTENZA È SPARITO: %r. Se quel comando non chiama più il gateway, "
             "le righe che ci passavano restano in lista e i soldi **non tornano più** — e "
             "nessuno se ne accorge, perché la lista continua a compilarsi." % (sorted(sparite),))
+
+    def test_il_corpo_del_rimborso_admin_lo_chiama_SOLO_il_pulsante(self):
+        """Voce 142: la partenza censita `_admin_rimborso_sotto_chiave` e' il corpo del pulsante
+        dell'admin. Se un altro metodo la chiamasse, i soldi partirebbero da un punto che il
+        censimento qui sopra non vede: per lui la partenza resterebbe «il pulsante»."""
+        self.assertEqual(
+            {"_admin_rimborso"}, chiamanti_di("_admin_rimborso_sotto_chiave"),
+            "⛔ il corpo del rimborso dell'admin lo chiama qualcun altro oltre al pulsante: "
+            "quella e' una partenza dei soldi nuova, da misurare e censire")
 
 
 class TestIRimborsiARRIVANOAlGateway(_BancoGateway):

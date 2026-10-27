@@ -1639,12 +1639,12 @@ class _LedgerCheEsplode:
             raise RuntimeError("ledger payout giu'")
         return [dict(r) for r in self.righe]
 
-    def imposta_importo(self, pid, minori):
+    def imposta_importo(self, pid, minori, solo_se_stato=None):
         if "imposta_importo" in self.su:
             raise RuntimeError("ledger payout giu'")
         return True
 
-    def rimuovi(self, pid):
+    def rimuovi(self, pid, solo_se_stato=None):
         if "rimuovi" in self.su:
             raise RuntimeError("ledger payout giu'")
         return True
@@ -1863,10 +1863,10 @@ class _LedgerConta:
         self.chiamate.append({"host_id": host_id, "stato": stato, "valuta": valuta})
         return [dict(r) for r in self.righe]
 
-    def imposta_importo(self, pid, minori):
+    def imposta_importo(self, pid, minori, solo_se_stato=None):
         return True
 
-    def rimuovi(self, pid):
+    def rimuovi(self, pid, solo_se_stato=None):
         return True
 
     def registra_maturato(self, pid, host_id, minori, valuta):

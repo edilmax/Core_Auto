@@ -767,8 +767,10 @@ class FinancialController:
             if mv.get("idempotente"):
                 continue                     # gia' contato nello storico dal giornale
             try:
-                ok = (payout.imposta_importo(pid, disp - quota) if disp - quota > 0
-                      else payout.rimuovi(pid))
+                # voce 139: solo se e' ANCORA 'maturato' (nel mezzo una contestazione puo'
+                # averlo fermato): se no `ok` e' False e segue lo storno
+                ok = (payout.imposta_importo(pid, disp - quota, solo_se_stato="maturato")
+                      if disp - quota > 0 else payout.rimuovi(pid, solo_se_stato="maturato"))
             except Exception:
                 logger.warning("offset penale: ledger payout in errore (ISOLATO, "
                                "segue storno)", exc_info=True)
@@ -955,8 +957,9 @@ class FinancialController:
                 if mv is None or mv.get("idempotente"):
                     continue          # giornale giu' O payout gia' consumato per la nota
                 try:
-                    ok = (payout.imposta_importo(pid, disp - quota) if disp - quota > 0
-                          else payout.rimuovi(pid))
+                    # voce 139: come in `processa_penale`, solo se e' ANCORA 'maturato'
+                    ok = (payout.imposta_importo(pid, disp - quota, solo_se_stato="maturato")
+                          if disp - quota > 0 else payout.rimuovi(pid, solo_se_stato="maturato"))
                 except Exception:
                     logger.warning("riscossione debito: ledger payout in errore (ISOLATO, "
                                    "segue storno)", exc_info=True)

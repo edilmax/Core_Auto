@@ -205,6 +205,25 @@ class TestIBuchiDelGiudice(unittest.TestCase):
         self.assertIsNone(p.info("p1"))
         self.assertIs(p.rimuovi("p1"), True, "idempotente: rimuovere il gia' rimosso e' True")
 
+    def test_139_imposta_importo_e_rimuovi_SOLO_SE_LO_STATO_E_ANCORA_quello_chiesto(self):
+        # Voce 139: la compensazione della penale legge i 'maturato' e scrive dopo. Se nel mezzo il
+        # bonifico e' stato fermato (contestazione) o tolto, non lo tocca, e lo deve sapere.
+        p = pd()
+        p.registra_maturato("p1", "h1", 9700, "USD")
+        self.assertTrue(p.aggiorna_stato("p1", "trattenuto"))
+        self.assertIs(p.imposta_importo("p1", 4200, solo_se_stato="maturato"), False)
+        self.assertIs(p.rimuovi("p1", solo_se_stato="maturato"), False)
+        self.assertEqual((p.stato_di("p1"), p.info("p1")["minori"]), ("trattenuto", 9700),
+                         "un bonifico FERMATO e' stato ridotto o tolto")
+        self.assertIs(p.imposta_importo("manca", 4200, solo_se_stato="maturato"), False)
+        self.assertIs(p.rimuovi("manca", solo_se_stato="maturato"), False,
+                      "con lo stato chiesto, togliere cio' che non c'e' NON e' fatto")
+        p.registra_maturato("p2", "h1", 9700, "USD")
+        self.assertIs(p.imposta_importo("p2", 4200, solo_se_stato="maturato"), True)
+        self.assertEqual(p.info("p2")["minori"], 4200)
+        self.assertIs(p.rimuovi("p2", solo_se_stato="maturato"), True)
+        self.assertIsNone(p.info("p2"))
+
     def test_riga343_il_ledger_in_memoria_si_usa_anche_da_un_altro_thread(self):
         # Il web server serve ogni richiesta in un thread diverso: `check_same_thread=False` esiste
         # per questo. Col mutante (False -> True) la prima scrittura da un altro thread fallisce in
