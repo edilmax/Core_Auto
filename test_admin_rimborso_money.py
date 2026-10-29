@@ -1834,6 +1834,106 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
         self.assertIn("date_liberate", riga.get("manca") or [],
                       "una divisione con un'altra cifra salta il freno delle date: %r" % (riga,))
 
+    # ── VOCE 175 (Kimi K18 punto 5, 26/10): il freno 3 guarda lo stato del payout, non il giornale ──
+    # `_payout_trattieni` trasforma un bonifico gia' partito ('in_transito') in 'trattenuto', e nella 174
+    # il payout sparisce mentre il giornale ha `payout_host`: col pulsante acceso l'host e' pagato e
+    # l'ospite rimborsato. Il bonifico partito si scrive come lo scrive quello vero: 'in_transito' e la
+    # riga `payout_host` del giornale.
+    def _bonifico_partito_per(self, rif, importo):
+        self.assertTrue(self.sys.payout.imposta_importo(rif, importo), "setup")
+        self.assertTrue(self.sys.payout.aggiorna_stato(rif, "in_transito"), "setup")
+        self.r._giornale(tipo="payout_host", riferimento=rif, soggetto="host:" + self.hid,
+                         importo_cents=importo, valuta="EUR", causale="prova 175: bonifico partito")
+
+    def _con_la_garanzia_rilasciata(self, rif, quota):
+        """La garanzia data all'host (il «tutto ok» della 174): il ramo NON 'risolto' del freno 3."""
+        vera = self.sys.garanzia.stato
+
+        def _rilasciata(r):
+            st = dict(vera(r) or {})
+            if r == rif:
+                st.update(stato="rilasciato", host_riceve_cents=quota)
+            return st
+        return mock.patch.object(self.sys.garanzia, "stato", side_effect=_rilasciata)
+
+    def test_175_bonifico_partito_e_payout_TRATTENUTO_il_pulsante_resta_spento(self):
+        rif, _ = self._cancella_da_ospite("2026-09-21", "2026-09-23", "pi_175_tr")
+        pagato = int(self._riga(self._lista(), rif)["pagato_cents"])
+        self._bonifico_partito_per(rif, pagato)
+        self.assertTrue(self.r._payout_trattieni(rif), "setup")
+        self.assertEqual("trattenuto", self.sys.payout.stato_di(rif),
+                         "PREMESSA: `_payout_trattieni` ferma un bonifico gia' partito in 'trattenuto'")
+        with self._con_la_garanzia_rilasciata(rif, pagato):
+            riga = self._riga(self._lista(), rif)
+        self.assertIn("payout_gia_pagato", riga.get("manca") or [],
+                      "HOST GIA' PAGATO (giornale) E PULSANTE DELL'OSPITE ACCESO: il registro dice "
+                      "'trattenuto' e il freno non legge il giornale: %r" % (riga,))
+        self.assertFalse(riga.get("bottone"), riga)
+
+    def test_175_bonifico_partito_e_payout_SPARITO_il_pulsante_resta_spento(self):
+        rif, _ = self._cancella_da_ospite("2026-09-21", "2026-09-23", "pi_175_sp")
+        pagato = int(self._riga(self._lista(), rif)["pagato_cents"])
+        self._bonifico_partito_per(rif, pagato)
+        self.assertTrue(self.sys.payout.rimuovi(rif), "setup")
+        self.assertIsNone(self.sys.payout.info(rif), "PREMESSA: la riga del registro e' sparita")
+        with self._con_la_garanzia_rilasciata(rif, pagato):
+            riga = self._riga(self._lista(), rif)
+        self.assertIn("payout_gia_pagato", riga.get("manca") or [],
+                      "HOST GIA' PAGATO (giornale) E PULSANTE DELL'OSPITE ACCESO: la riga del registro "
+                      "non c'e' piu' e il freno non legge il giornale: %r" % (riga,))
+        self.assertFalse(riga.get("bottone"), riga)
+
+    def test_175_con_la_penale_un_bonifico_partito_OLTRE_la_quota_e_poi_trattenuto_ferma(self):
+        rif, _ = self._cancella_da_ospite("2026-09-21", "2026-09-23", "pi_175_rq")
+        self.assertEqual("risolto", (self.sys.garanzia.stato(rif) or {}).get("stato"),
+                         "PREMESSA: la penale ha diviso la garanzia")
+        quota = int(self.sys.garanzia.stato(rif)["host_riceve_cents"])
+        pagato = int(self._riga(self._lista(), rif)["pagato_cents"])
+        self.assertLess(quota, pagato, "PREMESSA")
+        self._bonifico_partito_per(rif, pagato)
+        self.assertTrue(self.r._payout_trattieni(rif), "setup")
+        self.assertEqual("trattenuto", self.sys.payout.stato_di(rif), "PREMESSA")
+        riga = self._riga(self._lista(), rif)
+        self.assertIn("payout_gia_pagato", riga.get("manca") or [],
+                      "ALL'HOST SONO USCITI %d (giornale) OLTRE LA QUOTA %d E IL PULSANTE DELL'OSPITE E' "
+                      "ACCESO: %r" % (pagato, quota, riga))
+        self.assertFalse(riga.get("bottone"), riga)
+
+    def test_175_con_la_penale_la_QUOTA_partita_NON_ferma_la_parte_dell_ospite(self):
+        # il silenzio (ferrea 10): la quota della penale e' dell'host, partita e anche 'trattenuto'
+        # dopo, non e' un doppio esborso
+        rif, _ = self._cancella_da_ospite("2026-09-21", "2026-09-23", "pi_175_qq")
+        quota = int(self.sys.garanzia.stato(rif)["host_riceve_cents"])
+        self._bonifico_partito_per(rif, quota)
+        self.assertTrue(self.r._payout_trattieni(rif), "setup")
+        riga = self._riga(self._lista(), rif)
+        self.assertNotIn("payout_gia_pagato", riga.get("manca") or [],
+                         "la quota della penale, che e' dell'host, ferma il rimborso dell'ospite: %r"
+                         % (riga,))
+        self.assertIs(True, riga.get("passi_sicurezza_ok"), riga)
+
+    def test_175_registro_dei_bonifici_ASSENTE_il_pulsante_resta_spento(self):
+        # D19: il componente che il freno interroga non c'e' (avvio monco): «non lo so» non e' «via
+        # libera». Ramo 'risolto' (la penale di questo banco).
+        rif, _ = self._cancella_da_ospite("2026-09-21", "2026-09-23", "pi_175_na")
+        self.sys.payout = None
+        riga = self._riga(self._lista(), rif)
+        self.assertIn("stato_payout_sconosciuto", riga.get("manca") or [],
+                      "senza il registro dei bonifici il freno 3 da' via libera: %r" % (riga,))
+        self.assertIs(False, riga.get("passi_sicurezza_ok"), riga)
+        self.assertFalse(riga.get("bottone"), riga)
+
+    def test_175_registro_dei_bonifici_ASSENTE_anche_nel_ramo_normale(self):
+        rif, _ = self._cancella_da_ospite("2026-09-21", "2026-09-23", "pi_175_nn")
+        pagato = int(self._riga(self._lista(), rif)["pagato_cents"])
+        self.sys.payout = None
+        with self._con_la_garanzia_rilasciata(rif, pagato):
+            riga = self._riga(self._lista(), rif)
+        self.assertIn("stato_payout_sconosciuto", riga.get("manca") or [],
+                      "senza il registro dei bonifici il freno 3 da' via libera: %r" % (riga,))
+        self.assertIs(False, riga.get("passi_sicurezza_ok"), riga)
+        self.assertFalse(riga.get("bottone"), riga)
+
     def test_PACCO1_un_rimborso_PARZIALE_non_e_un_rimborso_fatto(self):
         """Kimi K12 sulla #279: «gia' rimborsato» voleva dire «almeno un centesimo»: 40 restituiti
         su 100 dovuti toglievano la riga e i 60 sparivano. E con 40 riusciti + 60 in corso il

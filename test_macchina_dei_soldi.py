@@ -126,8 +126,8 @@ CHI_SCRIVE_UN_DOVUTO = ("ospite_cancella", "host_cancella", "admin_rimborso",
 # Quello che `_tick_garanzia` (fase83_server.avvia_server) chiama, in ordine. La copia e' in
 # `Corsa.giro_orario`; `test_A_...` la confronta col vivo.
 GIRO_ORARIO_COPIATO = ("_ritenta_bonifici_fermi", "_incassa_blocchi", "_subentro_per_disaccordo",
-                       "auto_rilascia",
-                       "_trasferisci_all_host", "_pulizia_uploads_se_ora", "_conservazione_se_ora",
+                       "_sblocca_garanzie_scadute",
+                       "_pulizia_uploads_se_ora", "_conservazione_se_ora",
                        "_riscuoti_carta_se_ora", "sleep")
 
 NON_GUARDA = (
@@ -580,16 +580,10 @@ class Corsa:
         r._ritenta_bonifici_fermi()                  # R3 (21/10): Stripe non ritenta da solo
         r._incassa_blocchi()
         P["server"]._subentro_per_disaccordo(sis)
-        pp = sis.pagamenti_pendenti
-
-        def _rimborsata(rif):
-            try:
-                i = pp.info(rif)
-                return bool(i) and i.get("stato") in ("rimborsato", "cancellata_host")
-            except Exception:
-                return False
-        for x in (sis.garanzia.auto_rilascia(dettagli=True, salta_se=_rimborsata) or []):
-            r._trasferisci_all_host(x["prenotazione_id"], x["host_riceve_cents"])
+        # voce 177 (pacco 3, 27/10): lo sblocco delle garanzie scadute e i loro bonifici stanno
+        # in un metodo del router, con `auto_rilascia` sotto `_BONIFICI_LOCK`: si chiama quello,
+        # non una sua copia, cosi' la macchina misura il lucchetto vero.
+        r._sblocca_garanzie_scadute()
         r._pulizia_uploads_se_ora()
         r._conservazione_se_ora()
         r._riscuoti_carta_se_ora()

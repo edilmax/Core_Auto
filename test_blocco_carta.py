@@ -329,13 +329,18 @@ class TestLaCancellazioneNelleQuarantottoOreAnnulla(_Base):
         # su Stripe il blocco risulta INCASSATO (un incasso partito prima, con la risposta persa)
         self.stripe.esito_annullo = None
         self.stripe.pagamenti[pi] = "succeeded"
-        self.r._incassa_blocchi(ora_ts=int(time.time()) + 3600)
+        with self.assertLogs("core_auto.server", level="INFO") as reg:
+            self.r._incassa_blocchi(ora_ts=int(time.time()) + 3600)
         sweep_hold_una_passata(self.sis, self.r)
         sweep_hold_una_passata(self.sis, self.r)
         righe = [int(m["importo_cents"]) for m in self.movimenti(rif, "rimborso")]
         self.assertEqual([dovuto], righe,
                          "L'HOST HA CANCELLATO, STRIPE HA INCASSATO E NESSUNO RESTITUISCE: promessi %d, "
                          "righe %r" % (dovuto, righe))
+        # voce 143, meta' 'rimborsato': il giro scrive la riga solo per le cancellazioni
+        # dell'OSPITE; qui la scrive lo sweeper, e il giro non deve gridare l'importo sconosciuto
+        self.assertEqual([], [r.getMessage() for r in reg.records
+                              if "importo_dovuto_sconosciuto" in r.getMessage()])
         _s, lista = self.g("GET", "/api/admin/rimborsi_dovuti", None, AK)
         self.assertIn(rif, [x.get("riferimento") for x in lista.get("rimborsi", [])])
 
@@ -495,6 +500,12 @@ class TestLaRevisioneDiGML(_Base):
         self.assertNotEqual(self.stato(rif), "pagato")
         self.assertEqual(self.movimenti(rif, "incasso"), [])
         self.assertFalse(self.sis.eventi_stripe.elaborato("evt_blocco1"))
+
+
+# Voce 143, meta' 'rimborsato': le 5 prove della classe
+# `TestIlBloccoIncassatoSuUnaCancellazioneDellOspiteSiRestituisce` sono SPOSTATE (27/10, PROTON) in
+# test_fase83_server: le righe che guardano stanno in fase83, e il Giudice per fase83 accende quel
+# file, non questo. Usano ancora `_Base` di qui.
 
 
 class TestIlLinkVeroChiedeIlBlocco(unittest.TestCase):
@@ -1190,6 +1201,10 @@ class TestIlRimborsoDellAdminColBlocco(_ConLeSpie):
         self.assertNotIn("AUTORIZZATO", testo,
                          "«solo autorizzato, niente da restituire» su soldi INCASSATI: %r" % testo)
         self.assertEqual(self.stripe.rimborsi, [])
+
+    # Il limite 8a della voce 143 (voce 179) e' SPOSTATO (27/10, PROTON) in test_fase83_server,
+    # `TestIlRimborsoDellAdminColBloccoIncassatoDopo`: la riga che guarda sta in fase83, e il
+    # Giudice per fase83 accende quel file. Usa ancora `_ConLeSpie` di qui.
 
 
 class TestLaCancellazioneDellOspiteAiMargini(_ConLeSpie):

@@ -27,6 +27,7 @@ import fase83_server
 from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
 from test_blocco_carta import StripeColBlocco
+from test_blocco_carta import _Base as _BancoDelBlocco, _ConLeSpie as _SpieDelBlocco
 from test_fase203_ical_orologio import _PostoInterno
 from test_rimborso_torna_da_ogni_strada import _BancoDelleStrade
 from test_fase160_escrow_garanzia import nella_finestra
@@ -3422,6 +3423,504 @@ class TestLaPenaleNonSiPrendeDaUnBonificoGiaPartito(_BancoDeiSoldiDelServer):
                          "PENALE PRESA DA UN BONIFICO CHE STAVA PARTENDO: Stripe ha mandato %d e il "
                          "giornale dice compensati %d" % (pieno, off - sto))
         self._il_debito_e_la_penale_INTERA(rif_a)
+
+
+class TestLaCancellazioneDellOspiteNonCorreColBonifico(_BancoDeiSoldiDelServer):
+    """Voce 174 (Claude e PROTON 26/10, gemella della 142). Il GIORNO D'ARRIVO, dalle 15:00 locali
+    a mezzanotte, l'ospite puo' sia premere «tutto ok» (`_garanzia_conferma`: rilascia la garanzia
+    e fa partire il bonifico, FUORI da `_BONIFICI_LOCK`) sia cancellare (`_cancella_prenotazione`:
+    il freno della garanzia si guarda UNA volta, all'inizio e fuori dal lucchetto). Premuti
+    insieme (doppio clic, due schede, o ospite e host d'accordo):
+    · il «tutto ok» arriva fra la rilettura della garanzia e `chiudi_proporzionale`: il passaggio
+      di stato fallisce, il rimborso resta al 50% e `_payout_trattieni` toglie il payout mentre il
+      bonifico, che ha gia' letto l'importo pieno, parla con Stripe: soldi a tutti e due;
+    · il «tutto ok» arriva prima della rilettura: il tetto di cassa taglia il rimborso, ma il
+      registro dei bonifici perde la riga di un bonifico partito;
+    · la cancellazione dell'HOST (nessun freno sull'ora, solo quello della garanzia) col «tutto
+      ok» in mezzo: ospite al 100% e host pagato per intero.
+    Lo sblocco automatico NON e' il compagno dell'ospite: arriva 24 ore dopo l'arrivo, quando
+    l'ospite non cancella piu' (la prima prova del 26/10 lo usava: un'ora che non capita).
+    L'ora delle prove e' l'arrivo letto dalla garanzia piu' 3 ore; le premesse dicono che a
+    quell'ora valgono sia il «tutto ok» sia la cancellazione, non chi vince."""
+
+    def _arrivato_oggi(self, slug, pi):
+        """Prenotata per oggi e pagata, flessibile (nel giorno d'arrivo all'ospite torna il 50%).
+        Ritorna il voucher, il bonifico pieno, quanto ha pagato l'ospite e l'ora delle prove."""
+        from fase160_escrow_garanzia import FINESTRA_ORE_DEFAULT
+        self.pubblica(slug, "flessibile")
+        b = self.prenota(slug, 0)
+        rif = b["riferimento"]
+        s, c = self.paga(rif, pi)
+        _deve(s == 200, s, c)
+        _deve((self.sis.payout.stato_di(rif), self.sis.garanzia.stato(rif)["stato"])
+              == ("maturato", "in_garanzia"), "PREMESSA: bonifico pronto e garanzia aperta",
+              self.sis.payout.stato_di(rif), self.sis.garanzia.stato(rif))
+        v = self.sis.firma.decodifica(b["voucher_token"])
+        ora = (int(self.sis.garanzia.stato(rif)["sblocco_auto_ts"])
+               - FINESTRA_ORE_DEFAULT * 3600 + 3 * 3600)
+        with mock.patch("time.time", return_value=float(ora)):
+            _deve(self.r._fuori_dalla_finestra(self.sis.garanzia, rif,
+                                               {"voucher_token": b["voucher_token"]}) == "",
+                  "PREMESSA: a quell'ora il «tutto ok» vale")
+        _deve(ora < self.sis.concierge._fine_giorno_arrivo(v["alloggio_id"], v["check_in"]),
+              "PREMESSA: a quell'ora l'ospite puo' ancora cancellare")
+        return b, int(self.sis.payout.info(rif)["minori"]), int(v["prezzo_guest_cents"]), ora
+
+    def _prima_di(self, oggetto, nome, premi):
+        vero = getattr(oggetto, nome)
+
+        def f(*a, **k):
+            premi()
+            return vero(*a, **k)
+        setattr(oggetto, nome, f)
+
+    def _insieme(self, b, ora, aggancia, cancella):
+        """La cancellazione (`cancella`) a quell'ora; dentro, `aggancia` fa partire il «tutto ok» in
+        un filo e aspetta che il bonifico abbia letto l'importo; il bonifico aspetta che la
+        cancellazione finisca. `date.today()` non si ferma: i giorni all'arrivo restano 0 anche a
+        cavallo della mezzanotte, perche' sotto zero contano zero."""
+        letto, fatto = threading.Event(), threading.Event()
+        fili, tutto_ok = [], []
+
+        def premi_tutto_ok():
+            if not fili:
+                f = threading.Thread(target=lambda: tutto_ok.append(self.g(
+                    "POST", "/api/garanzia/conferma", {"voucher_token": b["voucher_token"]})))
+                fili.append(f)
+                f.start()
+                letto.wait(2)    # col lucchetto il «tutto ok» resta fermo: si prosegue dopo 2 s
+
+        def addebito(rec):       # il bonifico ha GIA' letto stato e importo
+            letto.set()
+            fatto.wait(2)
+            return ""
+        self.r._addebito_del_pagamento = addebito
+        aggancia(premi_tutto_ok)
+        with mock.patch.object(fase59_concierge, "time", time), \
+                mock.patch("time.time", return_value=float(ora)):
+            s, c = cancella()
+            fatto.set()
+            for f in fili:
+                f.join(10)
+        _deve(fili and not any(f.is_alive() for f in fili),
+              "PREMESSA: il «tutto ok» doveva partire durante la cancellazione e finire")
+        _deve(tutto_ok and (tutto_ok[0][1] or {}).get("errore") not in ("non_ancora_arrivato",
+                                                                           "finestra_chiusa"),
+              "PREMESSA: il «tutto ok» doveva cadere nella sua finestra", tutto_ok)
+        return (s, c), tutto_ok[0]
+
+    def _soldi_usciti(self, rif):
+        rimborsi = [int(m["importo_cents"]) for m in self.sis.finanza.movimenti(rif)
+                    if m.get("tipo") == "rimborso"]
+        return rimborsi, [x[1] for x in self.connect.bonifici if x[3] == rif]
+
+    def _cancella_ospite(self, b):
+        return lambda: self.g("POST", "/api/concierge/cancella",
+                              {"voucher_token": b["voucher_token"]})
+
+    def test_174_tutto_ok_e_cancella_insieme_il_giorno_d_arrivo_MAI_soldi_a_tutti_e_due(self):
+        b, pieno, pagato, ora = self._arrivato_oggi("casa-g174", "pi_g174")
+        (s, c), ok = self._insieme(
+            b, ora, lambda premi: self._prima_di(self.sis.garanzia, "chiudi_proporzionale", premi),
+            self._cancella_ospite(b))
+        rimborsi, pagati = self._soldi_usciti(b["riferimento"])
+        self.assertLessEqual(sum(rimborsi) + sum(pagati), pagato,
+                             "PERDITA %d: l'ospite ha pagato %d, gli si devono %r e all'host sono "
+                             "partiti %r (pieno %d), payout ora %r; cancellazione %s %r, «tutto ok» %r"
+                             % (sum(rimborsi) + sum(pagati) - pagato, pagato, rimborsi, pagati,
+                                pieno, self.sis.payout.info(b["riferimento"]), s, c, ok))
+        # ...e l'host non perde la sua parte: se vince la cancellazione al 50%, la quota della penale
+        # e' sua e parte (senza il «tutto ok» sotto il lucchetto il rilascio rubava la divisione)
+        self.assertTrue(s != 200 or sum(pagati) > 0,
+                        "L'HOST PERDE LA SUA QUOTA DELLA PENALE: cancellazione %s (rimborso %r) e "
+                        "all'host non e' partito niente (%r); garanzia %r, «tutto ok» %r"
+                        % (s, rimborsi, pagati, self.sis.garanzia.stato(b["riferimento"]), ok))
+
+    def test_174_gemella_tutto_ok_prima_della_rilettura_il_registro_non_perde_il_bonifico(self):
+        b, pieno, pagato, ora = self._arrivato_oggi("casa-w174", "pi_w174")
+        (s, c), ok = self._insieme(
+            b, ora, lambda premi: self._prima_di(self.sis.inventario, "rilascia", premi),
+            self._cancella_ospite(b))
+        rif = b["riferimento"]
+        uscite = [int(m["importo_cents"]) for m in self.sis.finanza.movimenti(rif)
+                  if m.get("tipo") == "payout_host"]
+        _deve(uscite, "PREMESSA: un bonifico all'host doveva partire", s, c, ok)
+        riga = self.sis.payout.info(rif) or {}
+        self.assertEqual((sum(uscite), True),
+                         (int(riga.get("minori") or 0), riga.get("stato") in ("in_transito", "pagato")),
+                         "IL REGISTRO DEI BONIFICI HA PERSO UN BONIFICO PARTITO: il giornale dice "
+                         "partiti %r, il registro ha %r; cancellazione %s %r, «tutto ok» %r"
+                         % (uscite, self.sis.payout.info(rif), s, c, ok))
+
+    def test_174_host_cancella_col_tutto_ok_in_mezzo_MAI_soldi_a_tutti_e_due(self):
+        b, pieno, pagato, ora = self._arrivato_oggi("casa-h174", "pi_h174")
+        (s, c), ok = self._insieme(
+            b, ora,
+            lambda premi: self._prima_di(self.sis.pagamenti_pendenti, "marca_cancellata_host", premi),
+            lambda: self.g("POST", "/api/host/cancella", {"riferimento": b["riferimento"]},
+                           {"X-Host-Token": self.tok}))
+        rimborsi, pagati = self._soldi_usciti(b["riferimento"])
+        self.assertLessEqual(sum(rimborsi) + sum(pagati), pagato,
+                             "PERDITA %d (cancellazione dell'HOST): l'ospite ha pagato %d, gli si "
+                             "devono %r e all'host sono partiti %r (pieno %d), payout ora %r; "
+                             "cancellazione %s %r, «tutto ok» %r"
+                             % (sum(rimborsi) + sum(pagati) - pagato, pagato, rimborsi, pagati,
+                                pieno, self.sis.payout.info(b["riferimento"]), s, c, ok))
+
+    def test_174_host_cancella_mentre_il_giro_orario_sblocca_MAI_soldi_a_tutti_e_due(self):
+        # il secondo compagno dell'host: nessun freno sull'ora, quindi l'host cancella anche DOPO lo
+        # sblocco, proprio mentre il giro orario della garanzia rilascia e fa partire il bonifico
+        b, pieno, pagato, _ora = self._arrivato_oggi("casa-hs174", "pi_hs174")
+        rif = b["riferimento"]
+        ora = int(self.sis.garanzia.stato(rif)["sblocco_auto_ts"]) + 60
+        letto, fatto = threading.Event(), threading.Event()
+        fili = []
+
+        def rimborsata(r):       # lo stesso `salta_se` del giro della garanzia del server
+            return (self.sis.pagamenti_pendenti.info(r) or {}).get("stato") in ("rimborsato",
+                                                                               "cancellata_host")
+
+        def giro_orario():
+            for x in self.sis.garanzia.auto_rilascia(ora_ts=ora, dettagli=True,
+                                                     salta_se=rimborsata) or []:
+                self.r._trasferisci_all_host(x["prenotazione_id"], x["host_riceve_cents"])
+
+        def premi_giro():
+            if not fili:
+                f = threading.Thread(target=giro_orario)
+                fili.append(f)
+                f.start()
+                letto.wait(2)    # col lucchetto il giro resta fermo: si prosegue dopo 2 s
+        self._prima_di(self.sis.pagamenti_pendenti, "marca_cancellata_host", premi_giro)
+
+        def addebito(rec):       # il bonifico ha GIA' letto stato e importo
+            letto.set()
+            fatto.wait(2)
+            return ""
+        self.r._addebito_del_pagamento = addebito
+        with mock.patch("time.time", return_value=float(ora)):
+            s, c = self.g("POST", "/api/host/cancella", {"riferimento": rif},
+                          {"X-Host-Token": self.tok})
+            fatto.set()
+            for f in fili:
+                f.join(10)
+        _deve(fili and not any(f.is_alive() for f in fili),
+              "PREMESSA: il giro orario doveva partire durante la cancellazione e finire")
+        rimborsi, pagati = self._soldi_usciti(rif)
+        self.assertLessEqual(sum(rimborsi) + sum(pagati), pagato,
+                             "PERDITA %d (l'HOST cancella mentre il giro orario sblocca): l'ospite ha "
+                             "pagato %d, gli si devono %r e all'host sono partiti %r (pieno %d), "
+                             "payout ora %r, garanzia %r; cancellazione %s %r"
+                             % (sum(rimborsi) + sum(pagati) - pagato, pagato, rimborsi, pagati, pieno,
+                                self.sis.payout.info(rif), self.sis.garanzia.stato(rif).get("stato"),
+                                s, c))
+
+    def test_177_host_cancella_mentre_il_giro_sblocca_la_garanzia_non_resta_RILASCIATA(self):
+        # VOCE 177 (PROTON 26/10), SOLO PROVA: la stessa gara qui sopra. I soldi sono a posto, ma
+        # la garanzia rilasciata dal giro nel mezzo resta 'rilasciato' (all'host il pieno) su una
+        # prenotazione 'cancellata_host' a cui l'host non ha avuto niente: il registro mente
+        b, pieno, pagato, _ora = self._arrivato_oggi("casa-g177", "pi_g177")
+        rif = b["riferimento"]
+        ora = int(self.sis.garanzia.stato(rif)["sblocco_auto_ts"]) + 60
+        letto, fatto = threading.Event(), threading.Event()
+        fili = []
+
+        def giro_orario():       # il giro VERO della garanzia, quello che chiama il tick
+            self.r._sblocca_garanzie_scadute(ora_ts=ora)
+
+        def premi_giro():
+            if not fili:
+                f = threading.Thread(target=giro_orario)
+                fili.append(f)
+                f.start()
+                letto.wait(2)    # col lucchetto il giro resta fermo: si prosegue dopo 2 s
+        self._prima_di(self.sis.pagamenti_pendenti, "marca_cancellata_host", premi_giro)
+
+        def addebito(rec):
+            letto.set()
+            fatto.wait(2)
+            return ""
+        self.r._addebito_del_pagamento = addebito
+        with mock.patch("time.time", return_value=float(ora)):
+            s, c = self.g("POST", "/api/host/cancella", {"riferimento": rif},
+                          {"X-Host-Token": self.tok})
+            fatto.set()
+            for f in fili:
+                f.join(10)
+        _deve(fili and not any(f.is_alive() for f in fili),
+              "PREMESSA: il giro orario doveva partire durante la cancellazione e finire")
+        _deve(s == 200, "PREMESSA: l'host doveva poter cancellare", s, c)
+        rimborsi, pagati = self._soldi_usciti(rif)
+        _deve(pagati == [], "PREMESSA: all'host non doveva partire niente", pagati)
+        st = self.sis.garanzia.stato(rif)
+        self.assertNotEqual("rilasciato", st.get("stato"),
+                            "IL REGISTRO DELLA GARANZIA MENTE: dice rilasciata all'host (%r) su una "
+                            "prenotazione cancellata dall'host, bonifici %r, rimborsi %r, pendente %r"
+                            % (st, pagati, rimborsi,
+                               (self.sis.pagamenti_pendenti.info(rif) or {}).get("stato")))
+
+
+class TestIlGiroVeroDellaGaranzia(_BancoDeiSoldiDelServer):
+    """Voce 177 (PROTON 27/10): il giro orario della garanzia e' `_sblocca_garanzie_scadute`, che il
+    tick di `avvia_server` chiama. La prova 177 lo esegue solo in gara con la cancellazione
+    dell'host, dove trova la garanzia gia' annullata e non rilascia niente: queste lo fanno
+    lavorare davvero. Nate dai mutanti del Giudice letti PRIMA del giro (`_sblocca_garanzie_scadute`
+    e `_rimborsata`)."""
+
+    DOPO = 40 * 86400       # oltre la finestra della garanzia di una prenotazione a 10 giorni
+
+    def _pagata(self, slug, pi):
+        self.pubblica(slug)
+        rif = self.prenota(slug, 10)["riferimento"]
+        s, c = self.paga(rif, pi)
+        _deve(s == 200, s, c)
+        _deve((self.sis.garanzia.stato(rif)["stato"], self.sis.payout.stato_di(rif))
+              == ("in_garanzia", "maturato"), "PREMESSA: garanzia aperta e bonifico pronto",
+              self.sis.garanzia.stato(rif), self.sis.payout.stato_di(rif))
+        return rif
+
+    def test_177a_dopo_la_finestra_il_giro_rilascia_e_paga_l_host_una_volta(self):
+        rif = self._pagata("casa-gv-a", "pi_gv_a")
+        pieno = int(self.sis.payout.info(rif)["minori"])
+        self.r._sblocca_garanzie_scadute(ora_ts=int(time.time()) + self.DOPO)
+        self.assertEqual(("rilasciato", [("acct_banco", pieno, "EUR", rif)]),
+                         (self.sis.garanzia.stato(rif)["stato"], self.connect.bonifici),
+                         "IL GIRO DELLA GARANZIA NON RILASCIA O NON PAGA L'HOST: dopo la finestra "
+                         "garanzia %r, bonifici %r" % (self.sis.garanzia.stato(rif),
+                                                       self.connect.bonifici))
+
+    def test_177b_una_RIMBORSATA_con_la_garanzia_ancora_aperta_non_paga_l_host(self):
+        # D19: il rimborso doveva chiudere la garanzia e quel passo e' saltato (isolato). Lo stato
+        # si costruisce a mano: pendente 'rimborsato', garanzia ancora 'in_garanzia'
+        rif = self._pagata("casa-gv-b", "pi_gv_b")
+        _deve(self.sis.pagamenti_pendenti.marca_da_rimborsare(rif) is True,
+              "PREMESSA: la prenotazione doveva diventare 'rimborsato'")
+        self.r._sblocca_garanzie_scadute(ora_ts=int(time.time()) + self.DOPO)
+        self.assertEqual(("annullato", []),
+                         (self.sis.garanzia.stato(rif)["stato"], self.connect.bonifici),
+                         "GARANZIA RILASCIATA ALL'HOST SU UNA PRENOTAZIONE RIMBORSATA: garanzia %r, "
+                         "bonifici %r" % (self.sis.garanzia.stato(rif), self.connect.bonifici))
+
+    def test_177c_se_i_pendenti_non_si_leggono_il_giro_rilascia_lo_stesso(self):
+        # IL VERSO E' VOLUTO, non va «corretto»: la prevenzione e' FAIL-SAFE VERSO L'HOST (docstring
+        # di `auto_rilascia` e di `_sblocca_garanzie_scadute`). In dubbio si rilascia: con
+        # l'archivio dei pendenti giu' un host legittimo non resta senza soldi, e la rete a valle
+        # e' il guardiano fase186. Saltare qui fermerebbe la garanzia di TUTTI gli host.
+        rif = self._pagata("casa-gv-c", "pi_gv_c")
+
+        def esplode(_rif):
+            raise sqlite3.OperationalError("database is locked")
+        with mock.patch.object(self.sis.pagamenti_pendenti, "info", esplode):
+            self.r._sblocca_garanzie_scadute(ora_ts=int(time.time()) + self.DOPO)
+        self.assertEqual("rilasciato", self.sis.garanzia.stato(rif)["stato"],
+                         "UNA LETTURA FALLITA HA FERMATO LA GARANZIA DI UN HOST LEGITTIMO: %r"
+                         % (self.sis.garanzia.stato(rif),))
+
+    def test_177d_un_bonifico_che_esplode_nel_giro_lo_dice_con_la_traccia(self):
+        self._pagata("casa-gv-d", "pi_gv_d")
+
+        def esplode(_rif, _importo):
+            raise RuntimeError("Connect giu'")
+        self.r._trasferisci_all_host = esplode
+        with self.ascolta() as righe:
+            self.r._sblocca_garanzie_scadute(ora_ts=int(time.time()) + self.DOPO)
+        self.assertEqual(["WARNING:transfer su auto-rilascio fallito (ignorato) |exc_info:RuntimeError"],
+                         self.avvisi_con(righe, "transfer su auto-rilascio fallito"),
+                         "IL BONIFICO FALLITO NEL GIRO NON LO DICE (o senza la traccia): %r" % (righe,))
+
+    def test_177e_una_garanzia_senza_auto_rilascia_esce_senza_errore(self):
+        self.sis.garanzia = object()        # un sistema senza il registro della garanzia giusto
+        self.assertIsNone(self.r._sblocca_garanzie_scadute(ora_ts=int(time.time()) + self.DOPO))
+        self.assertEqual([], self.connect.bonifici)
+
+
+class _OraVeraPerIlPreventivo:
+    """Le prove del blocco sulla carta SPOSTATE qui da test_blocco_carta (27/10, PROTON): in questo
+    file `setUpModule` ferma l'orologio di fase59 al 1 gennaio 2026, e la cancellazione dell'ospite
+    lo usa per le 48 ore. Per tutta la prova fase59 rivede l'ora vera, come in test_blocco_carta:
+    stesse prove, stesso mondo. (Nessun `test_` qui: non si raccoglie da sola.)"""
+
+    def setUp(self):
+        orologio = mock.patch.object(fase59_concierge, "time", time)
+        orologio.start()
+        self.addCleanup(orologio.stop)
+        super().setUp()
+
+
+class TestIlBloccoIncassatoSuUnaCancellazioneDellOspiteSiRestituisce(_OraVeraPerIlPreventivo,
+                                                                     _BancoDelBlocco):
+    """Voce 143, meta' 'rimborsato' (Claude; Kimi K13 4.2; PROTON P1-QUINQUIES, P2-BIS e il pacco
+    del 26/10). L'ospite cancella, la riga del rimborso dovuto non nasce perche' i soldi sembrano
+    solo AUTORIZZATI, e poi su Stripe risultano INCASSATI: nessuno la scriveva piu' e l'ospite non
+    riaveva i suoi soldi. Due strade: (i) con la penale l'incasso riesce e poi la scrittura del
+    blocco esplode; (ii) senza penale l'annullo non riesce, e poi il pagamento risulta incassato.
+    SPOSTATE qui da test_blocco_carta (27/10): le righe che guardano stanno in fase83, e il Giudice
+    per fase83 accende questo file, non quello (fuori dai suoi 8 occhi)."""
+
+    def _giro(self, ora):
+        from fase83_server import sweep_hold_una_passata
+        with self.assertLogs("core_auto.server", level="INFO") as reg:
+            self.r._incassa_blocchi(ora_ts=int(ora))
+            sweep_hold_una_passata(self.sis, self.r)
+        return [r.getMessage() for r in reg.records if r.levelname == "ERROR"]
+
+    def test_143_rimborsato_penale_incassata_poi_errore_la_riga_nasce(self):
+        from unittest import mock
+        rif, vt, tot = self.prenota("2027-04-10", "2027-04-12")
+        _s, _c, pi = self.paga_bloccato(rif, tot)
+        self.assertEqual(self.stato(rif), "pagato", "PREMESSA: confermata col blocco")
+        vero_segna = self.sis.pagamenti_pendenti.segna_blocco
+
+        def segna(rif_, **campi):       # l'archivio dei pendenti non si apre (fase162 `_apri`)
+            if "blocco_incassato_ts" in campi:
+                raise RuntimeError("archivio dei pendenti bloccato")
+            return vero_segna(rif_, **campi)
+        self.sis.pagamenti_pendenti.segna_blocco = segna
+        dopo = time.time() + fase83_server.SECONDI_RIPENSAMENTO + 3600
+        with mock.patch("time.time", return_value=dopo):
+            s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
+        self.assertEqual(s, 200, "%r" % (c,))
+        self.assertEqual(self.stripe.pagamenti[pi], "succeeded", "PREMESSA: Stripe ha INCASSATO")
+        dovuto = int(c.get("rimborso_cents", 0))
+        self.assertGreater(dovuto, 0, "PREMESSA: la tassa torna all'ospite: %r" % (c,))
+        self.assertEqual([dovuto], [int(m["importo_cents"]) for m in self.movimenti(rif, "rimborso")],
+                         "Stripe dice INCASSATO e la riga non nasce subito: l'ospite aspetta il giro")
+        self.sis.pagamenti_pendenti.segna_blocco = vero_segna
+        errori = self._giro(dopo + 3600)
+        righe = [int(m["importo_cents"]) for m in self.movimenti(rif, "rimborso")]
+        self.assertEqual([dovuto], righe,
+                         "BLOCCO INCASSATO E NESSUN RIMBORSO DOVUTO: Stripe ha preso %d, all'ospite "
+                         "spettano %d (%r)" % (tot, dovuto, righe))
+        self.assertEqual([], [e for e in errori if "importo_dovuto_sconosciuto" in e],
+                         "FALSO ALLARME: la riga c'e' gia' e il giro grida l'importo sconosciuto")
+
+    def test_143_rimborsato_annullo_fallito_poi_incassato_la_riga_nasce_per_intero(self):
+        rif, vt, tot = self.prenota("2027-04-14", "2027-04-16")
+        _s, _c, pi = self.paga_bloccato(rif, tot, n=2)
+        self.stripe.esito_annullo = {"ok": False, "id": "", "motivo": "URLError: rete"}
+        self.stripe.pagamenti.pop(pi)                       # nemmeno la rilettura risponde
+        s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
+        self.assertEqual(s, 200, "%r" % (c,))
+        self.assertEqual(self.movimenti(rif, "rimborso"), [],
+                         "PREMESSA: annullo non riuscito, nessuna riga (non si sa ancora)")
+        dovuto = int(c.get("rimborso_cents", 0))
+        self.assertGreater(dovuto, 0, "PREMESSA: alle 48 ore spetta tutto: %r" % (c,))
+        self.stripe.esito_annullo = None
+        self.stripe.pagamenti[pi] = "succeeded"             # su Stripe risulta incassato
+        self._giro(time.time() + 3600)
+        righe = [int(m["importo_cents"]) for m in self.movimenti(rif, "rimborso")]
+        self.assertEqual([dovuto], righe,
+                         "L'OSPITE HA CANCELLATO, STRIPE HA INCASSATO E NESSUNO RESTITUISCE: dovuti %d, "
+                         "righe %r" % (dovuto, righe))
+
+    def test_143_un_blocco_senza_l_importo_dovuto_grida_e_non_inventa_la_riga(self):
+        # D19: un blocco scritto prima del campo (o col campo perso) si costruisce a mano
+        import sqlite3
+        rif, vt, tot = self.prenota("2027-04-18", "2027-04-20")
+        _s, _c, pi = self.paga_bloccato(rif, tot, n=3)
+        self.stripe.esito_annullo = {"ok": False, "id": "", "motivo": "URLError: rete"}
+        self.stripe.pagamenti.pop(pi)
+        s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
+        self.assertEqual(s, 200, "%r" % (c,))
+        corpo = self.corpo(rif)
+        corpo.pop("blocco_rimborso_dovuto_cents", None)
+        con = sqlite3.connect(self.dir + "/p.db")
+        with con:
+            con.execute("UPDATE pendenti SET corpo_json=? WHERE riferimento=?",
+                        (json.dumps(corpo), rif))
+        con.close()
+        self.stripe.esito_annullo = None
+        self.stripe.pagamenti[pi] = "succeeded"
+        errori = self._giro(time.time() + 3600)
+        self.assertEqual([], self.movimenti(rif, "rimborso"),
+                         "RIGA INVENTATA: l'importo dovuto non era scritto da nessuna parte")
+        self.assertTrue([e for e in errori if "importo_dovuto_sconosciuto" in e and rif[:8] in e],
+                        "BLOCCO INCASSATO SU UNA CANCELLATA E NESSUNO LO DICE: %r" % (errori,))
+
+    def test_143_annullo_riuscito_poi_errore_nessuna_riga(self):
+        # il gemello di (i): l'annullo RIESCE su Stripe e poi la scrittura esplode. Stripe dice
+        # 'canceled': i soldi non sono mai entrati, nessuna riga, ne' adesso ne' dopo il giro
+        rif, vt, tot = self.prenota("2027-04-22", "2027-04-24")
+        _s, _c, pi = self.paga_bloccato(rif, tot, n=4)
+        vero_segna = self.sis.pagamenti_pendenti.segna_blocco
+
+        def segna(rif_, **campi):
+            if "blocco_annullato_ts" in campi:
+                raise RuntimeError("archivio dei pendenti bloccato")
+            return vero_segna(rif_, **campi)
+        self.sis.pagamenti_pendenti.segna_blocco = segna
+        s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
+        self.sis.pagamenti_pendenti.segna_blocco = vero_segna
+        self.assertEqual(s, 200, "%r" % (c,))
+        self.assertEqual("canceled", self.stripe.pagamenti[pi], "PREMESSA: Stripe ha ANNULLATO")
+        self._giro(time.time() + 3600)
+        self.assertEqual([], self.movimenti(rif, "rimborso"),
+                         "RIMBORSO DOVUTO SU SOLDI MAI ENTRATI (annullo riuscito)")
+
+    def test_143_esploso_e_stripe_muto_su_soldi_mai_entrati_nessuna_riga(self):
+        # con la penale l'incasso esplode e Stripe non risponde: non si sa. La riga non nasce
+        # subito; il giro trova il blocco ancora solo autorizzato e lo annulla: nessuna riga
+        from unittest import mock
+        rif, vt, tot = self.prenota("2027-04-26", "2027-04-28")
+        _s, _c, pi = self.paga_bloccato(rif, tot, n=5)
+
+        def esplode(rif_, pi_):
+            raise RuntimeError("rete caduta a meta' dell'incasso")
+        self.r._incassa_blocco = esplode
+        self.stripe.pagamenti.pop(pi)                       # e la rilettura non risponde
+        dopo = time.time() + fase83_server.SECONDI_RIPENSAMENTO + 3600
+        with mock.patch("time.time", return_value=dopo):
+            s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
+        self.assertEqual(s, 200, "%r" % (c,))
+        del self.r._incassa_blocco
+        self.stripe.pagamenti[pi] = "requires_capture"      # su Stripe: mai incassato
+        self._giro(dopo + 3600)
+        self.assertEqual("canceled", self.stripe.pagamenti[pi], "PREMESSA: il giro annulla")
+        self.assertEqual([], self.movimenti(rif, "rimborso"),
+                         "RIMBORSO DOVUTO SU SOLDI MAI ENTRATI (Stripe muto al momento dell'errore)")
+
+
+class TestIlRimborsoDellAdminColBloccoIncassatoDopo(_OraVeraPerIlPreventivo, _SpieDelBlocco):
+    """Limite 8a della voce 143 (voce 179, PROTON 26/10), SPOSTATA qui da test_blocco_carta
+    `TestIlRimborsoDellAdminColBlocco` (27/10): la riga che guarda sta in fase83
+    `_admin_rimborso_sotto_chiave`, e il Giudice per fase83 accende questo file."""
+
+    def test_8a_rimborso_admin_annullo_fallito_poi_incassato_la_riga_nasce(self):
+        # Limite 8a della voce 143 (PROTON 26/10), SOLO PROVA: l'admin rimborsa, l'annullo del
+        # blocco non riesce, poi su Stripe i soldi risultano INCASSATI. Il giro trova 'incassato' su
+        # un 'rimborsato', ma l'importo non e' scritto: l'ospite resta senza riga di rimborso
+        from fase83_server import sweep_hold_una_passata
+        rif, _vt, tot = self.prenota("2027-04-10", "2027-04-12")
+        _s, _c, pi = self.paga_bloccato(rif, tot)
+        self.stripe.esito_annullo = {"ok": False, "id": "", "motivo": "URLError: rete"}
+        self.stripe.pagamenti.pop(pi)                       # e nemmeno la rilettura risponde
+        s, c = self.rimborsa(rif, "2027-04-10", "2027-04-12")
+        self.assertEqual(s, 200, "%r" % (c,))
+        self.assertEqual((self.stato(rif), self.movimenti(rif, "rimborso")), ("rimborsato", []),
+                         "PREMESSA: rimborsata, annullo non riuscito, nessuna riga (non si sa ancora)")
+        self.stripe.esito_annullo = None
+        self.stripe.pagamenti[pi] = "succeeded"             # su Stripe risulta incassato
+        with self.assertLogs("core_auto.server", level="INFO") as reg:
+            self.r._incassa_blocchi(ora_ts=int(time.time()) + 3600)
+            sweep_hold_una_passata(self.sis, self.r)
+        self.assertTrue(self.movimenti(rif, "incasso"), "PREMESSA: il giro ha visto l'incasso")
+        righe = [int(m["importo_cents"]) for m in self.movimenti(rif, "rimborso")]
+        self.assertEqual([tot], righe,
+                         "L'ADMIN HA RIMBORSATO, STRIPE HA INCASSATO E L'OSPITE RESTA SENZA: pagati %d, "
+                         "righe %r; il registro dice %r" % (
+                             tot, righe, [r.getMessage()[:120] for r in reg.records
+                                          if r.levelname == "ERROR"]))
+
+    def test_179_con_il_totale_a_zero_non_segna_un_importo_dovuto(self):
+        # il gemello della 8a (PROTON 27/10, dai mutanti del Giudice letti prima del giro): con
+        # l'ospite pagato e niente da restituire la riga della 179 non scrive niente nel blocco.
+        # Un importo dovuto di ZERO li' farebbe gridare al giro «importo sconosciuto» per niente
+        rif, _tot = self._pagata("2027-04-22", "2027-04-24", "cs_zero179", "pi_zero179")
+        self._azzera_il_totale(rif)
+        s, c = self.rimborsa(rif, "2027-04-22", "2027-04-24")
+        self.assertEqual(s, 200, "%r" % (c,))
+        self.assertNotIn("blocco_rimborso_dovuto_cents", self.corpo(rif),
+                         "IMPORTO DOVUTO DI ZERO SEGNATO NEL BLOCCO: %r" % (self.corpo(rif),))
 
 
 class TestUnPagamentoConfermatoNonLasciaIlBonificoFermo(_BancoDeiSoldiDelServer):
