@@ -638,8 +638,16 @@ class TestSeNonSiMettonoDAccordoSubentriamoNoi(unittest.TestCase):
         self.assertIn("_subentro_per_disaccordo", righe,
                       "il tick non chiama il subentro: i soldi vanno all'host anche se in chat "
                       "stanno litigando")
-        self.assertLess(righe["_subentro_per_disaccordo"], righe["auto_rilascia"],
+        # voce 177 (26/10): il rilascio sta in `_sblocca_garanzie_scadute` del router, che il tick
+        # chiama (cosi' le prove chiamano il giro vero e il rilascio sta sotto `_BONIFICI_LOCK`)
+        self.assertLess(righe["_subentro_per_disaccordo"], righe["_sblocca_garanzie_scadute"],
                         "il subentro deve venire PRIMA del rilascio automatico, o arriva a soldi partiti")
+        metodo = [n for n in ast.walk(albero)
+                  if isinstance(n, ast.FunctionDef) and n.name == "_sblocca_garanzie_scadute"]
+        self.assertEqual(1, len(metodo), "il giro della garanzia del router non si trova piu'")
+        self.assertIn("auto_rilascia", [n.func.attr for n in ast.walk(metodo[0])
+                                        if isinstance(n, ast.Call)
+                                        and isinstance(n.func, ast.Attribute)])
 
 
 if __name__ == "__main__":

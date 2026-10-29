@@ -53,8 +53,10 @@ _AMMESSI = _sorgenti_ammesse()
 # pagamento di una prenotazione e' solo AUTORIZZATO sulla carta. Li scrive fase83 (webhook,
 # cancellazioni, giro orario); li leggono il giornale, il bonifico e chi sorveglia (fase202,
 # fase181) -- tutti attraverso `blocco_della_carta`, mai a mano.
+# `blocco_rimborso_dovuto_cents` (voce 143): quanto spetta all'ospite che ha cancellato se il
+# blocco risulta poi INCASSATO; lo scrive la cancellazione, lo legge il giro orario.
 CAMPI_BLOCCO = ("blocco_pi", "blocco_incassa_dal_ts", "blocco_incassato_ts",
-                "blocco_annullato_ts")
+                "blocco_annullato_ts", "blocco_rimborso_dovuto_cents")
 
 
 def blocco_della_carta(corpo: Any) -> Dict[str, Any]:

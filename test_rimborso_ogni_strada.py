@@ -53,6 +53,14 @@ STRADE_CENSITE = {
     "rimborso deciso dall'arbitro (controversia risolta)": "rimborso_controversia:",
     "rimborso 100% per cancellazione host": None,
     "rimborso dovuto per cancellazione ospite": None,
+    # Voci 143 e 179 (pacco 3, 27/10): il giro orario dei blocchi sulla carta, quando trova
+    # 'incassato' su una 'rimborsato', scrive la riga che la cancellazione dell'ospite (o il
+    # rimborso dell'admin) non aveva potuto scrivere perche' i soldi non risultavano incassati.
+    # L'importo e' `blocco_rimborso_dovuto_cents`, cioe' quello che la strada di partenza ha
+    # calcolato allora: e' la STESSA riga scritta dopo, non una cifra nuova (le prove
+    # `test_fase83_server.TestIlBloccoIncassatoSuUnaCancellazioneDellOspiteSiRestituisce` e
+    # `TestIlRimborsoDellAdminColBloccoIncassatoDopo` lo pretendono).
+    "rimborso dovuto per cancellazione ospite (blocco incassato dopo)": None,
     "rimborso dovuto: pagamento su prenotazione non confermabile (stato %s)":
         "rimborso_non_confermabile:",
     "rimborso dovuto: pagamento tardivo su stanza presa": "rimborso_tardivo:",
@@ -77,6 +85,13 @@ CHIAVE_CONDIVISA_DICHIARATA = {
     "rimborso disposto da admin",
     "rimborso 100% per cancellazione host",
     "rimborso dovuto per cancellazione ospite",
+    # Voci 143 e 179 (pacco 3, 27/10): la quarta. Non porta un importo suo: scrive DOPO la
+    # cifra della cancellazione dell'ospite (lo scaglione) o del rimborso dell'admin (il
+    # totale), quindi nelle coppie ordinate di test_rimborso_coppie_stessa_chiave si comporta
+    # come la strada da cui nasce. ⚠️ Con quattro strade quel file chiede di passare dalla
+    # tabella alla PROPRIETA' («se la prima scrive meno della seconda, il libro mente»):
+    # e' la voce 184 di RIPRENDI, aperta.
+    "rimborso dovuto per cancellazione ospite (blocco incassato dopo)",
 }
 
 

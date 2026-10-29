@@ -78,12 +78,14 @@ E2E = os.path.join(QUI, "e2e_rimborso_stripe.py")
 #    repository. Qui si guarda solo se il file ESISTE; non si legge, non si stampa.
 FILE_CHIAVE = os.environ.get("STRIPE_TEST_KEY_FILE",
                              os.path.join(os.path.dirname(RADICE), "stripe.com prova.txt"))
-# ⛔ I TRE punti che chiamano `.rimborsa(` (l'albero lo dice, e la guardia di
-#    test_rimborso_arriva_al_gateway.PARTENZE_CENSITE li censisce): i due comandi del
-#    pannello + il LOCK 1-CARTA=1-SCONTO, l'unica strada che restituisce DA SOLA al webhook
-#    di conferma. Il 2026-09-25 qui c'erano solo i due: la strada del Lock scriveva il
-#    giornale e muoveva il gateway finto, e l'esame la dichiarava NON MISURATA perche' non
-#    la vedeva partire.
+# ⛔ I TRE punti da cui i soldi tornano con `.rimborsa(`: i due comandi del pannello + il
+#    LOCK 1-CARTA=1-SCONTO, l'unica strada che restituisce DA SOLA al webhook di conferma.
+#    Dalla voce 142 (26/10) il pulsante `_admin_rimborso` chiama `.rimborsa(` attraverso il suo
+#    corpo `_admin_rimborso_sotto_chiave`: test_rimborso_arriva_al_gateway.PARTENZE_CENSITE
+#    censisce il CORPO (e pretende che lo chiami solo il pulsante), qui resta il PULSANTE, che
+#    avvolge il corpo mentre gira. Il 2026-09-25 qui c'erano solo i due: la strada del Lock
+#    scriveva il giornale e muoveva il gateway finto, e l'esame la dichiarava NON MISURATA
+#    perche' non la vedeva partire.
 GATEWAY = ("_admin_rimborso", "_admin_rimborsa_dovuto", "_lock_carta_credito")
 STRADA_DEL_GUASTO = "rimborso 100% per cancellazione host"
 

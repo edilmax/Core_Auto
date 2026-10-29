@@ -5266,6 +5266,11 @@ class RouterHTTP:
                         self._giornale(tipo="rimborso", riferimento=rif, soggetto="ospite:" + rif,
                                        importo_cents=tot, valuta=_valuta,
                                        causale="rimborso disposto da admin")
+                    elif tot > 0 and _era_pagato:
+                        # Voce 179: come la cancellazione dell'ospite (voce 143). Se l'annullo non e'
+                        # riuscito e poi i soldi risultano INCASSATI, il giro orario scrive la riga
+                        # con questo importo.
+                        pp.segna_blocco(rif, blocco_rimborso_dovuto_cents=tot)
             except Exception:
                 logger.warning("admin rimborso: invalidazione pendente fallita (ignorata)",
                                exc_info=True)
@@ -5383,8 +5388,12 @@ class RouterHTTP:
         if fc is None:
             return None, False
         try:
-            movimenti = [m for m in fc.movimenti(str(rif))
-                         if (m.get("tipo") or "") == "rimborso"]
+            _tutti = fc.movimenti(str(rif))
+            movimenti = [m for m in _tutti if (m.get("tipo") or "") == "rimborso"]
+            # voce 175: quanto il GIORNALE dice uscito verso l'host (`payout_host`), anche quando il
+            # registro dei bonifici lo dice 'trattenuto' (`_payout_trattieni`) o non lo ha piu' (174)
+            uscito_host = sum(int(m.get("importo_cents") or 0) for m in _tutti
+                              if (m.get("tipo") or "") == "payout_host")
         except Exception:
             logger.error("rimborsi dovuti: giornale illeggibile per %s",
                          _rif_per_registro(rif), exc_info=True)
@@ -5473,23 +5482,31 @@ class RouterHTTP:
                     manca.append("arbitrato_supera_il_pagato")
                 # ...e il bonifico gia' partito non deve superare la quota decisa: se all'host e'
                 # uscito di piu', rimborsare l'ospite e' il doppio esborso che il freno ferma.
+                # voce 175: il registro dei bonifici ASSENTE solleva qui e finisce in
+                # «stato_payout_sconosciuto»: prima `pd is not None and` lo lasciava passare muto
                 pd = getattr(self._sys, "payout", None)
-                if pd is not None and str(pd.stato_di(str(rif)) or "") in ("in_transito", "pagato"):
-                    if int((pd.info(str(rif)) or {}).get("minori") or 0) > quota:
-                        passi_ok = False
-                        manca.append("payout_gia_pagato")
+                partito = 0
+                if str(pd.stato_di(str(rif)) or "") in ("in_transito", "pagato"):
+                    partito = int((pd.info(str(rif)) or {}).get("minori") or 0)
+                # ...e conta anche cio' che il giornale dice uscito all'host
+                if max(partito, uscito_host) > quota:
+                    passi_ok = False
+                    manca.append("payout_gia_pagato")
             else:
                 pd = getattr(self._sys, "payout", None)
-                stato_payout = str(pd.stato_di(str(rif)) or "") if pd is not None else ""
+                stato_payout = str(pd.stato_di(str(rif)) or "")      # assente: solleva (175)
                 # Kimi K12 sulla #279: il bonifico riuscito scrive 'in_transito' e in produzione
                 # nessuno scrive 'pagato' (voce 17): guardare solo 'pagato' lasciava rimborsare
                 # l'ospite con l'host gia' pagato. Stessa coppia di `_garanzia_gia_divisa`.
-                passi_ok = stato_payout not in ("in_transito", "pagato")
+                # Voce 175: e il bonifico che il giornale dice partito, anche se il registro lo dice
+                # 'trattenuto' o non lo ha piu'.
+                passi_ok = stato_payout not in ("in_transito", "pagato") and uscito_host == 0
                 if not passi_ok:
                     manca.append("payout_gia_pagato")
         except Exception:
             # Non sapere in che stato e' il payout NON e' un dettaglio: nel dubbio i soldi
             # non partono da soli, si grida e decide una persona.
+            passi_ok = False                   # voce 175: anche dopo il conto del ramo 'risolto'
             manca.append("stato_payout_sconosciuto")
             logger.warning("rimborsi dovuti: stato payout illeggibile per %s",
                            _rif_per_registro(rif), exc_info=True)
@@ -7600,6 +7617,35 @@ class RouterHTTP:
                        self._fmt_importo(int(importo_cents), valuta))
         return ""
 
+    def _sblocca_garanzie_scadute(self, ora_ts=None):
+        """Il giro orario della garanzia (tick di `avvia_server`): 24h di silenzio = tutto ok ->
+        rilascio + bonifico AUTOMATICO all'host. PREVENZIONE perdita: non si versa l'escrow
+        all'host se la prenotazione e' RIMBORSATA/cancellata_host (il passo che chiude l'escrow nel
+        rimborso puo' saltare in isolamento). Fail-safe verso l'host: in dubbio -> non salta
+        (rilascia). Il guardiano fase186 resta la rete a valle."""
+        gz = getattr(self._sys, "garanzia", None)
+        pp = getattr(self._sys, "pagamenti_pendenti", None)
+        if gz is None or not hasattr(gz, "auto_rilascia"):
+            return
+
+        def _rimborsata(_rif):
+            try:
+                _i = pp.info(_rif) if pp is not None else None
+                return bool(_i) and _i.get("stato") in ("rimborsato", "cancellata_host")
+            except Exception:
+                return False
+        # Voce 177, 26/10 («autorizzato» per delega): il rilascio sotto `_BONIFICI_LOCK`, come il
+        # «tutto ok» (K) e la cancellazione dell'host (H). Fuori, rilasciava fra il freno dell'host
+        # e il suo `annulla`: garanzia 'rilasciato' su una 'cancellata_host'. I bonifici restano
+        # fuori: ognuno prende il lucchetto da se'.
+        with _BONIFICI_LOCK:
+            sbloccate = gz.auto_rilascia(ora_ts=ora_ts, dettagli=True, salta_se=_rimborsata)
+        for _r in (sbloccate or []):
+            try:
+                self._trasferisci_all_host(_r["prenotazione_id"], _r["host_riceve_cents"])
+            except Exception:
+                logger.warning("transfer su auto-rilascio fallito (ignorato)", exc_info=True)
+
     def _ritenta_bonifici_fermi(self):
         """R3 (revisione Trail of Bits del 20/10/2026, «autorizzato» del 21/10). Stripe NON
         ritenta un bonifico fallito: «You must explicitly attempt the transfer again»
@@ -7701,6 +7747,17 @@ class RouterHTTP:
             return 403, {"errore": "non_tua"}       # solo il proprietario può cancellare la sua
         if rec.get("stato") in ("cancellata_host", "rimborsato"):
             return 409, {"errore": "gia_cancellata"}
+        # ⛔ VOCE 174 (PROTON e Claude, 26/10): dal freno della garanzia alla fine dei passi, sotto
+        # `_BONIFICI_LOCK`. Il freno si guardava fuori: il «tutto ok» dell'ospite o il giro orario
+        # rilasciavano la garanzia subito dopo, il bonifico partiva pieno e qui si rimborsava l'ospite
+        # al 100%. Dentro il lucchetto il bonifico in volo finisce prima (e il freno lo vede), o
+        # parte dopo e trova 'cancellata_host'.
+        with _BONIFICI_LOCK:
+            return self._host_cancella_sotto_chiave(ref, rec, host_id, pp)
+
+    def _host_cancella_sotto_chiave(self, ref, rec, host_id, pp):
+        """Il corpo di `_host_cancella` dal freno della garanzia in poi; lo chiama tenendo
+        `_BONIFICI_LOCK`."""
         # ESCROW GIA' LIQUIDATO -> l'host NON puo' piu' auto-cancellare (bug PROVATO
         # 2026-07-28, test_escrow_gia_liquidato). Cammino: l'ospite paga e preme "tutto ok"
         # (o passano le 24h dal check-in) -> l'escrow si chiude e il netto e' gia' PARTITO
@@ -8091,10 +8148,14 @@ class RouterHTTP:
         fuori = self._fuori_dalla_finestra(g, res[0], res[1])
         if fuori:
             return 409, {"errore": fuori}
-        out = g.conferma_ospite(res[0])
-        if out.get("ok"):
-            # sblocco confermato dal cliente -> il netto parte da solo verso l'host (Connect)
-            self._trasferisci_all_host(res[0], out.get("host_riceve_cents", 0))
+        # ⛔ VOCE 174: il rilascio e il suo bonifico sotto `_BONIFICI_LOCK`, come le cancellazioni.
+        # Fuori, un «tutto ok» premuto mentre l'ospite o l'host cancellano rilasciava la garanzia in
+        # mezzo alla loro decisione: soldi all'host E all'ospite.
+        with _BONIFICI_LOCK:
+            out = g.conferma_ospite(res[0])
+            if out.get("ok"):
+                # sblocco confermato dal cliente -> il netto parte da solo verso l'host (Connect)
+                self._trasferisci_all_host(res[0], out.get("host_riceve_cents", 0))
         return (200 if out.get("ok") else 409), out
 
     def _garanzia_contesta(self, body):
@@ -8216,6 +8277,20 @@ class RouterHTTP:
         except Exception:
             giorni = 0
         giorni = giorni if giorni > 0 else 0
+        # ⛔ VOCE 174 (PROTON e Claude, 26/10): dal pendente alla riga del rimborso, sotto
+        # `_BONIFICI_LOCK`. Il freno della garanzia si guardava UNA volta e fuori: un «tutto ok» o un
+        # bonifico in volo in mezzo, e i soldi andavano all'host E all'ospite. Credito, email e
+        # penale in struttura (parlano con la rete) restano fuori, nella coda.
+        with _BONIFICI_LOCK:
+            fatto = self._cancella_prenotazione_sotto_chiave(v, token, allog, ci, co, rif, pagato,
+                                                             giorni)
+        if not isinstance(fatto, dict):
+            return fatto                       # risposta gia' decisa: freni, replay, guasto
+        return self._cancella_prenotazione_coda(v, rif, giorni, fatto)
+
+    def _cancella_prenotazione_sotto_chiave(self, v, token, allog, ci, co, rif, pagato, giorni):
+        """Il corpo di `_cancella_prenotazione` dal pendente alla riga del rimborso; lo chiama
+        tenendo `_BONIFICI_LOCK`. Torna la risposta, se si esce prima, o cio' che serve alla coda."""
         # CONSAPEVOLE DEL PAGAMENTO: se il record pendenti esiste e NON è 'pagato', il cliente
         # non ha versato nulla -> NIENTE rimborso/penale/credito su soldi mai incassati.
         # Il record va comunque invalidato: il link di pagamento può restare vivo fino a 24h
@@ -8303,7 +8378,13 @@ class RouterHTTP:
                 logger.error("cancellazione %s: chiusura del blocco sulla carta esplosa (il "
                              "giro orario ANNULLERA' il blocco: una penale, se c'era, non entra)",
                              _rif_per_registro(rif), exc_info=True)
-                _senza_incasso = _blocco(_rec)["stato"] in ("aperto", "annullato")
+                # Voce 143, strada (i): la fotografia dice 'aperto' anche quando l'incasso della
+                # penale e' riuscito e poi una scrittura e' esplosa: su 'aperto' si rilegge Stripe.
+                # Solo 'succeeded' scrive la riga adesso; il resto ("" compreso) lascia l'importo nel
+                # blocco qui sotto, e la riga la scrive il giro orario se i soldi risultano entrati.
+                _b = _blocco(_rec)
+                _senza_incasso = _b["stato"] == "annullato" or (
+                    _b["stato"] == "aperto" and self._stato_pi(_b["pi"]) != "succeeded")
         # ESCROW PRIMA del resto: serve sapere quanto TIENE l'host (quota-penale della
         # politica) per decidere il payout. host_tiene vale SOLO se la chiusura CAS riesce.
         host_tiene = 0
@@ -8458,6 +8539,21 @@ class RouterHTTP:
                              "cents promessi all'ospite via email: registrarlo A MANO dal "
                              "pannello, o quei soldi non risultano dovuti da nessuna parte",
                              _rif_per_registro(rif), rimborso_totale)
+        elif pagato_davvero and rimborso_totale > 0 and _pp is not None:
+            # Voce 143, strada (ii): i soldi sembrano solo autorizzati, ma l'annullo puo' non
+            # essere riuscito. Se poi su Stripe risultano INCASSATI il giro orario scrive la riga
+            # con QUESTO importo: dopo non si saprebbe piu' (`giorni` e le 48 ore cambiano).
+            _pp.segna_blocco(rif, blocco_rimborso_dovuto_cents=int(rimborso_totale))
+        return {"r": r, "pagato_davvero": pagato_davvero, "senza_incasso": _senza_incasso,
+                "tratt_originale": tratt_originale, "tassa": tassa,
+                "rimborso_totale": rimborso_totale}
+
+    def _cancella_prenotazione_coda(self, v, rif, giorni, fatto):
+        """La coda di `_cancella_prenotazione`, FUORI dal lucchetto: credito, email e penale in
+        struttura (parlano con la rete), poi la risposta."""
+        r, pagato_davvero, tassa = fatto["r"], fatto["pagato_davvero"], fatto["tassa"]
+        _senza_incasso, tratt_originale = fatto["senza_incasso"], fatto["tratt_originale"]
+        rimborso_totale = fatto["rimborso_totale"]
         # il credito nasce dal trattenuto ORIGINALE della politica: il taglio anti-perdita
         # (tetto di cassa) non deve MAI coniare Credito Viaggio nuovo dal nulla.
         # (e su un blocco mai incassato la penale non e' mai entrata: niente credito da coniare)
@@ -10276,6 +10372,29 @@ class RouterHTTP:
                 esito = self._incassa_blocco(rif, b["pi"])
             elif stato in ("rimborsato", "cancellata_host"):
                 esito = self._annulla_blocco(rif, b["pi"])
+                # Voce 143: l'ospite aveva cancellato e i soldi risultano INCASSATI. La riga del
+                # rimborso dovuto si scrive QUI, una volta sola: dopo 'incassato' il record esce da
+                # `blocchi_aperti`. L'importo e' quello della cancellazione; se manca non si
+                # inventa, si grida (una riga gia' scritta, strada (i), tace).
+                if esito == "incassato" and stato == "rimborsato":
+                    try:
+                        dj = json.loads(rec.get("corpo_json") or "{}")
+                    except Exception:
+                        dj = {}
+                    dovuto = dj.get("blocco_rimborso_dovuto_cents")
+                    fc = getattr(self._sys, "finanza", None)
+                    if isinstance(dovuto, int) and not isinstance(dovuto, bool) and dovuto > 0:
+                        self._giornale(tipo="rimborso", riferimento=rif, soggetto="ospite:" + rif,
+                                       importo_cents=dovuto, valuta=dj.get("valuta") or "EUR",
+                                       causale="rimborso dovuto per cancellazione ospite "
+                                               "(blocco incassato dopo)")
+                    elif not (fc is not None and any(m.get("tipo") == "rimborso"
+                                                     for m in fc.movimenti(rif))):
+                        logger.error("RIMBORSO DOVUTO | codice: importo_dovuto_sconosciuto | "
+                                     "riferimento: %s | pi: %s | messaggio: l'ospite ha cancellato "
+                                     "e su Stripe i soldi risultano INCASSATI, ma quanto gli spetta "
+                                     "non e' scritto: calcolarlo e registrarlo A MANO",
+                                     _rif_per_registro(rif), b["pi"])
             else:
                 continue
             conta[{"incassato": "incassati", "annullato": "annullati"}.get(esito, "falliti")] += 1
@@ -14041,19 +14160,6 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
     if gz is not None and hasattr(gz, "auto_rilascia"):
         import threading as _th
 
-        # PREVENZIONE perdita: non versare l'escrow all'host se la prenotazione e' RIMBORSATA/
-        # cancellata_host (il passo che chiude l'escrow nel rimborso puo' saltare in isolamento).
-        # Fail-safe verso l'host: in dubbio -> non salta (rilascia). Il guardiano fase186 resta
-        # la rete a valle; questa e' la prevenzione al momento esatto del rilascio.
-        _pp_g = getattr(sistema, "pagamenti_pendenti", None)
-
-        def _rimborsata(_rif):
-            try:
-                _i = _pp_g.info(_rif) if _pp_g is not None else None
-                return bool(_i) and _i.get("stato") in ("rimborsato", "cancellata_host")
-            except Exception:
-                return False
-
         def _tick_garanzia():
             while True:
                 try:
@@ -14078,13 +14184,7 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                     # ferma il rilascio: la funzione non solleva mai.
                     _subentro_per_disaccordo(sistema)
                     # 24h di silenzio = tutto ok -> rilascio + bonifico AUTOMATICO all'host
-                    for _r in (gz.auto_rilascia(dettagli=True, salta_se=_rimborsata) or []):
-                        try:
-                            router._trasferisci_all_host(_r["prenotazione_id"],
-                                                         _r["host_riceve_cents"])
-                        except Exception:
-                            logger.warning("transfer su auto-rilascio fallito (ignorato)",
-                                           exc_info=True)
+                    router._sblocca_garanzie_scadute()
                 except Exception:
                     logger.warning("auto_rilascia garanzia fallito (ignorato)", exc_info=True)
                 try:
