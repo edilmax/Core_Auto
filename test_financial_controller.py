@@ -363,5 +363,49 @@ class TestLeCompensazioniScrivonoSoloSuUnBonificoAncoraMaturato(unittest.TestCas
                                            "che siano ancora 'maturato': %r" % (p2.stati,))
 
 
+class TestQuantoLePenaliHannoPresoDaUnaRiga(unittest.TestCase):
+    """Busta A4 di Proton (29/10), punto (a): la riga che una penale usa per intero sparisce dal
+    ledger dei bonifici, e l'arbitro chiede al giornale quanto le penali le hanno preso
+    (`compensato_su_payout`). La prova dell'arbitro sta in test_fase83_server
+    (`test_A4_3a_...`); qui, nel file che il Giudice accende per fase177, la lettura da sola."""
+
+    def setUp(self):
+        self.fc = crea_financial_controller(":memory:")
+        self.fc.inizializza_schema()
+
+    def test_A4_3_conta_le_compensazioni_della_riga_meno_gli_storni_e_SOLO_di_quella_riga(self):
+        # la penale da 150: la prima riga (100) si consuma intera, la seconda perde 50
+        self.fc.processa_penale(riferimento="RIF_PEN", host_id="h1", penale_cents=150,
+                                valuta="EUR", payout=_Payout([
+                                    {"prenotazione_id": "P1", "minori": 100},
+                                    {"prenotazione_id": "XP1", "minori": 9999}]))
+        self.assertEqual((100, 50, 0), (self.fc.compensato_su_payout("P1"),
+                                        self.fc.compensato_su_payout("XP1"),
+                                        self.fc.compensato_su_payout("1")),
+                         "la lettura confonde le righe (P1, XP1, e la sola coda «1»)")
+
+        class _NonScrive(_Payout):
+            def rimuovi(self, pid, solo_se_stato=None):
+                return False                          # il ledger rifiuta: segue lo storno
+        self.fc.processa_penale(riferimento="RIF_PEN2", host_id="h2", penale_cents=70,
+                                valuta="EUR",
+                                payout=_NonScrive([{"prenotazione_id": "P2", "minori": 70}]))
+        self.assertEqual(0, self.fc.compensato_su_payout("P2"),
+                         "la compensazione stornata conta ancora come presa dalla riga")
+        # la riscossione di un debito sui bonifici dopo: stesso schema, conta anche lei
+        self._debito_senza_righe("RIF_DEB", "h3", 40)
+        self.fc.riscuoti_debiti(host_id="h3", payout=_Payout([
+            {"prenotazione_id": "P3", "minori": 40}]))
+        self.assertEqual(40, self.fc.compensato_su_payout("P3"),
+                         "la riscossione del debito sulla riga non risulta presa")
+
+    def _debito_senza_righe(self, rif, host, cents):
+        class _NoPayout:
+            def elenca(self, *a, **k):
+                return []
+        self.fc.processa_penale(riferimento=rif, host_id=host, penale_cents=cents,
+                                valuta="EUR", payout=_NoPayout())
+
+
 if __name__ == "__main__":
     unittest.main()

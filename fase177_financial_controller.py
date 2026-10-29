@@ -313,6 +313,26 @@ class FinancialController:
         finally:
             con.close()
 
+    def compensato_su_payout(self, prenotazione_id: str) -> int:
+        """Quanto le penali hanno preso dalla riga payout di `prenotazione_id` (compensazioni
+        meno storni), dal giornale. Busta A4 di Proton (29/10), punto (a): la riga usata per
+        intero il ledger non la ha piu' (`processa_penale` e `riscuoti_debiti` la tolgono), e
+        chi la cerca la vede uguale a una riga mai scritta; il giornale invece la ricorda. Le
+        righe stanno sotto il riferimento della PENALE, non di questa prenotazione: si
+        riconoscono dall'evento_id ('offset:<nota>:<pid>' e 'storno-offset:<nota>:<pid>')."""
+        con = self._apri()
+        try:
+            tot = 0
+            for r in con.execute(
+                    "SELECT tipo, evento_id, importo_cents FROM libro_giornale "
+                    "WHERE (tipo='penale_offset' AND evento_id LIKE 'offset:%') "
+                    "OR (tipo='storno' AND evento_id LIKE 'storno-offset:%')"):
+                if str(r["evento_id"]).split(":", 2)[-1] == str(prenotazione_id):
+                    tot += int(r["importo_cents"]) * (1 if r["tipo"] == "penale_offset" else -1)
+            return max(0, tot)
+        finally:
+            con.close()
+
     # ══════════════════════════════════════════════════════════════════════════════════
     #  IL LIBRO DEVE DIRE IL VERO, NON SOLO QUADRARE — 2026-08-17
     # ══════════════════════════════════════════════════════════════════════════════════

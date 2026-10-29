@@ -119,6 +119,7 @@ class TestIBuchiDelGiudice(unittest.TestCase):
             ("elenca", ("h1",), []),                                   # 281
             ("tutti", (), []),                                         # 306
             ("imposta_importo", ("p1", 5), False),                     # 327
+            ("riallinea_maturato", ("p1", 5), False),                  # busta A3
         ]
         for nome, args, atteso in chiamate:
             with self.subTest(metodo=nome):
@@ -223,6 +224,71 @@ class TestIBuchiDelGiudice(unittest.TestCase):
         self.assertEqual(p.info("p2")["minori"], 4200)
         self.assertIs(p.rimuovi("p2", solo_se_stato="maturato"), True)
         self.assertIsNone(p.info("p2"))
+
+    def test_A3_riallinea_maturato_scrive_la_quota_SOLO_dove_deve_e_dice_se_l_ha_scritta(self):
+        # Busta A3 di Proton, colpo 2: la scrittura sola dell'arbitro non aveva nessuna prova fra
+        # gli occhi di fase131. Da 'trattenuto', 'maturato' e 'in_attesa' (colpo 1) scrive quota,
+        # stato 'maturato' e l'ora, e dice True; da 'in_transito'/'pagato', su una riga che non
+        # c'e', con una quota non positiva o un riferimento che non e' una stringa non scrive e
+        # dice False. ⛔ `True` fisso direbbe «scritto» su una riga mai riscritta: l'arbitro
+        # pagherebbe subito il pieno.
+        ora = [1]
+        p = crea_payout_dashboard(":memory:", orologio=lambda: ora[0])
+        p.inizializza_schema()
+        for rif, arrivo in (("t", "trattenuto"), ("m", "maturato"), ("a", "in_attesa")):
+            with self.subTest(da=arrivo):
+                ora[0] = 1
+                p.registra_maturato(rif, "h1", 17400, "EUR")
+                if arrivo == "trattenuto":
+                    p.aggiorna_stato(rif, "trattenuto")
+                elif arrivo == "in_attesa":
+                    p.rimuovi(rif)
+                    p.registra_in_attesa(rif, "h1", 17400, "EUR")
+                ora[0] = 777
+                self.assertIs(p.riallinea_maturato(rif, 8700), True)
+                r = p.info(rif)
+                self.assertEqual((r["stato"], r["minori"]), ("maturato", 8700))
+                self.assertEqual([x["ts"] for x in p.tutti() if x["prenotazione_id"] == rif], [777],
+                                 "l'ora della riga non e' quella della scrittura (FIFO delle penali)")
+        for rif, arrivo in (("i", "in_transito"), ("g", "pagato")):
+            with self.subTest(da=arrivo):
+                p.registra_maturato(rif, "h1", 17400, "EUR")
+                p.aggiorna_stato(rif, "in_transito")
+                if arrivo == "pagato":
+                    p.aggiorna_stato(rif, "pagato")
+                self.assertIs(p.riallinea_maturato(rif, 8700), False)
+                self.assertEqual((p.stato_di(rif), p.info(rif)["minori"]), (arrivo, 17400),
+                                 "un bonifico partito o pagato e' stato riscritto")
+        self.assertIs(p.riallinea_maturato("manca", 8700), False)
+        p.registra_maturato("z", "h1", 17400, "EUR")
+        p.aggiorna_stato("z", "trattenuto")
+        for quota in (0, -1, True):
+            with self.subTest(quota=quota):
+                self.assertIs(p.riallinea_maturato("z", quota), False)
+        p.registra_maturato("123", "h1", 17400, "EUR")
+        p.aggiorna_stato("123", "trattenuto")
+        self.assertIs(p.riallinea_maturato(123, 8700), False)
+        self.assertIs(p.riallinea_maturato("", 8700), False)
+        self.assertEqual([(p.stato_di(x), p.info(x)["minori"]) for x in ("z", "123")],
+                         [("trattenuto", 17400)] * 2, "una quota rifiutata ha scritto lo stesso")
+
+    def test_A4_1_riallinea_maturato_con_se_minori_scrive_SOLO_sulla_riga_letta(self):
+        # Prova A4_1 (28/10): l'arbitro legge la riga, calcola la quota e poi scrive. Se nel mezzo
+        # una compensazione di penale ha ridotto la riga, la quota calcolata sulla riga vecchia
+        # restituirebbe all'host la parte gia' usata per la penale: con `se_minori` scrive solo se
+        # l'importo e' ancora quello letto, e dice False se non ha scritto.
+        p = pd()
+        p.registra_maturato("p1", "h1", 17400, "EUR")
+        self.assertIs(p.imposta_importo("p1", 14400, solo_se_stato="maturato"), True)  # la penale
+        self.assertIs(p.riallinea_maturato("p1", 8700, se_minori=17400), False)
+        self.assertEqual((p.stato_di("p1"), p.info("p1")["minori"]), ("maturato", 14400),
+                         "la quota calcolata su una riga che non c'e' piu' e' stata scritta")
+        self.assertIs(p.riallinea_maturato("p1", 5700, se_minori=14400), True)
+        self.assertEqual((p.stato_di("p1"), p.info("p1")["minori"]), ("maturato", 5700))
+        p.registra_maturato("p2", "h1", 17400, "EUR")
+        p.aggiorna_stato("p2", "trattenuto")
+        self.assertIs(p.riallinea_maturato("p2", 8700, se_minori=17400), True)
+        self.assertEqual((p.stato_di("p2"), p.info("p2")["minori"]), ("maturato", 8700))
 
     def test_riga343_il_ledger_in_memoria_si_usa_anche_da_un_altro_thread(self):
         # Il web server serve ogni richiesta in un thread diverso: `check_same_thread=False` esiste

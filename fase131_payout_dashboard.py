@@ -342,6 +342,39 @@ class PayoutDashboard:
         finally:
             con.close()
 
+    def riallinea_maturato(self, prenotazione_id: str, minori: int,
+                           se_minori: Optional[int] = None) -> bool:
+        """La quota decisa dall'arbitro torna pagabile in UNA scrittura (busta A2 di Proton,
+        colpo 1, 28/10). Prima era `rimuovi` + `registra_maturato`: se la seconda falliva, o il
+        processo moriva in mezzo, la riga spariva e la quota dell'host non aveva piu' nessuna
+        strada. Fuori da `_TRANSIZIONI` apposta, come lo era quella coppia: dalla riga che la
+        disputa ha fermato ('trattenuto'), che il blocco non ha fermato ('maturato'), o il cui
+        incasso non e' ancora scritto ('in_attesa': busta A3, colpo 1 — lasciata cosi', l'incasso
+        dopo la portava a 'maturato' PIENA e l'host prendeva anche la parte dell'ospite).
+        'in_transito'/'pagato' no: oggi nessuna strada li porta a una garanzia contestata
+        (`contesta` parte solo da 'in_garanzia'). False se non ha scritto niente.
+        Prova A4_1 (28/10): con `se_minori` scrive solo se la riga ha ANCORA l'importo letto da
+        chi ha calcolato la quota (una penale compensata nel mezzo tornerebbe all'host)."""
+        m = _pos(minori)
+        if m <= 0 or not (isinstance(prenotazione_id, str) and prenotazione_id):
+            return False
+        sql, par = ("UPDATE payout SET minori=?, stato='maturato', ts=? "
+                    "WHERE prenotazione_id=? "
+                    "AND stato IN ('trattenuto', 'maturato', 'in_attesa')",
+                    [m, self._now(), prenotazione_id])
+        if se_minori is not None:
+            sql, par = sql + " AND minori=?", par + [se_minori]
+        con = self._apri()
+        try:
+            with con:
+                cur = con.execute(sql, par)
+            return bool(cur.rowcount)
+        except Exception:
+            logger.warning("riallinea_maturato fallita (ISOLATA)", exc_info=True)
+            return False
+        finally:
+            con.close()
+
     def da_pagare(self, host_id: str, valuta: str) -> int:
         rie = self.riepilogo(host_id).get(_norm_valuta(valuta), {})
         return rie.get("maturato", 0) + rie.get("in_transito", 0)

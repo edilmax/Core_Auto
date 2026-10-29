@@ -5888,6 +5888,17 @@ class RouterHTTP:
                 return 422, {"errore": "percentuale_o_importo_mancante"}
             rimborso = int(importo * pct / 100)
         rimborso = max(0, min(int(rimborso), importo))
+        # Busta A4 di Proton (29/10), punto (b): dalla decisione all'ultima scrittura sul bonifico
+        # sotto `_BONIFICI_LOCK`, come il chargeback (voce 138 b) e il rimborso dell'admin (142).
+        # Fuori, il giro orario leggeva la riga PIENA appena la garanzia era 'risolto', prima che
+        # l'arbitro la riscrivesse con la quota: all'host partiva anche la parte dell'ospite.
+        with _BONIFICI_LOCK:
+            return self._admin_controversia_risolvi_sotto_chiave(rif, g, importo, rimborso,
+                                                                 headers)
+
+    def _admin_controversia_risolvi_sotto_chiave(self, rif, g, importo, rimborso, headers):
+        """Il corpo di `_admin_controversia_risolvi` dalla decisione in poi; lo chiama tenendo
+        `_BONIFICI_LOCK`."""
         try:
             out = g.risolvi(rif, rimborso_ospite_cents=rimborso)
         except Exception:
@@ -5895,29 +5906,6 @@ class RouterHTTP:
             return 503, {"errore": "service_unavailable"}
         if not out.get("ok"):
             return 409, out
-        # payout dell'host: azzerato se il cliente prende tutto, altrimenti resta (parziale)
-        if rimborso >= importo:
-            pd = getattr(self._sys, "payout", None)
-            if pd is not None:
-                pd.rimuovi(rif)
-        else:
-            # SPLIT PARZIALE: il ledger payout va RIALLINEATO alla quota host PRIMA del
-            # bonifico. Senza, il record restava all'importo PIENO: dashboard host gonfiata
-            # e, per chi paga a mano da `da_pagare`, all'host arrivava ANCHE la quota
-            # appena rimborsata all'ospite (perdita reale, stessa classe del bug #90).
-            quota_host = out.get("host_riceve_cents", importo - rimborso)
-            pd = getattr(self._sys, "payout", None)
-            if pd is not None:
-                # il payout era stato BLOCCATO ('trattenuto') all'apertura della disputa:
-                # la quota decisa dall'arbitro torna PAGABILE ('maturato') ricostruendo il
-                # record (trattenuto->maturato non e' una transizione ammessa: cosi' un
-                # pagamento tardivo non riattiva mai un payout in disputa per sbaglio).
-                riga = pd.info(rif)
-                if riga is not None:
-                    pd.rimuovi(rif)
-                    pd.registra_maturato(rif, riga["host_id"], quota_host, riga["valuta"])
-            # la parte che spetta all'host parte da sola verso il suo conto (Connect)
-            self._trasferisci_all_host(rif, quota_host)
         # SCATOLA NERA DEL RIMBORSO. Senza questa riga la decisione dell'arbitro vive solo
         # nella risposta HTTP di questo istante, e il cliente non entra nella lista di chi
         # aspetta i suoi soldi: esiste solo nella memoria di chi ha arbitrato.
@@ -5926,17 +5914,165 @@ class RouterHTTP:
         # freno «date liberate» — che qui non puo' passare, il soggiorno c'e' stato — con
         # l'aritmetica «quota host + rimborso <= pagato». Fino a quel giorno la riga era senza
         # pulsante e la cifra andava riscritta a mano su Stripe (limite dichiarato allora).
+        # Voce 146 (27/10): la riga si scrive SUBITO dopo il CAS, prima del bonifico. Dopo,
+        # un'interruzione fra il CAS e la riga lasciava la decisione senza riga, e ripetere
+        # risponde 409 (la garanzia e' gia' 'risolto'). L'evento e' stabile: non si raddoppia.
         try:
             _pp = getattr(self._sys, "pagamenti_pendenti", None)
             _dj = json.loads(((_pp.info(rif) if _pp is not None else None) or {})
                              .get("corpo_json") or "{}")
         except Exception:
             _dj = {}
+        _valuta = _dj.get("valuta") or "EUR"
+        _rimb = int(out.get("ospite_rimborso_cents", rimborso) or 0)
         self._giornale(tipo="rimborso", riferimento=rif, soggetto="ospite:" + str(rif),
-                       importo_cents=int(out.get("ospite_rimborso_cents", rimborso) or 0),
-                       valuta=_dj.get("valuta") or "EUR",
+                       importo_cents=_rimb, valuta=_valuta,
                        evento_id="rimborso_controversia:" + str(rif),
                        causale="rimborso deciso dall'arbitro (controversia risolta)")
+        # Voce 147 (27/10): E SI VERIFICA CHE SIA ATTERRATA, come nella cancellazione
+        # dell'ospite: `_giornale` degrada i guasti a WARNING, e un movimento che torna None
+        # in silenzio lasciava la risposta «decisione registrata» senza la riga.
+        if _rimb > 0:
+            try:
+                _fc = getattr(self._sys, "finanza", None)
+                _scritta = _fc is not None and any(
+                    m.get("tipo") == "rimborso" for m in _fc.movimenti(str(rif)))
+            except Exception:
+                _scritta = False
+            if not _scritta:
+                logger.error("RIMBORSO DOVUTO NON REGISTRATO NEI CONTI | rif %s | %s decisi "
+                             "dall'arbitro per l'ospite: registrarlo A MANO dal pannello, o "
+                             "quei soldi non risultano dovuti da nessuna parte",
+                             _rif_per_registro(rif), self._fmt_importo(_rimb, _valuta))
+        # payout dell'host: azzerato se il cliente prende tutto, altrimenti resta (parziale)
+        riallineato = True
+        penale_oltre = penale_pari = partito = False
+        pieno, tolta = rimborso >= importo, True
+        if pieno:
+            # Busta A2 di Proton (28/10), colpo 5: all'host non va niente. La riga del bonifico si
+            # toglie E si guarda che sia tolta: rimasta 'maturato', il giro orario la pagava con
+            # la garanzia 'risolto' (host pagato e ospite rimborsato). E una penale gia'
+            # compensata sulla riga risultava pagata con soldi tornati all'ospite: lo si dice.
+            riallineato = False
+            pd = getattr(self._sys, "payout", None)
+            if pd is not None:
+                riga = pd.info(rif)
+                _preso = (max(0, importo - int(riga.get("minori") or 0)) if riga is not None
+                          else self._compensato_dalle_penali(rif))
+                # come nella divisione (A4_3f): una riga gia' partita non si cancella, e lo si dice
+                partito = (riga or {}).get("stato") in ("in_transito", "pagato")
+                if partito:
+                    logger.error("BONIFICO DELL'HOST GIA' PARTITO | RIF: %s | l'arbitro ha dato "
+                                 "tutto all'ospite, ma il bonifico della riga e' gia' partito: NON "
+                                 "pagarlo di nuovo; va recuperato dall'host",
+                                 _rif_per_registro(rif))
+                else:
+                    tolta = pd.rimuovi(rif) is True
+                if not tolta:
+                    fermo = (pd.aggiorna_stato(rif, "trattenuto") is True
+                             or pd.stato_di(rif) == "trattenuto")
+                    logger.error("RIGA DEL BONIFICO DELL'HOST NON TOLTA | RIF: %s | l'arbitro ha "
+                                 "dato tutto all'ospite ma la riga resta nel registro dei "
+                                 "bonifici: NON pagarla%s", _rif_per_registro(rif),
+                                 "" if fermo else " | e la riga NON e' stata fermata: il giro "
+                                 "orario la paga, fermarla a mano")
+                penale_oltre = _preso > 0
+                if penale_oltre:
+                    logger.error("PENALE COMPENSATA OLTRE LA QUOTA DELL'HOST | RIF: %s | l'arbitro "
+                                 "da' tutto all'ospite ma una penale ha gia' usato %s di questa "
+                                 "riga: all'host non spetta niente e alla penale mancano %s, da "
+                                 "riaprire a mano", _rif_per_registro(rif),
+                                 self._fmt_importo(_preso, _valuta),
+                                 self._fmt_importo(_preso, _valuta))
+        else:
+            # SPLIT PARZIALE: il ledger payout va RIALLINEATO alla quota host PRIMA del
+            # bonifico. Senza, il record restava all'importo PIENO: dashboard host gonfiata
+            # e, per chi paga a mano da `da_pagare`, all'host arrivava ANCHE la quota
+            # appena rimborsata all'ospite (perdita reale, stessa classe del bug #90).
+            quota_host = out.get("host_riceve_cents", importo - rimborso)
+            quota_riga = int(quota_host)
+            pd = getattr(self._sys, "payout", None)
+            riallineato = consumata = False
+            if pd is not None:
+                # il payout era stato BLOCCATO ('trattenuto') all'apertura della disputa:
+                # la quota decisa dall'arbitro torna PAGABILE ('maturato') con una scrittura
+                # dedicata (trattenuto->maturato non e' una transizione ammessa: cosi' un
+                # pagamento tardivo non riattiva mai un payout in disputa per sbaglio).
+                # Voci 144 e 145 (27/10): i ritorni si guardano; una riga che non si legge
+                # lasciava la quota ferma con la risposta «parte da sola». Busta A2 (28/10):
+                # UNA scrittura sola, che dice lei se ha scritto. Con `rimuovi` + INSERT la riga
+                # spariva se il secondo passo falliva (colpo 1), e la rilettura di verifica che
+                # falliva diceva «NON parte» su una riga gia' pagabile (colpo 2: pagata due volte).
+                riga = pd.info(rif)
+                if riga is not None:
+                    # Prova A4_1 (busta A3, colpo 3 (a), 28/10): dopo l'apertura della garanzia
+                    # una penale compensata puo' aver gia' usato una parte della riga. La quota
+                    # scritta sopra per intero gliela restituiva: la penale risultava pagata e i
+                    # soldi tornavano all'host. Alla riga si toglie la parte dell'ospite, mai
+                    # oltre la quota, e si scrive solo se e' ancora quella letta (una penale
+                    # arrivata nel mezzo fa fallire la scrittura).
+                    gia = int(riga.get("minori") or 0)
+                    quota_riga = min(int(quota_host), gia - (importo - int(quota_host)))
+                    riallineato = quota_riga > 0 and pd.riallinea_maturato(
+                        rif, quota_riga, se_minori=gia) is True
+                else:
+                    # Busta A4 di Proton (29/10), punto (a): la penale che usa TUTTA la riga la
+                    # toglie dal registro, e la riga sparita sembrava illeggibile («la paga una
+                    # persona» con la quota intera: soldi che la penale ha gia' usato). Il
+                    # giornale ricorda quanto le penali le hanno preso.
+                    _preso = self._compensato_dalle_penali(rif)
+                    consumata = _preso > 0
+                    if consumata:
+                        quota_riga = int(quota_host) - _preso
+            if riallineato:
+                # la parte che spetta all'host parte da sola verso il suo conto (Connect)
+                self._trasferisci_all_host(rif, quota_riga)
+            else:
+                # Prova A4_1: la riga non riscritta non resta pagabile (il giro orario paga ogni
+                # 'maturato' con la garanzia 'risolto'), e se non si ferma lo si dice.
+                # Busta A4, punto (b): una riga gia' partita non diventa 'trattenuto' (fase131 lo
+                # ammette da 'in_transito'): i soldi sono gia' all'host, e lo dice l'ERROR qui
+                # sotto. La riga che la penale ha tolto non c'e' piu': niente da fermare.
+                partito = pd is not None and pd.stato_di(rif) in ("in_transito", "pagato")
+                fermo = pd is None or partito or (pd.aggiorna_stato(rif, "trattenuto") is True
+                                                  or pd.stato_di(rif) == "trattenuto") or consumata
+                avviso = ("" if fermo else " | e la riga NON e' stata fermata: il giro orario "
+                          "la paga, fermarla a mano")
+                penale_oltre, penale_pari = quota_riga < 0, quota_riga == 0
+                if partito:
+                    logger.error("BONIFICO DELL'HOST GIA' PARTITO | RIF: %s | quota decisa "
+                                 "dall'arbitro %s, ma il bonifico della riga e' gia' partito: NON "
+                                 "pagarlo di nuovo; quello partito oltre la quota va recuperato "
+                                 "dall'host", _rif_per_registro(rif),
+                                 self._fmt_importo(int(quota_host), _valuta))
+                elif penale_pari and fermo:
+                    # Busta A4, punto (c): la penale ha usato GIUSTA la quota dell'host. Non manca
+                    # niente: non e' un allarme (ferrea 10; diceva «mancano 0,00, da riaprire»).
+                    logger.warning("PENALE COMPENSATA PARI ALLA QUOTA DELL'HOST | RIF: %s | "
+                                   "l'arbitro da' all'host %s e una penale li ha gia' usati su "
+                                   "questa riga: all'host non spetta altro e alla penale non "
+                                   "manca niente", _rif_per_registro(rif),
+                                   self._fmt_importo(int(quota_host), _valuta))
+                elif penale_pari:
+                    logger.error("PENALE COMPENSATA PARI ALLA QUOTA DELL'HOST | RIF: %s | "
+                                 "l'arbitro da' all'host %s e una penale li ha gia' usati su "
+                                 "questa riga: all'host non spetta altro e alla penale non manca "
+                                 "niente%s", _rif_per_registro(rif),
+                                 self._fmt_importo(int(quota_host), _valuta), avviso)
+                elif penale_oltre:
+                    logger.error("PENALE COMPENSATA OLTRE LA QUOTA DELL'HOST | RIF: %s | l'arbitro "
+                                 "da' all'host %s ma una penale ne ha gia' usati di piu' su questa "
+                                 "riga: all'host non spetta altro e alla penale mancano %s, da "
+                                 "riaprire a mano%s", _rif_per_registro(rif),
+                                 self._fmt_importo(int(quota_host), _valuta),
+                                 self._fmt_importo(-quota_riga, _valuta), avviso)
+                else:
+                    logger.error("BONIFICO DELL'HOST NON RIALLINEATO | RIF: %s | quota decisa "
+                                 "dall'arbitro %s: il registro dei bonifici non e' stato riscritto "
+                                 "(riga assente, illeggibile, rimasta la vecchia o cambiata dopo "
+                                 "la lettura): la quota NON parte da sola, la paga una persona "
+                                 "dopo il controllo%s", _rif_per_registro(rif),
+                                 self._fmt_importo(int(quota_host), _valuta), avviso)
         self._email_esito_controversia(rif, out.get("ospite_rimborso_cents", rimborso))
         # TRACCIA DEL GESTO (vedi `_admin_alloggio_stato`): questa rotta DECIDE quanto torna
         # all'ospite, e la cifra fa parte del «cosa» -- una riga senza l'importo non dice cosa e'
@@ -5948,9 +6084,35 @@ class RouterHTTP:
         return 200, {"stato": "risolta", "riferimento": rif,
                      "rimborso_cliente_cents": out.get("ospite_rimborso_cents", rimborso),
                      "va_all_host_cents": out.get("host_riceve_cents", importo - rimborso),
-                     "nota": "decisione registrata + garanzia sbloccata; la quota dell'host "
-                             "parte da sola; il rimborso all'ospite si esegue dalla lista "
-                             "«Rimborsi da eseguire», col pulsante, per questa cifra esatta"}
+                     "nota": ("decisione registrata + garanzia sbloccata; "
+                              + ("la quota dell'host parte da sola; " if riallineato else
+                                 "ATTENZIONE: il bonifico dell'host e' gia' partito, NON pagarlo "
+                                 "di nuovo; " if partito else
+                                 "una penale ha gia' usato tutta la quota dell'host, che non "
+                                 "riceve altro; " if penale_pari else
+                                 "ATTENZIONE: una penale ha gia' usato la quota dell'host, che non "
+                                 "riceve altro, e la penale resta in parte da riscuotere; "
+                                 if penale_oltre else
+                                 "all'host non va niente; " if pieno and tolta else
+                                 "ATTENZIONE: all'host non va niente, ma la riga del suo bonifico "
+                                 "NON e' stata tolta: non pagarla; " if pieno else
+                                 "ATTENZIONE: il registro dei bonifici non e' stato riscritto, la "
+                                 "quota dell'host NON parte: la paga una persona dopo il "
+                                 "controllo; ")
+                              + "il rimborso all'ospite si esegue dalla lista «Rimborsi da "
+                              "eseguire», col pulsante, per questa cifra esatta")}
+
+    def _compensato_dalle_penali(self, rif):
+        """Quanto le penali hanno preso dalla riga del bonifico di `rif` (fase177, dal giornale: la
+        riga usata per intero il registro dei bonifici non la ha piu'). 0 se il giornale non si
+        legge, e il WARNING lo dice: chi chiama resta sulla strada prudente."""
+        try:
+            _fin = getattr(self._sys, "finanza", None)
+            return int(_fin.compensato_su_payout(rif)) if _fin is not None else 0
+        except Exception:
+            logger.warning("arbitro: giornale illeggibile, non so se una penale ha usato la riga "
+                           "del bonifico (ISOLATO)", exc_info=True)
+            return 0
 
     def _traduci_servizi(self, item: Dict[str, Any], lingua: str) -> Dict[str, Any]:
         if isinstance(item.get("servizi"), list):
@@ -7424,17 +7586,16 @@ class RouterHTTP:
                 return                                # gia' partito (guardia anti-doppio)
             # Voce 138 (a), 26/10 («autorizzato» per delega): un chargeback dopo il rilascio
             # lascia la garanzia 'rilasciato' e scrive 'trattenuto' solo qui; chi arriva dopo
-            # con un elenco (R3, verifica, dati fiscali) lo pagava. 'trattenuto' paga solo con
-            # la garanzia divisa dall'arbitro ('risolto'), la strada di `_admin_controversia_risolvi`.
+            # con un elenco (R3, verifica, dati fiscali) lo pagava. Voce 180 (busta A1, 27/10):
+            # 'trattenuto' non paga MAI in automatico, nemmeno con la garanzia 'risolto'. La rotta
+            # dell'arbitro riscrive il bonifico 'maturato' con la quota prima di pagare, quindi un
+            # 'trattenuto' con 'risolto' e' la riga vecchia piena (voce 144) o un chargeback
+            # arrivato dopo la divisione: in tutti e due i casi pagarlo e' una perdita.
             if _stato_pay == "trattenuto":
-                _gz = getattr(self._sys, "garanzia", None)
-                _st = _gz.stato(rif) if _gz is not None else None
-                if not (isinstance(_st, dict) and _st.get("stato") == "risolto"):
-                    logger.error("BONIFICO FERMATO | RIF: %s | codice: payout_trattenuto | il "
-                                 "bonifico e' trattenuto (contestazione) e la garanzia non e' "
-                                 "divisa dall'arbitro: non parte, decide una persona",
-                                 _rif_per_registro(rif))
-                    return
+                logger.error("BONIFICO FERMATO | RIF: %s | codice: payout_trattenuto | il "
+                             "bonifico e' trattenuto (contestazione o controversia): non parte, "
+                             "decide una persona", _rif_per_registro(rif))
+                return
             # SCATTO ② (Debt Status): PRIMA di pagare, i debiti 'aperto' dell'host si
             # saldano ALLA FONTE (riscossione sui maturato, fase177). Puo' ridurre o
             # consumare anche QUESTO payout. Isolata: se fallisce, si paga.
@@ -8175,10 +8336,15 @@ class RouterHTTP:
             # PROVATO: restava 'maturato' -> `da_pagare` lo includeva e il bonifico
             # MANUALE avrebbe pagato l'host con la controversia in corso. L'esito
             # (quota/rimozione) lo decide l'arbitro in _admin_controversia_risolvi.
+            # Busta A3, colpo 1 (b), 28/10: il ritorno si guarda. `aggiorna_stato` su un errore
+            # del database torna False e non solleva: il bonifico restava pagabile e l'ERROR qui
+            # sotto diceva lo stesso «trattenuto».
+            fermo = False
             try:
                 pd = getattr(self._sys, "payout", None)
                 if pd is not None:
-                    pd.aggiorna_stato(res[0], "trattenuto")
+                    fermo = (pd.aggiorna_stato(res[0], "trattenuto") is True
+                             or pd.stato_di(res[0]) == "trattenuto")
             except Exception:
                 logger.warning("blocco payout su contestazione fallito (ignorato)",
                                exc_info=True)
@@ -8188,8 +8354,11 @@ class RouterHTTP:
             # ospite in attesa, e lo sapeva solo chi apriva a mano il riquadro
             # Controversie. Misurato il 2026-09-14 («porta per un uomo solo»).
             logger.error("CONTROVERSIA APERTA | riferimento: %s | messaggio: l'ospite contesta "
-                         "il servizio, il bonifico all'host e' trattenuto e serve una "
-                         "decisione dell'arbitro", _rif_per_registro(res[0]))
+                         "il servizio, %s e serve una decisione dell'arbitro",
+                         _rif_per_registro(res[0]),
+                         "il bonifico all'host e' trattenuto" if fermo else
+                         "il bonifico all'host NON e' stato fermato (riga assente o non "
+                         "scritta): non pagarlo a mano")
             _cfg = getattr(self._sys, "config", None)
             _dest = (getattr(_cfg, "email_alert", "") or getattr(_cfg, "email_mittente", "")
                      or "info@bookinvip.com")
