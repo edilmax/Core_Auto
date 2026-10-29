@@ -26,7 +26,7 @@ from urllib.parse import parse_qs, quote, urlencode, urlparse
 import fase83_server
 from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
-from test_blocco_carta import StripeColBlocco
+from test_blocco_carta import HK as _HK_BLOCCO, StripeColBlocco, _vero
 from test_blocco_carta import _Base as _BancoDelBlocco, _ConLeSpie as _SpieDelBlocco
 from test_fase203_ical_orologio import _PostoInterno
 from test_rimborso_torna_da_ogni_strada import _BancoDelleStrade
@@ -3878,6 +3878,73 @@ class TestIlBloccoIncassatoSuUnaCancellazioneDellOspiteSiRestituisce(_OraVeraPer
         self.assertEqual("canceled", self.stripe.pagamenti[pi], "PREMESSA: il giro annulla")
         self.assertEqual([], self.movimenti(rif, "rimborso"),
                          "RIMBORSO DOVUTO SU SOLDI MAI ENTRATI (Stripe muto al momento dell'errore)")
+
+    def _cancellata_col_blocco_incassato_dopo(self, ci, co, n, **corpo_a_mano):
+        # strada (ii): l'annullo non riesce, poi su Stripe i soldi risultano INCASSATI; il corpo
+        # del blocco si corregge a mano prima del giro (D19)
+        rif, vt, tot = self.prenota(ci, co)
+        _s, _c, pi = self.paga_bloccato(rif, tot, n=n)
+        self.stripe.esito_annullo = {"ok": False, "id": "", "motivo": "URLError: rete"}
+        self.stripe.pagamenti.pop(pi)
+        s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
+        self.assertEqual(s, 200, "%r" % (c,))
+        corpo = dict(self.corpo(rif), **corpo_a_mano)
+        con = sqlite3.connect(self.dir + "/p.db")
+        with con:
+            con.execute("UPDATE pendenti SET corpo_json=? WHERE riferimento=?",
+                        (json.dumps(corpo), rif))
+        con.close()
+        self.stripe.esito_annullo = None
+        self.stripe.pagamenti[pi] = "succeeded"
+        return rif
+
+    def test_143_la_riga_del_giro_porta_la_valuta_del_blocco(self):
+        # mutanti della CI della #282 su fase83 :10388 (`or` -> `and`): con la valuta scritta la
+        # riga la porta, non l'euro di ripiego
+        rif = self._cancellata_col_blocco_incassato_dopo("2027-05-02", "2027-05-04", 6,
+                                                         valuta="USD")
+        self._giro(time.time() + 3600)
+        self.assertEqual(["USD"], [m["valuta"] for m in self.movimenti(rif, "rimborso")],
+                         "LA RIGA DEL RIMBORSO HA CAMBIATO VALUTA: %r" % (self.movimenti(rif, "rimborso"),))
+
+    def test_143_un_importo_dovuto_di_zero_non_chiede_una_riga(self):
+        # mutante della CI della #282 su fase83 :10386 (`>` -> `>=`): come in
+        # test_blocco_carta.test_un_totale_a_zero_non_chiede_una_riga_di_rimborso, il chiamante
+        # non chiede una riga da zero euro (che `_giornale` la scarti e' la seconda difesa)
+        rif = self._cancellata_col_blocco_incassato_dopo("2027-05-06", "2027-05-08", 7,
+                                                         blocco_rimborso_dovuto_cents=0)
+        chieste, vero = [], self.r._giornale
+        self.r._giornale = lambda *a, **k: (chieste.append(k), vero(*a, **k))[1]
+        self._giro(time.time() + 3600)
+        self.assertEqual([], [k for k in chieste if k.get("tipo") == "rimborso"],
+                         "CHIESTA UNA RIGA DI RIMBORSO DA ZERO EURO: %r" % (chieste,))
+
+    def test_143_senza_niente_da_restituire_non_segna_un_importo_dovuto(self):
+        # il gemello della 179 sulla cancellazione dell'ospite (mutanti della CI della #282 su
+        # fase83 :8542): non rimborsabile, dopo le 48 ore e senza tassa di soggiorno all'ospite
+        # non spetta niente, e nel blocco non si segna un importo dovuto di zero
+        self.g("POST", "/api/host/pubblica", {"host_id": "demo", "slug": "casa0", "titolo": "C0",
+               "citta": "Roma", "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
+               "servizi": [], "immagini": [], "politica_cancellazione": "non_rimborsabile"},
+               _HK_BLOCCO)
+        self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": "casa0",
+               "da": _vero("2027-04-01"), "a": _vero("2027-05-31"), "unita_totali": 1,
+               "prezzo_netto_cents": 10000}, _HK_BLOCCO)
+        _, q = self.g("POST", "/api/concierge/quote", {"alloggio_id": "casa0",
+                      "check_in": _vero("2027-05-10"), "check_out": _vero("2027-05-12"),
+                      "party": 2})
+        self.assertEqual(q.get("tassa_soggiorno_cents"), 0, "PREMESSA: annuncio senza tassa: %r" % (q,))
+        _, b = self.g("POST", "/api/concierge/book", {"quote_token": q["quote_token"],
+                                                      "email": "o@x.it"})
+        rif, vt = b["riferimento"], b.get("voucher_token", "")
+        self.paga_bloccato(rif, int(q["totale_cents"]), n=8)
+        self.assertEqual(self.stato(rif), "pagato", "PREMESSA: confermata col blocco")
+        dopo = time.time() + fase83_server.SECONDI_RIPENSAMENTO + 3600
+        with mock.patch("time.time", return_value=dopo):
+            s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
+        self.assertEqual((s, c.get("rimborso_cents")), (200, 0), "PREMESSA: niente rimborso: %r" % (c,))
+        self.assertNotIn("blocco_rimborso_dovuto_cents", self.corpo(rif),
+                         "IMPORTO DOVUTO DI ZERO SEGNATO NEL BLOCCO: %r" % (self.corpo(rif),))
 
 
 class TestIlRimborsoDellAdminColBloccoIncassatoDopo(_OraVeraPerIlPreventivo, _SpieDelBlocco):
