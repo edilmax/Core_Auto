@@ -3911,8 +3911,8 @@ class TestIlBloccoIncassatoSuUnaCancellazioneDellOspiteSiRestituisce(_OraVeraPer
         # mutante della CI della #282 su fase83 :10386 (`>` -> `>=`): come in
         # test_blocco_carta.test_un_totale_a_zero_non_chiede_una_riga_di_rimborso, il chiamante
         # non chiede una riga da zero euro (che `_giornale` la scarti e' la seconda difesa)
-        rif = self._cancellata_col_blocco_incassato_dopo("2027-05-06", "2027-05-08", 7,
-                                                         blocco_rimborso_dovuto_cents=0)
+        self._cancellata_col_blocco_incassato_dopo("2027-05-06", "2027-05-08", 7,
+                                                   blocco_rimborso_dovuto_cents=0)
         chieste, vero = [], self.r._giornale
         self.r._giornale = lambda *a, **k: (chieste.append(k), vero(*a, **k))[1]
         self._giro(time.time() + 3600)
