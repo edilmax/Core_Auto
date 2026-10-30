@@ -487,6 +487,22 @@ class TestBuchiDiMutazione(unittest.TestCase):
                       "interrompe a meta'" % (e,))
         self.assertFalse(esito, "ha detto di aver cancellato una prenotazione inesistente")
 
+    def test_F1_con_da_stato_cancella_SOLO_se_lo_stato_e_ancora_quello_letto(self):
+        # Pacco 4, parte B, F1 (29/10): l'host decide penale e rimborso su uno stato letto; se nel
+        # mezzo l'ospite paga, il CAS non deve passare sul 'pagato' con le decisioni di 'in_attesa'
+        self._grezzo(riferimento="F1", alloggio_id="casa", stato="pagato")
+        self.assertIs(self.p.marca_cancellata_host("F1", 0, da_stato="in_attesa"), False,
+                      "cancellata come 'in_attesa' una prenotazione gia' PAGATA")
+        self.assertEqual("pagato", self.p.info("F1")["stato"])
+        # D19: uno stato CHIUSO passato come «letto» non riapre il CAS (senza il controllo su
+        # `_AMMESSI` la WHERE diventerebbe `stato IN ('rimborsato')` e scriverebbe)
+        self._grezzo(riferimento="F1c", alloggio_id="casa", stato="rimborsato")
+        self.assertIs(self.p.marca_cancellata_host("F1c", 0, da_stato="rimborsato"), False,
+                      "una prenotazione gia' RIMBORSATA e' diventata 'cancellata_host'")
+        self.assertEqual("rimborsato", self.p.info("F1c")["stato"])
+        self.assertIs(self.p.marca_cancellata_host("F1", 1500, da_stato="pagato"), True)
+        self.assertEqual("cancellata_host", self.p.info("F1")["stato"])
+
     # ── attivi_per_alloggio / attivi_multi (il calendario dell'host) ─────────────────────
 
     def test_riga431_un_alloggio_senza_nome_non_apre_il_calendario_di_nessuno(self):

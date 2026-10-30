@@ -6577,5 +6577,574 @@ class TestIlPagamentoAManoInDollari(_BancoDellaRitenuta):
         self.assertIn("IMPORTO: %d.%02d USD |" % (minori // 100, minori % 100), riga[0])
 
 
+class TestF1LHostCheCancellaDecideSullaPrenotazioneDiAdesso(_BancoDeiSoldiDelServer):
+    """Pacco 4, parte B, F1 (revisione differenziale del pacco 3, 29/10): `_host_cancella` legge
+    la prenotazione FUORI da `_BONIFICI_LOCK`, e `_host_cancella_sotto_chiave` decide con quella
+    lettura (pagata o no, la penale, il CAS) dopo l'attesa del lucchetto, che il pacco 3 tiene
+    anche durante le chiamate a Stripe. Il pagamento dell'ospite (`conferma` nel webhook) non
+    prende il lucchetto: se arriva nel mezzo, la prenotazione diventa 'cancellata_host' come se
+    l'ospite non avesse pagato. Niente riga di rimborso, niente penale, nessun ERROR: l'ospite
+    perde quello che ha pagato. Le prove fanno arrivare il pagamento nel punto della gara (D19)."""
+
+    def _da_pagare(self, slug):
+        self.pubblica(slug)
+        rif = self.prenota(slug, 10)["riferimento"]
+        _deve((self.sis.pagamenti_pendenti.info(rif) or {}).get("stato") == "in_attesa",
+              "PREMESSA: prenotata e non ancora pagata", self.sis.pagamenti_pendenti.info(rif))
+        return rif
+
+    def _soldi(self, rif):
+        rimborsi = [int(m["importo_cents"]) for m in self.sis.finanza.movimenti(rif)
+                    if m.get("tipo") == "rimborso"]
+        return sum(int(m["importo_cents"]) for m in self.incassi(rif)), rimborsi
+
+    def test_F1_l_ospite_paga_mentre_l_host_aspetta_il_lucchetto_e_riavra_tutto(self):
+        rif = self._da_pagare("casa-f1a")
+        pp = self.sis.pagamenti_pendenti
+        vera, pagamento = pp.info, []
+
+        def letta_poi_pagata(r):          # la lettura fuori dal lucchetto, poi l'ospite paga
+            letto = vera(r)
+            if r == rif and not pagamento:
+                pagamento.append(None)
+                pagamento[0] = self.paga(rif, "pi_f1a")
+            return letto
+        pp.info = letta_poi_pagata
+        try:
+            s, c = self.g("POST", "/api/host/cancella", {"riferimento": rif},
+                          {"X-Host-Token": self.tok})
+        finally:
+            pp.info = vera
+        _deve(pagamento and pagamento[0] and pagamento[0][0] == 200,
+              "PREMESSA: il pagamento doveva passare mentre l'host aspettava", pagamento)
+        pagato, rimborsi = self._soldi(rif)
+        _deve(pagato > 0, "PREMESSA: l'incasso dell'ospite e' scritto", self.incassi(rif))
+        self.assertEqual((200, "cancellata_host", [pagato], True),
+                         (s, (pp.info(rif) or {}).get("stato"), rimborsi,
+                          int((c or {}).get("penale_host_cents") or 0) > 0),
+                         "L'HOST HA CANCELLATO UNA PRENOTAZIONE APPENA PAGATA COME SE NON LO FOSSE: "
+                         "l'ospite ha pagato %d, rimborsi scritti %r, risposta %s %r"
+                         % (pagato, rimborsi, s, c))
+
+    def test_F1b_l_ospite_paga_proprio_prima_del_CAS_e_la_cancellazione_non_lo_ignora(self):
+        # il pagamento arriva dopo ogni lettura, un attimo prima della marcatura: la cancellazione
+        # o si ferma (la prenotazione resta pagata, l'host riprova) o rimborsa tutto; mai in mezzo
+        rif = self._da_pagare("casa-f1b")
+        pp = self.sis.pagamenti_pendenti
+        vera, pagamento = pp.marca_cancellata_host, []
+
+        def pagata_prima(*a, **k):
+            if not pagamento:
+                pagamento.append(None)
+                pagamento[0] = self.paga(rif, "pi_f1b")
+            return vera(*a, **k)
+        pp.marca_cancellata_host = pagata_prima
+        try:
+            s, c = self.g("POST", "/api/host/cancella", {"riferimento": rif},
+                          {"X-Host-Token": self.tok})
+        finally:
+            pp.marca_cancellata_host = vera
+        _deve(pagamento and pagamento[0] and pagamento[0][0] == 200,
+              "PREMESSA: il pagamento doveva passare prima della marcatura", pagamento)
+        pagato, rimborsi = self._soldi(rif)
+        _deve(pagato > 0, "PREMESSA: l'incasso dell'ospite e' scritto", self.incassi(rif))
+        esito = (s, (pp.info(rif) or {}).get("stato"), rimborsi)
+        self.assertIn(esito, [(409, "pagato", []), (200, "cancellata_host", [pagato])],
+                      "LA CANCELLAZIONE DELL'HOST HA IGNORATO IL PAGAMENTO ARRIVATO PRIMA DELLA "
+                      "MARCATURA: l'ospite ha pagato %d, esito %r, risposta %r" % (pagato, esito, c))
+        if s == 409:     # ferma: l'host deve sapere che e' ancora attiva e che puo' riprovare
+            self.assertEqual("prenotazione_cambiata", (c or {}).get("errore"),
+                             "L'HOST LEGGE «GIA' CANCELLATA» SU UNA PRENOTAZIONE PAGATA E ATTIVA: %r"
+                             % (c,))
+
+
+class TestR1IlGiroDeiBlocchiNonIncassaUnaPrenotazioneGiaChiusa(_OraVeraPerIlPreventivo,
+                                                               _BancoDelBlocco):
+    """Pacco 4, parte B, R1 (busta 54 di Claude sul pacco 3): `_incassa_blocchi` legge
+    `blocchi_aperti()` una volta e, per ogni 'pagato' fuori dalla finestra, INCASSA senza rileggere
+    lo stato e senza `_BONIFICI_LOCK` (le cancellazioni e il rimborso dell'admin lo tengono). Se nel
+    mezzo l'ospite cancella e l'annullo non riesce, la prenotazione e' 'rimborsato' col rimborso
+    dovuto segnato nel blocco, ma il giro incassa lo stesso: il blocco diventa 'incassato', il
+    record esce da `blocchi_aperti` e la riga del rimborso non la scrive nessuno. Nessun ERROR."""
+
+    def _flessibile_bloccata(self, slug, ci, co, n):
+        # flessibile e arrivo lontano: dopo le 48 ore all'ospite torna tutto, quindi il blocco si
+        # ANNULLA (niente da trattenere) invece di incassarsi
+        self.g("POST", "/api/host/pubblica", {"host_id": "demo", "slug": slug, "titolo": "F",
+               "citta": "Roma", "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
+               "servizi": [], "immagini": [], "politica_cancellazione": "flessibile"},
+               _HK_BLOCCO)
+        self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": slug,
+               "da": _vero("2027-04-01"), "a": _vero("2027-05-31"), "unita_totali": 1,
+               "prezzo_netto_cents": 10000}, _HK_BLOCCO)
+        _, q = self.g("POST", "/api/concierge/quote", {"alloggio_id": slug,
+                      "check_in": _vero(ci), "check_out": _vero(co), "party": 2})
+        _, bk = self.g("POST", "/api/concierge/book", {"quote_token": q["quote_token"],
+                                                       "email": "o@x.it"})
+        rif, vt = bk["riferimento"], bk.get("voucher_token", "")
+        _s, _c, pi = self.paga_bloccato(rif, int(q["totale_cents"]), n=n)
+        self.assertEqual(self.stato(rif), "pagato", "PREMESSA: confermata col blocco")
+        return rif, vt, pi
+
+    def test_R1_l_ospite_cancella_dopo_la_fotografia_e_il_giro_non_incassa_senza_rimborso(self):
+        rif, vt, pi = self._flessibile_bloccata("casa-r1", "2027-05-10", "2027-05-12", 11)
+        dopo = time.time() + fase83_server.SECONDI_RIPENSAMENTO + 3600
+        pp = self.sis.pagamenti_pendenti
+        vera, cancellata = pp.blocchi_aperti, []
+
+        def fotografia_poi_cancella(*a, **k):
+            foto = vera(*a, **k)
+            if not cancellata:          # l'ospite cancella dopo la fotografia, l'annullo non riesce
+                self.stripe.esito_annullo = {"ok": False, "id": "", "motivo": "URLError: rete"}
+                self.stripe.pagamenti.pop(pi)             # e nemmeno la rilettura risponde
+                with mock.patch("time.time", return_value=dopo):
+                    cancellata.append(self.g("POST", "/api/concierge/cancella",
+                                             {"voucher_token": vt}))
+                self.stripe.esito_annullo = None
+                self.stripe.pagamenti[pi] = "requires_capture"     # il blocco e' ancora vivo
+            return foto
+        pp.blocchi_aperti = fotografia_poi_cancella
+        try:
+            self.r._incassa_blocchi(ora_ts=int(dopo) + 3600)
+        finally:
+            pp.blocchi_aperti = vera
+        self.assertEqual(200, cancellata[0][0], "PREMESSA: l'ospite doveva cancellare %r" % (cancellata,))
+        dovuto = self.corpo(rif).get("blocco_rimborso_dovuto_cents")
+        self.assertEqual(("rimborsato", True, True),
+                         (self.stato(rif), isinstance(dovuto, int) and dovuto > 0,
+                          pi in [p for p, _k in self.stripe.annulli]),
+                         "PREMESSA: cancellata, rimborso dovuto segnato, annullo tentato: %r"
+                         % (self.corpo(rif),))
+        rimborsi = [int(m["importo_cents"]) for m in self.movimenti(rif, "rimborso")]
+        incassato = self.stripe.pagamenti.get(pi) == "succeeded"
+        self.assertEqual([dovuto] if incassato else [], rimborsi,
+                         "IL GIRO HA INCASSATO UNA PRENOTAZIONE GIA' CANCELLATA E NESSUNO RESTITUISCE: "
+                         "su Stripe %r, dovuti all'ospite %r, righe di rimborso %r"
+                         % (self.stripe.pagamenti.get(pi), dovuto, rimborsi))
+
+    def test_R1b_se_la_prenotazione_non_si_rilegge_il_giro_non_incassa_alla_cieca(self):
+        # D19: la rilettura fallisce (fase162 `info` torna None anche su un errore): non si sa se e'
+        # ancora 'pagato', quindi niente incasso; lo rifa' il giro dopo
+        rif, _vt, pi = self._flessibile_bloccata("casa-r1b", "2027-05-14", "2027-05-16", 12)
+        dopo = time.time() + fase83_server.SECONDI_RIPENSAMENTO + 3600
+        pp = self.sis.pagamenti_pendenti
+        vera = pp.info
+        pp.info = lambda *a, **k: None
+        try:
+            self.r._incassa_blocchi(ora_ts=int(dopo) + 3600)
+        finally:
+            pp.info = vera
+        self.assertEqual(([], "requires_capture"),
+                         ([p for p, _k in self.stripe.incassi], self.stripe.pagamenti.get(pi)),
+                         "IL GIRO HA INCASSATO SENZA SAPERE SE LA PRENOTAZIONE E' ANCORA PAGATA")
+        self.assertEqual("pagato", self.stato(rif))
+
+    def test_R1c_se_la_rilettura_esplode_il_giro_non_incassa_e_va_avanti(self):
+        # D19: l'archivio dei pendenti solleva sulla rilettura (fase162 `info` non isola): niente
+        # incasso alla cieca, e il giro non esce a meta' (come la R4)
+        rif, _vt, pi = self._flessibile_bloccata("casa-r1c", "2027-05-18", "2027-05-20", 13)
+        dopo = time.time() + fase83_server.SECONDI_RIPENSAMENTO + 3600
+        pp = self.sis.pagamenti_pendenti
+        vera = pp.info
+
+        def esplode(*a, **k):
+            raise sqlite3.OperationalError("database is locked")
+        pp.info = esplode
+        try:
+            try:
+                self.r._incassa_blocchi(ora_ts=int(dopo) + 3600)
+            except Exception as e:
+                self.fail("LA RILETTURA ESPLOSA HA FERMATO IL GIRO DEI BLOCCHI: %r" % (e,))
+        finally:
+            pp.info = vera
+        self.assertEqual(([], "requires_capture"),
+                         ([p for p, _k in self.stripe.incassi], self.stripe.pagamenti.get(pi)),
+                         "IL GIRO HA INCASSATO CON LA RILETTURA ESPLOSA")
+
+
+class TestR2LaRigaDelRimborsoScrittaDalGiroSiVerifica(_OraVeraPerIlPreventivo, _BancoDelBlocco):
+    """Pacco 4, parte B, R2 (busta 54 di Claude): l'ospite ha cancellato, l'annullo non e'
+    riuscito e su Stripe i soldi risultano INCASSATI. Il giro dei blocchi scrive la riga del
+    rimborso dovuto (`_giornale`), ma non guarda se e' atterrata: `_giornale` degrada i guasti a
+    WARNING e il record e' gia' fuori da `blocchi_aperti`, quindi nessun giro la riscrive. La
+    cancellazione dell'ospite invece verifica e grida «RIMBORSO DOVUTO NON REGISTRATO NEI CONTI»."""
+
+    def _cancellata_e_incassata_dopo(self, ci, co, n):
+        rif, vt, tot = self.prenota(ci, co)
+        _s, _c, pi = self.paga_bloccato(rif, tot, n=n)
+        self.stripe.esito_annullo = {"ok": False, "id": "", "motivo": "URLError: rete"}
+        self.stripe.pagamenti.pop(pi)                       # nemmeno la rilettura risponde
+        s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
+        self.assertEqual(s, 200, "%r" % (c,))
+        dovuto = self.corpo(rif).get("blocco_rimborso_dovuto_cents")
+        self.assertTrue(isinstance(dovuto, int) and dovuto > 0,
+                        "PREMESSA: il rimborso dovuto e' segnato nel blocco %r" % (self.corpo(rif),))
+        self.stripe.esito_annullo = None
+        self.stripe.pagamenti[pi] = "succeeded"             # su Stripe risulta incassato
+        return rif, dovuto
+
+    def _giro(self):
+        with self.assertLogs("core_auto.server", level="INFO") as reg:
+            self.r._incassa_blocchi(ora_ts=int(time.time()) + 3600)
+        return [r.getMessage() for r in reg.records if r.levelname == "ERROR"]
+
+    def test_R2_la_riga_del_giro_che_non_atterra_si_grida(self):
+        rif, dovuto = self._cancellata_e_incassata_dopo("2027-04-14", "2027-04-16", 21)
+        self.sis.finanza.movimento = lambda **k: None       # il giornale «accetta» e non scrive
+        errori = self._giro()
+        self.assertEqual([], self.movimenti(rif, "rimborso"), "PREMESSA: la riga non e' atterrata")
+        self.assertTrue([e for e in errori if "RIMBORSO DOVUTO NON REGISTRATO" in e and rif[:8] in e],
+                        "BLOCCO INCASSATO, %d DOVUTI ALL'OSPITE E NESSUNA RIGA: il giro non lo dice "
+                        "e non la riscrivera' (errori %r)" % (dovuto, errori))
+
+    def test_R2_gemella_con_la_riga_atterrata_tace(self):
+        # ferrea 10: col giornale sano la riga c'e' e quell'allarme non si sente
+        rif, dovuto = self._cancellata_e_incassata_dopo("2027-04-18", "2027-04-20", 22)
+        errori = self._giro()
+        self.assertEqual([dovuto], [int(m["importo_cents"]) for m in self.movimenti(rif, "rimborso")])
+        self.assertEqual([], [e for e in errori if "NON REGISTRATO" in e],
+                         "FALSO ALLARME: la riga del rimborso c'e' %r" % (errori,))
+
+    def test_R2c_se_la_verifica_non_si_legge_si_grida_lo_stesso(self):
+        # D19: la rilettura del giornale esplode subito dopo la scrittura. Non si sa se la riga
+        # c'e': si grida come la cancellazione dell'ospite, non si da' per scritta
+        rif, dovuto = self._cancellata_e_incassata_dopo("2027-04-22", "2027-04-24", 23)
+        vero_g, vera_m, scritta = self.r._giornale, self.sis.finanza.movimenti, []
+
+        def giornale(*a, **k):
+            esito = vero_g(*a, **k)
+            if k.get("tipo") == "rimborso":
+                scritta.append(True)
+            return esito
+
+        def movimenti(*a, **k):
+            if scritta:
+                raise sqlite3.OperationalError("database is locked")
+            return vera_m(*a, **k)
+        self.r._giornale, self.sis.finanza.movimenti = giornale, movimenti
+        try:
+            errori = self._giro()
+        finally:
+            self.sis.finanza.movimenti = vera_m
+        self.assertEqual([dovuto], [int(m["importo_cents"]) for m in self.movimenti(rif, "rimborso")],
+                         "PREMESSA: la riga e' atterrata, e' la verifica che non si legge")
+        self.assertTrue([e for e in errori if "RIMBORSO DOVUTO NON REGISTRATO" in e and rif[:8] in e],
+                        "LA VERIFICA DELLA RIGA E' ESPLOSA E IL GIRO TACE: %r" % (errori,))
+
+
+class TestR3LaCancellazioneDellHostColBloccoIncassatoDopo(_OraVeraPerIlPreventivo, _BancoDelBlocco):
+    """Pacco 4, parte B, R3 (busta 54 di Claude): l'host cancella, l'annullo del blocco non riesce,
+    e poi il giro trova su Stripe i soldi INCASSATI. Per 'cancellata_host' il giro non scrive la
+    riga del rimborso e non grida: la lascia alla ripresa dello sweeper, che pero' guarda solo le
+    50 cancellazioni dell'host piu' recenti (`cancellate_host(limit=50)`). Se nel frattempo ne sono
+    arrivate altre 50, quella ospite resta senza la riga, in silenzio."""
+
+    def test_R3_il_giro_che_trova_incassata_una_cancellata_host_scrive_il_rimborso(self):
+        from fase83_server import sweep_hold_una_passata
+        pp = self.sis.pagamenti_pendenti
+        rif, _vt, tot = self.prenota("2027-04-10", "2027-04-12")
+        _s, _c, pi = self.paga_bloccato(rif, tot, n=31)
+        self.stripe.esito_annullo = {"ok": False, "id": "", "motivo": "URLError: rete"}
+        self.stripe.pagamenti.pop(pi)                       # nemmeno la rilettura risponde
+        ora = int(time.time())
+        with mock.patch.object(pp, "_now", return_value=ora - 7200):
+            s, c = self.g("POST", "/api/host/cancella", {"riferimento": rif, "host_id": "demo"},
+                          _HK_BLOCCO)
+        self.assertEqual(200, s, "%r" % (c,))
+        dovuto = int(c.get("rimborso_cliente_cents", 0))
+        self.assertGreater(dovuto, 0, "PREMESSA: l'host cancella, all'ospite spetta tutto: %r" % (c,))
+        self.assertEqual([], self.movimenti(rif, "rimborso"), "PREMESSA: annullo non riuscito")
+        for i in range(51):                                 # poi altre 51 cancellazioni dell'host
+            self.assertTrue(pp.registra("R3ALTRA%02d" % i, alloggio_id="casa",
+                                        check_in=_vero("2027-05-01"), check_out=_vero("2027-05-02"),
+                                        host_id="demo"))
+            self.assertTrue(pp.marca_cancellata_host("R3ALTRA%02d" % i, 0))
+        self.stripe.esito_annullo = None
+        self.stripe.pagamenti[pi] = "succeeded"             # su Stripe risulta incassato
+        self.r._incassa_blocchi(ora_ts=ora + 3600)
+        sweep_hold_una_passata(self.sis, self.r)
+        righe = [int(m["importo_cents"]) for m in self.movimenti(rif, "rimborso")]
+        self.assertEqual([dovuto], righe,
+                         "L'HOST HA CANCELLATO, STRIPE HA INCASSATO E NESSUNO RESTITUISCE: dovuti %d, "
+                         "righe %r (blocco %r)" % (dovuto, righe, self.corpo(rif)))
+
+    def test_R3b_se_la_ripresa_esplode_nel_giro_lo_dice(self):
+        # D19: la ripresa chiamata dal giro esplode (archivio giu'): un ERROR col riferimento, e il
+        # giro va avanti
+        rif, _vt, tot = self.prenota("2027-04-14", "2027-04-16")
+        _s, _c, pi = self.paga_bloccato(rif, tot, n=32)
+        self.stripe.esito_annullo = {"ok": False, "id": "", "motivo": "URLError: rete"}
+        self.stripe.pagamenti.pop(pi)
+        s, c = self.g("POST", "/api/host/cancella", {"riferimento": rif, "host_id": "demo"},
+                      _HK_BLOCCO)
+        self.assertEqual(200, s, "%r" % (c,))
+        self.stripe.esito_annullo = None
+        self.stripe.pagamenti[pi] = "succeeded"
+
+        def esplode(*a, **k):
+            raise RuntimeError("archivio bloccato")
+        with mock.patch.object(fase83_server, "_riprendi_cancellazione_host", esplode), \
+                self.assertLogs("core_auto.server", level="INFO") as reg:
+            conta = self.r._incassa_blocchi(ora_ts=int(time.time()) + 3600)
+        errori = [r.getMessage() for r in reg.records if r.levelname == "ERROR"]
+        self.assertTrue([e for e in errori if "ripresa_fallita" in e and rif[:8] in e],
+                        "LA RIPRESA E' ESPLOSA NEL GIRO E NESSUNO LO DICE: %r" % (errori,))
+        self.assertEqual(1, conta["incassati"] + conta["annullati"], "il giro si e' fermato: %r" % (conta,))
+
+
+class TestR4UnaLetturaDelGiornaleCheEsplodeNonFermaIlGiro(_OraVeraPerIlPreventivo, _BancoDelBlocco):
+    """Pacco 4, parte B, R4 (busta 54 di Claude): nel giro dei blocchi, per una cancellazione
+    dell'ospite incassata dopo e senza l'importo dovuto scritto, `fc.movimenti(rif)` si legge fuori
+    da ogni try. Se esplode, esce dal giro: gli altri blocchi di quel giro non si incassano ne' si
+    annullano, e al giro dopo si ferma di nuovo nello stesso punto."""
+
+    def test_R4_il_giornale_che_esplode_su_una_non_ferma_le_altre_e_si_grida(self):
+        rif_a, vt_a, tot_a = self.prenota("2027-04-26", "2027-04-28")
+        _s, _c, pi_a = self.paga_bloccato(rif_a, tot_a, n=41)
+        self.stripe.esito_annullo = {"ok": False, "id": "", "motivo": "URLError: rete"}
+        self.stripe.pagamenti.pop(pi_a)
+        s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": vt_a})
+        self.assertEqual(s, 200, "%r" % (c,))
+        corpo = self.corpo(rif_a)                          # D19: l'importo dovuto non e' scritto
+        corpo.pop("blocco_rimborso_dovuto_cents", None)
+        con = sqlite3.connect(self.dir + "/p.db")
+        with con:
+            con.execute("UPDATE pendenti SET corpo_json=? WHERE riferimento=?",
+                        (json.dumps(corpo), rif_a))
+        con.close()
+        self.stripe.esito_annullo = None
+        self.stripe.pagamenti[pi_a] = "succeeded"           # su Stripe risulta incassato
+        rif_b, _vt_b, tot_b = self.prenota("2027-05-02", "2027-05-04")
+        _s, _c, pi_b = self.paga_bloccato(rif_b, tot_b, n=42)
+        self.assertEqual("pagato", self.stato(rif_b), "PREMESSA: l'altra e' confermata col blocco")
+        vera = self.sis.finanza.movimenti
+
+        def movimenti(rif, *a, **k):
+            if rif == rif_a:
+                raise sqlite3.OperationalError("database is locked")
+            return vera(rif, *a, **k)
+        self.sis.finanza.movimenti = movimenti
+        try:
+            with self.assertLogs("core_auto.server", level="INFO") as reg:
+                try:
+                    self.r._incassa_blocchi(ora_ts=int(time.time()) + fase83_server.SECONDI_RIPENSAMENTO
+                                            + 3600)
+                except Exception as e:
+                    self.fail("UNA LETTURA DEL GIORNALE HA FERMATO TUTTO IL GIRO DEI BLOCCHI: %r" % (e,))
+        finally:
+            self.sis.finanza.movimenti = vera
+        errori = [r.getMessage() for r in reg.records if r.levelname == "ERROR"]
+        self.assertTrue([e for e in errori if rif_a[:8] in e and "RIMBORSO DOVUTO" in e],
+                        "BLOCCO INCASSATO SU UNA CANCELLATA, RIGHE ILLEGGIBILI, E NESSUNO LO DICE: %r"
+                        % (errori,))
+        self.assertEqual("succeeded", self.stripe.pagamenti.get(pi_b),
+                         "L'ALTRO BLOCCO NON E' STATO INCASSATO: il giro si e' fermato prima")
+
+
+class TestF4LaPenaleIncassataPoiUnErroreLaRigaNasceSubito(_OraVeraPerIlPreventivo, _BancoDelBlocco):
+    """Pacco 4, parte B, F4 (revisione differenziale del pacco 3): l'ospite cancella dopo le 48 ore,
+    la penale si incassa (il blocco e' scritto 'incassato'), poi un passo dopo esplode e Stripe non
+    si rilegge. Il ramo dell'errore guarda la FOTOGRAFIA della prenotazione, presa prima
+    dell'incasso: dice 'aperto', quindi niente riga e l'importo dovuto segnato nel blocco. Ma il
+    blocco e' gia' 'incassato': il giro non lo rivede e la riga non la scrive nessuno. E l'ERROR
+    promette «il giro orario ANNULLERA' il blocco», che non succede."""
+
+    def test_F4_la_penale_incassata_e_poi_un_errore_la_riga_del_rimborso_c_e(self):
+        rif, vt, tot = self.prenota("2027-04-10", "2027-04-12")
+        _s, _c, pi = self.paga_bloccato(rif, tot, n=51)
+        self.assertEqual(self.stato(rif), "pagato", "PREMESSA: confermata col blocco")
+        vero = self.r._riasserisci_incasso
+
+        def esplode(*a, **k):          # l'incasso e' riuscito e scritto, poi un passo esplode
+            self.stripe.pagamenti.pop(pi, None)          # e Stripe non si rilegge
+            raise RuntimeError("archivio dei conti bloccato")
+        self.r._riasserisci_incasso = esplode
+        dopo = time.time() + fase83_server.SECONDI_RIPENSAMENTO + 3600
+        try:
+            with mock.patch("time.time", return_value=dopo):
+                s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
+        finally:
+            self.r._riasserisci_incasso = vero
+        self.assertEqual(s, 200, "%r" % (c,))
+        self.assertTrue(self.corpo(rif).get("blocco_incassato_ts"),
+                        "PREMESSA: l'incasso della penale e' scritto %r" % (self.corpo(rif),))
+        dovuto = int(c.get("rimborso_cents", 0))
+        self.assertGreater(dovuto, 0, "PREMESSA: la tassa torna all'ospite: %r" % (c,))
+        self.stripe.pagamenti[pi] = "succeeded"           # Stripe torna a rispondere
+        self.r._incassa_blocchi(ora_ts=int(dopo) + 3600)
+        righe = [int(m["importo_cents"]) for m in self.movimenti(rif, "rimborso")]
+        self.assertEqual([dovuto], righe,
+                         "PENALE INCASSATA, %d DOVUTI ALL'OSPITE E NESSUNA RIGA (blocco %r)"
+                         % (dovuto, self.corpo(rif)))
+
+    def test_F4b_se_anche_la_rilettura_esplode_la_cancellazione_arriva_in_fondo(self):
+        # D19: dopo l'incasso esplodono il passo e anche la rilettura del blocco. Le date sono gia'
+        # liberate e la penale incassata: la cancellazione non muore a meta' (500 con la prenotazione
+        # ancora 'pagato'), si torna alla fotografia
+        rif, vt, tot = self.prenota("2027-04-14", "2027-04-16")
+        _s, _c, pi = self.paga_bloccato(rif, tot, n=52)
+        pp = self.sis.pagamenti_pendenti
+        vero_r, vera_info, esploso = self.r._riasserisci_incasso, pp.info, []
+
+        def esplode(*a, **k):
+            self.stripe.pagamenti.pop(pi, None)
+            esploso.append(True)
+            raise RuntimeError("archivio dei conti bloccato")
+
+        def info(*a, **k):
+            if esploso:
+                raise sqlite3.OperationalError("database is locked")
+            return vera_info(*a, **k)
+        self.r._riasserisci_incasso, pp.info = esplode, info
+        dopo = time.time() + fase83_server.SECONDI_RIPENSAMENTO + 3600
+        try:
+            with mock.patch("time.time", return_value=dopo):
+                s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
+        finally:
+            self.r._riasserisci_incasso, pp.info = vero_r, vera_info
+        self.assertEqual(esploso, [True], "PREMESSA: l'incasso e il passo dopo sono avvenuti")
+        self.assertEqual((200, "rimborsato"), (s, self.stato(rif)),
+                         "LA CANCELLAZIONE E' MORTA A META' SULLA RILETTURA: %s %r" % (s, c))
+
+    def _errore_della_chiusura(self, ci, co, n, prepara):
+        # l'ERROR del ramo dell'errore di `_chiudi_blocco`, dopo le 48 ore (con la penale si incassa)
+        rif, vt, tot = self.prenota(ci, co)
+        _s, _c, pi = self.paga_bloccato(rif, tot, n=n)
+        prepara(pi)
+        dopo = time.time() + fase83_server.SECONDI_RIPENSAMENTO + 3600
+        try:
+            with mock.patch("time.time", return_value=dopo), \
+                    self.assertLogs("core_auto.server", level="ERROR") as reg:
+                s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
+        finally:
+            for nome in ("_riasserisci_incasso", "_incassa_blocco"):
+                self.r.__dict__.pop(nome, None)
+        self.assertEqual(s, 200, "%r" % (c,))
+        righe = [r.getMessage() for r in reg.records
+                 if "chiusura del blocco sulla carta esplosa" in r.getMessage()]
+        self.assertEqual(1, len(righe), "PREMESSA: un ERROR della chiusura %r" % (righe,))
+        return rif, righe[0]
+
+    def test_F4c_l_errore_della_chiusura_dice_cosa_e_successo_davvero(self):
+        # Claude 29/10 (a): dopo la riparazione F4 la frase «il giro orario ANNULLERA' il blocco: una
+        # penale, se c'era, non entra» non e' piu' sempre vera (ferrea 10, «testi che mentono»)
+        def incassata_poi_esplode(pi):
+            def esplode(*a, **k):
+                self.stripe.pagamenti.pop(pi, None)
+                raise RuntimeError("archivio dei conti bloccato")
+            self.r._riasserisci_incasso = esplode
+        rif, msg = self._errore_della_chiusura("2027-04-18", "2027-04-20", 53, incassata_poi_esplode)
+        self.assertTrue(self.corpo(rif).get("blocco_incassato_ts"), "PREMESSA: incasso scritto")
+        self.assertTrue("ANNULLERA'" not in msg and "INCASSATI" in msg,
+                        "L'ERROR PROMETTE L'ANNULLO DI UN BLOCCO GIA' INCASSATO (la riga del "
+                        "rimborso nasce adesso): %r" % (msg,))
+
+        def esplode_prima(pi):         # gemella: niente incassato, Stripe muto: il giro annullera'
+            def esplode(*a, **k):
+                raise RuntimeError("rete caduta prima dell'incasso")
+            self.r._incassa_blocco = esplode
+            self.stripe.pagamenti.pop(pi, None)
+        rif2, msg2 = self._errore_della_chiusura("2027-04-22", "2027-04-24", 54, esplode_prima)
+        self.assertTrue("INCASSATI" not in msg2 and "annull" in msg2.lower(),
+                        "L'ERROR NON DICE CHE IL BLOCCO SI ANNULLA (soldi non entrati): %r" % (msg2,))
+
+
+class TestF5NienteDaRestituireNonEUnImportoSconosciuto(_OraVeraPerIlPreventivo, _BancoDelBlocco):
+    """Pacco 4, parte B, F5 (revisione differenziale del pacco 3): l'ospite cancella e non gli
+    spetta niente (non rimborsabile, dopo le 48 ore, senza tassa). L'incasso della penale non
+    riesce al momento, e Stripe poi lo da' per fatto: il giro trova il blocco INCASSATO e, senza un
+    importo dovuto scritto, grida «importo_dovuto_sconosciuto». E' un falso allarme (ferrea 10):
+    l'importo e' noto, ed e' zero."""
+
+    def test_F5_all_ospite_non_spetta_niente_e_il_giro_tace(self):
+        self.g("POST", "/api/host/pubblica", {"host_id": "demo", "slug": "casa-f5", "titolo": "C0",
+               "citta": "Roma", "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
+               "servizi": [], "immagini": [], "politica_cancellazione": "non_rimborsabile"},
+               _HK_BLOCCO)
+        self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": "casa-f5",
+               "da": _vero("2027-04-01"), "a": _vero("2027-05-31"), "unita_totali": 1,
+               "prezzo_netto_cents": 10000}, _HK_BLOCCO)
+        _, q = self.g("POST", "/api/concierge/quote", {"alloggio_id": "casa-f5",
+                      "check_in": _vero("2027-05-10"), "check_out": _vero("2027-05-12"),
+                      "party": 2})
+        self.assertEqual(q.get("tassa_soggiorno_cents"), 0, "PREMESSA: senza tassa: %r" % (q,))
+        _, b = self.g("POST", "/api/concierge/book", {"quote_token": q["quote_token"],
+                                                      "email": "o@x.it"})
+        rif, vt = b["riferimento"], b.get("voucher_token", "")
+        _s, _c, pi = self.paga_bloccato(rif, int(q["totale_cents"]), n=61)
+        self.stripe.esito_incasso = {"ok": False, "id": "", "motivo": "URLError: rete"}
+        self.stripe.pagamenti.pop(pi)                       # e la rilettura non risponde
+        dopo = time.time() + fase83_server.SECONDI_RIPENSAMENTO + 3600
+        with mock.patch("time.time", return_value=dopo):
+            s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
+        self.assertEqual((s, c.get("rimborso_cents")), (200, 0), "PREMESSA: niente rimborso: %r" % (c,))
+        self.stripe.esito_incasso = None
+        self.stripe.pagamenti[pi] = "succeeded"             # l'incasso era riuscito davvero
+        with self.assertLogs("core_auto.server", level="INFO") as reg:
+            self.r._incassa_blocchi(ora_ts=int(dopo) + 3600)
+        self.assertTrue(self.corpo(rif).get("blocco_incassato_ts"),
+                        "PREMESSA: il giro vede il blocco incassato %r" % (self.corpo(rif),))
+        errori = [r.getMessage() for r in reg.records if r.levelname == "ERROR"]
+        self.assertEqual(([], []),
+                         ([e for e in errori if "importo_dovuto_sconosciuto" in e],
+                          self.movimenti(rif, "rimborso")),
+                         "FALSO ALLARME: all'ospite non spetta niente e il giro grida l'importo "
+                         "sconosciuto (o scrive una riga)")
+
+
+class TestF7LImportoDovutoNonSegnatoNonRompeLaCancellazione(_OraVeraPerIlPreventivo,
+                                                             _BancoDelBlocco):
+    """Pacco 4, parte B, F7 (revisione differenziale del pacco 3): dopo il CAS 'rimborsato', con
+    l'annullo del blocco non riuscito, la cancellazione dell'ospite segna nel blocco l'importo
+    dovuto (`segna_blocco`) fuori da ogni try. fase162 apre l'archivio fuori dal suo try, quindi
+    puo' SOLLEVARE: 500 a cancellazione fatta (e la coda, email e credito, saltata). E quando
+    torna False (scrittura isolata) nessuno lo dice: se poi i soldi risultano incassati, il giro
+    non sa quanto restituire."""
+
+    def _cancella_con_annullo_fallito(self, ci, co, n, segna_finto):
+        rif, vt, tot = self.prenota(ci, co)
+        _s, _c, pi = self.paga_bloccato(rif, tot, n=n)
+        self.stripe.esito_annullo = {"ok": False, "id": "", "motivo": "URLError: rete"}
+        self.stripe.pagamenti.pop(pi)
+        pp = self.sis.pagamenti_pendenti
+        vero = pp.segna_blocco
+
+        def segna(rif_, **campi):
+            if "blocco_rimborso_dovuto_cents" in campi:
+                return segna_finto()
+            return vero(rif_, **campi)
+        pp.segna_blocco = segna
+        try:
+            with self.assertLogs("core_auto.server", level="INFO") as reg:
+                s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
+        finally:
+            pp.segna_blocco = vero
+        return rif, s, c, [r.getMessage() for r in reg.records if r.levelname == "ERROR"]
+
+    def test_F7_segna_blocco_che_solleva_non_da_500_a_cancellazione_fatta_e_si_grida(self):
+        def esplode():
+            raise sqlite3.OperationalError("unable to open database file")
+        rif, s, c, errori = self._cancella_con_annullo_fallito("2027-04-10", "2027-04-12", 71,
+                                                              esplode)
+        self.assertEqual((200, "rimborsato"), (s, self.stato(rif)),
+                         "LA CANCELLAZIONE E' FATTA E LA RISPOSTA E' UN ERRORE: %s %r" % (s, c))
+        self.assertTrue([e for e in errori if "importo_dovuto_non_segnato" in e and rif[:8] in e],
+                        "L'IMPORTO DOVUTO NON E' SEGNATO E NESSUNO LO DICE: %r" % (errori,))
+
+    def test_F7b_segna_blocco_che_torna_False_si_grida(self):
+        rif, s, c, errori = self._cancella_con_annullo_fallito("2027-04-14", "2027-04-16", 72,
+                                                              lambda: False)
+        self.assertEqual((200, "rimborsato"), (s, self.stato(rif)), "PREMESSA: %s %r" % (s, c))
+        self.assertTrue([e for e in errori if "importo_dovuto_non_segnato" in e and rif[:8] in e],
+                        "L'IMPORTO DOVUTO NON E' SEGNATO E NESSUNO LO DICE: %r" % (errori,))
+
+    def test_F7_gemella_segnato_tace(self):
+        # ferrea 10: con la scrittura riuscita l'allarme non si sente
+        rif, s, c, errori = self._cancella_con_annullo_fallito(
+            "2027-04-18", "2027-04-20", 73,
+            lambda: True)
+        self.assertEqual([], [e for e in errori if "importo_dovuto_non_segnato" in e], errori)
+
+
 if __name__ == "__main__":
     unittest.main()

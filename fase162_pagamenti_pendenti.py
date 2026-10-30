@@ -591,13 +591,21 @@ class PagamentiPendenti:
         finally:
             con.close()
 
-    def marca_cancellata_host(self, riferimento: Any, penale_cents: int = 0) -> bool:
+    def marca_cancellata_host(self, riferimento: Any, penale_cents: int = 0,
+                              da_stato: Optional[str] = None) -> bool:
         """L'host ha annullato: marca 'cancellata_host' e registra la penale nel corpo_json.
         CAS (acquisizione atomica della decisione, pattern #16/#31): scrive SOLO se il record
         non è già chiuso ('cancellata_host'/'rimborsato'). Chi perde la gara (doppio click,
-        admin rimborso nello stesso istante) vede False e NON deve applicare penale/effetti."""
+        admin rimborso nello stesso istante) vede False e NON deve applicare penale/effetti.
+        F1 (pacco 4, parte B, 29/10): con `da_stato` scrive SOLO se lo stato e' ancora quello
+        letto da chi ha deciso penale e rimborso (un pagamento arrivato nel mezzo fa perdere)."""
         if not (isinstance(riferimento, str) and riferimento):
             return False
+        ammessi = _AMMESSI["cancellata_host"]
+        if da_stato is not None:
+            if da_stato not in ammessi:
+                return False
+            ammessi = (da_stato,)
         con = self._apri()
         try:
             with con:
@@ -618,8 +626,8 @@ class PagamentiPendenti:
                     # noqa: vedi la nota su `scaduto` -- si interpolano solo segnaposto `?`
                     "UPDATE pendenti SET stato='cancellata_host', corpo_json=?, cancellata_ts=? "  # nosec B608  # noqa: S608
                     "WHERE riferimento=? AND stato IN (%s)"
-                    % ",".join("?" * len(_AMMESSI["cancellata_host"])),
-                    (_j2.dumps(cj), self._now(), riferimento) + _AMMESSI["cancellata_host"])
+                    % ",".join("?" * len(ammessi)),
+                    (_j2.dumps(cj), self._now(), riferimento) + ammessi)
             return bool(cur.rowcount)
         finally:
             con.close()

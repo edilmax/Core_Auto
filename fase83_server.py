@@ -7920,6 +7920,14 @@ class RouterHTTP:
     def _host_cancella_sotto_chiave(self, ref, rec, host_id, pp):
         """Il corpo di `_host_cancella` dal freno della garanzia in poi; lo chiama tenendo
         `_BONIFICI_LOCK`."""
+        # F1 (pacco 4, parte B, 29/10): la prenotazione si RILEGGE qui, sotto il lucchetto. Quella
+        # di `_host_cancella` e' vecchia di tutta l'attesa del lucchetto (tenuto anche durante le
+        # chiamate a Stripe), e il pagamento dell'ospite (`conferma`) il lucchetto non lo prende:
+        # con la lettura vecchia una prenotazione appena pagata si cancellava come non pagata,
+        # senza rimborso e senza penale. Guardia: `TestF1LHostCheCancellaDecideSullaPrenotazioneDiAdesso`.
+        rec = pp.info(ref)
+        if rec is None:
+            return 404, {"errore": "prenotazione_non_trovata"}
         # ESCROW GIA' LIQUIDATO -> l'host NON puo' piu' auto-cancellare (bug PROVATO
         # 2026-07-28, test_escrow_gia_liquidato). Cammino: l'ospite paga e preme "tutto ok"
         # (o passano le 24h dal check-in) -> l'escrow si chiude e il netto e' gia' PARTITO
@@ -7980,14 +7988,21 @@ class RouterHTTP:
         # una prenotazione chiusa dall'admin (BUG provato in gara admin∥host: stato
         # 'rimborsato' con penale 15% registrata). Crash dopo il CAS = date ancora bloccate
         # (lato sicuro, zero overbooking; i passi sotto sono idempotenti e ripetibili).
+        # F1b: il CAS vale solo sullo stato appena letto. Il pagamento puo' arrivare anche fra la
+        # rilettura e qui: cancellare un 'pagato' con la penale e il rimborso di un 'in_attesa'
+        # lasciava l'ospite senza i suoi soldi.
         try:
-            vinta = pp.marca_cancellata_host(ref, penale)
+            vinta = pp.marca_cancellata_host(ref, penale, da_stato=rec.get("stato"))
         except Exception:
             logger.warning("host cancella: marcatura fallita (trattata come persa)",
                            exc_info=True)
             vinta = False
         if not vinta:
-            return 409, {"errore": "gia_cancellata"}
+            if (pp.info(ref) or {}).get("stato") in ("cancellata_host", "rimborsato"):
+                return 409, {"errore": "gia_cancellata"}
+            return 409, {"errore": "prenotazione_cambiata",
+                         "nota": "la prenotazione e' cambiata mentre la cancellavi (per esempio "
+                                 "l'ospite ha appena pagato): riprova"}
         # FINANCIAL CONTROLLER (fase177, scatto ①): la NOTA DI DEBITO 15% nel GIORNALE;
         # l'offset compensa subito la penale dai payout maturati dell'host (contratto art. 6).
         # ⛔ VOCE 137: col giornale non scrivibile qui si tornava 503 DOPO il CAS gia' vinto, e le
@@ -8545,16 +8560,29 @@ class RouterHTTP:
                 _senza_incasso = self._chiudi_blocco(
                     rif, _rec, int(r.get("trattenuto_cents", 0) or 0))
             except Exception:
-                logger.error("cancellazione %s: chiusura del blocco sulla carta esplosa (il "
-                             "giro orario ANNULLERA' il blocco: una penale, se c'era, non entra)",
-                             _rif_per_registro(rif), exc_info=True)
                 # Voce 143, strada (i): la fotografia dice 'aperto' anche quando l'incasso della
                 # penale e' riuscito e poi una scrittura e' esplosa: su 'aperto' si rilegge Stripe.
                 # Solo 'succeeded' scrive la riga adesso; il resto ("" compreso) lascia l'importo nel
                 # blocco qui sotto, e la riga la scrive il giro orario se i soldi risultano entrati.
-                _b = _blocco(_rec)
+                # F4 (pacco 4, parte B, 29/10): si RILEGGE il blocco. La fotografia e' di prima
+                # dell'incasso: se l'incasso e' scritto e poi un passo esplode diceva 'aperto', la
+                # riga non nasceva e l'importo finiva su un blocco 'incassato' che il giro non rivede.
+                try:
+                    _b = _blocco(_pp.info(rif) or _rec)
+                except Exception:
+                    _b = _blocco(_rec)    # date gia' liberate: la rilettura non ferma la cancellazione
                 _senza_incasso = _b["stato"] == "annullato" or (
                     _b["stato"] == "aperto" and self._stato_pi(_b["pi"]) != "succeeded")
+                # Claude 29/10 (a): l'ERROR si scrive DOPO la rilettura e dice quello che e' successo.
+                # Prima prometteva sempre «il giro orario ANNULLERA' il blocco», anche sui soldi gia'
+                # incassati (la riga nasce qui sotto). Guardia: `test_F4c_...`.
+                logger.error("cancellazione %s: chiusura del blocco sulla carta esplosa (%s)",
+                             _rif_per_registro(rif),
+                             "i soldi NON risultano entrati: niente riga adesso; se il blocco e' "
+                             "ancora aperto il giro orario lo annulla, o scrive la riga se su Stripe "
+                             "risulta incassato, e solo allora una penale entra" if _senza_incasso
+                             else "i soldi risultano INCASSATI: la riga del rimborso dovuto si "
+                             "scrive adesso", exc_info=True)
         # ESCROW PRIMA del resto: serve sapere quanto TIENE l'host (quota-penale della
         # politica) per decidere il payout. host_tiene vale SOLO se la chiusura CAS riesce.
         host_tiene = 0
@@ -8709,11 +8737,26 @@ class RouterHTTP:
                              "cents promessi all'ospite via email: registrarlo A MANO dal "
                              "pannello, o quei soldi non risultano dovuti da nessuna parte",
                              _rif_per_registro(rif), rimborso_totale)
-        elif pagato_davvero and rimborso_totale > 0 and _pp is not None:
+        elif pagato_davvero and _senza_incasso and _pp is not None:
             # Voce 143, strada (ii): i soldi sembrano solo autorizzati, ma l'annullo puo' non
             # essere riuscito. Se poi su Stripe risultano INCASSATI il giro orario scrive la riga
             # con QUESTO importo: dopo non si saprebbe piu' (`giorni` e le 48 ore cambiano).
-            _pp.segna_blocco(rif, blocco_rimborso_dovuto_cents=int(rimborso_totale))
+            # F5 (pacco 4, parte B, 29/10): anche quando e' ZERO. Senza, il giro che trovava il
+            # blocco incassato gridava «importo_dovuto_sconosciuto» su un importo noto: niente.
+            # F7: dopo il CAS, quindi mai un 500 (fase162 apre l'archivio fuori dal suo try), e il
+            # False della scrittura isolata non resta muto.
+            try:
+                _segnato = _pp.segna_blocco(
+                    rif, blocco_rimborso_dovuto_cents=int(rimborso_totale)) is True
+            except Exception:
+                _segnato = False
+            if not _segnato:
+                logger.error("RIMBORSO DOVUTO | codice: importo_dovuto_non_segnato | riferimento: "
+                             "%s | messaggio: %s dovuti all'ospite e l'annullo del blocco non e' "
+                             "confermato: l'importo non e' scritto nel blocco. Se su Stripe i soldi "
+                             "risultano INCASSATI, registrare il rimborso A MANO",
+                             _rif_per_registro(rif),
+                             self._fmt_importo(int(rimborso_totale), v.get("valuta", "EUR")))
         return {"r": r, "pagato_davvero": pagato_davvero, "senza_incasso": _senza_incasso,
                 "tratt_originale": tratt_originale, "tassa": tassa,
                 "rimborso_totale": rimborso_totale}
@@ -10539,7 +10582,23 @@ class RouterHTTP:
                 if ora < b["incassa_dal_ts"]:
                     conta["in_finestra"] += 1
                     continue
-                esito = self._incassa_blocco(rif, b["pi"])
+                # R1 (pacco 4, parte B, 29/10): la fotografia di `blocchi_aperti` e' vecchia. Se nel
+                # mezzo l'ospite cancella (o l'admin rimborsa, o l'host cancella) con l'annullo
+                # fallito, incassare qui prendeva i soldi e il record usciva dai blocchi aperti senza
+                # la riga del rimborso. Si rilegge sotto `_BONIFICI_LOCK`, che quelle tre strade
+                # tengono: chiusa nel frattempo, la si lascia al giro dopo, che la annulla; una
+                # lettura fallita non incassa. Guardia: `TestR1IlGiroDeiBlocchiNonIncassaUnaPrenotazioneGiaChiusa`.
+                with _BONIFICI_LOCK:
+                    try:
+                        ancora_pagata = (pp.info(rif) or {}).get("stato") == "pagato"
+                    except Exception:
+                        logger.warning("blocco %s: prenotazione non riletta, non si incassa (si "
+                                       "ritenta al giro dopo)", _rif_per_registro(rif),
+                                       exc_info=True)
+                        ancora_pagata = False
+                    if not ancora_pagata:
+                        continue
+                    esito = self._incassa_blocco(rif, b["pi"])
             elif stato in ("rimborsato", "cancellata_host"):
                 esito = self._annulla_blocco(rif, b["pi"])
                 # Voce 143: l'ospite aveva cancellato e i soldi risultano INCASSATI. La riga del
@@ -10558,13 +10617,50 @@ class RouterHTTP:
                                        importo_cents=dovuto, valuta=dj.get("valuta") or "EUR",
                                        causale="rimborso dovuto per cancellazione ospite "
                                                "(blocco incassato dopo)")
-                    elif not (fc is not None and any(m.get("tipo") == "rimborso"
-                                                     for m in fc.movimenti(rif))):
-                        logger.error("RIMBORSO DOVUTO | codice: importo_dovuto_sconosciuto | "
-                                     "riferimento: %s | pi: %s | messaggio: l'ospite ha cancellato "
-                                     "e su Stripe i soldi risultano INCASSATI, ma quanto gli spetta "
-                                     "non e' scritto: calcolarlo e registrarlo A MANO",
-                                     _rif_per_registro(rif), b["pi"])
+                        # R2 (pacco 4, parte B, 29/10): E SI VERIFICA CHE SIA ATTERRATA, come nella
+                        # cancellazione dell'ospite. `_giornale` degrada i guasti a WARNING e il
+                        # record e' gia' fuori da `blocchi_aperti`: nessun giro la riscrive.
+                        try:
+                            _scritta = fc is None or any(m.get("tipo") == "rimborso"
+                                                         for m in fc.movimenti(rif))
+                        except Exception:
+                            _scritta = False
+                        if not _scritta:
+                            logger.error("RIMBORSO DOVUTO NON REGISTRATO NEI CONTI | rif %s | %s "
+                                         "dovuti all'ospite che ha cancellato, e il blocco risulta "
+                                         "INCASSATO: registrarlo A MANO dal pannello, nessun giro "
+                                         "lo riscrive", _rif_per_registro(rif),
+                                         self._fmt_importo(dovuto, dj.get("valuta") or "EUR"))
+                    elif not (type(dovuto) is int and dovuto == 0):   # F5: zero = niente da dare
+                        # R4 (pacco 4, parte B, 29/10): la lettura del giornale fuori da ogni try
+                        # esplodeva fuori dal giro, e gli altri blocchi restavano fermi (anche ai giri
+                        # dopo, nello stesso punto). Se non si legge, non si sa se la riga c'e': si grida.
+                        try:
+                            _c_e = fc is not None and any(m.get("tipo") == "rimborso"
+                                                          for m in fc.movimenti(rif))
+                        except Exception:
+                            _c_e = False
+                        if not _c_e:
+                            logger.error("RIMBORSO DOVUTO | codice: importo_dovuto_sconosciuto | "
+                                         "riferimento: %s | pi: %s | messaggio: l'ospite ha cancellato "
+                                         "e su Stripe i soldi risultano INCASSATI, ma quanto gli spetta "
+                                         "non e' scritto: calcolarlo e registrarlo A MANO",
+                                         _rif_per_registro(rif), b["pi"])
+                # R3 (pacco 4, parte B, 29/10): cancellata dall'HOST e i soldi risultano INCASSATI. La
+                # riga la scriveva solo la ripresa dello sweeper, che guarda le 50 cancellazioni
+                # dell'host piu' recenti: con altre 50 nel mezzo l'ospite restava senza, in
+                # silenzio. La ripresa si fa ADESSO, con la regola della cancellazione (stesso
+                # importo, voce 172 compresa); la rilettura serve, il blocco e' appena 'incassato'.
+                if esito == "incassato" and stato == "cancellata_host":
+                    try:
+                        with _BONIFICI_LOCK:
+                            _riprendi_cancellazione_host(self._sys, self, pp.info(rif))
+                    except Exception:
+                        logger.error("cancellazione host %s: codice: ripresa_fallita | messaggio: "
+                                     "il blocco risulta INCASSATO e la ripresa e' esplosa: la riga "
+                                     "del rimborso la scrive lo sweeper solo se la vede fra le "
+                                     "ultime 50, controllarla A MANO", _rif_per_registro(rif),
+                                     exc_info=True)
             else:
                 continue
             conta[{"incassato": "incassati", "annullato": "annullati"}.get(esito, "falliti")] += 1
