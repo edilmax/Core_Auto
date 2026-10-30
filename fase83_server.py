@@ -5945,7 +5945,6 @@ class RouterHTTP:
                              "quei soldi non risultano dovuti da nessuna parte",
                              _rif_per_registro(rif), self._fmt_importo(_rimb, _valuta))
         # payout dell'host: azzerato se il cliente prende tutto, altrimenti resta (parziale)
-        riallineato = True
         penale_oltre = penale_pari = partito = False
         pieno, tolta = rimborso >= importo, True
         if pieno:
@@ -6045,9 +6044,18 @@ class RouterHTTP:
                                  "pagarlo di nuovo; quello partito oltre la quota va recuperato "
                                  "dall'host", _rif_per_registro(rif),
                                  self._fmt_importo(int(quota_host), _valuta))
+                elif penale_oltre:
+                    logger.error("PENALE COMPENSATA OLTRE LA QUOTA DELL'HOST | RIF: %s | l'arbitro "
+                                 "da' all'host %s ma una penale ne ha gia' usati di piu' su questa "
+                                 "riga: all'host non spetta altro e alla penale mancano %s, da "
+                                 "riaprire a mano%s", _rif_per_registro(rif),
+                                 self._fmt_importo(int(quota_host), _valuta),
+                                 self._fmt_importo(-quota_riga, _valuta), avviso)
                 elif penale_pari and fermo:
                     # Busta A4, punto (c): la penale ha usato GIUSTA la quota dell'host. Non manca
                     # niente: non e' un allarme (ferrea 10; diceva «mancano 0,00, da riaprire»).
+                    # Dopo «oltre» apposta: se il confine di `penale_oltre` scivolasse a `<=`, la
+                    # quota zero finirebbe li' e la prova A4_3c lo vede (mutante del 30/10).
                     logger.warning("PENALE COMPENSATA PARI ALLA QUOTA DELL'HOST | RIF: %s | "
                                    "l'arbitro da' all'host %s e una penale li ha gia' usati su "
                                    "questa riga: all'host non spetta altro e alla penale non "
@@ -6059,13 +6067,6 @@ class RouterHTTP:
                                  "questa riga: all'host non spetta altro e alla penale non manca "
                                  "niente%s", _rif_per_registro(rif),
                                  self._fmt_importo(int(quota_host), _valuta), avviso)
-                elif penale_oltre:
-                    logger.error("PENALE COMPENSATA OLTRE LA QUOTA DELL'HOST | RIF: %s | l'arbitro "
-                                 "da' all'host %s ma una penale ne ha gia' usati di piu' su questa "
-                                 "riga: all'host non spetta altro e alla penale mancano %s, da "
-                                 "riaprire a mano%s", _rif_per_registro(rif),
-                                 self._fmt_importo(int(quota_host), _valuta),
-                                 self._fmt_importo(-quota_riga, _valuta), avviso)
                 else:
                     logger.error("BONIFICO DELL'HOST NON RIALLINEATO | RIF: %s | quota decisa "
                                  "dall'arbitro %s: il registro dei bonifici non e' stato riscritto "
@@ -6088,11 +6089,11 @@ class RouterHTTP:
                               + ("la quota dell'host parte da sola; " if riallineato else
                                  "ATTENZIONE: il bonifico dell'host e' gia' partito, NON pagarlo "
                                  "di nuovo; " if partito else
-                                 "una penale ha gia' usato tutta la quota dell'host, che non "
-                                 "riceve altro; " if penale_pari else
                                  "ATTENZIONE: una penale ha gia' usato la quota dell'host, che non "
                                  "riceve altro, e la penale resta in parte da riscuotere; "
                                  if penale_oltre else
+                                 "una penale ha gia' usato tutta la quota dell'host, che non "
+                                 "riceve altro; " if penale_pari else
                                  "all'host non va niente; " if pieno and tolta else
                                  "ATTENZIONE: all'host non va niente, ma la riga del suo bonifico "
                                  "NON e' stata tolta: non pagarla; " if pieno else
