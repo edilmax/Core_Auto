@@ -3051,9 +3051,12 @@ class TestUnBonificoTrattenutoNonPartePiu(_BancoDeiSoldiDelServer):
     chargeback della banca lascia la garanzia 'rilasciato' (`contesta` risponde stato_non_valido)
     e scrive 'trattenuto' SOLO sul payout. Il bonifico guardava solo 'in_transito'/'pagato': chi
     arrivava dopo con un elenco (il giro dei bonifici fermi, la verifica, i dati fiscali) pagava
-    l'host coi soldi che la banca si riprende. Il gemello che deve restare verde (l'arbitro:
-    'trattenuto' con la garanzia 'risolto' paga) e' `TestUnaControversiaApertaFermaISoldi.
-    test_F1_segnala_cancella_arbitro_e_l_host_collegato_RICEVE_la_sua_quota`."""
+    l'host coi soldi che la banca si riprende. Busta A1 di Claude (27/10): 'trattenuto' non paga
+    MAI in automatico, nemmeno con la garanzia 'risolto' (la rotta dell'arbitro riscrive il
+    bonifico 'maturato' prima di pagare; un 'trattenuto' con 'risolto' e' la riga vecchia della
+    voce 144 o un chargeback arrivato dopo la divisione). I gemelli che devono restare verdi
+    (l'arbitro paga la sua quota) sono `test_138a_gemello_MATURATO_con_la_garanzia_RISOLTA_paga_e_tace`
+    e `TestUnaControversiaApertaFermaISoldi.test_F1_segnala_cancella_arbitro_e_l_host_collegato_RICEVE_la_sua_quota`."""
 
     def setUp(self):
         super().setUp()
@@ -3094,10 +3097,12 @@ class TestUnBonificoTrattenutoNonPartePiu(_BancoDeiSoldiDelServer):
                         "IL BONIFICO FERMATO NON LO DICE NESSUNO: manca l'allarme "
                         "payout_trattenuto %r" % (righe,))
 
-    def test_138a_gemello_TRATTENUTO_con_la_garanzia_RISOLTA_paga_e_tace(self):
-        # ferrea 10: l'allarme qui sopra tace quando 'trattenuto' paga davvero, con la garanzia
-        # divisa dall'arbitro. Lo stato si costruisce a mano (D19): la rotta dell'arbitro
-        # riscrive il bonifico 'maturato' prima di pagare e non passerebbe di qui.
+    def test_138a_TRATTENUTO_con_la_garanzia_RISOLTA_la_riga_vecchia_NON_paga_e_grida(self):
+        # Busta A1 di Claude (27/10), colpo 1 (i): la rotta dell'arbitro riscrive il bonifico
+        # 'maturato' con la quota decisa prima di pagare, quindi un 'trattenuto' con la garanzia
+        # 'risolto' nasce solo se quella riscrittura non e' avvenuta (voce 144: `pd.rimuovi` col
+        # ritorno ignorato) e la riga e' quella VECCHIA, piena. Lo stato si costruisce a mano
+        # (D19): il bonifico comanda l'importo del registro, quindi pagare qui pagherebbe il pieno.
         self.connect = _ConnectCheRicorda()
         self.sis.connect = self.connect
         self.pubblica("casa-t5")
@@ -3108,13 +3113,77 @@ class TestUnBonificoTrattenutoNonPartePiu(_BancoDeiSoldiDelServer):
               "PREMESSA: la garanzia doveva poter diventare contestata")
         _deve(self.sis.payout.aggiorna_stato(rif, "trattenuto") is True,
               "PREMESSA: il bonifico doveva fermarsi")
-        _deve(self.sis.garanzia.risolvi(rif, rimborso_ospite_cents=0).get("ok"),
-              "PREMESSA: l'arbitro doveva dare tutto all'host", self.sis.garanzia.stato(rif))
         pieno = int(self.sis.payout.info(rif)["minori"])
+        _deve(self.sis.garanzia.risolvi(rif, rimborso_ospite_cents=pieno // 2).get("ok"),
+              "PREMESSA: l'arbitro doveva dividere", self.sis.garanzia.stato(rif))
+        quota = int(self.sis.garanzia.stato(rif)["host_riceve_cents"])
+        _deve(0 < quota < pieno, "PREMESSA: la quota dell'host e' meno della riga vecchia",
+              quota, pieno)
         with self.ascolta() as righe:
-            self.r._trasferisci_all_host(rif, pieno)
-        self.assertEqual([("acct_banco", pieno, "EUR", rif)], self.connect.bonifici,
-                         "la garanzia divisa dall'arbitro non paga piu' un 'trattenuto'")
+            self.r._trasferisci_all_host(rif, quota)
+        self.assertEqual([], self.connect.bonifici,
+                         "LA RIGA VECCHIA 'trattenuto' E' PARTITA con la garanzia divisa: "
+                         "decisi %d all'host, partiti %r" % (quota, self.connect.bonifici))
+        self.assertTrue(self.errori_con(righe, "BONIFICO FERMATO", "codice: payout_trattenuto"),
+                        "IL BONIFICO FERMATO NON LO DICE NESSUNO: manca l'allarme "
+                        "payout_trattenuto %r" % (righe,))
+
+    def test_138a_CHARGEBACK_DOPO_LA_DIVISIONE_DELL_ARBITRO_il_bonifico_non_parte(self):
+        # Busta A1 di Claude (27/10), colpo 1 (ii): l'arbitro divide (garanzia 'risolto') e il
+        # bonifico della quota e' rifiutato, resta 'maturato'. Poi la banca apre un chargeback:
+        # `contesta` vale solo da 'in_garanzia' (risponde stato_non_valido) e il payout diventa
+        # 'trattenuto'. Chi arriva dopo con l'elenco (giro dei bonifici fermi, verifica, dati
+        # fiscali) non deve pagarlo: la banca puo' riprendersi i soldi dell'ospite.
+        self.pubblica("casa-t6")
+        rif = self.prenota("casa-t6", 10)["riferimento"]
+        s, c = self.paga(rif, "pi_t6")
+        _deve(s == 200, s, c)
+        _deve(self.sis.garanzia.contesta(rif, "non corrisponde").get("ok"),
+              "PREMESSA: la garanzia doveva poter diventare contestata")
+        _deve(self.sis.payout.aggiorna_stato(rif, "trattenuto") is True,
+              "PREMESSA: il bonifico doveva fermarsi")
+        s, c = self.g("POST", "/api/admin/controversia/risolvi",
+                      {"riferimento": rif, "percentuale_ospite": 50}, {"X-Admin-Key": "ak"})
+        _deve(s == 200, "PREMESSA: l'arbitro doveva decidere", s, c)
+        _deve(self.connect.rifiutati and not self.connect.bonifici,
+              "PREMESSA: il bonifico della quota doveva essere RIFIUTATO", self.connect.rifiutati,
+              self.connect.bonifici)
+        _deve(self.sis.garanzia.stato(rif)["stato"] == "risolto", self.sis.garanzia.stato(rif))
+        _deve(self.sis.payout.stato_di(rif) == "maturato", self.sis.payout.stato_di(rif))
+        s, c = self.contestazione("pi_t6", dp="dp_t6")
+        _deve(s == 200, s, c)
+        _deve(self.sis.payout.stato_di(rif) == "trattenuto",
+              "PREMESSA: il chargeback doveva trattenere il bonifico", self.sis.payout.stato_di(rif))
+        with self.ascolta() as righe:
+            self.r._trasferisci_all_host(rif, int(self.sis.payout.info(rif)["minori"]))
+        self.assertEqual([], self.connect.bonifici,
+                         "BONIFICO PARTITO SOTTO CHARGEBACK dopo la divisione dell'arbitro: "
+                         "payout 'trattenuto', garanzia 'risolto', partiti %r"
+                         % (self.connect.bonifici,))
+        self.assertTrue(self.errori_con(righe, "BONIFICO FERMATO", "codice: payout_trattenuto"),
+                        "IL BONIFICO FERMATO NON LO DICE NESSUNO: manca l'allarme "
+                        "payout_trattenuto %r" % (righe,))
+
+    def test_138a_gemello_MATURATO_con_la_garanzia_RISOLTA_paga_e_tace(self):
+        # ferrea 10: l'allarme qui sopra tace quando il bonifico parte davvero. La strada vera
+        # dell'arbitro: riscrive il bonifico 'maturato' con la quota e lo paga.
+        self.connect = _ConnectCheRicorda()
+        self.sis.connect = self.connect
+        self.pubblica("casa-t7")
+        rif = self.prenota("casa-t7", 10)["riferimento"]
+        s, c = self.paga(rif, "pi_t7")
+        _deve(s == 200, s, c)
+        _deve(self.sis.garanzia.contesta(rif, "non corrisponde").get("ok"),
+              "PREMESSA: la garanzia doveva poter diventare contestata")
+        _deve(self.sis.payout.aggiorna_stato(rif, "trattenuto") is True,
+              "PREMESSA: il bonifico doveva fermarsi")
+        with self.ascolta() as righe:
+            s, c = self.g("POST", "/api/admin/controversia/risolvi",
+                          {"riferimento": rif, "percentuale_ospite": 50}, {"X-Admin-Key": "ak"})
+        _deve(s == 200, "PREMESSA: l'arbitro doveva decidere", s, c)
+        quota = int(self.sis.garanzia.stato(rif)["host_riceve_cents"])
+        self.assertEqual([("acct_banco", quota, "EUR", rif)], self.connect.bonifici,
+                         "la quota decisa dall'arbitro non e' partita")
         self.assertEqual([], self.errori_con(righe, "payout_trattenuto"),
                          "FALSO ALLARME: il bonifico e' partito e il registro dice fermato")
 
@@ -4564,6 +4633,865 @@ class TestUnaControversiaApertaFermaISoldi(_BancoDeiSoldiDelServer):
             self._cancella_host(b["riferimento"])
         self.assertTrue(self.errori_con(righe, "CONTROVERSIA NON LETTA",
                                         "|exc_info:OperationalError"), "%r" % (righe,))
+
+    # --- L'ARBITRO (pacco 4, voci 144-147: Kimi K13 2.1-2.4; prove rosse di PROTON P1-QUINQUIES,
+    # 25/10 23:07, nel suo canale) ---
+
+    def test_k13_2_1_split_con_rimuovi_fallito_NON_paga_il_registro_pieno(self):
+        """Voce 144: lo split dell'arbitro riscrive il bonifico togliendo la riga 'trattenuto' e
+        registrandone una 'maturato' con la quota. Se `rimuovi` non toglie niente, la registrazione
+        e' INSERT OR IGNORE e resta la riga vecchia, PIENA: il bonifico paga il registro.
+        Dalla busta A2 (28/10) la riga si riscrive in UNA scrittura: il guasto si mette su tutte
+        e due le strade, cosi' la prova resta rossa sul codice di prima e vale su quello nuovo."""
+        b = self._pagata("casa-k21", 2, "pi_k21")
+        rif = b["riferimento"]
+        self._segnalata(rif)
+        pieno = int(self.sis.payout.info(rif)["minori"])
+        self.sis.payout.rimuovi = lambda *a, **k: False       # l'archivio non toglie la riga
+        self.sis.payout.riallinea_maturato = lambda *a, **k: False   # ne' la riscrive
+        with self.ascolta() as righe:
+            s, c = self._arbitro(rif, 50)
+        _deve(s == 200, "PREMESSA: l'arbitro doveva decidere", s, c)
+        st = self.sis.garanzia.stato(rif)
+        quota = int(st["host_riceve_cents"])
+        _deve(0 < quota < pieno, "PREMESSA: meta' all'host", quota, pieno)
+        pagati = [imp for (_a, imp, _v, r) in self.connect.bonifici if r == rif]
+        self.assertTrue(all(imp <= quota for imp in pagati),
+                        "SPLIT DELL'ARBITRO PAGATO PIENO: l'arbitro ha dato %d all'host e %d "
+                        "all'ospite, partiti %r (registro pieno %d)"
+                        % (quota, int(st["ospite_rimborso_cents"]), pagati, pieno))
+        self.assertTrue(self.errori_con(righe, "BONIFICO DELL'HOST NON RIALLINEATO"),
+                        "IL BONIFICO NON RIALLINEATO NON LO DICE NESSUNO: %r" % (righe,))
+        self.assertNotIn("parte da sola", (c or {}).get("nota", ""),
+                         "LA RISPOSTA PROMETTE CHE LA QUOTA PARTE DA SOLA: %r" % (c,))
+
+    def test_k13_2_2_bonifico_dell_host_ILLEGGIBILE_nell_arbitro_lo_dice(self):
+        """Voce 145: `pd.info` che non legge (fase131 `info` torna None anche su un errore)
+        durante l'arbitro: niente riga da riscrivere, la quota non parte, e la risposta diceva
+        «la quota dell'host parte da sola»."""
+        b = self._pagata("casa-k22", 2, "pi_k22")
+        rif = b["riferimento"]
+        self._segnalata(rif)
+        self.sis.payout.info = lambda *a, **k: None            # l'archivio non risponde
+        with self.ascolta() as righe:
+            s, c = self._arbitro(rif, 50)
+        _deve(s == 200, "PREMESSA: l'arbitro doveva decidere", s, c)
+        self.assertEqual([], [b_ for b_ in self.connect.bonifici if b_[3] == rif],
+                         "un bonifico e' partito senza il registro")
+        self.assertTrue(self.errori_con(righe, "BONIFICO DELL'HOST NON RIALLINEATO"),
+                        "LA QUOTA DELL'HOST E' FERMA E NESSUNO LO DICE: %r" % (righe,))
+        self.assertNotIn("parte da sola", (c or {}).get("nota", ""),
+                         "LA RISPOSTA PROMETTE CHE LA QUOTA PARTE DA SOLA: %r" % (c,))
+
+    def test_k13_2_2_gemello_lo_split_vero_dice_che_parte_e_tace(self):
+        # ferrea 10: con il registro sano l'allarme tace e la risposta dice che la quota parte.
+        b = self._pagata("casa-k22g", 2, "pi_k22g")
+        rif = b["riferimento"]
+        self._segnalata(rif)
+        with self.ascolta() as righe:
+            s, c = self._arbitro(rif, 50)
+        _deve(s == 200, "PREMESSA: l'arbitro doveva decidere", s, c)
+        self.assertEqual([], self.errori_con(righe, "NON RIALLINEATO"),
+                         "FALSO ALLARME sul bonifico riallineato: %r" % (righe,))
+        self.assertIn("parte da sola", (c or {}).get("nota", ""), "%r" % (c,))
+
+    def test_k13_2_3_arbitro_interrotto_dopo_il_CAS_la_riga_di_rimborso_c_e(self):
+        """Voce 146: il CAS dell'arbitro passa, poi il processo si interrompe prima del giornale:
+        nessuna riga di rimborso, e ripetere risponde 409 (la garanzia e' gia' 'risolto')."""
+        b = self._pagata("casa-k23", 2, "pi_k23")
+        rif = b["riferimento"]
+        self._segnalata(rif)
+        vero = self.r._trasferisci_all_host
+
+        def esplode(*a, **k):
+            raise RuntimeError("processo interrotto a meta' dell'arbitrato")
+        self.r._trasferisci_all_host = esplode
+        s1, c1 = self._arbitro(rif, 50)
+        self.r._trasferisci_all_host = vero
+        st = self.sis.garanzia.stato(rif)
+        _deve(st["stato"] == "risolto", "PREMESSA: il CAS dell'arbitro e' passato", st, s1, c1)
+        dovuto = int(st["ospite_rimborso_cents"])
+        _deve(dovuto > 0, "PREMESSA: all'ospite spetta qualcosa", st)
+        s2, c2 = self._arbitro(rif, 50)                       # l'admin ripete lo stesso gesto
+        righe = [int(m["importo_cents"]) for m in self.sis.finanza.movimenti(rif)
+                 if m.get("tipo") == "rimborso"]
+        self.assertEqual([dovuto], righe,
+                         "DECISIONE DELL'ARBITRO SENZA RIGA DI RIMBORSO: l'ospite aspetta %d e la "
+                         "lista dei rimborsi non lo sa (primo gesto %s %r, secondo %s %r)"
+                         % (dovuto, s1, c1, s2, c2))
+
+    def test_k13_2_4_arbitro_col_giornale_che_non_scrive_GRIDA(self):
+        """Voce 147: il giornale «accetta» e non scrive, e la rotta risponde 200 «decisione
+        registrata» senza la verifica che la cancellazione dell'ospite fa."""
+        b = self._pagata("casa-k24", 2, "pi_k24")
+        rif = b["riferimento"]
+        self._segnalata(rif)
+        self.sis.finanza.movimento = lambda **k: None          # il giornale «accetta» e non scrive
+        with self.ascolta() as righe:
+            s, c = self._arbitro(rif, 50)
+        _deve(s == 200, "PREMESSA: la decisione passa", s, c)
+        self.assertTrue(self.errori_con(righe, "RIMBORSO DOVUTO NON REGISTRATO"),
+                        "DECISIONE REGISTRATA SOLO A PAROLE: risposta %r, nel giornale niente e nel "
+                        "registro nessun ERROR: %r" % (c, righe))
+
+    def test_k13_2_4_gemello_col_giornale_sano_TACE(self):
+        # ferrea 10: la riga atterra, nessun allarme.
+        b = self._pagata("casa-k24g", 2, "pi_k24g")
+        rif = b["riferimento"]
+        self._segnalata(rif)
+        with self.ascolta() as righe:
+            s, c = self._arbitro(rif, 50)
+        _deve(s == 200, "PREMESSA: la decisione passa", s, c)
+        self.assertEqual([], self.errori_con(righe, "RIMBORSO DOVUTO NON REGISTRATO"),
+                         "FALSO ALLARME: la riga del rimborso c'e' %r" % (righe,))
+
+    # --- ATTACCO A2 DI PROTON al pacco 4 (busta A2 del 27/10, prove rosse del 28/10) ---
+
+    def test_A2_1_split_con_registra_maturato_fallito_la_riga_del_bonifico_NON_sparisce(self):
+        """Colpo 1: lo split toglie la riga 'trattenuto' (`rimuovi` riesce) e poi
+        `registra_maturato` fallisce (fase131: sull'errore WARNING e False). La riga sparisce: il
+        giro orario legge solo i 'maturato', «Lo pago io a mano» legge il registro, il pannello
+        dell'host non mostra niente. La quota decisa resta solo nella garanzia 'risolto'."""
+        b = self._pagata("casa-a21", 2, "pi_a21")
+        rif = b["riferimento"]
+        self._segnalata(rif)
+        self.sis.payout.registra_maturato = lambda *a, **k: False   # l'archivio non scrive
+        s, c = self._arbitro(rif, 50)
+        _deve(s == 200, "PREMESSA: l'arbitro doveva decidere", s, c)
+        quota = int(self.sis.garanzia.stato(rif)["host_riceve_cents"])
+        _deve(quota > 0, "PREMESSA: meta' all'host", quota)
+        self.assertIsNotNone(self.sis.payout.info(rif),
+                             "LA RIGA DEL BONIFICO E' SPARITA: l'arbitro ha deciso %d per l'host e "
+                             "nel registro dei bonifici non c'e' piu' niente da pagare (%r)"
+                             % (quota, c))
+
+    def test_A2_1_gemello_la_scrittura_sola_che_fallisce_lascia_la_riga_ferma_e_grida(self):
+        """Colpo 1 dal lato della riparazione: la quota si scrive in UNA scrittura; se fallisce
+        la riga resta quella fermata dalla disputa ('trattenuto', piena), non parte niente e un
+        ERROR lo dice. Rossa se qualcuno rimette un `rimuovi` prima della scrittura."""
+        b = self._pagata("casa-a21g", 2, "pi_a21g")
+        rif = b["riferimento"]
+        self._segnalata(rif)
+        prima = self.sis.payout.info(rif) or {}
+        _deve(prima.get("stato") == "trattenuto", "PREMESSA: la disputa ferma la riga", prima)
+        self.sis.payout.riallinea_maturato = lambda *a, **k: False   # l'archivio non scrive
+        with self.ascolta() as righe:
+            s, c = self._arbitro(rif, 50)
+        _deve(s == 200, "PREMESSA: l'arbitro doveva decidere", s, c)
+        dopo = self.sis.payout.info(rif) or {}
+        self.assertEqual((prima.get("stato"), prima.get("minori")),
+                         (dopo.get("stato"), dopo.get("minori")),
+                         "LA RIGA DEL BONIFICO E' CAMBIATA SENZA LA SCRITTURA DELLA QUOTA: %r -> %r"
+                         % (prima, dopo))
+        self.assertEqual([], [b_ for b_ in self.connect.bonifici if b_[3] == rif],
+                         "un bonifico e' partito senza la quota scritta")
+        self.assertTrue(self.errori_con(righe, "BONIFICO DELL'HOST NON RIALLINEATO"),
+                        "LA QUOTA DELL'HOST E' FERMA E NESSUNO LO DICE: %r" % (righe,))
+
+    def test_A2_2_split_riuscito_con_la_verifica_che_non_legge_la_nota_NON_dice_che_non_parte(self):
+        """Colpo 2: lo split riscrive la riga 'maturato' con la quota, poi la lettura di verifica
+        fallisce una volta (fase131 `info` sull'errore torna None). La risposta dice «la quota
+        dell'host NON parte: la paga una persona», ma la riga e' giusta e la garanzia e'
+        'risolto': il giro orario la paga da solo. Chi crede alla nota e paga dalla banca paga
+        l'host due volte."""
+        b = self._pagata("casa-a22", 2, "pi_a22")
+        rif = b["riferimento"]
+        self._segnalata(rif)
+        pd = self.sis.payout
+        # la scrittura della quota: la coppia vecchia (`registra_maturato`) o quella sola nuova
+        # (`riallinea_maturato`); la prova guarda le due, cosi' e' rossa sul codice di prima
+        scritture = [n for n in ("registra_maturato", "riallinea_maturato") if hasattr(pd, n)]
+        veri = {n: getattr(pd, n) for n in scritture}
+        vero_info = pd.info
+        dopo_la_scrittura = []
+
+        def scrive(nome):
+            def _f(*a, **k):
+                esito = veri[nome](*a, **k)
+                dopo_la_scrittura.append(True)
+                return esito
+            return _f
+
+        def info(*a, **k):
+            if len(dopo_la_scrittura) == 1:              # la prima lettura dopo la scrittura
+                dopo_la_scrittura.append(False)
+                return None                              # fase131 `info` su un errore
+            return vero_info(*a, **k)
+        for n in scritture:
+            setattr(pd, n, scrive(n))
+        pd.info = info
+        s, c = self._arbitro(rif, 50)
+        for n in scritture:
+            setattr(pd, n, veri[n])
+        pd.info = vero_info
+        _deve(s == 200, "PREMESSA: l'arbitro doveva decidere", s, c)
+        _deve(dopo_la_scrittura[:1] == [True], "PREMESSA: la quota doveva essere scritta",
+              dopo_la_scrittura)
+        quota = int(self.sis.garanzia.stato(rif)["host_riceve_cents"])
+        riga = pd.info(rif) or {}
+        _deve((riga.get("stato"), int(riga.get("minori") or 0)) == ("maturato", quota),
+              "PREMESSA: la riga doveva essere riscritta con la quota", riga, quota)
+        self.r._ritenta_bonifici_fermi()
+        _deve([b_[1] for b_ in self.connect.bonifici if b_[3] == rif] == [quota],
+              "PREMESSA: il giro orario doveva pagare la quota da solo", self.connect.bonifici)
+        self.assertNotIn("NON parte", (c or {}).get("nota", ""),
+                         "LA RISPOSTA DICE CHE LA QUOTA NON PARTE E CHE LA PAGA UNA PERSONA, e il "
+                         "giro orario ha appena pagato %d all'host: chi la paga dalla banca la paga "
+                         "due volte (%r)" % (quota, c))
+
+    def test_A3_1_riga_ancora_in_attesa_all_arbitro_l_incasso_dopo_NON_paga_l_host_pieno(self):
+        """Busta A3, colpo 1: la riga del bonifico e' ancora 'in_attesa' quando l'arbitro decide
+        (l'incasso non e' ancora scritto: blocco sulla carta incassato tardi, o il primo passo del
+        pagamento morto a meta' e sanato dal webhook ripetuto; e il passo della contestazione che
+        la ferma, `aggiorna_stato(..., 'trattenuto')`, ha detto False senza che nessuno guardi).
+        Con `rimuovi` + `registra_maturato` la riga diventava 'maturato' con la quota; con la
+        scrittura sola resta 'in_attesa' PIENA, e l'incasso che arriva dopo la porta a 'maturato'
+        piena: la garanzia e' 'risolto' e il bonifico paga il registro, cioe' anche la parte che
+        l'arbitro ha deciso di restituire all'ospite."""
+        b = self._pagata("casa-a31", 2, "pi_a31")
+        rif = b["riferimento"]
+        pd = self.sis.payout
+        riga = pd.info(rif) or {}
+        _deve(riga.get("stato") == "maturato", "PREMESSA: prenotazione pagata", riga)
+        _deve(pd.rimuovi(rif) and pd.registra_in_attesa(rif, riga["host_id"], riga["minori"],
+                                                         riga["valuta"]),
+              "PREMESSA: la riga torna 'in_attesa' (incasso non ancora scritto)")
+        _deve(self.sis.garanzia.contesta(rif, "non corrisponde").get("ok"),
+              "PREMESSA: la garanzia diventa contestata (il bonifico non e' stato fermato)")
+        s, c = self._arbitro(rif, 50)
+        _deve(s == 200, "PREMESSA: l'arbitro doveva decidere", s, c)
+        quota = int(self.sis.garanzia.stato(rif)["host_riceve_cents"])
+        _deve(0 < quota < int(riga["minori"]), "PREMESSA: meta' all'host", quota, riga)
+        self.r._riasserisci_incasso(self.sis.pagamenti_pendenti.info(rif), rif)   # l'incasso
+        self.r._ritenta_bonifici_fermi()                                          # il giro orario
+        pagati = [imp for (_a, imp, _v, r) in self.connect.bonifici if r == rif]
+        self.assertTrue(all(imp <= quota for imp in pagati),
+                        "L'HOST E' STATO PAGATO PIENO DOPO LA DIVISIONE: l'arbitro gli ha dato %d, "
+                        "partiti %r (registro %r, risposta %r)"
+                        % (quota, pagati, pd.info(rif), c))
+
+    def test_A4_1_la_penale_compensata_sulla_riga_in_controversia_NON_torna_all_host(self):
+        """Busta A3, colpo 3 (a): la riga del bonifico e' ancora 'maturato' durante la
+        controversia (il 'trattenuto' della contestazione non e' stato scritto), e la
+        compensazione di una penale dello stesso host la riduce (fase177 legge i 'maturato' e
+        scrive `imposta_importo(..., solo_se_stato='maturato')`). Poi l'arbitro scrive la quota
+        come importo ASSOLUTO: la parte gia' usata per la penale torna all'host, e la penale
+        risulta compensata senza esserlo. All'host spetta la quota MENO quello che la riga ha
+        gia' pagato; se l'arbitro non sa riscriverla, si ferma, ma non paga di piu'."""
+        b = self._pagata("casa-a41", 2, "pi_a41")
+        rif = b["riferimento"]
+        pd = self.sis.payout
+        pieno = int((pd.info(rif) or {}).get("minori") or 0)
+        _deve(self.sis.garanzia.contesta(rif, "non corrisponde").get("ok"),
+              "PREMESSA: la garanzia diventa contestata (il bonifico non e' stato fermato)")
+        _deve(pd.stato_di(rif) == "maturato", "PREMESSA: la riga resta 'maturato'", pd.info(rif))
+        compensato = 3000
+        _deve(pd.imposta_importo(rif, pieno - compensato, solo_se_stato="maturato") is True,
+              "PREMESSA: la compensazione della penale toglie %d dalla riga" % compensato)
+        s, c = self._arbitro(rif, 50)
+        _deve(s == 200, "PREMESSA: l'arbitro doveva decidere", s, c)
+        quota = int(self.sis.garanzia.stato(rif)["host_riceve_cents"])
+        _deve(compensato < quota < pieno, "PREMESSA: meta' all'host", quota, pieno)
+        self.r._ritenta_bonifici_fermi()
+        pagati = [imp for (_a, imp, _v, r) in self.connect.bonifici if r == rif]
+        riga = pd.info(rif) or {}
+        ancora = int(riga.get("minori") or 0) if riga.get("stato") == "maturato" else 0
+        self.assertLessEqual(sum(pagati) + ancora, quota - compensato,
+                             "LA PENALE COMPENSATA E' TORNATA ALL'HOST: quota %d, gia' usati %d per "
+                             "la penale, partiti %r e ancora da pagare %d (registro %r, risposta %r)"
+                             % (quota, compensato, pagati, ancora, riga, c))
+
+    def test_A4_2_il_trattenuto_NON_scritto_alla_contestazione_si_dice(self):
+        """Busta A3, colpo 1 (b): `_garanzia_contesta` chiama `aggiorna_stato(rif,
+        'trattenuto')` e non guarda il ritorno (fase131 sull'errore del database fa WARNING e
+        torna False, non solleva). Il bonifico resta pagabile durante la controversia e il
+        registro scrive lo stesso «il bonifico all'host e' trattenuto». La prova confronta la
+        stessa contestazione sana e col 'trattenuto' che fallisce: gli ERROR devono essere
+        diversi (qualunque sia la frase scelta per dirlo)."""
+        def errori_della_contestazione(slug, pi, trattenuto_ok):
+            b = self._pagata(slug, 2, pi)
+            rif = b["riferimento"]
+            vero = self.sis.payout.aggiorna_stato
+            if not trattenuto_ok:
+                self.sis.payout.aggiorna_stato = lambda *a, **k: False   # l'archivio non scrive
+            try:
+                with self.ascolta() as righe:
+                    s, c = self._all_istante(b, -3600, "/api/garanzia/contesta")
+            finally:
+                self.sis.payout.aggiorna_stato = vero
+            _deve(s == 200 and self.sis.garanzia.stato(rif)["stato"] == "contestato",
+                  "PREMESSA: la contestazione doveva passare", s, c)
+            atteso = "trattenuto" if trattenuto_ok else "maturato"
+            _deve(self.sis.payout.stato_di(rif) == atteso,
+                  "PREMESSA: il bonifico doveva essere '%s'" % atteso, self.sis.payout.info(rif))
+            return sorted(r.replace(rif, "<RIF>") for r in self.errori_con(righe))
+        sana = errori_della_contestazione("casa-a42s", "pi_a42s", True)
+        _deve(sana, "PREMESSA: la contestazione sana scrive il suo ERROR", sana)
+        guasta = errori_della_contestazione("casa-a42g", "pi_a42g", False)
+        self.assertNotEqual(sana, guasta,
+                            "IL BONIFICO NON E' STATO FERMATO E NESSUNO LO DICE: col 'trattenuto' non "
+                            "scritto il registro scrive gli stessi ERROR della contestazione sana "
+                            "(che dicono pure che il bonifico e' trattenuto): %r" % (guasta,))
+
+    # --- Le gemelle della A4_1 (28/10): la stessa causa (l'arbitro scrive la quota sopra una riga
+    # che una penale ha gia' ridotto) da altre tre strade, piu' il ramo di difesa da solo (D19) ---
+
+    def _compensa(self, rif, togli):
+        # l'effetto della compensazione di una penale sulla riga, come lo scrive fase177
+        # (`imposta_importo` solo se e' ancora 'maturato'): la prova costruisce lo stato (D19)
+        pd = self.sis.payout
+        resta = int(pd.info(rif)["minori"]) - togli
+        _deve(pd.imposta_importo(rif, resta, solo_se_stato="maturato") is True,
+              "PREMESSA: la compensazione della penale toglie %d dalla riga" % togli)
+
+    def _pagati_e_ancora(self, rif):
+        self.r._ritenta_bonifici_fermi()                                          # il giro orario
+        pagati = [imp for (_a, imp, _v, r) in self.connect.bonifici if r == rif]
+        riga = self.sis.payout.info(rif) or {}
+        ancora = int(riga.get("minori") or 0) if riga.get("stato") == "maturato" else 0
+        return pagati, ancora, riga
+
+    def test_A4_1b_la_penale_compensata_PRIMA_della_contestazione_NON_torna_all_host(self):
+        """La strada di tutti i giorni della A4_1: durante la garanzia la riga e' 'maturato' e la
+        compensazione di una penale dello stesso host la riduce (fase177 legge i 'maturato'
+        dell'host, anche quelli ancora in garanzia); poi l'ospite contesta (la riga diventa
+        'trattenuto') e l'arbitro divide. All'host va la quota MENO la penale, al centesimo."""
+        b = self._pagata("casa-a41b", 2, "pi_a41b")
+        rif = b["riferimento"]
+        compensato = 3000
+        self._compensa(rif, compensato)
+        self._segnalata(rif)
+        with self.ascolta() as righe:
+            s, c = self._arbitro(rif, 50)
+        _deve(s == 200, "PREMESSA: l'arbitro doveva decidere", s, c)
+        quota = int(self.sis.garanzia.stato(rif)["host_riceve_cents"])
+        _deve(compensato < quota, "PREMESSA: la penale sta dentro la quota", quota)
+        pagati, ancora, riga = self._pagati_e_ancora(rif)
+        self.assertEqual(quota - compensato, sum(pagati) + ancora,
+                         "ALL'HOST NON E' ANDATA LA QUOTA MENO LA PENALE GIA' USATA: quota %d, penale "
+                         "%d, partiti %r e ancora da pagare %d (registro %r, risposta %r)"
+                         % (quota, compensato, pagati, ancora, riga, c))
+        self.assertEqual([], self.errori_con(righe, "NON RIALLINEATO"),
+                         "FALSO ALLARME: la riga e' stata riscritta %r" % (righe,))
+
+    def test_A4_1c_la_penale_compensata_OLTRE_la_quota_non_paga_niente_e_lo_dice(self):
+        """La penale ha gia' usato piu' della quota che l'arbitro da' all'host (riga ancora
+        'maturato' durante la controversia, come nella A4_1). All'host non spetta altro: non
+        parte niente, nemmeno dal giro orario, e un ERROR dice che la penale e' scoperta."""
+        b = self._pagata("casa-a41c", 2, "pi_a41c")
+        rif = b["riferimento"]
+        pieno = int(self.sis.payout.info(rif)["minori"])
+        _deve(self.sis.garanzia.contesta(rif, "non corrisponde").get("ok"),
+              "PREMESSA: la garanzia diventa contestata (il bonifico non e' stato fermato)")
+        compensato = pieno - pieno // 4                  # tre quarti alla penale, meta' all'host
+        self._compensa(rif, compensato)
+        with self.ascolta() as righe:
+            s, c = self._arbitro(rif, 50)
+        _deve(s == 200, "PREMESSA: l'arbitro doveva decidere", s, c)
+        quota = int(self.sis.garanzia.stato(rif)["host_riceve_cents"])
+        _deve(0 < quota < compensato, "PREMESSA: la penale supera la quota", quota, compensato)
+        pagati, ancora, riga = self._pagati_e_ancora(rif)
+        self.assertEqual(([], 0), (pagati, ancora),
+                         "LA PENALE HA GIA' PRESO PIU' DELLA QUOTA E L'HOST E' STATO PAGATO LO STESSO: "
+                         "quota %d, penale %d, partiti %r, ancora da pagare %d (registro %r)"
+                         % (quota, compensato, pagati, ancora, riga))
+        manca = "mancano " + self.r._fmt_importo(compensato - quota, "EUR")
+        self.assertTrue(self.errori_con(righe, "OLTRE LA QUOTA", manca),
+                        "LA PENALE SCOPERTA NON LA DICE NESSUNO (o non dice quanto manca, %r): %r"
+                        % (manca, righe))
+        self.assertNotIn("parte da sola", (c or {}).get("nota", ""), "%r" % (c,))
+
+    def test_A4_1d_la_penale_che_arriva_fra_la_lettura_e_la_scrittura_NON_torna_all_host(self):
+        """La gara della A4_1: l'arbitro legge la riga ('maturato', la contestazione non l'ha
+        fermata) e, prima che scriva la quota, una compensazione di penale la riduce. La quota
+        calcolata sulla riga letta non si scrive sopra quella cambiata: non parte piu' di quanto
+        spetta, e un ERROR lo dice."""
+        b = self._pagata("casa-a41d", 2, "pi_a41d")
+        rif = b["riferimento"]
+        pd = self.sis.payout
+        _deve(self.sis.garanzia.contesta(rif, "non corrisponde").get("ok"),
+              "PREMESSA: la garanzia diventa contestata (il bonifico non e' stato fermato)")
+        compensato = 3000
+        vera = pd.riallinea_maturato
+        gara = []
+
+        def la_penale_arriva_prima(*a, **k):
+            if not gara:
+                gara.append(True)
+                self._compensa(rif, compensato)
+            return vera(*a, **k)
+        pd.riallinea_maturato = la_penale_arriva_prima
+        try:
+            with self.ascolta() as righe:
+                s, c = self._arbitro(rif, 50)
+        finally:
+            pd.riallinea_maturato = vera
+        _deve(s == 200 and gara == [True], "PREMESSA: l'arbitro doveva decidere e scrivere", s, c)
+        quota = int(self.sis.garanzia.stato(rif)["host_riceve_cents"])
+        pagati, ancora, riga = self._pagati_e_ancora(rif)
+        self.assertLessEqual(sum(pagati) + ancora, quota - compensato,
+                             "LA PENALE ARRIVATA IN MEZZO E' TORNATA ALL'HOST: quota %d, penale %d, "
+                             "partiti %r e ancora da pagare %d (registro %r, risposta %r)"
+                             % (quota, compensato, pagati, ancora, riga, c))
+        self.assertTrue(self.errori_con(righe, "BONIFICO DELL'HOST NON RIALLINEATO"),
+                        "LA QUOTA FERMA NON LA DICE NESSUNO: %r" % (righe,))
+
+    def test_A4_1e_la_riga_che_resta_pagabile_dopo_la_quota_non_scritta_si_dice(self):
+        """Il ramo di difesa della A4_1 da solo (D19): la quota non si scrive e la riga e' ancora
+        'maturato'. Il giro orario paga ogni 'maturato' con la garanzia 'risolto', quindi la riga
+        si ferma; se nemmeno il fermo riesce, l'ERROR lo dice. Gemella (ferrea 10): con la riga
+        gia' 'trattenuto' quella frase tace."""
+        def errori(slug, pi, fermata_dalla_contestazione, fermo_ok):
+            b = self._pagata(slug, 2, pi)
+            rif = b["riferimento"]
+            pd = self.sis.payout
+            if fermata_dalla_contestazione:
+                self._segnalata(rif)
+            else:
+                _deve(self.sis.garanzia.contesta(rif, "non corrisponde").get("ok"),
+                      "PREMESSA: la garanzia diventa contestata")
+            veri = (pd.riallinea_maturato, pd.aggiorna_stato)
+            pd.riallinea_maturato = lambda *a, **k: False          # l'archivio non scrive
+            if not fermo_ok:
+                pd.aggiorna_stato = lambda *a, **k: False          # ne' ferma la riga
+            try:
+                with self.ascolta() as righe:
+                    s, c = self._arbitro(rif, 50)
+            finally:
+                pd.riallinea_maturato, pd.aggiorna_stato = veri
+            _deve(s == 200, "PREMESSA: l'arbitro doveva decidere", s, c)
+            return rif, self.errori_con(righe, "BONIFICO DELL'HOST NON RIALLINEATO")
+        rif, err = errori("casa-a41e1", "pi_a41e1", False, True)
+        self.assertEqual("trattenuto", self.sis.payout.stato_di(rif),
+                         "LA RIGA CON LA QUOTA NON SCRITTA E' RIMASTA PAGABILE: %r"
+                         % (self.sis.payout.info(rif),))
+        self.assertTrue(err and not any("NON e' stata fermata" in e for e in err), err)
+        _rif, err = errori("casa-a41e2", "pi_a41e2", False, False)
+        self.assertTrue(any("NON e' stata fermata" in e for e in err),
+                        "LA RIGA PAGABILE CON LA QUOTA NON SCRITTA NON LA DICE NESSUNO: %r" % (err,))
+        _rif, err = errori("casa-a41e3", "pi_a41e3", True, False)
+        self.assertTrue(err and not any("NON e' stata fermata" in e for e in err),
+                        "FALSO ALLARME: la riga era gia' ferma dalla contestazione %r" % (err,))
+
+    # --- Busta A4 di Proton (29/10), punti (a) e (c): la penale che usa TUTTA la riga, e quella
+    # che usa GIUSTA la quota dell'host ---
+
+    def test_A4_3a_la_penale_che_usa_TUTTA_la_riga_NON_si_paga_a_mano(self):
+        """Punto (a): la penale di un'altra cancellazione dello stesso host si prende TUTTA la riga
+        del bonifico, ancora 'maturato' durante la controversia, e fase177 la TOGLIE (`rimuovi`,
+        non `imposta_importo`). All'arbitro la riga non c'e': il registro diceva «NON RIALLINEATO
+        ... la paga una persona» con la quota intera, piu' «la riga NON e' stata fermata» su una
+        riga che non esiste, e chi lo segue paga all'host soldi che la penale ha gia' usato. E' la
+        penale oltre la quota (A4_1c): non parte niente e l'ERROR dice quanto manca alla penale.
+        La penale e' quella vera di fase177: la sua traccia nel giornale e' cio' che distingue
+        questa riga da quella illeggibile della k13_2_2, che resta «la paga una persona»."""
+        b = self._pagata("casa-a43a", 2, "pi_a43a")
+        rif = b["riferimento"]
+        pd = self.sis.payout
+        riga = pd.info(rif)
+        pieno = int(riga["minori"])
+        _deve(self.sis.garanzia.contesta(rif, "non corrisponde").get("ok"),
+              "PREMESSA: la garanzia diventa contestata (il bonifico non e' stato fermato)")
+        out = self.sis.finanza.processa_penale(
+            riferimento="pen-a43a", host_id=riga["host_id"], penale_cents=pieno,
+            valuta=riga["valuta"], payout=pd)
+        _deve(out and out["offset_cents"] == pieno and pd.info(rif) is None,
+              "PREMESSA: la penale usa tutta la riga e fase177 la toglie", out, pd.info(rif))
+        with self.ascolta() as righe:
+            s, c = self._arbitro(rif, 50)
+        _deve(s == 200, "PREMESSA: l'arbitro doveva decidere", s, c)
+        quota = int(self.sis.garanzia.stato(rif)["host_riceve_cents"])
+        _deve(0 < quota < pieno, "PREMESSA: meta' all'host", quota, pieno)
+        pagati, ancora, dopo = self._pagati_e_ancora(rif)
+        self.assertEqual(([], 0), (pagati, ancora),
+                         "LA PENALE HA PRESO TUTTA LA RIGA E L'HOST E' STATO PAGATO LO STESSO: "
+                         "partiti %r, ancora da pagare %d (registro %r)" % (pagati, ancora, dopo))
+        manca = "mancano " + self.r._fmt_importo(pieno - quota, riga["valuta"])
+        self.assertTrue(self.errori_con(righe, "OLTRE LA QUOTA", manca),
+                        "LA PENALE CHE HA USATO TUTTA LA RIGA NON E' DETTA PENALE OLTRE LA QUOTA "
+                        "(o non dice quanto manca, %r): %r" % (manca, righe))
+        self.assertEqual([], self.errori_con(righe, "la paga una persona"),
+                         "IL REGISTRO DICE DI PAGARE A MANO UNA QUOTA CHE LA PENALE HA GIA' USATO")
+        self.assertEqual([], [r for r in righe if "NON e' stata fermata" in r],
+                         "AVVISO FALSO: non c'e' nessuna riga da fermare %r" % (righe,))
+        self.assertNotIn("la paga una persona", (c or {}).get("nota", ""), "%r" % (c,))
+
+    def test_A4_3c_la_penale_che_usa_GIUSTA_la_quota_non_e_un_allarme(self):
+        """Punto (c): la penale ha usato proprio la quota che l'arbitro da' all'host. All'host non
+        spetta altro e alla penale non manca niente, ma il registro diceva «alla penale mancano
+        0,00 EUR, da riaprire a mano» e la risposta «la penale resta in parte da riscuotere»
+        (ferrea 10: un falso allarme insegna a ignorare quelli veri). Non parte niente e nessun
+        ERROR sulla penale."""
+        b = self._pagata("casa-a43c", 2, "pi_a43c")
+        rif = b["riferimento"]
+        pieno = int(self.sis.payout.info(rif)["minori"])
+        _deve(self.sis.garanzia.contesta(rif, "non corrisponde").get("ok"),
+              "PREMESSA: la garanzia diventa contestata (il bonifico non e' stato fermato)")
+        quota = pieno - int(pieno * 50 / 100)            # quello che l'arbitro dara' all'host
+        self._compensa(rif, quota)
+        pd = self.sis.payout
+        vera, scritte = pd.riallinea_maturato, []
+
+        def conta_e_scrive(r, minori, **k):      # mutante del 30/10: `quota_riga >= 0`
+            scritte.append(minori)
+            return vera(r, minori, **k)
+        pd.riallinea_maturato = conta_e_scrive
+        try:
+            with self.ascolta() as righe:
+                s, c = self._arbitro(rif, 50)
+        finally:
+            pd.riallinea_maturato = vera
+        _deve(s == 200 and int(self.sis.garanzia.stato(rif)["host_riceve_cents"]) == quota,
+              "PREMESSA: la penale e' proprio la quota dell'host", s, c)
+        self.assertEqual([], [m for m in scritte if m <= 0],
+                         "L'ARBITRO CHIEDE DI SCRIVERE UNA QUOTA ZERO NEL REGISTRO: lo ferma solo "
+                         "la guardia di fase131, la sua difesa non c'e' (D19)")
+        pagati, ancora, dopo = self._pagati_e_ancora(rif)
+        self.assertEqual(([], 0), (pagati, ancora),
+                         "LA PENALE HA USATO LA QUOTA E L'HOST E' STATO PAGATO LO STESSO: partiti "
+                         "%r, ancora da pagare %d (registro %r)" % (pagati, ancora, dopo))
+        self.assertEqual([], self.errori_con(righe, "PENALE"),
+                         "FALSO ALLARME: alla penale non manca niente %r" % (righe,))
+        self.assertEqual([], self.errori_con(righe, "NON RIALLINEATO"), "%r" % (righe,))
+        self.assertTrue(self.avvisi_con(righe, "PARI ALLA QUOTA"),
+                        "LA DECISIONE NON LASCIA TRACCIA NEL REGISTRO: %r" % (righe,))
+        nota = (c or {}).get("nota", "")
+        self.assertTrue("non riceve altro" in nota and "da riscuotere" not in nota
+                        and "la paga una persona" not in nota, "%r" % (c,))
+
+    def test_A4_3d_la_penale_pari_alla_quota_con_la_riga_NON_fermata_lo_grida(self):
+        """Il ramo di difesa della (c) da solo (D19): la penale ha usato giusta la quota e sulla
+        riga resta solo la parte dell'ospite, ma il fermo non riesce: il giro orario la pagherebbe
+        all'host. Qui l'ERROR serve, e dice che la riga non e' ferma."""
+        b = self._pagata("casa-a43d", 2, "pi_a43d")
+        rif = b["riferimento"]
+        pd = self.sis.payout
+        pieno = int(pd.info(rif)["minori"])
+        _deve(self.sis.garanzia.contesta(rif, "non corrisponde").get("ok"),
+              "PREMESSA: la garanzia diventa contestata (il bonifico non e' stato fermato)")
+        self._compensa(rif, pieno - int(pieno * 50 / 100))
+        vero = pd.aggiorna_stato
+        pd.aggiorna_stato = lambda *a, **k: False                  # l'archivio non ferma
+        try:
+            with self.ascolta() as righe:
+                s, c = self._arbitro(rif, 50)
+        finally:
+            pd.aggiorna_stato = vero
+        _deve(s == 200 and pd.stato_di(rif) == "maturato",
+              "PREMESSA: l'arbitro decide e la riga resta pagabile", s, c, pd.info(rif))
+        self.assertTrue(self.errori_con(righe, "PARI ALLA QUOTA", "NON e' stata fermata"),
+                        "LA RIGA RIMASTA PAGABILE NON LA DICE NESSUNO: %r" % (righe,))
+
+    def test_A4_3e_col_giornale_illeggibile_la_riga_tolta_resta_da_controllare(self):
+        """La lettura nuova del giornale che esplode (D19): l'arbitro non sa se una penale ha usato
+        la riga. Decide lo stesso (la garanzia e' gia' 'risolto': un 500 qui lascerebbe la
+        decisione senza risposta), non paga niente, e resta la strada prudente della k13_2_2:
+        «la paga una persona dopo il controllo», col WARNING che dice perche' non lo sa."""
+        b = self._pagata("casa-a43e", 2, "pi_a43e")
+        rif = b["riferimento"]
+        pd = self.sis.payout
+        riga = pd.info(rif)
+        _deve(self.sis.garanzia.contesta(rif, "non corrisponde").get("ok"),
+              "PREMESSA: la garanzia diventa contestata (il bonifico non e' stato fermato)")
+        self.sis.finanza.processa_penale(
+            riferimento="pen-a43e", host_id=riga["host_id"], penale_cents=int(riga["minori"]),
+            valuta=riga["valuta"], payout=pd)
+        _deve(pd.info(rif) is None, "PREMESSA: la penale ha tolto la riga", pd.info(rif))
+
+        def esplode(*a, **k):
+            raise sqlite3.OperationalError("database is locked")
+        with mock.patch.object(self.sis.finanza, "compensato_su_payout", esplode):
+            with self.ascolta() as righe:
+                s, c = self._arbitro(rif, 50)
+        self.assertEqual(200, s, "l'arbitro senza la lettura del giornale non risponde: %r" % (c,))
+        self.assertEqual([], [b_ for b_ in self.connect.bonifici if b_[3] == rif])
+        self.assertTrue(self.avvisi_con(righe, "giornale illeggibile", "exc_info:OperationalError"),
+                        "IL WARNING NON PORTA LA TRACCIA DELL'ERRORE: %r" % (righe,))
+        self.assertTrue(self.errori_con(righe, "NON RIALLINEATO", "la paga una persona"),
+                        "%r" % (righe,))
+
+    def test_A4_3b_il_giro_orario_in_mezzo_all_arbitro_NON_paga_la_riga_piena(self):
+        """Punto (b), la gara: l'arbitro non teneva `_BONIFICI_LOCK`. La riga e' ancora 'maturato'
+        (la contestazione non l'ha fermata, A4_2), `g.risolvi` porta la garanzia a 'risolto', e il
+        giro orario (paga ogni 'maturato' con la garanzia chiusa) legge la riga PIENA prima che
+        l'arbitro la riscriva con la quota: partiva tutto all'host, e la risposta diceva «parte da
+        sola». Col lucchetto il giro aspetta l'arbitro e trova la riga gia' riscritta e pagata.
+        Stessa forma della gara della voce 142 (`test_142_rimborso_admin_e_bonifico_insieme`)."""
+        b = self._pagata("casa-a43b", 2, "pi_a43b")
+        rif = b["riferimento"]
+        pd = self.sis.payout
+        pieno = int(pd.info(rif)["minori"])
+        _deve(self.sis.garanzia.contesta(rif, "non corrisponde").get("ok")
+              and pd.stato_di(rif) == "maturato",
+              "PREMESSA: garanzia contestata, bonifico non fermato", pd.info(rif))
+        letto, fatto = threading.Event(), threading.Event()
+        filo = threading.Thread(target=self.r._ritenta_bonifici_fermi)
+        vero_risolvi = self.sis.garanzia.risolvi
+        vero_addebito = self.r._addebito_del_pagamento
+        tenuto = []
+
+        def risolvi_col_giro_in_mezzo(*a, **k):        # subito DOPO la decisione dell'arbitro
+            # T1 della revisione del pacco 3: la gara da sola dipende dall'attesa di 2 s (su un PC
+            # carico il giro puo' arrivare tardi e la prova restare verde col difetto dentro);
+            # che l'arbitro decida tenendo il lucchetto si guarda anche diretto, senza orologio.
+            tenuto.append(fase83_server._BONIFICI_LOCK._is_owned())
+            out = vero_risolvi(*a, **k)
+            filo.start()
+            letto.wait(2)    # col lucchetto il giro non arriva a leggere: si prosegue dopo 2 s
+            return out
+
+        def addebito(rec):       # il bonifico del giro ha GIA' letto stato e importo
+            if threading.current_thread() is filo:
+                letto.set()
+                fatto.wait(2)
+            return vero_addebito(rec)
+        self.sis.garanzia.risolvi = risolvi_col_giro_in_mezzo
+        self.r._addebito_del_pagamento = addebito
+        try:
+            s, c = self._arbitro(rif, 50)
+        finally:
+            fatto.set()
+            filo.join(10)
+            self.sis.garanzia.risolvi = vero_risolvi
+        _deve(s == 200 and filo.ident is not None and not filo.is_alive(),
+              "PREMESSA: l'arbitro decide e il giro orario parte e finisce", s, c)
+        self.assertEqual([True], tenuto, "L'ARBITRO DECIDE SENZA TENERE `_BONIFICI_LOCK`")
+        quota = int(self.sis.garanzia.stato(rif)["host_riceve_cents"])
+        _deve(0 < quota < pieno, "PREMESSA: meta' all'host", quota, pieno)
+        pagati = [imp for (_a, imp, _v, r) in self.connect.bonifici if r == rif]
+        self.assertEqual([quota], pagati,
+                         "IL GIRO ORARIO IN MEZZO ALL'ARBITRO HA PAGATO LA RIGA PIENA: quota %d, "
+                         "pieno %d, partiti %r (risposta %r)" % (quota, pieno, pagati, c))
+
+    def test_A4_3f_la_riga_gia_partita_NON_diventa_trattenuto_e_non_si_ripaga(self):
+        """Punto (b), la seconda meta' (D19: lo stato si costruisce, col lucchetto la gara non lo
+        porta piu' qui): all'arbitro la riga e' gia' 'in_transito'. `riallinea_maturato` non la
+        scrive, e il ramo che ferma la riga la portava a 'trattenuto' (fase131 ammette
+        in_transito -> trattenuto) con l'ERROR «la paga una persona»: il registro diceva fermi
+        soldi gia' partiti, e chi lo seguiva pagava l'host una seconda volta. La riga resta com'e',
+        e l'ERROR dice che il bonifico e' gia' partito."""
+        b = self._pagata("casa-a43f", 2, "pi_a43f")
+        rif = b["riferimento"]
+        pd = self.sis.payout
+        _deve(self.sis.garanzia.contesta(rif, "non corrisponde").get("ok")
+              and pd.aggiorna_stato(rif, "in_transito") is True,
+              "PREMESSA: garanzia contestata e bonifico gia' partito", pd.info(rif))
+        with self.ascolta() as righe:
+            s, c = self._arbitro(rif, 50)
+        _deve(s == 200, "PREMESSA: l'arbitro doveva decidere", s, c)
+        self.assertEqual("in_transito", pd.stato_di(rif),
+                         "IL REGISTRO DICE FERMI SOLDI GIA' PARTITI: %r" % (pd.info(rif),))
+        self.assertEqual([], self.errori_con(righe, "la paga una persona"),
+                         "IL REGISTRO CHIEDE DI PAGARE DI NUOVO UN BONIFICO GIA' PARTITO: %r"
+                         % (righe,))
+        self.assertTrue(self.errori_con(righe, "GIA' PARTITO"),
+                        "IL BONIFICO GIA' PARTITO NON LO DICE NESSUNO: %r" % (righe,))
+        self.assertNotIn("la paga una persona", (c or {}).get("nota", ""), "%r" % (c,))
+
+    # --- Busta A2 di Proton (28/10), colpo 5: il rimborso PIENO all'ospite toglie la riga del
+    # bonifico senza guardare il ritorno, e una penale gia' compensata sulla riga sparisce ---
+
+    def _rimborso_pieno(self, rif, **guasti):
+        pd = self.sis.payout
+        veri = {k: getattr(pd, k) for k in guasti}
+        for k, v in guasti.items():
+            setattr(pd, k, v)
+        try:
+            with self.ascolta() as righe:
+                s, c = self._arbitro(rif, 100)
+        finally:
+            for k, v in veri.items():
+                setattr(pd, k, v)
+        _deve(s == 200 and int(self.sis.garanzia.stato(rif)["host_riceve_cents"]) == 0,
+              "PREMESSA: l'arbitro da' tutto all'ospite", s, c)
+        return righe, c
+
+    def test_A2_5a_rimborso_pieno_con_la_riga_che_NON_si_toglie_non_paga_l_host(self):
+        """Colpo 5: se `rimuovi` non toglie la riga (l'archivio non scrive: fase131 fa WARNING e
+        torna False) e la riga e' 'maturato' (la contestazione non l'ha fermata, A4_2), il giro
+        orario la paga all'host con la garanzia 'risolto': l'host prende tutto E l'ospite riceve
+        tutto. E la risposta diceva «la quota dell'host parte da sola» su una quota zero. La riga
+        si ferma, l'ERROR lo dice, e la risposta non promette niente all'host."""
+        b = self._pagata("casa-a25a", 2, "pi_a25a")
+        rif = b["riferimento"]
+        _deve(self.sis.garanzia.contesta(rif, "non corrisponde").get("ok")
+              and self.sis.payout.stato_di(rif) == "maturato",
+              "PREMESSA: garanzia contestata, bonifico non fermato", self.sis.payout.info(rif))
+        righe, c = self._rimborso_pieno(rif, rimuovi=lambda *a, **k: False)
+        pagati, ancora, riga = self._pagati_e_ancora(rif)
+        self.assertEqual(([], 0), (pagati, ancora),
+                         "RIMBORSO PIENO ALL'OSPITE E L'HOST PAGATO LO STESSO: partiti %r, ancora da "
+                         "pagare %d (registro %r)" % (pagati, ancora, riga))
+        self.assertTrue(self.errori_con(righe, "NON TOLTA"),
+                        "LA RIGA RIMASTA NEL REGISTRO NON LA DICE NESSUNO: %r" % (righe,))
+        self.assertFalse(any("NON e' stata fermata" in r for r in self.errori_con(righe, "NON TOLTA")),
+                         "FALSO ALLARME: la riga e' stata fermata %r" % (righe,))
+        self.assertNotIn("parte da sola", (c or {}).get("nota", ""),
+                         "LA RISPOSTA PROMETTE UNA QUOTA ALL'HOST CHE NON C'E': %r" % (c,))
+
+    def test_A2_5a2_la_riga_che_NON_si_toglie_e_NON_si_ferma_lo_grida(self):
+        """Il ramo di difesa della A2_5a da solo (D19; mutanti del 30/10 su `fermo` del rimborso
+        pieno): la riga non si toglie e nemmeno il fermo riesce, quindi il giro orario la
+        pagherebbe all'host. L'ERROR lo dice."""
+        b = self._pagata("casa-a25a2", 2, "pi_a25a2")
+        rif = b["riferimento"]
+        _deve(self.sis.garanzia.contesta(rif, "non corrisponde").get("ok")
+              and self.sis.payout.stato_di(rif) == "maturato",
+              "PREMESSA: garanzia contestata, bonifico non fermato", self.sis.payout.info(rif))
+        righe, c = self._rimborso_pieno(rif, rimuovi=lambda *a, **k: False,
+                                        aggiorna_stato=lambda *a, **k: False)
+        _deve(self.sis.payout.stato_di(rif) == "maturato",
+              "PREMESSA: la riga resta pagabile", self.sis.payout.info(rif))
+        self.assertTrue(self.errori_con(righe, "NON TOLTA", "NON e' stata fermata"),
+                        "LA RIGA RIMASTA PAGABILE NON LA DICE NESSUNO: %r" % (righe,))
+
+    def test_A2_5b_rimborso_pieno_dopo_una_penale_compensata_sulla_riga_lo_dice(self):
+        """Trovato per strada col colpo 5 (consegne del 28/10): la penale di un'altra cancellazione
+        dello stesso host ha gia' usato una parte della riga (la compensazione vera di fase177),
+        poi l'arbitro rimborsa TUTTO all'ospite e la riga si toglie. La penale risultava pagata
+        con soldi tornati all'ospite, in silenzio. Stessa forma della A4_1c: «PENALE COMPENSATA
+        OLTRE LA QUOTA ... mancano», e la variante con la penale che si e' presa tutta la riga."""
+        for slug, penale_intera in (("casa-a25b", False), ("casa-a25b2", True)):
+            b = self._pagata(slug, 2, "pi_" + slug[5:])
+            rif = b["riferimento"]
+            pd = self.sis.payout
+            riga = pd.info(rif)
+            pieno = int(riga["minori"])
+            _deve(self.sis.garanzia.contesta(rif, "non corrisponde").get("ok"),
+                  "PREMESSA: la garanzia diventa contestata (il bonifico non e' stato fermato)")
+            compensato = pieno if penale_intera else 3000
+            self.sis.finanza.processa_penale(
+                riferimento="pen-" + slug, host_id=riga["host_id"], penale_cents=compensato,
+                valuta=riga["valuta"], payout=pd)
+            _deve(int((pd.info(rif) or {}).get("minori") or 0) == pieno - compensato,
+                  "PREMESSA: la penale ha usato %d della riga" % compensato, pd.info(rif))
+            righe, c = self._rimborso_pieno(rif)
+            pagati, ancora, dopo = self._pagati_e_ancora(rif)
+            self.assertEqual(([], 0), (pagati, ancora), "%s %r" % (slug, dopo))
+            manca = "mancano " + self.r._fmt_importo(compensato, riga["valuta"])
+            self.assertTrue(self.errori_con(righe, "OLTRE LA QUOTA", manca),
+                            "LA PENALE PAGATA CON SOLDI TORNATI ALL'OSPITE NON LA DICE NESSUNO "
+                            "(%s, %r): %r" % (slug, manca, righe))
+            self.assertNotIn("parte da sola", (c or {}).get("nota", ""), "%r" % (c,))
+
+    def test_A2_5_gemello_il_rimborso_pieno_sano_toglie_la_riga_e_tace(self):
+        # ferrea 10: senza penale e con l'archivio sano niente ERROR sulla riga o sulla penale, la
+        # riga non c'e' piu', e la risposta dice che all'host non va niente.
+        b = self._pagata("casa-a25g", 2, "pi_a25g")
+        rif = b["riferimento"]
+        self._segnalata(rif)
+        righe, c = self._rimborso_pieno(rif)
+        self.assertIsNone(self.sis.payout.info(rif), "la riga del bonifico e' rimasta")
+        self.assertEqual([], self.errori_con(righe, "NON TOLTA") + self.errori_con(righe, "PENALE"),
+                         "FALSO ALLARME sul rimborso pieno sano: %r" % (righe,))
+        nota = (c or {}).get("nota", "")
+        self.assertTrue("all'host non va niente" in nota and "parte da sola" not in nota,
+                        "%r" % (c,))
+
+    def test_A2_5c_rimborso_pieno_con_la_riga_gia_partita_NON_la_cancella(self):
+        """La gemella della A4_3f nel ramo del rimborso pieno (D19: lo stato si costruisce): la
+        riga e' gia' 'in_transito' e `rimuovi` (senza `solo_se_stato`) la cancellava. Il registro
+        perdeva la traccia di soldi gia' partiti verso l'host mentre l'ospite riceve tutto, e
+        nessuno lo diceva. La riga resta, e l'ERROR dice che il bonifico e' gia' partito."""
+        b = self._pagata("casa-a25c", 2, "pi_a25c")
+        rif = b["riferimento"]
+        pd = self.sis.payout
+        _deve(self.sis.garanzia.contesta(rif, "non corrisponde").get("ok")
+              and pd.aggiorna_stato(rif, "in_transito") is True,
+              "PREMESSA: garanzia contestata e bonifico gia' partito", pd.info(rif))
+        righe, c = self._rimborso_pieno(rif)
+        self.assertEqual("in_transito", pd.stato_di(rif),
+                         "IL REGISTRO HA CANCELLATO UN BONIFICO GIA' PARTITO: %r" % (pd.info(rif),))
+        self.assertTrue(self.errori_con(righe, "GIA' PARTITO"),
+                        "IL BONIFICO GIA' PARTITO CON IL RIMBORSO PIENO NON LO DICE NESSUNO: %r"
+                        % (righe,))
+        self.assertIn("gia' partito", (c or {}).get("nota", ""), "%r" % (c,))
+
+    # --- I mutanti SOPRAVVISSUTI del job `caselle` sulla PR #283 (ff16d25, 30/10): ogni prova
+    # qui sotto e' vista ROSSA col suo mutante rimesso a mano ---
+
+    def test_A2_6a_niente_all_ospite_niente_falso_allarme_sul_rimborso(self):
+        """Mutante su `if _rimb > 0` (voce 147): con l'arbitro che da' tutto all'host non c'e'
+        nessun rimborso da cercare nel giornale, e «RIMBORSO DOVUTO NON REGISTRATO» sarebbe un
+        falso allarme (ferrea 10)."""
+        b = self._pagata("casa-a26a", 2, "pi_a26a")
+        rif = b["riferimento"]
+        self._segnalata(rif)
+        with self.ascolta() as righe:
+            s, c = self._arbitro(rif, 0)
+        _deve(s == 200 and int(self.sis.garanzia.stato(rif)["ospite_rimborso_cents"]) == 0,
+              "PREMESSA: niente all'ospite", s, c)
+        self.assertEqual([], self.errori_con(righe, "RIMBORSO DOVUTO NON REGISTRATO"),
+                         "FALSO ALLARME: all'ospite non spetta niente %r" % (righe,))
+
+    def test_A2_6b_il_giornale_che_esplode_nella_verifica_del_rimborso_lo_grida(self):
+        """Il ramo `except` della verifica della voce 147 da solo (D19; mutante su
+        `_scritta = False`): se il giornale non si rilegge non si sa se la riga del rimborso
+        c'e', e si grida."""
+        b = self._pagata("casa-a26b", 2, "pi_a26b")
+        rif = b["riferimento"]
+        self._segnalata(rif)
+
+        def esplode(*a, **k):
+            raise sqlite3.OperationalError("database is locked")
+        with mock.patch.object(self.sis.finanza, "movimenti", esplode):
+            with self.ascolta() as righe:
+                s, c = self._arbitro(rif, 50)
+        self.assertEqual(200, s, "l'arbitro senza la rilettura del giornale non risponde: %r" % (c,))
+        self.assertTrue(self.errori_con(righe, "RIMBORSO DOVUTO NON REGISTRATO"),
+                        "LA RIGA DEL RIMBORSO NON SI RILEGGE E NESSUNO LO DICE: %r" % (righe,))
+
+    def test_A4_3g_la_riga_illeggibile_senza_penale_e_non_fermata_lo_grida(self):
+        """Mutanti su `consumata = _preso > 0` e sulla nota del rimborso pieno (`pieno and
+        tolta`): la riga non si legge (`pd.info` None), il giornale non ha penali su di lei e il
+        fermo non riesce. Non e' una riga consumata: resta «la paga una persona», con l'avviso
+        che la riga non e' ferma, e la risposta lo dice."""
+        b = self._pagata("casa-a43g", 2, "pi_a43g")
+        rif = b["riferimento"]
+        pd = self.sis.payout
+        _deve(self.sis.garanzia.contesta(rif, "non corrisponde").get("ok")
+              and pd.stato_di(rif) == "maturato",
+              "PREMESSA: garanzia contestata, bonifico non fermato", pd.info(rif))
+        veri = (pd.info, pd.aggiorna_stato)
+        pd.info = lambda *a, **k: None                          # l'archivio non risponde
+        pd.aggiorna_stato = lambda *a, **k: False               # ne' ferma la riga
+        try:
+            with self.ascolta() as righe:
+                s, c = self._arbitro(rif, 50)
+        finally:
+            pd.info, pd.aggiorna_stato = veri
+        _deve(s == 200, "PREMESSA: l'arbitro doveva decidere", s, c)
+        self.assertTrue(self.errori_con(righe, "NON RIALLINEATO", "la paga una persona",
+                                        "NON e' stata fermata"),
+                        "LA RIGA ILLEGGIBILE E PAGABILE NON LA DICE NESSUNO: %r" % (righe,))
+        self.assertIn("la paga una persona", (c or {}).get("nota", ""), "%r" % (c,))
+
+    def test_A4_2b_il_fermo_che_ESPLODE_alla_contestazione_si_dice(self):
+        """Il ramo `except` della A4_2 da solo (D19; mutante su `fermo = False`): `aggiorna_stato`
+        che solleva invece di tornare False. Il bonifico non e' fermo, e gli ERROR non possono
+        essere quelli della contestazione sana."""
+        def errori(slug, pi, esplode):
+            b = self._pagata(slug, 2, pi)
+            rif = b["riferimento"]
+            vero = self.sis.payout.aggiorna_stato
+            if esplode:
+                def _esplode(*a, **k):
+                    raise sqlite3.OperationalError("database is locked")
+                self.sis.payout.aggiorna_stato = _esplode
+            try:
+                with self.ascolta() as righe:
+                    s, c = self._all_istante(b, -3600, "/api/garanzia/contesta")
+            finally:
+                self.sis.payout.aggiorna_stato = vero
+            _deve(s == 200 and self.sis.garanzia.stato(rif)["stato"] == "contestato",
+                  "PREMESSA: la contestazione doveva passare", s, c)
+            return sorted(r.replace(rif, "<RIF>") for r in self.errori_con(righe))
+        sana = errori("casa-a42bs", "pi_a42bs", False)
+        _deve(sana, "PREMESSA: la contestazione sana scrive il suo ERROR", sana)
+        esplosa = errori("casa-a42be", "pi_a42be", True)
+        self.assertNotEqual(sana, esplosa,
+                            "IL FERMO E' ESPLOSO E IL REGISTRO DICE LE STESSE COSE DELLA "
+                            "CONTESTAZIONE SANA (il bonifico trattenuto): %r" % (esplosa,))
 
 
 class _StripeCheConosceLAddebito(StripeColBlocco):
