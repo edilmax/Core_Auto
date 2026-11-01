@@ -26,7 +26,7 @@ from urllib.parse import parse_qs, quote, urlencode, urlparse
 import fase83_server
 from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
-from test_blocco_carta import HK as _HK_BLOCCO, StripeColBlocco, _vero
+from test_blocco_carta import AK as _AK_BLOCCO, HK as _HK_BLOCCO, StripeColBlocco, _vero
 from test_blocco_carta import _Base as _BancoDelBlocco, _ConLeSpie as _SpieDelBlocco
 from test_fase203_ical_orologio import _PostoInterno
 from test_rimborso_torna_da_ogni_strada import _BancoDelleStrade
@@ -3816,6 +3816,27 @@ class _OraVeraPerIlPreventivo:
         super().setUp()
 
 
+class _StripeColBloccoCheRicordaIRimborsi(StripeColBlocco):
+    """Il blocco sulla carta (`test_blocco_carta`), piu' la memoria dei rimborsi: cio' che il
+    pulsante manda a Stripe, Stripe lo ridice a `rimborsi_di` (uno per chiave, come
+    l'Idempotency-Key vera). Senza memoria la riga non potrebbe mai uscire «perche' lo dice
+    Stripe». `rimborsi` resta l'elenco di cio' che il gateway HA RICEVUTO."""
+
+    def __init__(self):
+        super().__init__()
+        self.fatti = {}
+
+    def rimborsa(self, pi, importo, chiave):
+        esito = super().rimborsa(pi, importo, chiave)
+        if esito.get("ok"):              # solo un rimborso riuscito resta nella memoria di Stripe
+            self.fatti.setdefault(chiave, (pi, int(importo)))
+        return esito
+
+    def rimborsi_di(self, pi):
+        fatti = sum(i for p, i in self.fatti.values() if p == pi)
+        return {"ok": True, "rimborsi": [], "rimborsato_cents": fatti, "motivo": ""}
+
+
 class TestIlBloccoIncassatoSuUnaCancellazioneDellOspiteSiRestituisce(_OraVeraPerIlPreventivo,
                                                                      _BancoDelBlocco):
     """Voce 143, meta' 'rimborsato' (Claude; Kimi K13 4.2; PROTON P1-QUINQUIES, P2-BIS e il pacco
@@ -3975,6 +3996,47 @@ class TestIlBloccoIncassatoSuUnaCancellazioneDellOspiteSiRestituisce(_OraVeraPer
         self._giro(time.time() + 3600)
         self.assertEqual(["USD"], [m["valuta"] for m in self.movimenti(rif, "rimborso")],
                          "LA RIGA DEL RIMBORSO HA CAMBIATO VALUTA: %r" % (self.movimenti(rif, "rimborso"),))
+
+    def _riga_in_lista(self, rif):
+        s, corpo = self.g("GET", "/api/admin/rimborsi_dovuti", None, _AK_BLOCCO)
+        self.assertEqual(s, 200, "la lista dei rimborsi dovuti non risponde: %r" % (corpo,))
+        return next((r for r in corpo.get("rimborsi") or [] if r.get("riferimento") == rif), None)
+
+    def test_143_la_strada_intera_dalla_lista_al_pulsante_a_stripe(self):
+        # casella 2 del blocco 1 (`collaudi/esame_rimborsi.py`, 1/11): questa strada scriveva il
+        # dovuto e nessun collaudo la seguiva oltre. Da capo a fondo: la lista la mostra col
+        # pulsante -> il pulsante manda a Stripe QUELLA cifra su QUEL pagamento -> la riga esce
+        # perche' Stripe la conosce -> ripremere non restituisce due volte
+        self.stripe = self.sis.stripe = _StripeColBloccoCheRicordaIRimborsi()
+        rif = self._cancellata_col_blocco_incassato_dopo("2027-05-14", "2027-05-16", 9)
+        pi = "pi_blocco9"                   # il pagamento che `paga_bloccato(n=9)` ha bloccato
+        pagato = self.stripe.importi[pi]    # cio' che Stripe ha sulla carta, non una cifra del server
+        dovuto = int(self.corpo(rif).get("blocco_rimborso_dovuto_cents") or 0)
+        self.assertEqual(dovuto, pagato, "dentro le 48 ore all'ospite spetta tutto il pagato (%d): "
+                                         "segnati %d" % (pagato, dovuto))
+        self._giro(time.time() + 3600)
+        self.assertEqual([dovuto], [int(m["importo_cents"]) for m in self.movimenti(rif, "rimborso")],
+                         "PREMESSA: il giro ha scritto la riga del rimborso dovuto")
+        riga = self._riga_in_lista(rif)
+        self.assertIsNotNone(riga, "BLOCCO INCASSATO E LA RIGA NON ARRIVA IN LISTA: nessuno sa "
+                                   "che all'ospite spettano %d" % dovuto)
+        self.assertEqual((riga.get("dovuto_cents"), riga.get("payment_intent")), (dovuto, pi),
+                         "IN LISTA L'IMPORTO O IL PAGAMENTO SBAGLIATO: %r" % (riga,))
+        self.assertTrue(riga.get("bottone"), "LA RIGA C'E' MA NON SI PUO' PREMERE (manca: %r)"
+                        % (riga.get("manca"),))
+        self.assertEqual([], self.stripe.rimborsi, "PREMESSA: niente al gateway prima del pulsante")
+        s, o = self.g("POST", "/api/admin/rimborsa_dovuto", {"riferimento": rif}, _AK_BLOCCO)
+        self.assertEqual((s, o.get("stato"), o.get("importo_cents")), (200, "rimborsato", dovuto),
+                         "il pulsante non ha restituito il dovuto: %r" % (o,))
+        # la chiave stabile e' quella di `_admin_rimborso`: fra le due rotte Stripe restituisce una volta
+        self.assertEqual([(pi, dovuto, "rimborso:" + rif)], self.stripe.rimborsi,
+                         "IL GATEWAY HA RICEVUTO ALTRO DAL DOVUTO SUL PAGAMENTO BLOCCATO: %r"
+                         % (self.stripe.rimborsi,))
+        self.assertIsNone(self._riga_in_lista(rif),
+                          "STRIPE HA IL RIMBORSO E LA RIGA E' ANCORA IN LISTA: si premerebbe di nuovo")
+        s2, o2 = self.g("POST", "/api/admin/rimborsa_dovuto", {"riferimento": rif}, _AK_BLOCCO)
+        self.assertEqual((s2, o2.get("stato"), len(self.stripe.rimborsi)), (200, "gia_rimborsato", 1),
+                         "PREMUTO DUE VOLTE: %r %r" % (o2, self.stripe.rimborsi))
 
     def test_143_un_importo_dovuto_di_zero_non_chiede_una_riga(self):
         # mutante della CI della #282 su fase83 :10386 (`>` -> `>=`): come in
