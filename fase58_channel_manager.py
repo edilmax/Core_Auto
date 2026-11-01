@@ -386,6 +386,93 @@ class ChannelManager:
             prezzi.append(int(p))
         return min(prezzi) if prezzi else None
 
+    def prezzo_piu_comune(self, alloggio_id: Any, da: Any) -> Optional[int]:
+        """Il prezzo che hanno piu' giorni da `da` in poi (a parita', il piu' alto): e' il base
+        degli annunci nati prima che il base avesse una colonna sua (fase57). Il minimo no: e'
+        il giorno speciale piu' economico. None se non c'e' calendario."""
+        if not (isinstance(alloggio_id, str) and alloggio_id.strip()) or _data_iso(da) is None:
+            return None
+        con = self._apri()
+        try:
+            r = con.execute(
+                "SELECT prezzo_netto_cents FROM inventario WHERE alloggio_id=? AND giorno>=? "
+                "AND prezzo_netto_cents>0 GROUP BY prezzo_netto_cents "
+                "ORDER BY COUNT(*) DESC, prezzo_netto_cents DESC LIMIT 1",
+                (alloggio_id, da)).fetchone()
+        finally:
+            con.close()
+        return int(r[0]) if r else None
+
+    def segui_prezzo_base(self, alloggio_id: Any, da: Any, vecchio_cents: Any,
+                          nuovo_cents: Any) -> Dict[str, int]:
+        """IL PREZZO DELL'ANNUNCIO E' IL PREZZO BASE: i giorni da `da` in poi che avevano il
+        base vecchio passano al nuovo, in una transazione sola.
+
+        ⛔ Nasce dal giro dell'host vero del 30/10 (il fondatore: «clicco modifica, cambio la
+        cifra, salvo e risulta ancora quello vecchio»): `rispecchia_prezzo` ricopiava sopra il
+        prezzo nuovo il minimo del calendario, cioe' il vecchio. Come su Airbnb (aiuto 37 e
+        474): cambiare il base sposta i giorni che lo avevano e lascia stare gli altri, che si
+        contano per dirlo all'host:
+          speciali   giorni ancora in vendita con un prezzo DIVERSO dal base vecchio: l'host
+                     l'ha scelto apposta;
+          prenotati  giorni TUTTI venduti (a qualunque prezzo): non c'e' piu' niente da vendere.
+        Un giorno con una camera venduta e altre libere SEGUE: e' ancora in vendita, e al prezzo
+        vecchio l'ospite pagherebbe di nuovo quello che l'host ha appena cambiato.
+        ⚠️ LIMITE NOTO, non nato qui: il cruscotto ricalcola l'incasso di una prenotazione dai
+        prezzi dei suoi giorni (fase83 `_revenue_prenotazione`), quindi su quel giorno mostra il
+        prezzo nuovo anche per la camera gia' venduta. I soldi veri non cambiano (li fissa il
+        preventivo); e' scritto in RIPRENDI_QUI.md.
+        ⛔ Segue anche il prezzo MESSO DA PARTE da un blocco del calendario esterno: e' quello
+        che torna quando la notte si libera, e se restasse il vecchio il vecchio tornerebbe da
+        solo.
+        Ritorna {"aggiornati", "speciali", "prenotati"}: tutto zero se non c'e' niente da fare."""
+        esito = {"aggiornati": 0, "speciali": 0, "prenotati": 0}
+        if not (isinstance(alloggio_id, str) and alloggio_id.strip()) or _data_iso(da) is None:
+            return esito
+        if not (_intero(vecchio_cents) and _intero(nuovo_cents)
+                and 0 < vecchio_cents <= MAX_CENTS and 0 < nuovo_cents <= MAX_CENTS):
+            return esito
+        if vecchio_cents == nuovo_cents:
+            return esito
+        ora = datetime.datetime.now().isoformat(timespec="seconds")
+        con = self._apri()
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            # «tutto venduto» = unita_occupate>0 AND unita_occupate>=unita_totali
+            esito["speciali"] = con.execute(
+                "SELECT COUNT(*) FROM inventario WHERE alloggio_id=? AND giorno>=? "
+                "AND prezzo_netto_cents>0 AND prezzo_netto_cents<>? "
+                "AND NOT (unita_occupate>0 AND unita_occupate>=unita_totali)",
+                (alloggio_id, da, vecchio_cents)).fetchone()[0]
+            esito["prenotati"] = con.execute(
+                "SELECT COUNT(*) FROM inventario WHERE alloggio_id=? AND giorno>=? "
+                "AND unita_occupate>0 AND unita_occupate>=unita_totali",
+                (alloggio_id, da)).fetchone()[0]
+            cur = con.execute(
+                "UPDATE inventario SET prezzo_netto_cents=?, aggiornato_ts=? "
+                "WHERE alloggio_id=? AND giorno>=? AND prezzo_netto_cents=? "
+                "AND NOT (unita_occupate>0 AND unita_occupate>=unita_totali)",
+                (nuovo_cents, ora, alloggio_id, da, vecchio_cents))
+            esito["aggiornati"] = max(0, cur.rowcount)
+            cur = con.execute(
+                "UPDATE inventario_prima_del_blocco SET prezzo_netto_cents=? "
+                "WHERE alloggio_id=? AND giorno>=? AND prezzo_netto_cents=?",
+                (nuovo_cents, alloggio_id, da, vecchio_cents))
+            esito["aggiornati"] += max(0, cur.rowcount)
+            con.execute("COMMIT")
+        except Exception:
+            try:
+                con.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
+            raise
+        finally:
+            con.close()
+        # DOPO il COMMIT, come in `imposta_disponibilita`: la vetrina rilegge il minimo vero
+        if esito["aggiornati"]:
+            self._avvisa_lo_specchio(alloggio_id)
+        return esito
+
     def _muta_giorno(self, alloggio_id: str, giorno: str, **campi: Any) -> bool:
         """Aggiornamento parziale (per i comandi). Crea la riga se assente."""
         ora = datetime.datetime.now().isoformat(timespec="seconds")

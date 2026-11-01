@@ -494,11 +494,17 @@ class CatalogoVetrina:
                                ("pin_manuale", "INTEGER NOT NULL DEFAULT 0"),
                                ("cin", "TEXT NOT NULL DEFAULT ''"),
                                ("fuso", "TEXT NOT NULL DEFAULT ''"),
-                               ("paga_in_struttura", "INTEGER NOT NULL DEFAULT 1")):
+                               ("paga_in_struttura", "INTEGER NOT NULL DEFAULT 1"),
+                               # solo qui, non nel CREATE: cosi' un archivio nuovo e uno
+                               # migrato hanno le colonne nello STESSO ordine (contratto)
+                               ("prezzo_base_cents", "INTEGER NOT NULL DEFAULT 0")):
                     try:
                         con.execute("ALTER TABLE alloggi ADD COLUMN %s %s" % (_c, _d))
                     except sqlite3.OperationalError:
                         pass
+                # ⛔ IL PREZZO BASE degli annunci nati prima della sua colonna resta 0 = «non si
+                # sa»: NON si copia dalla vetrina, che e' lo specchio del giorno piu' economico
+                # (code-review 30/10). Lo ricava fase83 dal calendario (il prezzo piu' comune).
                 # RIEMPIMENTO AUTO DEL FUSO (self-healing): gli annunci creati prima della
                 # colonna `fuso` l'hanno vuota. Ad ogni avvio si prova a dedurlo da
                 # citta'/paese per quelli ancora vuoti -> l'ora locale diventa ESATTA senza
@@ -672,15 +678,16 @@ class CatalogoVetrina:
             if row is None:
                 cur = con.execute(
                     "INSERT INTO alloggi (host_id, slug, titolo, descrizione, citta, "
-                    "paese, fuso, cin, indirizzo, prezzo_notte_cents, capacita, camere, bagni, "
+                    "paese, fuso, cin, indirizzo, prezzo_notte_cents, prezzo_base_cents, "
+                    "capacita, camere, bagni, "
                     "servizi_mask, valuta, stato, lat_micro, lon_micro, politica_cancellazione, "
                     "tassa_pp_notte_cents, tassa_max_notti, tassa_perc_bps, "
                     "sconto_settimana_bps, sconto_mese_bps, "
                     "modalita_prenotazione, pin_manuale, paga_in_struttura, creato_ts, aggiornato_ts) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (scheda.host_id, scheda.slug, scheda.titolo, scheda.descrizione,
                      scheda.citta, scheda.paese, scheda.fuso, scheda.cin, scheda.indirizzo,
-                     scheda.prezzo_notte_cents,
+                     scheda.prezzo_notte_cents, scheda.prezzo_notte_cents,
                      scheda.capacita, scheda.camere, scheda.bagni, mask, scheda.valuta,
                      scheda.stato, scheda.lat_micro, scheda.lon_micro,
                      scheda.politica_cancellazione, scheda.tassa_pp_notte_cents,
@@ -694,15 +701,15 @@ class CatalogoVetrina:
                 alloggio_id = row["id"]
                 con.execute(
                     "UPDATE alloggi SET host_id=?, titolo=?, descrizione=?, citta=?, "
-                    "paese=?, fuso=?, cin=?, indirizzo=?, prezzo_notte_cents=?, capacita=?, "
-                    "camere=?, bagni=?, "
+                    "paese=?, fuso=?, cin=?, indirizzo=?, prezzo_notte_cents=?, "
+                    "prezzo_base_cents=?, capacita=?, camere=?, bagni=?, "
                     "servizi_mask=?, valuta=?, stato=?, lat_micro=?, lon_micro=?, "
                     "politica_cancellazione=?, tassa_pp_notte_cents=?, tassa_max_notti=?, "
                     "tassa_perc_bps=?, sconto_settimana_bps=?, sconto_mese_bps=?, "
                     "modalita_prenotazione=?, pin_manuale=?, paga_in_struttura=?, aggiornato_ts=? WHERE id=?",
                     (scheda.host_id, scheda.titolo, scheda.descrizione, scheda.citta,
                      scheda.paese, scheda.fuso, scheda.cin, scheda.indirizzo,
-                     scheda.prezzo_notte_cents, scheda.capacita,
+                     scheda.prezzo_notte_cents, scheda.prezzo_notte_cents, scheda.capacita,
                      scheda.camere, scheda.bagni, mask, scheda.valuta, scheda.stato,
                      scheda.lat_micro, scheda.lon_micro, scheda.politica_cancellazione,
                      scheda.tassa_pp_notte_cents, scheda.tassa_max_notti, scheda.tassa_perc_bps,
@@ -729,6 +736,8 @@ class CatalogoVetrina:
         # compila a mano in una schermata diversa da quella del calendario. Se il
         # calendario esiste gia', e' LUI la verita': si rispecchia subito, se no
         # l'annuncio resterebbe a mentire fino al prossimo salvataggio delle date.
+        # ⛔ Lo specchio scrive solo la vetrina: `prezzo_base_cents` resta quello dell'host
+        # (giro dell'host vero, 30/10), e i giorni lo seguono in fase83 `_host_pubblica`.
         self.rispecchia_prezzo(scheda.slug)
         return alloggio_id
 
@@ -979,13 +988,14 @@ class CatalogoVetrina:
         con = self._apri()
         try:
             righe = con.execute(
-                "SELECT id, slug, titolo, citta, prezzo_notte_cents, valuta, stato FROM alloggi "
-                "WHERE host_id=? ORDER BY aggiornato_ts DESC LIMIT ?",
+                "SELECT id, slug, titolo, citta, prezzo_notte_cents, prezzo_base_cents, valuta, "
+                "stato FROM alloggi WHERE host_id=? ORDER BY aggiornato_ts DESC LIMIT ?",
                 (str(host_id), limit)).fetchall()
         finally:
             con.close()
         return [{"id": int(r["id"]), "slug": r["slug"], "titolo": r["titolo"],
                  "citta": r["citta"], "prezzo_notte_cents": int(r["prezzo_notte_cents"]),
+                 "prezzo_base_cents": int(r["prezzo_base_cents"]) or None,
                  "valuta": r["valuta"] or "EUR", "stato": r["stato"]} for r in righe]
 
     def cerca_annunci_admin(self, termine: Any, *, limit: int = 10, offset: int = 0
@@ -1232,6 +1242,10 @@ class CatalogoVetrina:
             # pin fissato a mano dall'host: il form deve saperlo per NON farlo
             # sovrascrivere dalla geocodifica dell'indirizzo al prossimo salvataggio
             d["pin_manuale"] = bool(a["pin_manuale"]) if "pin_manuale" in a.keys() else False
+            # il prezzo che l'host ha scritto: la vetrina e' lo specchio del giorno piu'
+            # economico, e rimandarla dal modulo «Modifica» spostava i giorni sbagliati.
+            # None = annuncio nato prima della colonna: il base non si sa (lo ricava fase83)
+            d["prezzo_base_cents"] = int(a["prezzo_base_cents"]) or None
         return d
 
     # --- contratti JSON (tutti gli importi int cents; tassi/geo interi) ---

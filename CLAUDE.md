@@ -69,6 +69,42 @@ a ogni avvio di sessione; a fine lavoro va rieseguito.
 
 ---
 
+# ⚡ IL SISTEMA VELOCE — deciso il 2026-11-01, vale per OGNI sessione e OGNI IA
+
+> **Il fondatore, 2026-11-01**, dopo quattro mesi di stime mancate: *«mi sa che non so usarti e
+> sono caduto nel collo di bottiglia»*, poi *«trova un sistema per fare prima»* e *«chiusa questa
+> chat le altre lo dimenticano»*. Per questo sta qui e non solo nella memoria di sessione.
+
+**Il collo di bottiglia, misurato** sul lavoro del prezzo base (30/10-1/11): circa 3 ore di lavoro
+vero e due giorni di ATTESE IN FILA sul PC da 16 GB — suite PC 47 minuti (due volte), suite
+Linux 40 minuti (tre volte, due uccise da WSL che si spegne da solo), Giudice 2 ore (due volte) —
+mentre la CI della richiesta di unione rifa' le stesse cose su macchine sue e blocca gia' l'unione
+se qualcosa e' rosso.
+
+1. **Sul PC, prima del commit: solo le prove dei moduli toccati e dei loro sorveglianti** (minuti).
+   La suite INTERA e il Giudice `--diff` li esegue la CI della PR, e il verdetto si legge dalla
+   tabella dei job (regola ferrea 8: la CI su Linux e' il giudice). ⛔ Questo SOSTITUISCE, per il
+   momento del commit, la regola ferrea 6, la D2 e l'obbligo della suite Linux locale: la suite
+   intera resta obbligatoria **prima dell'unione e del deploy**, non prima del commit. La suite
+   locale (PC o Linux) si usa solo per capire un rosso della CI.
+2. **Due lavori in parallelo.** Mentre la CI controlla il lavoro A, il lavoro B si scrive in un
+   `git worktree` separato: i file sotto controllo non si toccano (regola ferrea 4).
+3. **Un solo via al giorno.** La sera un messaggio al fondatore coi lavori pronti e le prove fatte;
+   lui risponde una volta «procedi al commit e autorizzato» per QUEL gruppo. B1 e B4 restano: senza
+   quelle parole non si committa e non si tocca la produzione.
+4. **La lista si chiude.** Prima del lancio si ripara solo un difetto NUOVO che perde soldi o
+   dati; il resto va nell'elenco «dopo il lancio» di `RIPRENDI_QUI.md`. La mutazione zero vale sul
+   percorso dei soldi (i cinque moduli che un euro attraversa), non su tutto il codice. Sono scelte
+   di strategia: il fondatore puo' cambiarle.
+5. **Ogni lunedi' il conto misurato** con `python collaudi/piano.py`, mai una stima a memoria.
+   Misurato il 2026-11-01: 28 caselle fatte, 15 mancano.
+
+*Si verifica:* prima di ogni commit, nella sessione c'e' l'esito delle prove dei moduli toccati;
+prima di ogni unione, la tabella dei job della CI con la suite intera e il Giudice verdi, letta
+dall'API.
+
+---
+
 # 🩹 IL CATALOGO DEGLI SBAGLI — si rilegge PRIMA di dire «fatto»
 
 > **Ordine del fondatore, 2026-08-08:** *«bisogna scrivere tutti gli sbagli per non

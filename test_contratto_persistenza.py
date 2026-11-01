@@ -670,7 +670,10 @@ class TestContrattoCatalogoFase57(BaseContratto, unittest.TestCase):
             "sconto_settimana_bps INTEGER NOT NULL", "sconto_mese_bps INTEGER NOT NULL",
             "modalita_prenotazione TEXT NOT NULL", "pin_manuale INTEGER NOT NULL",
             "paga_in_struttura INTEGER NOT NULL", "creato_ts TEXT NOT NULL",
-            "aggiornato_ts TEXT NOT NULL", "cin TEXT NOT NULL"),
+            "aggiornato_ts TEXT NOT NULL", "cin TEXT NOT NULL",
+            # 2026-10-30, giro dell'host vero: il prezzo che l'host scrive; la vetrina e' lo
+            # specchio del giorno piu' economico (0 = annuncio nato prima, base non noto)
+            "prezzo_base_cents INTEGER NOT NULL"),
         "alloggio_immagini": (
             "id INTEGER PK1", "alloggio_id INTEGER NOT NULL", "url TEXT NOT NULL",
             "ordine INTEGER NOT NULL", "alt TEXT NOT NULL"),
@@ -696,7 +699,8 @@ class TestContrattoCatalogoFase57(BaseContratto, unittest.TestCase):
           "alloggio_immagini": ("alloggio_id -> alloggi.id ON DELETE CASCADE",),
           "upload_proprietario": ()}
     TRIGGER = {}
-    DENARO = ("alloggi.prezzo_notte_cents", "alloggi.sconto_mese_bps",
+    DENARO = ("alloggi.prezzo_base_cents", "alloggi.prezzo_notte_cents",
+              "alloggi.sconto_mese_bps",
               "alloggi.sconto_settimana_bps", "alloggi.tassa_max_notti",
               "alloggi.tassa_perc_bps", "alloggi.tassa_pp_notte_cents")
 

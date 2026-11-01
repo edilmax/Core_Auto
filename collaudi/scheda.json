@@ -439,11 +439,11 @@
  "555972b586e3": {
   "blocco": 2,
   "comando": "python collaudi/esame_feed_due_versi.py --scrivi",
-  "commit": "01a9c8c",
+  "commit": "1dee4c9",
   "condizione": "il feed esterno vale nei due versi: una notte chiusa da un feed si riapre quando sparisce da QUEL feed (e da nessun altro), con lo stato di prima, e solo se l'host non l'ha toccata nel frattempo; i blocchi esterni sono oggetti con origine, non sovrascritture dell'inventario; l'eco del nostro calendario riesportato dall'OTA non chiude le nostre notti; un feed che passa da N eventi a zero non riapre niente e diventa un'anomalia",
   "denominatore": 14,
   "esito": true,
-  "impronta": "9942247fd1cc",
+  "impronta": "1635b4315df2",
   "impronte_moduli": {
    "fase111_cancellazione": "cdaa0ff5cea8",
    "fase135_ical_bidirezionale": "7400c7b99498",
@@ -452,7 +452,7 @@
    "fase203_ical_orologio": "ea15acf5d4f9",
    "fase34_prenotazioni": "87f010d9f3cd",
    "fase36_booking_api": "519033218af6",
-   "fase58_channel_manager": "741a61da6f63",
+   "fase58_channel_manager": "38b075ee6ef4",
    "fase59_concierge": "24867562247b",
    "fase62_predictive_noshow": "c24b0e7953a2",
    "fase67_coda_intelligente": "3fa3954e9d4e",
@@ -460,7 +460,7 @@
    "fase82_ical_sync": "1402326ece2b"
   },
   "motivo": "",
-  "quando": "2026-10-23T00:18:20"
+  "quando": "2026-10-31T09:47:47"
  },
  "5c447a0ee514": {
   "blocco": 5,
@@ -1091,11 +1091,11 @@
  "e0c5eaf17028": {
   "blocco": 6,
   "comando": "python collaudi/esame_testi_congelati.py --scrivi",
-  "commit": "2828401",
+  "commit": "1dee4c9",
   "condizione": "nessun testo resta congelato in italiano dove la pagina dichiara 8 lingue: l'occhio del fondatore conta ZERO parole ferme sulle pagine che non sono gusci riempiti dal server",
   "denominatore": 72,
   "esito": true,
-  "impronta": "17180c37ab94",
+  "impronta": "de65f30167de",
   "impronte_moduli": {
    "fase107_traduzione_annunci": "e0fc5c8e8eb1",
    "fase113_messaggistica": "c3a8712be969",
@@ -1108,22 +1108,22 @@
    "fase166_geocoder": "162da4a35b88",
    "fase175_poi_osm": "c1ad5e11dd94",
    "fase26_ricerca": "c51cf25fe989",
-   "fase57_vetrina": "5ee5cae7a69e",
+   "fase57_vetrina": "1a8e6fabbd1a",
    "fase61_localizzazione": "6ca2f962ff78",
    "fase63_recensioni": "5e00244ea3f5",
    "fase74_sensory_engine": "6f64cb3f6e59"
   },
   "motivo": "",
-  "quando": "2026-10-17T10:16:58"
+  "quando": "2026-10-31T09:48:05"
  },
  "ec84faaea398": {
   "blocco": 2,
   "comando": "python collaudi/esame_prenotazioni.py --scrivi",
-  "commit": "01a9c8c",
+  "commit": "1dee4c9",
   "condizione": "la macchina a stati copre cancellazioni, modifiche, no-show e sovra-affitto",
   "denominatore": 34,
   "esito": true,
-  "impronta": "9942247fd1cc",
+  "impronta": "1635b4315df2",
   "impronte_moduli": {
    "fase111_cancellazione": "cdaa0ff5cea8",
    "fase135_ical_bidirezionale": "7400c7b99498",
@@ -1132,7 +1132,7 @@
    "fase203_ical_orologio": "ea15acf5d4f9",
    "fase34_prenotazioni": "87f010d9f3cd",
    "fase36_booking_api": "519033218af6",
-   "fase58_channel_manager": "741a61da6f63",
+   "fase58_channel_manager": "38b075ee6ef4",
    "fase59_concierge": "24867562247b",
    "fase62_predictive_noshow": "c24b0e7953a2",
    "fase67_coda_intelligente": "3fa3954e9d4e",
@@ -1140,7 +1140,7 @@
    "fase82_ical_sync": "1402326ece2b"
   },
   "motivo": "",
-  "quando": "2026-10-23T00:18:37"
+  "quando": "2026-10-31T09:48:05"
  },
  "eec63adbaf5b": {
   "blocco": 3,
@@ -1167,11 +1167,11 @@
  "f10f35b6a7b3": {
   "blocco": 2,
   "comando": "python collaudi/esame_ical.py --scrivi",
-  "commit": "01a9c8c",
+  "commit": "1dee4c9",
   "condizione": "iCal ha una difesa dal RITARDO 15 min-2 ore (oggi: zero, e' la finestra delle prenotazioni fantasma)",
   "denominatore": 24,
   "esito": true,
-  "impronta": "9942247fd1cc",
+  "impronta": "1635b4315df2",
   "impronte_moduli": {
    "fase111_cancellazione": "cdaa0ff5cea8",
    "fase135_ical_bidirezionale": "7400c7b99498",
@@ -1180,7 +1180,7 @@
    "fase203_ical_orologio": "ea15acf5d4f9",
    "fase34_prenotazioni": "87f010d9f3cd",
    "fase36_booking_api": "519033218af6",
-   "fase58_channel_manager": "741a61da6f63",
+   "fase58_channel_manager": "38b075ee6ef4",
    "fase59_concierge": "24867562247b",
    "fase62_predictive_noshow": "c24b0e7953a2",
    "fase67_coda_intelligente": "3fa3954e9d4e",
@@ -1188,7 +1188,7 @@
    "fase82_ical_sync": "1402326ece2b"
   },
   "motivo": "",
-  "quando": "2026-10-23T00:18:33"
+  "quando": "2026-10-31T09:48:00"
  },
  "f132bc4f619c": {
   "blocco": 10,
@@ -1204,11 +1204,11 @@
  "f5d22a937896": {
   "blocco": 2,
   "comando": "python collaudi/esame_gare.py --scrivi",
-  "commit": "01a9c8c",
+  "commit": "1dee4c9",
   "condizione": "il blocco atomico regge sotto gara (misurato: 10 giri x 24 agenti, 1 conferma)",
   "denominatore": 51,
   "esito": true,
-  "impronta": "9942247fd1cc",
+  "impronta": "1635b4315df2",
   "impronte_moduli": {
    "fase111_cancellazione": "cdaa0ff5cea8",
    "fase135_ical_bidirezionale": "7400c7b99498",
@@ -1217,7 +1217,7 @@
    "fase203_ical_orologio": "ea15acf5d4f9",
    "fase34_prenotazioni": "87f010d9f3cd",
    "fase36_booking_api": "519033218af6",
-   "fase58_channel_manager": "741a61da6f63",
+   "fase58_channel_manager": "38b075ee6ef4",
    "fase59_concierge": "24867562247b",
    "fase62_predictive_noshow": "c24b0e7953a2",
    "fase67_coda_intelligente": "3fa3954e9d4e",
@@ -1225,7 +1225,7 @@
    "fase82_ical_sync": "1402326ece2b"
   },
   "motivo": "",
-  "quando": "2026-10-23T00:18:32"
+  "quando": "2026-10-31T09:47:58"
  },
  "fb42414c3b6b": {
   "blocco": 3,
