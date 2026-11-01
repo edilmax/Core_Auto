@@ -537,6 +537,10 @@ class TestGiroOstileTutteLeRotte(unittest.TestCase):
                          [("alloggi", list), ("commissione_bps", int)], headers=TOK)
         self.assertEqual(ld["commissione_bps"], 500, "link diretto: non e' il 5%")
         self.chiama("GET", "/api/host/telegram_link", 200, [("link", str)], headers=TOK)
+        # lo stato per il pannello (giro dell'host vero, 30/10): qui il conto Stripe non c'e'
+        # ancora (nasce piu' sotto con `stripe_link`), e chiedere lo stato non lo crea
+        self.chiama("GET", "/api/host/collegamenti", 200, [("telegram", bool), ("stripe", str)],
+                    headers=TOK, valore={"telegram": False, "stripe": "assente"})
         il = self.chiama("GET", "/api/host/ical_link", 200, [("url", str)],
                          query={"alloggio": slug}, headers=TOK)
         self.assertTrue(il["url"].endswith(".ics"), il)
@@ -870,7 +874,7 @@ class TestGiroOstileTutteLeRotte(unittest.TestCase):
         inesistenti = provate - dichiarate
         self.assertEqual(inesistenti, set(),
                          "provate rotte che il router non dichiara: %s" % sorted(inesistenti))
-        self.assertEqual(len(dichiarate), 144,          # + «Lo pago io a mano» (R1, 21/10)
+        self.assertEqual(len(dichiarate), 145,          # + lo stato dei collegamenti (30/10)
                          "il router ha %d rotte: la mappa del collaudo va aggiornata"
                          % len(dichiarate))
         # nessuna 5xx inattesa: solo le due dormienti dichiarate

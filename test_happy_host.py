@@ -64,6 +64,7 @@ ATTESI = {
     ("POST", "/api/host/cancella"): 200,
     ("POST", "/api/host/carta_link"): 200,
     ("GET", "/api/host/carta_stato"): 200,
+    ("GET", "/api/host/collegamenti"): 200,
     ("GET", "/api/host/contratto_stato"): 200,
     ("GET", "/api/host/conversazioni"): 200,
     ("GET", "/api/host/dac7_stato"): 200,
@@ -788,7 +789,7 @@ class TestLegaleFiscaleHost(_BaseHost):
 # ══════════════════════════════════════════════════════════════════════════════════
 class TestCrescitaHost(_BaseHost):
     """referral · invito · invito/registra · invito/qualifica · link_diretto ·
-    telegram_link · conversazioni"""
+    telegram_link · collegamenti · conversazioni"""
 
     def test_referral_viral_codice_e_link(self):
         from urllib.parse import quote
@@ -836,6 +837,18 @@ class TestCrescitaHost(_BaseHost):
         self.assertTrue(link.startswith("https://t.me/BookinVipInfo_bot?start="), link)
         payload = link.split("start=", 1)[1]
         self.assertEqual(self.r._tg_verifica_payload(payload), self.host_id)
+
+    def test_collegamenti_dice_lo_stato_e_segue_il_telegram_vero(self):
+        # giro dell'host vero, 30/10: il pannello chiede lo stato quando si apre
+        st, prima = self.chiama("GET", "/api/host/collegamenti", atteso=200)
+        self.assertEqual(prima, {"telegram": False, "stripe": "assente"})
+        st, out = self.chiama("GET", "/api/host/telegram_link", atteso=200)
+        avvio = "/start " + out["link"].split("start=", 1)[1]
+        st, _ = self.r.gestisci("POST", "/api/telegram/webhook", {}, json.dumps(
+            {"message": {"chat": {"id": 4242}, "text": avvio}}), {})
+        self.assertEqual(st, 200)
+        st, dopo = self.chiama("GET", "/api/host/collegamenti", atteso=200)
+        self.assertEqual(dopo, {"telegram": True, "stripe": "assente"})
 
     def test_conversazioni_dell_host(self):
         st, vuote = self.chiama("GET", "/api/host/conversazioni", atteso=200)
@@ -971,7 +984,7 @@ class TestCoperturaRotteHost(unittest.TestCase):
                          "rotte host del router SENZA copertura happy-path")
         self.assertEqual(dichiarate - trovate, set(),
                          "rotte dichiarate qui che il router NON espone piu'")
-        self.assertEqual(len(ATTESI), 49, "la fetta host sono 49 rotte")
+        self.assertEqual(len(ATTESI), 50, "la fetta host sono 50 rotte")
 
 
 def _prove_del_modulo():

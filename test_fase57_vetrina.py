@@ -346,5 +346,49 @@ class TestCittaPubblicate(unittest.TestCase):
         self.assertEqual(cp, sorted(cp))                         # ordine deterministico
 
 
+class TestIlPrezzoBaseDellHost(unittest.TestCase):
+    """Giro dell'host vero, 30/10: la vetrina e' lo SPECCHIO del giorno prenotabile piu'
+    economico (`rispecchia_prezzo`), quindi non puo' essere anche il prezzo che l'host ha
+    scritto. Il base vive in una colonna sua, scritta solo da `pubblica`."""
+
+    def test_lo_specchio_cambia_la_vetrina_e_non_il_base(self):
+        cat = crea_catalogo(prezzo_minimo=lambda slug, da, a: 8000)
+        cat.pubblica(_scheda(prezzo_notte_cents=12000))
+        d = cat.dettaglio_owner("casa-mare")
+        self.assertEqual((8000, 12000), (d["prezzo_notte_cents"], d.get("prezzo_base_cents")))
+        self.assertEqual([12000], [a.get("prezzo_base_cents") for a in cat.alloggi_host("host1")])
+
+    def test_un_nuovo_salvataggio_scrive_il_base_nuovo(self):
+        cat = crea_catalogo(prezzo_minimo=lambda slug, da, a: 8000)
+        cat.pubblica(_scheda(prezzo_notte_cents=12000))
+        cat.pubblica(_scheda(prezzo_notte_cents=15000))
+        self.assertEqual(15000, cat.dettaglio_owner("casa-mare").get("prezzo_base_cents"))
+
+    def test_un_archivio_di_prima_non_inventa_il_base(self):
+        # gli annunci nati prima della colonna: la vetrina e' lo specchio del giorno piu'
+        # economico, NON il base (code-review 30/10). Il base resta «non si sa» (None) e lo
+        # ricava chi ha il calendario (fase83, il prezzo piu' comune dei giorni)
+        import os
+        import shutil
+        import sqlite3
+        import tempfile
+        d = tempfile.mkdtemp()
+        try:
+            percorso = os.path.join(d, "c.db")
+            crea_catalogo(percorso, prezzo_minimo=lambda slug, da, a: 9000).pubblica(_scheda())
+            con = sqlite3.connect(percorso)
+            con.execute("ALTER TABLE alloggi DROP COLUMN prezzo_base_cents")
+            con.commit()
+            con.close()
+            cat = crea_catalogo(percorso)
+            self.assertEqual((9000, None, [None]),
+                             (cat.dettaglio_owner("casa-mare")["prezzo_notte_cents"],
+                              cat.dettaglio_owner("casa-mare").get("prezzo_base_cents", "manca"),
+                              [a.get("prezzo_base_cents", "manca")
+                               for a in cat.alloggi_host("host1")]))
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+
 if __name__ == "__main__":
     unittest.main()

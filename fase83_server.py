@@ -2171,6 +2171,10 @@ def _gettone_prova_valido(firma: Any, gettone: Any, nome: str, ora: int) -> bool
             and isinstance(exp, int) and not isinstance(exp, bool) and exp >= ora)
 
 
+# Leggere il base vecchio, pubblicare e spostare i giorni sono UN gesto (`_host_pubblica`).
+_SERRATURA_PREZZO_BASE = threading.Lock()
+
+
 class RouterHTTP:
     """Router PURO (testabile): cabla il SistemaCasaVIP (fase81) sulle rotte HTTP."""
 
@@ -2405,6 +2409,8 @@ class RouterHTTP:
             return self._host_link_diretto(query, headers)
         if metodo == "GET" and path == "/api/host/telegram_link":
             return self._host_telegram_link(headers)
+        if metodo == "GET" and path == "/api/host/collegamenti":
+            return self._host_collegamenti(headers)
         if metodo == "GET" and path == "/api/host/ical_link":
             return self._ical_link(query, headers)
         if metodo == "GET" and path == "/api/host/calendario_prezzi":
@@ -7871,6 +7877,8 @@ class RouterHTTP:
         hid = self._host_id_da_token(headers)
         if not hid:
             return 422, {"errore": "host_id_mancante"}
+        # l'host sta per cambiare il suo conto su Stripe: lo stato ricordato non vale piu'
+        self.__dict__.get("_stato_stripe_ricordato", {}).clear()
         connect = getattr(self._sys, "connect", None)
         reg = getattr(self._sys, "registro_host", None)
         if connect is None or reg is None:
@@ -11808,7 +11816,34 @@ class RouterHTTP:
             raw_imgs = []
         imgs = [Immagine(u, i) for i, u in enumerate(raw_imgs)
                 if isinstance(u, str)]
-        id_num = self._sys.catalogo.pubblica(scheda, imgs)
+        # IL PREZZO BASE (giro dell'host vero, 30/10: «cambio la cifra, salvo e risulta ancora
+        # quello vecchio»). Quello di PRIMA si legge adesso, perche' `pubblica` lo sovrascrive;
+        # dopo, i giorni del calendario che lo avevano lo seguono (fase58 `segui_prezzo_base`).
+        # ⛔ E' `prezzo_base_cents`, MAI `prezzo_notte_cents`: quello e' lo specchio del giorno
+        # piu' economico, e preso per il base spostava i giorni sbagliati (code-review 30/10).
+        # Stesso base di prima -> `segui_prezzo_base` non tocca niente.
+        # ⛔ SOTTO SERRATURA, leggere-pubblicare-spostare: due salvataggi insieme leggevano lo
+        # stesso base vecchio e il secondo non trovava piu' giorni (code-review 30/10). Vale in
+        # UN processo, come la serratura dello specchio (fase57 `rispecchia_prezzo`).
+        # ⛔ Moneta cambiata: i giorni sono nella moneta di prima, e confrontarli col base nuovo
+        # mescolerebbe euro e yen -- non si spostano.
+        with _SERRATURA_PREZZO_BASE:
+            prima = self._sys.catalogo.dettaglio_owner(scheda.slug)
+            id_num = self._sys.catalogo.pubblica(scheda, imgs)
+            calendario = {"aggiornati": 0, "speciali": 0, "prenotati": 0}
+            if prima is not None and prima.get("valuta") == scheda.valuta:
+                import datetime as _d
+                # ISOLATO ma ERROR, e lo sa anche l'host (`calendario: None`): l'annuncio e'
+                # salvato, e dire «aggiornato» senza i giorni sarebbe di nuovo il prezzo che torna.
+                try:
+                    calendario = self._sys.inventario.segui_prezzo_base(
+                        scheda.slug, _d.date.today().isoformat(),
+                        self._prezzo_base_di(scheda.slug, prima), scheda.prezzo_notte_cents)
+                except Exception:
+                    logger.error("PREZZO BASE NON PORTATO SUL CALENDARIO di %r: l'annuncio e' "
+                                 "salvato, i giorni hanno ancora il prezzo vecchio", scheda.slug,
+                                 exc_info=True)
+                    calendario = None
         # ANTI-RICICLO DELLA PROMOZIONE (buco MISURATO e chiuso il 2026-08-09). Il CIN lo
         # rilascia lo Stato: non si cambia con un'email nuova. Alla registrazione non
         # esiste ancora — li' si possono confrontare solo email e telefono (fase88:334) —
@@ -11845,7 +11880,8 @@ class RouterHTTP:
                                             scheda.slug)
         except Exception:
             logger.warning("avviso domanda ospiti su publish fallito (ISOLATO)", exc_info=True)
-        return 201, {"stato": "pubblicato", "slug": scheda.slug, "id": id_num}
+        return 201, {"stato": "pubblicato", "slug": scheda.slug, "id": id_num,
+                     "calendario": calendario}
 
     def _motore_seo(self):
         """Motore SEO (fase173) costruito pigramente dai componenti del sistema."""
@@ -12791,6 +12827,52 @@ class RouterHTTP:
         bot = (_os.environ.get("TELEGRAM_BOT_USERNAME") or "BookinVipInfo_bot").lstrip("@")
         return 200, {"link": "https://t.me/%s?start=%s" % (bot, self._tg_firma_payload(hid))}
 
+    def _host_collegamenti(self, headers):
+        """LO STATO dei collegamenti dell'host, chiesto dal pannello quando si apre: Telegram
+        (c'e' la chat salvata?) e Stripe (assente | da_completare | in_verifica | pronto |
+        sconosciuto).
+
+        ⛔ Nasce dal giro dell'host vero del 30/10: il pannello diceva «Collega Telegram» e
+        «Collega Stripe» a un host gia' collegato, a ogni apertura, perche' nessuno gli diceva
+        lo stato. SOLA LETTURA, e non e' un dettaglio: `stripe_link` lo stato lo dice, ma
+        intanto crea il conto e un link nuovo -- qui non nasce niente.
+        ⚠️ «sconosciuto» non e' «da_completare»: se Stripe non risponde, un host collegato non
+        deve leggere che ha un lavoro da finire. `stato_account` isola il guasto e torna
+        {"pronto": False} SENZA `dettagli_inviati`: e' quella chiave a dire che Stripe ha
+        risposto davvero."""
+        if not self._auth_host(headers):
+            return 401, {"errore": "unauthorized"}
+        hid = self._host_id_da_token(headers)
+        if not hid:
+            # la chiave dell'operatore entra in `_auth_host` ma non e' un host: niente stato da dire
+            return 422, {"errore": "host_id_mancante"}
+        reg = getattr(self._sys, "registro_host", None)
+        info = (reg.info_host(hid) if reg is not None else None) or {}
+        acct = info.get("stripe_account_id", "")
+        stripe = "sconosciuto" if acct else "assente"
+        connect = getattr(self._sys, "connect", None)
+        # ⏱️ UNA domanda a Stripe al minuto per conto, qui e non solo nel browser: un copione
+        # col biglietto di un host consumava il limite di Stripe che serve ai pagamenti
+        # (code-review 30/10). Si ricorda solo una risposta VERA: se Stripe tace, si riprova.
+        import time as _t
+        ricordati = self.__dict__.setdefault("_stato_stripe_ricordato", {})
+        ricordo = ricordati.get(acct)
+        if acct and ricordo and _t.monotonic() - ricordo[0] < 60:
+            return 200, {"telegram": bool(info.get("telegram_chat_id")), "stripe": ricordo[1]}
+        if acct and connect is not None:
+            try:
+                st = connect.stato_account(acct)
+            except Exception:
+                logger.warning("stato del conto Stripe non letto (ISOLATO)", exc_info=True)
+                st = {}
+            # dati inviati ma bonifici non ancora attivi: e' Stripe che controlla, l'host non
+            # ha niente da completare (un pulsante «Completa» gli farebbe rifare il modulo)
+            if isinstance(st, dict) and "dettagli_inviati" in st:
+                stripe = ("pronto" if st.get("pronto") else
+                          "in_verifica" if st.get("dettagli_inviati") else "da_completare")
+                ricordati[acct] = (_t.monotonic(), stripe)
+        return 200, {"telegram": bool(info.get("telegram_chat_id")), "stripe": stripe}
+
     def _tg_reply(self, chat_id, testo):
         """Risposta best-effort all'host su Telegram (isolata)."""
         import json as _j
@@ -12975,6 +13057,8 @@ class RouterHTTP:
         except Exception:
             logger.error("host alloggi: eccezione ISOLATA", exc_info=True)
             return 503, {"errore": "service_unavailable"}
+        for a in el:
+            a["prezzo_base_cents"] = self._prezzo_base_di(a["slug"], a)
         return 200, {"alloggi": el}
 
     def _verifica_proprieta(self, headers, slug) -> bool:
@@ -13011,6 +13095,20 @@ class RouterHTTP:
         except Exception:
             return True
 
+    def _prezzo_base_di(self, slug, det):
+        """Il prezzo base dell'annuncio: quello scritto dall'host (fase57) o, per gli annunci
+        nati prima della sua colonna, il prezzo piu' comune del calendario -- MAI la vetrina,
+        che e' il giorno piu' economico (code-review 30/10). None se non si sa."""
+        base = det.get("prezzo_base_cents")
+        if base:
+            return base
+        import datetime as _d
+        try:
+            return self._sys.inventario.prezzo_piu_comune(slug, _d.date.today().isoformat())
+        except Exception:
+            logger.warning("prezzo piu' comune del calendario non letto (ISOLATO)", exc_info=True)
+            return None
+
     def _host_alloggio_dettaglio(self, query, headers):
         """Dettaglio COMPLETO di un alloggio del proprietario (per pre-riempire il form di
         modifica). Host-auth + verifica proprietà."""
@@ -13028,6 +13126,7 @@ class RouterHTTP:
             return 503, {"errore": "service_unavailable"}
         if d is None:
             return 404, {"errore": "non_trovato"}
+        d["prezzo_base_cents"] = self._prezzo_base_di(slug, d)
         return 200, d
 
     def _host_geocode(self, query, headers):

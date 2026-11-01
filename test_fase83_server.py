@@ -7269,5 +7269,384 @@ class TestF7LImportoDovutoNonSegnatoNonRompeLaCancellazione(_OraVeraPerIlPrevent
         self.assertEqual([], [e for e in errori if "importo_dovuto_non_segnato" in e], errori)
 
 
+class _ConnectDelloStato:
+    """Connect finto al bordo per lo STATO del conto. Ricorda se qualcuno ha provato a CREARE
+    un conto (una domanda di stato non deve crearne) e risponde come `stato_account`:
+    `dettagli_inviati` c'e' solo quando Stripe ha risposto davvero (fase101 :239)."""
+
+    def __init__(self, risposta):
+        self.risposta = risposta
+        self.creati = []
+
+    def crea_account(self, email=""):
+        self.creati.append(email)
+        return "acct_nuovo"
+
+    def link_onboarding(self, acct, ritorno, refresh_url=""):
+        return "https://connect.stripe.test/onboarding"
+
+    def stato_account(self, acct):
+        if isinstance(self.risposta, Exception):
+            raise self.risposta
+        return dict(self.risposta)
+
+
+class TestIlPannelloSaSeStripeETelegramSonoGiaCollegati(_BancoDeiSoldiDelServer):
+    """Giro dell'host vero, 30/10. Il fondatore: «ogni volta che apro la pagina host, stripe e'
+    da ricollegare. Telegram e' da ricollegare». Riprodotto col browser sulla copia locale:
+    Telegram collegato (chat salvata) e il pannello, ricaricato, dice ancora «Collega
+    Telegram». Il perche': nessuna rotta dice al pannello lo STATO; `stripe_link` lo dice
+    solo al clic, e intanto crea il conto e un link nuovo. Questa rotta e' di SOLA LETTURA."""
+
+    def stato(self, tok=None):
+        return self.g("GET", "/api/host/collegamenti", None,
+                      {"X-Host-Token": self.tok if tok is None else tok})
+
+    def test_host_gia_collegato_a_tutt_e_due_il_pannello_lo_sa(self):
+        self.sis.registro_host.imposta_telegram_chat(self.hid, "555")
+        self.sis.connect = _ConnectDelloStato({"pronto": True, "dettagli_inviati": True})
+        s, d = self.stato()
+        self.assertEqual((200, {"telegram": True, "stripe": "pronto"}), (s, d),
+                         "IL PANNELLO NON SA CHE L'HOST E' GIA' COLLEGATO")
+        self.assertEqual([], self.sis.connect.creati, "UNA DOMANDA DI STATO HA CREATO UN CONTO")
+
+    def test_host_nuovo_vede_i_due_pulsanti_e_nessun_conto_nasce(self):
+        s, c = self.g("POST", "/api/host/registrazione",
+                      {"email": "nuovo@banco.it", "password": "password1",
+                       "accetta_termini": True, "accetta_clausole": True,
+                       "accetta_privacy": True, "doc_sha256": doc_sha256(),
+                       "versione": CONTRATTO_HOST_VERSIONE})
+        _deve(s == 201, s, c)
+        self.sis.connect = _ConnectDelloStato({"pronto": False})
+        self.assertEqual((200, {"telegram": False, "stripe": "assente"}),
+                         self.stato(c["token"]))
+        self.assertEqual([], self.sis.connect.creati, "UNA DOMANDA DI STATO HA CREATO UN CONTO")
+
+    def test_conto_stripe_a_meta_si_dice_da_completare(self):
+        self.sis.connect = _ConnectDelloStato({"pronto": False, "dettagli_inviati": False})
+        self.assertEqual((200, {"telegram": False, "stripe": "da_completare"}), self.stato())
+
+    def test_dati_inviati_e_bonifici_non_ancora_attivi_si_dice_in_verifica(self):
+        # l'host ha finito il modulo, e' Stripe che controlla: un pulsante «Completa» lo
+        # rimanderebbe a rifare un lavoro gia' fatto (code-review del 30/10)
+        self.sis.connect = _ConnectDelloStato({"pronto": False, "dettagli_inviati": True})
+        self.assertEqual((200, {"telegram": False, "stripe": "in_verifica"}), self.stato())
+
+    def test_due_domande_ravvicinate_chiedono_a_stripe_una_volta_sola(self):
+        # il limite di una domanda al minuto stava solo nel browser: un copione col biglietto
+        # di un host consumava il limite di Stripe che serve ai pagamenti (code-review 30/10)
+        chiesti = []
+
+        class _Contato(_ConnectDelloStato):
+            def stato_account(s, acct):
+                chiesti.append(acct)
+                return super().stato_account(acct)
+        self.sis.connect = _Contato({"pronto": True, "dettagli_inviati": True})
+        self.assertEqual([(200, {"telegram": False, "stripe": "pronto"})] * 2,
+                         [self.stato(), self.stato()])
+        self.assertEqual(["acct_banco"], chiesti, "OGNI DOMANDA DEL PANNELLO VA A STRIPE")
+
+    def test_una_risposta_mancata_non_si_ricorda(self):
+        # ferrea 10, la gemella: se Stripe tace, la domanda dopo deve riprovare
+        self.sis.connect = _ConnectDelloStato({"pronto": False})
+        self.assertEqual("sconosciuto", self.stato()[1]["stripe"])
+        self.sis.connect = _ConnectDelloStato({"pronto": True, "dettagli_inviati": True})
+        self.assertEqual("pronto", self.stato()[1]["stripe"])
+
+    def test_stripe_che_non_risponde_non_diventa_da_completare(self):
+        # ferrea 10: un host collegato non deve leggere «da completare» perche' Stripe tace.
+        # `stato_account` isola il guasto e torna {"pronto": False} SENZA dettagli_inviati.
+        self.sis.connect = _ConnectDelloStato({"pronto": False})
+        self.assertEqual((200, {"telegram": False, "stripe": "sconosciuto"}), self.stato())
+
+    def test_stripe_che_solleva_non_da_500(self):
+        self.sis.connect = _ConnectDelloStato(OSError("rete"))
+        with self.assertLogs("core_auto.server", level="WARNING") as reg:
+            self.assertEqual((200, {"telegram": False, "stripe": "sconosciuto"}), self.stato())
+        # ferrea 9: il guasto si scrive col suo dettaglio, non solo «non letto»
+        self.assertEqual([OSError], [r.exc_info[0] for r in reg.records
+                                     if "conto Stripe non letto" in r.getMessage()])
+
+    def test_la_chiave_dell_operatore_non_e_un_host(self):
+        self.assertEqual((422, {"errore": "host_id_mancante"}),
+                         self.g("GET", "/api/host/collegamenti", None, {"X-Host-Key": "hk"}))
+
+    def test_host_senza_conto_resta_assente_anche_se_stripe_risponde_pronto(self):
+        # a Stripe si chiede SOLO di un conto che c'e': un host senza conto non diventa «pronto»
+        s, c = self.g("POST", "/api/host/registrazione",
+                      {"email": "senza@banco.it", "password": "password1",
+                       "accetta_termini": True, "accetta_clausole": True,
+                       "accetta_privacy": True, "doc_sha256": doc_sha256(),
+                       "versione": CONTRATTO_HOST_VERSIONE})
+        _deve(s == 201, s, c)
+        self.sis.connect = _ConnectDelloStato({"pronto": True, "dettagli_inviati": True})
+        self.assertEqual((200, {"telegram": False, "stripe": "assente"}), self.stato(c["token"]))
+
+    def test_il_ricordo_vale_meno_di_un_minuto_esatto(self):
+        from unittest import mock
+        chiesti, ora = [], [1000.0]
+
+        class _Contato(_ConnectDelloStato):
+            def stato_account(s, acct):
+                chiesti.append(ora[0])
+                return super().stato_account(acct)
+        self.sis.connect = _Contato({"pronto": True, "dettagli_inviati": True})
+        with mock.patch("time.monotonic", lambda: ora[0]):
+            self.stato()
+            ora[0] = 1059.9
+            self.stato()
+            ora[0] = 1060.0
+            self.stato()
+        self.assertEqual([1000.0, 1060.0], chiesti,
+                         "DOPO UN MINUTO ESATTO LO STATO DI STRIPE VA RICHIESTO")
+
+    def test_pagamenti_automatici_spenti_con_conto_salvato(self):
+        self.sis.connect = None
+        self.assertEqual((200, {"telegram": False, "stripe": "sconosciuto"}), self.stato())
+
+    def test_senza_accesso_401(self):
+        self.assertEqual(401, self.g("GET", "/api/host/collegamenti")[0])
+
+
+class TestIlPrezzoCambiatoDallHostNonTornaQuelloVecchio(_BancoDeiSoldiDelServer):
+    """Giro dell'host vero, 30/10. Il fondatore: «clicco modifica, cambio la cifra, salvo e
+    risulta ancora quello vecchio». Riprodotto col browser: annuncio a 80 EUR, 30 giorni aperti
+    a 80, Modifica -> 95 -> «Annuncio aggiornato», e il server ha ancora 80. Il perche':
+    `pubblica` scrive 95 e subito `rispecchia_prezzo` (fase57 :732) ci ricopia sopra il prezzo
+    piu' basso del calendario, cioe' 80. Come su Airbnb (aiuto 37 e 474): il prezzo
+    dell'annuncio e' il prezzo BASE, e i giorni che lo avevano lo seguono; i giorni con un
+    prezzo diverso, scelto apposta, e quelli gia' prenotati restano com'erano."""
+
+    SLUG = "casa-del-prezzo"
+
+    def setUp(self):
+        super().setUp()
+        self.pubblica(self.SLUG)            # annuncio e giorni [0, 60) allo stesso prezzo
+
+    def modifica(self, prezzo):
+        return self.g("POST", "/api/host/pubblica",
+                      {"slug": self.SLUG, "titolo": "Casa", "citta": "Roma",
+                       "prezzo_notte_cents": prezzo, "capacita": 2,
+                       "politica_cancellazione": "flessibile"}, {"X-Host-Token": self.tok})
+
+    def prezzo_del_giorno(self, giorni):
+        return self.sis.inventario.stato_giorno(self.SLUG, _fra(giorni))["prezzo_netto_cents"]
+
+    def vetrina(self):
+        return self.sis.catalogo.dettaglio_owner(self.SLUG)["prezzo_notte_cents"]
+
+    def test_il_prezzo_nuovo_resta_e_l_ospite_paga_quello(self):
+        s, c = self.modifica(12500)
+        _deve(s == 201, s, c)
+        self.assertEqual(12500, self.vetrina(), "IL PREZZO CAMBIATO E' TORNATO QUELLO VECCHIO")
+        s, q = self.g("POST", "/api/concierge/quote",
+                      {"alloggio_id": self.SLUG, "check_in": _fra(10),
+                       "check_out": _fra(12), "party": 2})
+        _deve(s == 200, s, q)
+        self.assertEqual(25000, q["prezzo_netto_cents"], "L'OSPITE PAGA ANCORA IL PREZZO VECCHIO")
+        self.assertEqual(60, c.get("calendario", {}).get("aggiornati"),
+                         "IL PANNELLO NON SA DIRE ALL'HOST QUANTI GIORNI HANNO SEGUITO: %r" % (c,))
+
+    def test_un_giorno_col_prezzo_scelto_apposta_resta_com_era(self):
+        s, c = self.g("POST", "/api/host/disponibilita",
+                      {"alloggio_id": self.SLUG, "giorno": _fra(20), "unita_totali": 1,
+                       "prezzo_netto_cents": 15000}, {"X-Host-Token": self.tok})
+        _deve(s == 200, s, c)
+        s, c = self.modifica(12500)
+        _deve(s == 201, s, c)
+        self.assertEqual((12500, 15000), (self.prezzo_del_giorno(19), self.prezzo_del_giorno(20)),
+                         "IL PREZZO SPECIALE DI UN GIORNO E' STATO CANCELLATO")
+        self.assertEqual({"aggiornati": 59, "speciali": 1, "prenotati": 0}, c.get("calendario"))
+
+    def test_i_giorni_gia_prenotati_restano_al_prezzo_dell_ospite(self):
+        # il cruscotto ricalcola gli incassi di una prenotazione dai prezzi dei suoi giorni
+        # (`_revenue_prenotazione`): cambiarli cambierebbe un incasso gia' fatto
+        self.prenota(self.SLUG, 5)
+        s, c = self.modifica(12500)
+        _deve(s == 201, s, c)
+        self.assertEqual((10000, 10000, 12500), (self.prezzo_del_giorno(5),
+                                                 self.prezzo_del_giorno(6),
+                                                 self.prezzo_del_giorno(7)),
+                         "IL PREZZO DI UNA NOTTE GIA' VENDUTA E' CAMBIATO")
+        self.assertEqual({"aggiornati": 58, "speciali": 0, "prenotati": 2}, c.get("calendario"))
+
+    def test_una_notte_chiusa_da_booking_riapre_al_prezzo_nuovo(self):
+        # il calendario esterno mette da parte il prezzo dell'host e lo rimette quando la
+        # notte si libera: se quel prezzo resta il vecchio, il vecchio torna da solo
+        self.sis.inventario.feed_applica(self.SLUG, "booking", [_fra(30)])
+        s, c = self.modifica(12500)
+        _deve(s == 201, s, c)
+        self.sis.inventario.feed_applica(self.SLUG, "booking", [])
+        self.assertEqual(12500, self.prezzo_del_giorno(30),
+                         "LA NOTTE RIAPERTA DA BOOKING E' TORNATA AL PREZZO VECCHIO")
+
+    def base(self):
+        return self.sis.catalogo.dettaglio_owner(self.SLUG).get("prezzo_base_cents")
+
+    def test_salvare_senza_cambiare_il_prezzo_non_tocca_il_calendario(self):
+        # ferrea 10, la gemella: chi cambia solo il titolo non si vede riscrivere le date.
+        # ⛔ Il modulo «Modifica» rimanda il BASE (10000), non la vetrina: la vetrina e' lo
+        # specchio del giorno piu' economico (8000), e prenderla per il base riscriveva il
+        # giorno che l'host aveva appena cambiato dal calendario (code-review del 30/10).
+        s, c = self.g("POST", "/api/host/disponibilita",
+                      {"alloggio_id": self.SLUG, "giorno": _fra(20), "unita_totali": 1,
+                       "prezzo_netto_cents": 8000}, {"X-Host-Token": self.tok})
+        _deve(s == 200, s, c)
+        s, c = self.modifica(10000)
+        _deve(s == 201, s, c)
+        self.assertEqual((8000, 10000), (self.prezzo_del_giorno(20), self.prezzo_del_giorno(21)))
+        self.assertEqual({"aggiornati": 0, "speciali": 0, "prenotati": 0},
+                         c.get("calendario", {"aggiornati": 0, "speciali": 0, "prenotati": 0}))
+
+    def test_se_i_giorni_non_seguono_l_host_lo_sa_e_il_registro_grida(self):
+        # D19: lo stato «impossibile» costruito a mano -- l'archivio del calendario esplode
+        def esplode(*_a, **_k):
+            raise sqlite3.OperationalError("database is locked")
+        vero = self.sis.inventario.segui_prezzo_base
+        self.sis.inventario.segui_prezzo_base = esplode
+        try:
+            with self.assertLogs("core_auto.server", level="ERROR") as reg:
+                s, c = self.modifica(12500)
+        finally:
+            self.sis.inventario.segui_prezzo_base = vero
+        self.assertEqual((201, None), (s, c.get("calendario", "manca")),
+                         "L'HOST LEGGEREBBE «AGGIORNATO» CON I GIORNI AL PREZZO VECCHIO")
+        self.assertEqual([sqlite3.OperationalError],
+                         [r.exc_info[0] for r in reg.records
+                          if "PREZZO BASE NON PORTATO" in r.getMessage()], reg.output)
+
+    def test_prezzo_piu_comune_che_esplode_lascia_il_base_non_noto(self):
+        # D19: annuncio di prima (base 0) e il calendario che non risponde: il modulo si apre
+        # lo stesso, il base resta «non si sa» e il registro dice perche'
+        con = sqlite3.connect(f"{self.dir}/c.db")
+        con.execute("UPDATE alloggi SET prezzo_base_cents=0")
+        con.commit()
+        con.close()
+
+        def esplode(*_a, **_k):
+            raise sqlite3.OperationalError("database is locked")
+        vero = self.sis.inventario.prezzo_piu_comune
+        self.sis.inventario.prezzo_piu_comune = esplode
+        try:
+            with self.assertLogs("core_auto.server", level="WARNING") as reg:
+                s, d = self.r.gestisci("GET", "/api/host/alloggio", {"slug": self.SLUG}, None,
+                                       {"X-Host-Token": self.tok})
+        finally:
+            self.sis.inventario.prezzo_piu_comune = vero
+        self.assertEqual((200, None), (s, d.get("prezzo_base_cents", "manca")))
+        self.assertEqual([sqlite3.OperationalError],
+                         [r.exc_info[0] for r in reg.records
+                          if "prezzo piu' comune" in r.getMessage()])
+
+    def test_un_giorno_speciale_piu_economico_non_diventa_il_base(self):
+        # la vetrina scende a 8000 (il giorno speciale): il «vecchio» e' il base, 10000
+        s, c = self.g("POST", "/api/host/disponibilita",
+                      {"alloggio_id": self.SLUG, "giorno": _fra(20), "unita_totali": 1,
+                       "prezzo_netto_cents": 8000}, {"X-Host-Token": self.tok})
+        _deve(s == 200, s, c)
+        s, c = self.modifica(12500)
+        _deve(s == 201, s, c)
+        self.assertEqual((12500, 8000), (self.prezzo_del_giorno(19), self.prezzo_del_giorno(20)),
+                         "HA SPOSTATO IL GIORNO SPECIALE E LASCIATO GLI ALTRI AL PREZZO VECCHIO")
+        self.assertEqual({"aggiornati": 59, "speciali": 1, "prenotati": 0}, c.get("calendario"))
+        self.assertEqual(12500, self.base())
+
+    def test_se_nessun_giorno_segue_il_base_e_salvato_lo_stesso(self):
+        # tutti i giorni a un prezzo scelto apposta: niente si sposta, ma il base nuovo resta
+        # (e non viene ricoperto), e la vetrina dice onestamente «da» il giorno piu' economico
+        s, c = self.g("POST", "/api/host/disponibilita_range",
+                      {"alloggio_id": self.SLUG, "da": _fra(0), "a": _fra(60), "unita_totali": 1,
+                       "prezzo_netto_cents": 15000}, {"X-Host-Token": self.tok})
+        _deve(s == 200, s, c)
+        s, c = self.modifica(12500)
+        _deve(s == 201, s, c)
+        self.assertEqual((15000, 15000), (self.prezzo_del_giorno(0), self.prezzo_del_giorno(59)),
+                         "HA RISCRITTO I GIORNI CHE L'HOST AVEVA PREZZATO APPOSTA")
+        self.assertEqual({"aggiornati": 0, "speciali": 60, "prenotati": 0}, c.get("calendario"))
+        self.assertEqual((12500, 15000), (self.base(), self.vetrina()),
+                         "IL BASE SCRITTO DALL'HOST E' SPARITO")
+
+    def test_una_notte_con_camere_ancora_libere_segue_il_base(self):
+        # 2 camere, 1 venduta: la notte e' ancora in vendita e deve avere il prezzo nuovo;
+        # quella tutta venduta resta com'era
+        s, c = self.g("POST", "/api/host/disponibilita",
+                      {"alloggio_id": self.SLUG, "giorno": _fra(25), "unita_totali": 2,
+                       "prezzo_netto_cents": 10000}, {"X-Host-Token": self.tok})
+        _deve(s == 200, s, c)
+        self.prenota(self.SLUG, 25)
+        s, c = self.modifica(12500)
+        _deve(s == 201, s, c)
+        self.assertEqual((12500, 10000), (self.prezzo_del_giorno(25), self.prezzo_del_giorno(26)),
+                         "UNA NOTTE CON UNA CAMERA ANCORA LIBERA E' RIMASTA AL PREZZO VECCHIO")
+        self.assertEqual({"aggiornati": 59, "speciali": 0, "prenotati": 1}, c.get("calendario"))
+
+    def test_un_annuncio_di_prima_prende_come_base_il_prezzo_piu_comune(self):
+        # annuncio nato prima della colonna del base: il base non si sa (0). La vetrina e' il
+        # giorno piu' economico (8000) e prenderla per il base sposterebbe proprio quel giorno
+        s, c = self.g("POST", "/api/host/disponibilita",
+                      {"alloggio_id": self.SLUG, "giorno": _fra(20), "unita_totali": 1,
+                       "prezzo_netto_cents": 8000}, {"X-Host-Token": self.tok})
+        _deve(s == 200, s, c)
+        con = sqlite3.connect(f"{self.dir}/c.db")
+        con.execute("UPDATE alloggi SET prezzo_base_cents=0")
+        con.commit()
+        con.close()
+        s, d = self.r.gestisci("GET", "/api/host/alloggio", {"slug": self.SLUG}, None,
+                               {"X-Host-Token": self.tok})
+        _deve(s == 200, s, d)
+        self.assertEqual(10000, d.get("prezzo_base_cents"), "IL MODULO MOSTRA IL GIORNO SPECIALE")
+        s, c = self.modifica(12500)
+        _deve(s == 201, s, c)
+        self.assertEqual((12500, 8000), (self.prezzo_del_giorno(19), self.prezzo_del_giorno(20)))
+
+    def test_cambiare_valuta_non_sposta_i_giorni(self):
+        # i prezzi dei giorni sono nella moneta di prima: confrontarli col base nuovo mescola
+        # euro e yen (code-review 30/10). Senza prenotazioni il cambio e' permesso.
+        s, c = self.g("POST", "/api/host/pubblica",
+                      {"slug": self.SLUG, "titolo": "Casa", "citta": "Roma", "valuta": "USD",
+                       "prezzo_notte_cents": 12500, "capacita": 2,
+                       "politica_cancellazione": "flessibile"}, {"X-Host-Token": self.tok})
+        _deve(s == 201, s, c)
+        self.assertEqual(10000, self.prezzo_del_giorno(5), "HA SPOSTATO I GIORNI FRA DUE MONETE")
+        self.assertEqual({"aggiornati": 0, "speciali": 0, "prenotati": 0}, c.get("calendario"))
+
+    def test_due_salvataggi_insieme_portano_i_giorni_all_ultimo_base(self):
+        # due schede aperte, o un doppio clic con la cifra cambiata: tutt'e due leggevano il
+        # base vecchio, e il secondo non trovava piu' giorni da spostare (code-review 30/10)
+        import threading
+        vera = self.sis.catalogo.pubblica
+
+        def lenta(*a, **k):
+            time.sleep(0.3)
+            return vera(*a, **k)
+        self.sis.catalogo.pubblica = lenta
+        try:
+            fili = [threading.Thread(target=self.modifica, args=(p,)) for p in (11000, 12000)]
+            for f in fili:
+                f.start()
+                time.sleep(0.05)
+            for f in fili:
+                f.join(10)
+        finally:
+            self.sis.catalogo.pubblica = vera
+        self.assertEqual(self.base(), self.prezzo_del_giorno(5),
+                         "IL BASE E I GIORNI SONO RIMASTI DIVERSI DOPO DUE SALVATAGGI INSIEME")
+
+    def test_il_modulo_e_la_tabella_ricevono_il_base(self):
+        s, c = self.g("POST", "/api/host/disponibilita",
+                      {"alloggio_id": self.SLUG, "giorno": _fra(20), "unita_totali": 1,
+                       "prezzo_netto_cents": 8000}, {"X-Host-Token": self.tok})
+        _deve(s == 200, s, c)
+        h = {"X-Host-Token": self.tok}
+        s, d = self.r.gestisci("GET", "/api/host/alloggio", {"slug": self.SLUG}, None, h)
+        _deve(s == 200, s, d)
+        s, el = self.r.gestisci("GET", "/api/host/alloggi", {}, None, h)
+        _deve(s == 200, s, el)
+        self.assertEqual((10000, [10000]),
+                         (d.get("prezzo_base_cents"),
+                          [a.get("prezzo_base_cents") for a in el["alloggi"]]),
+                         "IL MODULO «MODIFICA» NON SA QUAL E' IL PREZZO BASE DELL'HOST")
+
+
 if __name__ == "__main__":
     unittest.main()

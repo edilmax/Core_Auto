@@ -936,5 +936,130 @@ class TestLeGuardieDelGiro2(unittest.TestCase):
         self.assertEqual(self.cm.conta_elenco_prenotazioni(alloggio_id=""), 2)
 
 
+class TestIlPrezzoPiuComune(unittest.TestCase):
+    """`prezzo_piu_comune`: il base degli annunci nati prima della colonna del base (fase57).
+    Il piu' comune, non il minimo (quello e' il giorno speciale piu' economico)."""
+
+    G = ("2026-07-01", "2026-07-02", "2026-07-03", "2026-07-04")
+
+    def setUp(self):
+        self.cm = _cm()
+
+    def prezzi(self, *valori):
+        for g, p in zip(self.G, valori):
+            self.assertTrue(self.cm.imposta_disponibilita("a", g, unita_totali=1,
+                                                          prezzo_netto_cents=p))
+
+    def test_il_piu_comune_non_il_minimo(self):
+        self.prezzi(10000, 10000, 15000, 8000)
+        self.assertEqual(10000, self.cm.prezzo_piu_comune("a", self.G[0]))
+
+    def test_a_parita_il_piu_alto_e_solo_da_da_in_poi(self):
+        self.prezzi(9000, 12000, 12000, 9000)
+        self.assertEqual(12000, self.cm.prezzo_piu_comune("a", self.G[0]))
+        self.assertEqual(12000, self.cm.prezzo_piu_comune("a", self.G[2]))
+        self.assertEqual(9000, self.cm.prezzo_piu_comune("a", self.G[3]))
+
+    def test_ingressi_che_non_vanno_e_niente_calendario_danno_none(self):
+        self.prezzi(10000, 10000, 10000, 10000)
+        for argomenti in (("", self.G[0]), ("  ", self.G[0]), (None, self.G[0]),
+                          ("a", "non-data"), ("a", ""), ("a", None), ("vuoto", self.G[0])):
+            self.assertIsNone(self.cm.prezzo_piu_comune(*argomenti), argomenti)
+
+
+class TestIlPrezzoBaseSeguitoDaiGiorni(unittest.TestCase):
+    """`segui_prezzo_base` (giro dell'host vero, 30/10): il prezzo dell'annuncio e' il BASE, i
+    giorni da `da` in poi che lo avevano lo seguono; restano i giorni col prezzo scelto apposta
+    (speciali), le notti gia' vendute (prenotati), i giorni prima di `da` e gli altri alloggi."""
+
+    G = ("2026-07-01", "2026-07-02", "2026-07-03", "2026-07-04")
+
+    def setUp(self):
+        self.cm = _cm()
+        _carica(self.cm, giorni=self.G, prezzo=10000)
+        _carica(self.cm, alloggio="altro", giorni=self.G, prezzo=10000)
+
+    def prezzi(self, alloggio="a"):
+        return [self.cm.stato_giorno(alloggio, g)["prezzo_netto_cents"] for g in self.G]
+
+    def test_i_giorni_dal_primo_in_poi_seguono_e_gli_altri_restano(self):
+        self.assertTrue(self.cm.imposta_disponibilita("a", self.G[3], unita_totali=1,
+                                                      prezzo_netto_cents=15000))
+        self.assertTrue(self.cm.blocca("a", self.G[2], self.G[3], idem_key="k1").ok)
+        esito = self.cm.segui_prezzo_base("a", self.G[1], 10000, 12500)
+        self.assertEqual({"aggiornati": 1, "speciali": 1, "prenotati": 1}, esito)
+        self.assertEqual([10000, 12500, 10000, 15000], self.prezzi())
+        self.assertEqual([10000] * 4, self.prezzi("altro"), "HA TOCCATO UN ALTRO ALLOGGIO")
+
+    def test_una_notte_con_camere_ancora_libere_segue_e_le_vendute_non_sono_speciali(self):
+        # «tutto venduto» e' cio' che resta: 2 camere e 1 venduta e' ancora in vendita.
+        # Una notte tutta venduta a un prezzo speciale e' «prenotata», non «speciale»: l'host
+        # non deve leggere che ha prezzi scelti apposta dove ha solo ospiti.
+        self.assertTrue(self.cm.imposta_disponibilita("a", self.G[1], unita_totali=2,
+                                                      prezzo_netto_cents=10000))
+        self.assertTrue(self.cm.blocca("a", self.G[1], self.G[3], idem_key="k1").ok)
+        self.assertTrue(self.cm.imposta_disponibilita("a", self.G[3], unita_totali=1,
+                                                      prezzo_netto_cents=15000))
+        self.assertTrue(self.cm.blocca("a", self.G[3], "2026-07-05", idem_key="k2").ok)
+        esito = self.cm.segui_prezzo_base("a", self.G[0], 10000, 12500)
+        self.assertEqual({"aggiornati": 2, "speciali": 0, "prenotati": 2}, esito)
+        self.assertEqual([12500, 12500, 10000, 15000], self.prezzi())
+
+    def test_il_prezzo_messo_da_parte_da_un_blocco_esterno_segue(self):
+        self.cm.feed_applica("a", "booking", [self.G[1]])
+        esito = self.cm.segui_prezzo_base("a", self.G[0], 10000, 12500)
+        self.assertEqual({"aggiornati": 4, "speciali": 0, "prenotati": 0}, esito)
+        self.cm.feed_applica("a", "booking", [])
+        self.assertEqual([12500] * 4, self.prezzi())
+
+    def test_lo_specchio_e_avvisato_solo_se_qualcosa_e_cambiato(self):
+        visti = []
+        self.cm.collega_specchio(visti.append)
+        self.cm.segui_prezzo_base("a", self.G[0], 9999, 12500)       # nessun giorno a 9999
+        self.assertEqual([], visti)
+        self.cm.segui_prezzo_base("a", self.G[0], 10000, 12500)
+        self.assertEqual(["a"], visti)
+
+    def test_ingressi_che_non_vanno_non_toccano_niente(self):
+        zero = {"aggiornati": 0, "speciali": 0, "prenotati": 0}
+        for argomenti in (("a", self.G[0], 10000, 10000),            # stesso prezzo
+                          ("a", self.G[0], 0, 12500), ("a", self.G[0], 10000, 0),
+                          ("a", self.G[0], 10000, 1_000_000_01),     # oltre il massimo
+                          ("a", self.G[0], 10000.0, 12500), ("a", self.G[0], True, 12500),
+                          ("a", "non-data", 10000, 12500), ("", self.G[0], 10000, 12500),
+                          # data vuota: in SQL `giorno >= ''` prende TUTTI i giorni
+                          ("a", "", 10000, 12500),
+                          (None, self.G[0], 10000, 12500)):
+            self.assertEqual(zero, self.cm.segui_prezzo_base(*argomenti), argomenti)
+        self.assertEqual([10000] * 4, self.prezzi())
+
+    def test_al_massimo_esatto_si_puo(self):
+        self.assertEqual(4, self.cm.segui_prezzo_base("a", self.G[0], 10000,
+                                                      1_000_000_00)["aggiornati"])
+
+    def test_un_guasto_a_meta_non_lascia_mezzo_calendario(self):
+        # la seconda scrittura (il prezzo messo da parte) esplode: la prima torna indietro
+        self.cm.feed_applica("a", "booking", [self.G[1]])
+        vero = self.cm._apri
+
+        class _Esplode:
+            def __init__(self, con):
+                self._con = con
+
+            def execute(self, sql, *a):
+                if sql.startswith("UPDATE inventario_prima_del_blocco"):
+                    raise sqlite3.OperationalError("disk I/O error")
+                return self._con.execute(sql, *a)
+
+            def close(self):
+                self._con.close()
+        self.cm._apri = lambda: _Esplode(vero())
+        with self.assertRaises(sqlite3.OperationalError):
+            self.cm.segui_prezzo_base("a", self.G[0], 10000, 12500)
+        self.cm._apri = vero
+        self.assertEqual([10000, 0, 10000, 10000], self.prezzi(),
+                         "UN GUASTO HA LASCIATO META' DEI GIORNI COL PREZZO NUOVO")
+
+
 if __name__ == "__main__":
     unittest.main()
