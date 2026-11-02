@@ -527,6 +527,10 @@ CODICI_VISIBILI = (
     # qualcuno si e' ricordato di scrivere». Tre c'erano da prima; il quarto
     # (`range_date_non_valido`) e' nato quel giorno insieme alla rotta che lo usa.
     "alloggio_mancante", "date_mancanti", "non_tuo", "range_date_non_valido",
+    # pannello host — messaggi all'ospite (`POST /api/messaggi`). 2026-11-02, giro dei
+    # pulsanti per il fondatore: con un riferimento sbagliato l'host leggeva la frase
+    # generica «riprova fra qualche minuto», cioe' il consiglio sbagliato.
+    "prenotazione_non_trovata",
 )
 
 

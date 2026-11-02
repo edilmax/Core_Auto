@@ -109,11 +109,48 @@ async function provaTelegramSiAggiorna(browser) {
   return difetti;
 }
 
+// IL PULSANTE DICE COSA E' SUCCESSO DAVVERO (2/11, giro di ogni pulsante per il fondatore).
+// «Copia» scriveva «Copiato!» anche quando il browser rifiutava la copia (qui il permesso non
+// c'e', come su molti telefoni); «Crea» degli operatori del Bunker buttava la risposta del
+// server, quindi un'email sbagliata non diceva niente.
+async function provaMessaggiDeiPulsanti(browser) {
+  const difetti = [];
+  const entra = async (ruolo) => {
+    const ctx = await browser.newContext({ viewport: VIEWPORTS.PC });
+    const page = await ctx.newPage();
+    await page.goto(BASE + ruolo.entra, { waitUntil: 'networkidle', timeout: 20000 });
+    for (const [sel, val] of Object.entries(ruolo.fill)) await page.fill(sel, val);
+    await Promise.all([page.waitForNavigation({ waitUntil: 'networkidle', timeout: 20000 }).catch(() => {}), page.click('#go')]);
+    await page.waitForTimeout(1500);
+    return [ctx, page];
+  };
+  let [ctx, page] = await entra(RUOLI[0]);
+  const copia = await page.evaluate(async () => {
+    let negata = false;
+    try { await navigator.clipboard.writeText('x'); } catch (_) { negata = true; }
+    document.getElementById('btnCopiaRef').click();
+    await new Promise(r => setTimeout(r, 300));
+    return [negata, document.getElementById('btnCopiaRef').textContent, T('b_copiato')];
+  });
+  if (!copia[0]) difetti.push("copia: qui il browser permette la copia, la prova non vede il caso del rifiuto (NON ESEGUITA)");
+  else if (copia[1] === copia[2]) difetti.push(`copia rifiutata dal browser, ma il pulsante dice «${copia[2]}»`);
+  await ctx.close();
+  [ctx, page] = await entra(RUOLI[2]);
+  await page.fill('#aaEmail', 'non-una-email');
+  await page.click('#btnAaCrea');
+  await page.waitForTimeout(1500);
+  const stato = await page.evaluate(() => { const e = document.getElementById('aaStat'); return e ? e.textContent : null; });
+  if (stato === null || !stato.includes('❌')) difetti.push(`crea operatore con email sbagliata: nessun messaggio d'errore -> «${stato}»`);
+  await ctx.close();
+  return difetti;
+}
+
 (async () => {
   const browser = await chromium.launch();
   const risultati = [];
   for (const ruolo of RUOLI) for (const [vpNome, vp] of Object.entries(VIEWPORTS)) risultati.push(await provaRuolo(browser, ruolo, vpNome, vp));
   const difettiTg = await provaTelegramSiAggiorna(browser);
+  const difettiMsg = await provaMessaggiDeiPulsanti(browser);
   await browser.close();
 
   console.log('====== CLICK-THROUGH 3 PANNELLI (PC + Mobile) ======');
@@ -129,6 +166,9 @@ async function provaTelegramSiAggiorna(browser) {
   console.log('\n[TELEGRAM] lo stato si aggiorna da solo dopo il clic:');
   if (difettiTg.length) difettiTg.forEach(d => console.log('   ROSSO: ' + d));
   else console.log('   OK: primo collegamento e telefono nuovo dicono «collegato»');
-  console.log(`\n====== TOTALE difetti VERI: loginKO=${loginKo} · erroriJS=${totJs} · httpErrati=${totHttp} · telegram=${difettiTg.length} ======`);
-  process.exit(loginKo + totJs + totHttp + difettiTg.length > 0 ? 1 : 0);
+  console.log('\n[MESSAGGI] i pulsanti dicono cosa e\' successo davvero:');
+  if (difettiMsg.length) difettiMsg.forEach(d => console.log('   ROSSO: ' + d));
+  else console.log('   OK: «Copia» rifiutata non dice «Copiato!», «Crea» operatore sbagliato dice perche\'');
+  console.log(`\n====== TOTALE difetti VERI: loginKO=${loginKo} · erroriJS=${totJs} · httpErrati=${totHttp} · telegram=${difettiTg.length} · messaggi=${difettiMsg.length} ======`);
+  process.exit(loginKo + totJs + totHttp + difettiTg.length + difettiMsg.length > 0 ? 1 : 0);
 })();
