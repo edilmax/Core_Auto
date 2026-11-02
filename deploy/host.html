@@ -1436,10 +1436,15 @@ document.getElementById('btnCartaLink').onclick = async ()=>{
 // ⛔ Uno stato UGUALE all'ultimo non riscrive il messaggio, e «da completare» non copre il link
 // di Stripe appena aperto (LINK_STRIPE): toglierlo lascerebbe l'host senza la strada per finire.
 let COLLEGAMENTI_ORA=0, STATO_TG=null, STATO_STRIPE=null, LINK_STRIPE=false;
+// 📱 Dopo «Collega Telegram» l'host preme Avvia DAL TELEFONO: questa pagina non riprende il fuoco e
+// restava su «Apri questo link» (il fondatore, 2/11). Si ridomanda lo stato da soli, per dieci
+// minuti al massimo (caricaCollegamenti tiene comunque una domanda al minuto).
+let TG_ATTESA=null;
+function fermaAttesaTg(){ if(TG_ATTESA){ clearInterval(TG_ATTESA); TG_ATTESA=null; } }
 // All'uscita si dimentica tutto: il prossimo host sulla stessa pagina non deve leggere
 // «collegato» per i conti di quello di prima (code-review 30/10).
 function azzeraCollegamenti(){
-  COLLEGAMENTI_ORA=0; STATO_TG=null; STATO_STRIPE=null; LINK_STRIPE=false;
+  COLLEGAMENTI_ORA=0; STATO_TG=null; STATO_STRIPE=null; LINK_STRIPE=false; fermaAttesaTg();
   const tm=document.getElementById('tg_msg'), tb=document.getElementById('btnTgLink');
   tm.className=''; tm.textContent=''; tb.setAttribute('data-i18n','tg_btn'); tb.textContent=T('tg_btn');
   const sm=document.getElementById('sc_msg'), sb=document.getElementById('btnStripeLink');
@@ -1457,6 +1462,7 @@ async function caricaCollegamenti(){
   else if(d.telegram===false && STATO_TG===true){ tm.className=''; tm.textContent='';
     tb.setAttribute('data-i18n','tg_btn'); tb.textContent=T('tg_btn'); }
   STATO_TG=d.telegram;
+  if(d.telegram===true) fermaAttesaTg();
   if(d.stripe===STATO_STRIPE) return;
   STATO_STRIPE=d.stripe;
   const sm=document.getElementById('sc_msg'), sb=document.getElementById('btnStripeLink');
@@ -1474,13 +1480,24 @@ async function caricaCollegamenti(){
 }
 window.addEventListener('focus', ()=>{ if(hostToken()) caricaCollegamenti(); });
 document.getElementById('btnTgLink').onclick = async ()=>{
+  // chi e' gia' collegato chiede il link per un telefono nuovo: deve leggere che e' collegato
+  const giaCollegato = STATO_TG===true;
   COLLEGAMENTI_ORA=0; STATO_TG=null;         // al ritorno da Telegram lo stato si richiede
   const m=document.getElementById('tg_msg');
   try{
     const d=await getJson('/api/host/telegram_link',{headers:authHeaders()});
     if(!d.errore && d.link){
       window.open(d.link,'_blank');
-      m.className='msg ok'; m.innerHTML=T('tg_apri')+' <a href="'+d.link+'" target="_blank" rel="noopener">'+d.link+'</a>';
+      m.className='msg ok'; m.innerHTML=(giaCollegato ? escH(T('tg_ok'))+'<br>' : '')
+        +T('tg_apri')+' <a href="'+d.link+'" target="_blank" rel="noopener">'+d.link+'</a>';
+      fermaAttesaTg();
+      if(!giaCollegato){
+        const fine=Date.now()+600000;
+        TG_ATTESA=setInterval(()=>{
+          if(!hostToken() || Date.now()>fine){ fermaAttesaTg(); return; }
+          caricaCollegamenti();
+        }, 15000);
+      }
     } else { m.className='msg err'; m.textContent='❌ '+(d.errore?fraseErrore(d.errore):fraseErrore('risposta_non_valida')); }
   }catch(e){ m.className='msg err'; m.textContent=T('errore')+' '+e.message; }
 };

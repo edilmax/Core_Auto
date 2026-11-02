@@ -73,10 +73,47 @@ async function provaRuolo(browser, ruolo, vpNome, vp) {
   return { ruolo: ruolo.nome, vp: vpNome, login: true, bottoni: totVisibili, cliccati, disabilitati, jsErr, httpErr, stripeAttesi };
 }
 
+// TELEGRAM SI AGGIORNA DA SOLO (2/11, il fondatore: «Telegram dice sempre Ricollega e due secondi fa
+// l'ho collegato»). L'host si collega DAL TELEFONO: la pagina sul PC non riprende il fuoco e restava
+// ferma su «Apri questo link». Lo stato del server lo finge `page.route`, l'orologio lo sposta
+// Playwright. Due casi: il primo collegamento deve diventare «collegato» senza toccare la pagina;
+// chi e' gia' collegato e chiede il link per un telefono nuovo deve leggere che e' collegato.
+async function provaTelegramSiAggiorna(browser) {
+  const difetti = [];
+  for (const giaCollegato of [false, true]) {
+    const ctx = await browser.newContext({ viewport: VIEWPORTS.PC });
+    const page = await ctx.newPage();
+    await page.clock.install();
+    await page.addInitScript(() => { window.open = () => null; });
+    let collegato = giaCollegato;
+    await page.route('**/api/host/collegamenti', r => r.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ telegram: collegato, stripe: 'assente' }) }));
+    await page.route('**/api/host/telegram_link', r => r.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ link: 'https://t.me/prova_bot?start=x' }) }));
+    await page.goto(BASE + RUOLI[0].entra, { waitUntil: 'networkidle', timeout: 20000 });
+    for (const [sel, val] of Object.entries(RUOLI[0].fill)) await page.fill(sel, val);
+    await Promise.all([page.waitForNavigation({ waitUntil: 'networkidle', timeout: 20000 }).catch(() => {}), page.click('#go')]);
+    await page.waitForTimeout(1500);
+    await page.evaluate(() => document.getElementById('btnTgLink').click());
+    await page.waitForTimeout(500);
+    collegato = true;                      // l'host preme Avvia sul telefono
+    // a passi, con un attimo vero in mezzo: in un salto solo da 70 s l'attesa massima di ogni
+    // domanda al server scadrebbe prima della risposta, che arriva in tempo vero
+    for (let i = 0; i < 6; i++) { await page.clock.runFor(15000); await page.waitForTimeout(400); }
+    const [msg, ok] = await page.evaluate(() => [document.getElementById('tg_msg').textContent, T('tg_ok')]);
+    const caso = giaCollegato ? 'gia collegato, link per un telefono nuovo' : 'primo collegamento';
+    if (!msg.includes(ok)) difetti.push(`${caso}: il messaggio non dice «${ok}» -> «${msg.slice(0, 90)}»`);
+    if (giaCollegato && !msg.includes('t.me/prova_bot')) difetti.push(`${caso}: il link per il telefono nuovo e' sparito`);
+    await ctx.close();
+  }
+  return difetti;
+}
+
 (async () => {
   const browser = await chromium.launch();
   const risultati = [];
   for (const ruolo of RUOLI) for (const [vpNome, vp] of Object.entries(VIEWPORTS)) risultati.push(await provaRuolo(browser, ruolo, vpNome, vp));
+  const difettiTg = await provaTelegramSiAggiorna(browser);
   await browser.close();
 
   console.log('====== CLICK-THROUGH 3 PANNELLI (PC + Mobile) ======');
@@ -89,6 +126,9 @@ async function provaRuolo(browser, ruolo, vpNome, vp) {
     if (r.httpErr.length) { totHttp += r.httpErr.length; console.log(`   HTTP >=400 NON attesi (${r.httpErr.length}):`); [...new Set(r.httpErr)].slice(0, 12).forEach(e => console.log('      - ' + e)); }
     if (r.login && !r.jsErr.length && !r.httpErr.length) console.log('   OK: nessun errore JS, nessuna risposta HTTP errata (oltre agli Stripe attesi)');
   }
-  console.log(`\n====== TOTALE difetti VERI: loginKO=${loginKo} · erroriJS=${totJs} · httpErrati=${totHttp} ======`);
-  process.exit(loginKo + totJs + totHttp > 0 ? 1 : 0);
+  console.log('\n[TELEGRAM] lo stato si aggiorna da solo dopo il clic:');
+  if (difettiTg.length) difettiTg.forEach(d => console.log('   ROSSO: ' + d));
+  else console.log('   OK: primo collegamento e telefono nuovo dicono «collegato»');
+  console.log(`\n====== TOTALE difetti VERI: loginKO=${loginKo} · erroriJS=${totJs} · httpErrati=${totHttp} · telegram=${difettiTg.length} ======`);
+  process.exit(loginKo + totJs + totHttp + difettiTg.length > 0 ? 1 : 0);
 })();
