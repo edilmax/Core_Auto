@@ -622,7 +622,7 @@
  "813b9082642c": {
   "blocco": 1,
   "comando": "python collaudi/esame_produzione.py --scrivi",
-  "commit": "8a681f0",
+  "commit": "b654edd",
   "condizione": "gli invarianti sono verificati in PRODUZIONE, non solo nei test",
   "denominatore": 14,
   "esito": false,
@@ -655,8 +655,8 @@
    "fase87_stripe_webhook": "c77544db5a33",
    "fase99_multicurrency": "61a3b5a0c820"
   },
-  "motivo": "l'ULTIMO giro INTERO del Guardiano e' finito pulito (GUARDIANO: nessuno stato anomalo), ha meno di 25 h e ha verificato gli invarianti (la sua riga INVARIANTI ARCHIVI lo precede) (GUARDIANO: 52 stato/i anomalo/i -> {'riconciliazione_stripe' · eta 5.9 h · riga INVARIANTI ARCHIVI subito prima: si')",
-  "quando": "2026-11-01T20:42:52"
+  "motivo": "l'ULTIMO giro INTERO del Guardiano e' finito pulito (GUARDIANO: nessuno stato anomalo), ha meno di 25 h e ha verificato gli invarianti (la sua riga INVARIANTI ARCHIVI lo precede) (GUARDIANO: 47 stato/i anomalo/i -> {'bonifico_fermo': [{'pre · eta 3.1 h · riga INVARIANTI ARCHIVI subito prima: si')",
+  "quando": "2026-11-02T17:51:06"
  },
  "8267c64a367a": {
   "blocco": 4,
