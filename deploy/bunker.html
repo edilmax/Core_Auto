@@ -113,6 +113,7 @@ button.ghost{background:#222c40;color:var(--txt)}
         <button id="btnAaCrea" data-i18n="aa_crea">➕ Crea</button>
         <button class="ghost" id="btnAaLista" data-i18n="btn_agg">🔄 Aggiorna</button>
       </div>
+      <div id="aaStat" class="hint" style="margin-top:.4rem"></div>
       <div id="aaLista" style="margin-top:.4rem"></div>
     </div>
 
@@ -694,8 +695,13 @@ async function aaLista(){
   });
 }
 async function aaPost(body){
-  try{ await fetch('/api/bunker/admin_accounts',{method:'POST',headers:{...hdr(),'Content-Type':'application/json'},body:JSON.stringify(body)}); }
-  catch(_){console.warn('bunker',_);}
+  // la risposta si legge (2/11): prima un'email sbagliata o una password corta non dicevano niente
+  const st=$('aaStat');
+  try{
+    const r=await fetch('/api/bunker/admin_accounts',{method:'POST',headers:{...hdr(),'Content-Type':'application/json'},body:JSON.stringify(body)});
+    let d=null; try{ d=await r.json(); }catch(_){ d=null; }
+    st.textContent = r.ok ? '✅' : '❌ '+(BV.fraseErrore((d&&d.errore)||'', LANG)||BV.fraseErrore('errore_server_'+r.status, LANG));
+  }catch(e){ st.textContent='❌ '+BV.fraseErrore(BV.codRete(e), LANG); }
   aaLista();
 }
 async function aaCrea(){ await aaPost({azione:'crea',email:$('aaEmail').value,password:$('aaPw').value,ruolo:$('aaRuolo').value}); $('aaPw').value=''; }

@@ -861,10 +861,13 @@ async function caricaReferral(){
     }
   }catch(e){console.warn('bookinvip-host',e)}
 }
-document.getElementById('btnCopiaRef').onclick = ()=>{
+document.getElementById('btnCopiaRef').onclick = async ()=>{
   const i=document.getElementById('ref_link'); i.select();
-  navigator.clipboard?.writeText(i.value);
-  const b=document.getElementById('btnCopiaRef'); b.textContent=T('b_copiato');
+  const b=document.getElementById('btnCopiaRef');
+  // «Copiato!» solo se il browser ha copiato davvero (2/11): se rifiuta, il link resta
+  // selezionato e si copia a mano
+  try{ await navigator.clipboard.writeText(i.value); b.textContent=T('b_copiato'); }
+  catch(_){ b.textContent='Ctrl+C'; }
   setTimeout(()=>b.textContent=T('b_copia'),1500);
 };
 async function authPost(path, body, msgEl, okKey){
