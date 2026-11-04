@@ -81,6 +81,22 @@ class TestTrasparenzaCoerente(unittest.TestCase):
         finally:
             shutil.rmtree(d, ignore_errors=True)
 
+    def test_il_pannello_host_manda_chi_e_l_host(self):
+        """⛔ N18 (sito vero, 03/11). Il server sa fare il conto con la commissione VERA
+        dell'host (test qui sopra), ma solo se la richiesta dice chi e' l'host. Il
+        calcolatore di host.html chiamava /api/trasparenza SENZA authHeaders(): al fondatore
+        (8%) diceva «con noi 85 €» su 100 invece di 87, a un host nuovo (0%) 85 invece di 95."""
+        import os
+        import re
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               "deploy", "host.html"), encoding="utf-8") as f:
+            pagina = f.read()
+        chiamate = re.findall(r"getJson\(\s*'/api/trasparenza[^;]*;", pagina)
+        self.assertTrue(chiamate, "PREMESSA: il calcolatore chiama /api/trasparenza")
+        for c in chiamate:
+            self.assertIn("headers:authHeaders()", c.replace(" ", ""),
+                          "il calcolatore non dice al server chi e' l'host: " + c)
+
     def test_nessuna_divergenza_mostrato_vs_addebitato(self):
         """GUARDIA ANTI-DIVERGENZA: la vetrina e il motore devono usare la STESSA funzione.
         Rossa se qualcuno reintroduce un calcolo parallelo con parametri diversi."""

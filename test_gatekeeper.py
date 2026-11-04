@@ -157,6 +157,34 @@ class TestGatekeeper(unittest.TestCase):
         self.assertEqual(st, 200)
         self.assertIn("no-store", hd.get("cache-control", ""))
 
+    def test_host_registrazione_apre_la_pagina(self):
+        # ⛔ VOCE 202 (giro dell'host, 30/10): la pagina d'ingresso, dopo «Registrati»,
+        # salva il gettone e va su /host.html; la pagina e' chiusa dal biglietto bv_host e
+        # la registrazione non lo dava (il login si'): il nuovo host tornava al modulo
+        # d'accesso vuoto, senza una parola. Il primo gesto di ogni host nuovo.
+        st, _h, body, cookies = self.req(
+            "POST", "/api/host/registrazione", {"Content-Type": "application/json"},
+            body='{"email":"nuovo-gate@x.it","password":"password12",'
+                 '"accetta_termini":true,"accetta_clausole":true,"accetta_privacy":true}')
+        self.assertEqual(st, 201, body)
+        sc = next((c for c in cookies if c.startswith("bv_host=")), "")
+        self.assertTrue(sc, "la registrazione non da' il biglietto bv_host: "
+                            "/host.html rimanda il nuovo host a /entra-host")
+        self.assertIn("HttpOnly", sc)
+        cookie = self._valore_cookie(sc)
+        st, hd, _b, _c = self.req("GET", "/host.html", {"Cookie": "bv_host=" + cookie})
+        self.assertEqual(st, 200)
+        self.assertIn("no-store", hd.get("cache-control", ""))
+
+    def test_host_registrazione_rifiutata_niente_biglietto(self):
+        # la gemella: un account che NON nasce (email gia' registrata) non apre la pagina
+        st, _h, body, cookies = self.req(
+            "POST", "/api/host/registrazione", {"Content-Type": "application/json"},
+            body='{"email":"gate@x.it","password":"password12",'
+                 '"accetta_termini":true,"accetta_clausole":true,"accetta_privacy":true}')
+        self.assertEqual(st, 422, body)
+        self.assertFalse([c for c in cookies if c.startswith("bv_host=")])
+
     def test_bunker_login_apre_la_pagina(self):
         _s, _h, _b, cookies = self.req(
             "POST", "/api/bunker/login", {"X-Admin-Key": "ak"},

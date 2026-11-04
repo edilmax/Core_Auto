@@ -1252,7 +1252,10 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: Any = None) -> Optiona
         return None
     lng = _lingua_pagina(lingua, dati)
     e = html.escape
-    prezzo = _importo(dati.get("prezzo_guest_cents", 0), dati.get("valuta", "EUR"))
+    # ⛔ N2 (03/11): il «Totale» e' soggiorno + tassa, cioe' quello che Stripe addebita
+    # (fase59: totale_cents = prezzo_guest + tassa). Prima mancava la tassa.
+    prezzo = _importo(int(dati.get("prezzo_guest_cents", 0) or 0)
+                      + int(dati.get("tassa_soggiorno_cents", 0) or 0), dati.get("valuta", "EUR"))
     # CODICE prenotazione leggibile (BVIP-XXXX-XXXX) + PIN check-in, uguali per cliente e host
     from fase59_concierge import codice_prenotazione
     _ref = str(dati.get("riferimento", ""))
@@ -1641,7 +1644,11 @@ def pagina_ricevuta_html(sistema: Any, token: Any, lingua: Any = None) -> Option
             c = 0
         return _importo(c, valuta) + " " + str(valuta or "EUR")
 
-    totale = int(dj.get("prezzo_guest_cents", 0) or v.get("prezzo_guest_cents", 0) or 0)
+    # ⛔ N2 (03/11): «Totale pagato» = cio' che Stripe ha addebitato. fase85.crea_link addebita
+    # `totale_cents` (soggiorno + tassa) e, solo se manca, il soggiorno. Prima qui si leggeva il
+    # soggiorno come totale e gli si toglieva la tassa: 190,00 «pagato» su 190,08 addebitati.
+    totale = int(dj.get("totale_cents", 0)
+                 or dj.get("prezzo_guest_cents", v.get("prezzo_guest_cents", 0)) or 0)
     tassa = int(v.get("tassa_soggiorno_cents", 0) or 0)
     soggiorno = max(0, totale - tassa)
     righe = ("<div class='r'><span>%s</span><strong>%s</strong></div>"
@@ -11503,6 +11510,13 @@ class RouterHTTP:
                 except Exception:
                     logger.warning("referral su registrazione fallito (ignorato)",
                                    exc_info=True)
+        # ⛔ VOCE 202 (giro dell'host, 30/10): come il login, la registrazione riuscita da' il
+        # biglietto della pagina. Senza, /host.html rimandava il nuovo host a /entra-host col
+        # modulo vuoto: l'account c'era, il pannello no. Solo su e.ok: un rifiuto non apre niente.
+        if e.ok:
+            ttl = self._GATE_TTL["host"]
+            out = dict(out)
+            out["_cookie"] = [("bv_host", self._gate_firma("host", ttl), ttl)]
         return (201 if e.ok else 422), out
 
     def _host_login(self, body, headers=None):

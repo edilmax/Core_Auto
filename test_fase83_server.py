@@ -7710,5 +7710,69 @@ class TestIlPrezzoCambiatoDallHostNonTornaQuelloVecchio(_BancoDeiSoldiDelServer)
                          "IL MODULO «MODIFICA» NON SA QUAL E' IL PREZZO BASE DELL'HOST")
 
 
+class TestLaRicevutaEIlVoucherDiconoQuelloCheStripeAddebita(_BancoDeiSoldiDelServer):
+    """⛔ N2 del giro «da fresca» (3/11, voce 228). Stripe addebita `totale_cents` =
+    soggiorno + tassa di soggiorno (fase85 `crea_link`; se manca, il solo soggiorno). La
+    ricevuta leggeva come «Totale pagato» il solo soggiorno e gli toglieva la tassa: pagato
+    190,08, ricevuta 189,92 + 0,08 = 190,00. Il voucher scriveva «Totale» senza la tassa.
+    Stanno qui e non in test_email_ciclo: e' questo il file che il Giudice accende per fase83
+    (il giro sul diff del 4/11 le ha lasciate fuori e ha dato 3 sopravvissuti)."""
+
+    SLUG = "casa-con-tassa"
+
+    def setUp(self):
+        super().setUp()
+        self.pubblica(self.SLUG, tassa_pp_notte_cents=200)
+        s, self.q = self.g("POST", "/api/concierge/quote",
+                           {"alloggio_id": self.SLUG, "check_in": _fra(10),
+                            "check_out": _fra(12), "party": 2})
+        _deve(s == 200, s, self.q)
+        _deve(self.q["tassa_soggiorno_cents"] > 0, "PREMESSA: l'annuncio ha la tassa", self.q)
+        _deve(self.q["totale_cents"] == self.q["prezzo_guest_cents"]
+              + self.q["tassa_soggiorno_cents"], "PREMESSA: totale = soggiorno + tassa", self.q)
+        s, self.b = self.g("POST", "/api/concierge/book",
+                           {"quote_token": self.q["quote_token"], "email": "cli@banco.it"})
+        _deve(s == 201, s, self.b)
+
+    @staticmethod
+    def riga(pagina, etichetta):
+        m = re.search(r"<span>(?:<strong>)?" + re.escape(etichetta)
+                      + r"(?:</strong>)?</span><strong>([^<]+)</strong>", pagina or "")
+        return m.group(1) if m else None
+
+    @staticmethod
+    def euro(cents):
+        return "%.2f EUR" % (cents / 100)
+
+    def test_la_ricevuta_e_il_voucher_dicono_soggiorno_piu_tassa(self):
+        self.paga(self.b["riferimento"], "pi_ricevuta")
+        vt = self.b["voucher_token"]
+        ricevuta = fase83_server.pagina_ricevuta_html(self.sis, vt, "it")
+        voucher = fase83_server.pagina_voucher_html(self.sis, vt, "it")
+        self.assertEqual(
+            (self.euro(self.q["totale_cents"]), self.euro(self.q["prezzo_guest_cents"]),
+             self.euro(self.q["totale_cents"])),
+            (self.riga(ricevuta, "Totale pagato"), self.riga(ricevuta, "Soggiorno"),
+             self.riga(voucher, "Totale")),
+            "RICEVUTA O VOUCHER NON DICONO L'IMPORTO CHE STRIPE HA ADDEBITATO")
+
+    def test_senza_totale_la_ricevuta_dice_il_soggiorno_come_stripe(self):
+        """Gemella: una prenotazione registrata con `totale_cents` 0 Stripe la addebita col
+        solo soggiorno (ramo di riserva di fase85): la ricevuta dice quello, non zero."""
+        rif = self.b["riferimento"]
+        with sqlite3.connect(os.path.join(self.dir, "p.db")) as con:
+            cj = json.loads(con.execute("SELECT corpo_json FROM pendenti WHERE riferimento=?",
+                                        (rif,)).fetchone()[0])
+            _deve(cj.get("totale_cents") == self.q["totale_cents"], "PREMESSA", cj)
+            cj["totale_cents"] = 0
+            con.execute("UPDATE pendenti SET corpo_json=? WHERE riferimento=?",
+                        (json.dumps(cj), rif))
+        self.paga(rif, "pi_ricevuta_vecchia")
+        ricevuta = fase83_server.pagina_ricevuta_html(self.sis, self.b["voucher_token"], "it")
+        self.assertEqual(self.euro(self.q["prezzo_guest_cents"]),
+                         self.riga(ricevuta, "Totale pagato"),
+                         "SENZA totale_cents LA RICEVUTA NON DICE CIO' CHE STRIPE HA ADDEBITATO")
+
+
 if __name__ == "__main__":
     unittest.main()
