@@ -122,6 +122,19 @@ function sorveglia(page, dove, sacco) {
         && inYen.passoPrezzo === '1' && inYen.passoTassa === '1',
     `scelto lo yen, le caselle non lo dicono o chiedono ancora i decimali: ${JSON.stringify(inYen)}`);
   console.log(`[HOST] moneta accanto alle caselle: ${JSON.stringify(inEuro.etichette)} -> ${JSON.stringify(inYen.etichette)}`);
+  // ── TUTTE LE MONETE DEL MONDO (4/11): il menu offre ogni moneta della tabella, compreso il
+  //    peso filippino, e una moneta senza decimali nuova (il franco CFA) toglie i decimali.
+  const menu = await ph.evaluate(() => ({
+    opzioni: [...document.querySelectorAll('#p_valuta option')].map(o => o.value),
+    tabella: Object.keys(BV.VALUTE).length }));
+  await ph.selectOption('#p_valuta', 'XOF');
+  const inCFA = await monete();
+  await ph.selectOption('#p_valuta', 'EUR');
+  esigi(menu.opzioni.length === menu.tabella && menu.opzioni.includes('PHP') && menu.opzioni[0] === 'EUR',
+    `il menu non offre tutte le monete della tabella (o manca il peso filippino): ${menu.opzioni.length} su ${menu.tabella}`);
+  esigi(inCFA.etichette.every(x => x.includes('XOF')) && inCFA.passoTassa === '1',
+    `scelto il franco CFA, le caselle non lo dicono o chiedono i decimali: ${JSON.stringify(inCFA)}`);
+  console.log(`[HOST] monete nel menu: ${menu.opzioni.length} (tabella ${menu.tabella}), franco CFA: ${JSON.stringify(inCFA.etichette)}`);
 
   // ── LA FOTO: il primo setInputFiles della cassetta degli attrezzi --------------------
   // Il trasporto e' lungo: FileReader -> base64 -> POST /api/host/upload_foto -> magic
