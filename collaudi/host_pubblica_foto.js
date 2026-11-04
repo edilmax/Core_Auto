@@ -97,7 +97,7 @@ function sorveglia(page, dove, sacco) {
   await ph.fill('#p_cin', CIN);
   await ph.fill('#p_descr', 'Loft di collaudo: luminoso, centro, per il percorso A2.');
   await ph.fill('#p_prezzo', '95.50');       // euro col decimale: toCents() fa la conversione
-  await ph.fill('#p_tax_pp', '200');
+  await ph.fill('#p_tax_pp', '2');           // nella moneta, come il prezzo (voce 211): 2,00 EUR
   await ph.fill('#p_tax_max', '5');
   await ph.fill('#p_sc_sett', '10');
   await ph.fill('#p_cap', '3');

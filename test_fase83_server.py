@@ -1292,6 +1292,19 @@ class TestSEO(unittest.TestCase):
         self.assertIn("100.00", h)
         self.assertIn('rel="canonical"', h)
 
+    def test_prenota_dalla_pagina_per_google_apre_lo_stesso_alloggio(self):
+        """⛔ VOCE 203 (giro dell'host, 30/10). «Prenota su BookinVIP» portava a `/?slug=`,
+        ma la home legge solo `?apri=` (deploy/index.html): chi arrivava da Google atterrava
+        su una ricerca generica, non sull'alloggio che aveva scelto. I due capi insieme."""
+        h = pagina_alloggio_html(self.sys, "casa", "https://x.it")
+        link = re.search(r'<a href="([^"]+)">Prenota su BookinVIP', h)
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "deploy",
+                               "index.html"), encoding="utf-8") as f:
+            home = f.read()
+        self.assertEqual(("/?apri=casa", True),
+                         (link.group(1) if link else None, "p.get('apri')" in home),
+                         "«PRENOTA» DALLA PAGINA PER GOOGLE NON APRE L'ALLOGGIO SCELTO")
+
     def test_pagina_html_404(self):
         self.assertIsNone(pagina_alloggio_html(self.sys, "mai-vista"))
 
