@@ -9761,7 +9761,7 @@ class RouterHTTP:
                 # l'anteprima non offre il «paga in struttura», come poi non lo addebiterebbe
                 soglie = self._soglie_struttura(corpo) if accetta else {}
                 if soglie is None:
-                    accetta = False
+                    soglie, accetta = {}, False
                 if (accetta and isinstance(tot, int) and not isinstance(tot, bool) and tot > 0):
                     import fase188_paga_struttura as _ps
                     r = _ps.calcola(tot, nn,

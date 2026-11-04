@@ -287,9 +287,10 @@ class TestLeCifreFisseDelPagaInStrutturaSonoInEuro(unittest.TestCase):
         self.assertEqual(self.r._soglie_struttura({"valuta": "EUR"}), {})
         self.sys.tassi = None
         self.assertEqual(self.r._soglie_struttura({"valuta": "JPY"}), {})
-        self.sys.tassi = self._Tassi(None)
-        self.assertIsNone(self.r._soglie_struttura({"valuta": "JPY"}),
-                          "cambi attivi ma nessun tasso: nessuna cifra inventata")
+        for vuoto in (None, 0):
+            self.sys.tassi = self._Tassi(vuoto)
+            self.assertIsNone(self.r._soglie_struttura({"valuta": "JPY"}),
+                              "cambi attivi ma nessun tasso valido (%r): nessuna cifra" % (vuoto,))
 
     def test_il_cambio_si_chiede_dalla_moneta_in_cui_incassa_la_piattaforma(self):
         """Dalla moneta della CONFIGURAZIONE, non da un «EUR» scritto a mano: con una

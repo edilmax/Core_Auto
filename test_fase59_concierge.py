@@ -1284,6 +1284,7 @@ class TestLaQuotaFissaSiConverteNellaMonetaDellAnnuncio(unittest.TestCase):
             r = self._quota(self._proto("JPY", tasso))
             self.assertEqual(r.status, 503, r.corpo)
             self.assertEqual(r.corpo.get("errore"), "cambio_non_disponibile", r.corpo)
+            self.assertIs(r.corpo.get("riprova"), True, "la pagina deve poter dire «riprova»")
 
     def test_senza_fornitore_di_cambi_resta_il_calcolo_di_prima_e_lo_si_dichiara(self):
         """Sviluppo e prove girano senza la chiave dei cambi: li' la quota resta com'era. In
