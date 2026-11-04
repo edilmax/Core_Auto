@@ -80,6 +80,23 @@ class TestAccensione(unittest.TestCase):
         self.assertIsNone(s.mcp)
         self.assertIn("mcp disattivato (con_mcp=False)", s.report["avvisi"])
 
+    def test_senza_la_chiave_dei_cambi_l_avvio_lo_DICHIARA(self):
+        """⛔ VOCE 255 (4/11): senza fornitore di cambi la quota fissa della tariffa tecnica
+        non si converte nelle altre monete (fase59, fase83). In produzione la chiave c'e' (letta
+        il 4/11); se sparisse, l'avvio lo deve DIRE: il protocollo di deploy legge `avvisi` e si
+        aspetta la lista vuota. Con la chiave l'avviso tace (la rete qui non si tocca)."""
+        from unittest import mock
+        import fase99_multicurrency as f99
+        s = crea_sistema(ConfigCasaVIP(abilitato=True, segreto_hmac=SEG))
+        self.assertTrue([a for a in s.report["avvisi"] if "OXR_APP_ID" in a and "quota fissa" in a],
+                        s.report["avvisi"])
+        with mock.patch.object(f99.ProviderTassi, "scalda", lambda self: None):
+            s2 = crea_sistema(ConfigCasaVIP(abilitato=True, segreto_hmac=SEG,
+                                            oxr_app_id="chiave-di-prova"))
+        self.assertIsNotNone(s2.tassi)
+        self.assertEqual([a for a in s2.report["avvisi"] if "OXR_APP_ID" in a], [],
+                         s2.report["avvisi"])
+
 
 class TestEndToEnd(unittest.TestCase):
     def test_stack_lavora_insieme(self):

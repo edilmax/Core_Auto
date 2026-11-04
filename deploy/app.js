@@ -89,9 +89,9 @@
        letto il 2026-11-04) che mancavano. Decimali = come le vuole Stripe: 0 per le sue
        «zero-decimal», 2 per le altre, UGX a 2 come ISK (caso particolare di Stripe). Simbolo e
        nome dall'Intl inglese; dove il simbolo e' di piu' monete (Rs, C$) o non si legge su molti
-       telefoni, si scrive il codice. ⛔ MGA NON c'e' e non e' una svista: Stripe la vuole senza
-       decimali e il motore (fase99) ne conta 2 -> si addebiterebbe cento volte il prezzo. Entra
-       quando il motore la conta come Stripe (`test_valute_coerenti`, voce di RIPRENDI). */
+       telefoni, si scrive il codice. ⛔ MGA e' senza decimali come la vuole Stripe: il motore
+       (fase99) la contava a 2 e l'ha imparato lo stesso giorno (voce 251); prima di allora
+       restava fuori dal menu (`test_valute_coerenti`). */
     AFN:{s:'؋',e:2,n:'Afghan Afghani'}, ALL:{s:'ALL',e:2,n:'Albanian Lek'}, AMD:{s:'֏',e:2,n:'Armenian Dram'},
     ANG:{s:'ANG',e:2,n:'Netherlands Antillean Guilder'}, AOA:{s:'Kz',e:2,n:'Angolan Kwanza'}, ARS:{s:'ARS',e:2,n:'Argentine Peso'},
     AWG:{s:'AWG',e:2,n:'Aruban Florin'}, AZN:{s:'₼',e:2,n:'Azerbaijani Manat'}, BAM:{s:'KM',e:2,n:'Bosnia-Herzegovina Convertible Mark'},
@@ -110,7 +110,7 @@
     KMF:{s:'CF',e:0,n:'Comorian Franc'}, KYD:{s:'KYD',e:2,n:'Cayman Islands Dollar'}, KZT:{s:'₸',e:2,n:'Kazakhstani Tenge'},
     LAK:{s:'₭',e:2,n:'Laotian Kip'}, LBP:{s:'L£',e:2,n:'Lebanese Pound'}, LKR:{s:'LKR',e:2,n:'Sri Lankan Rupee'},
     LRD:{s:'LRD',e:2,n:'Liberian Dollar'}, LSL:{s:'LSL',e:2,n:'Lesotho Loti'}, MAD:{s:'MAD',e:2,n:'Moroccan Dirham'},
-    MDL:{s:'MDL',e:2,n:'Moldovan Leu'}, MKD:{s:'MKD',e:2,n:'Macedonian Denar'}, MMK:{s:'K',e:2,n:'Myanmar Kyat'},
+    MDL:{s:'MDL',e:2,n:'Moldovan Leu'}, MGA:{s:'Ar',e:0,n:'Malagasy Ariary'}, MKD:{s:'MKD',e:2,n:'Macedonian Denar'}, MMK:{s:'K',e:2,n:'Myanmar Kyat'},
     MNT:{s:'₮',e:2,n:'Mongolian Tugrik'}, MOP:{s:'MOP',e:2,n:'Macanese Pataca'}, MUR:{s:'MUR',e:2,n:'Mauritian Rupee'},
     MVR:{s:'MVR',e:2,n:'Maldivian Rufiyaa'}, MWK:{s:'MWK',e:2,n:'Malawian Kwacha'}, MYR:{s:'RM',e:2,n:'Malaysian Ringgit'},
     MZN:{s:'MZN',e:2,n:'Mozambican Metical'}, NAD:{s:'NAD',e:2,n:'Namibian Dollar'}, NGN:{s:'₦',e:2,n:'Nigerian Naira'},

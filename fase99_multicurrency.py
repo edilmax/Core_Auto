@@ -36,8 +36,11 @@ import fase98_policy_commissione as policy
 # e la riconciliazione (fase182) non può vederlo: lo stesso numero sbagliato va a Stripe E a
 # giornale, quindi il confronto torna. Chi le rimette qui trova rosso
 # `test_ISK_e_UGX_si_addebitano_come_valute_a_DUE_decimali` lo stesso giorno.
+#  MGA dal 4/11 (voce 251): Stripe la elenca fra le «zero-decimal» (docs.stripe.com/currencies,
+#  letta il 4/11); qui contava 2 e si addebitava cento volte il prezzo. Guardia:
+#  `test_fase99_multicurrency.TestDenaro.test_le_valute_senza_decimali_sono_quelle_di_stripe`.
 _ESP0 = {"JPY", "KRW", "VND", "CLP", "XAF", "XOF", "PYG", "RWF",
-         "GNF", "KMF", "DJF", "VUV", "XPF", "BIF"}
+         "GNF", "KMF", "DJF", "VUV", "XPF", "BIF", "MGA"}
 _ESP3 = {"BHD", "KWD", "OMR", "TND", "JOD", "IQD", "LYD"}
 
 

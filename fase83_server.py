@@ -6632,6 +6632,36 @@ class RouterHTTP:
         except Exception:
             return True
 
+    def _soglie_struttura(self, corpo):
+        """⛔ VOCE 255 (4/11). Le cifre FISSE della copertura carta di `fase188` (la quota e il
+        minimo) coprono un costo che Stripe prende in EURO: su un annuncio in un'altra moneta
+        si CONVERTONO col cambio del giorno, arrotondate in su. {} = restano quelle di fase188
+        (stessa moneta, o nessun fornitore di cambi: sviluppo e prove). None = cambi attivi ma
+        nessun tasso: il «paga in struttura» non si offre e resta l'online, che non perde
+        niente. La fee per notte NON si converte: e' un guadagno, deciso nella moneta
+        dell'annuncio. Guardia: `test_fase83_server.TestLeCifreFisseDelPagaInStrutturaSonoInEuro`."""
+        if not self._valuta_estera(corpo):
+            return {}
+        tassi = getattr(self._sys, "tassi", None)
+        if tassi is None:
+            return {}
+        try:
+            from decimal import ROUND_CEILING, Decimal
+            import fase188_paga_struttura as _ps
+            from fase99_multicurrency import esponente
+            cfg = getattr(self._sys, "config", None)
+            incasso = str(getattr(cfg, "valuta", "EUR") or "EUR").upper()
+            dest = str((corpo or {}).get("valuta") or incasso).upper()
+            t = Decimal(str(tassi.tasso(incasso, dest)))
+            if not t > 0:
+                return None
+            scala = Decimal(10) ** (esponente(dest) - esponente(incasso))
+            return {k: int((Decimal(v) * t * scala).quantize(Decimal(1), rounding=ROUND_CEILING))
+                    for k, v in (("gateway_fisso_cents", _ps.GATEWAY_FISSO_CENTS),
+                                 ("gateway_minimo_cents", _ps.GATEWAY_MINIMO_CENTS))}
+        except Exception:
+            return None
+
     def _forse_paga_struttura(self, corpo, dati):
         """FASE 2 - PAGA IN STRUTTURA (solo instant-book, DARK finche' PAGA_STRUTTURA_ATTIVO=1).
         Se l'ospite ha scelto 'in_struttura' E l'annuncio lo accetta E la feature e' accesa:
@@ -6664,8 +6694,13 @@ class RouterHTTP:
             comm = comm if isinstance(comm, int) and not isinstance(comm, bool) else 0
             import fase188_paga_struttura as _ps
             notti = _notti_count(corpo.get("check_in", ""), corpo.get("check_out", ""))
+            soglie = self._soglie_struttura(corpo)       # voce 255: le cifre fisse in euro, convertite
+            if soglie is None:
+                logger.warning("paga-struttura: nessun cambio per %s -> resto ONLINE",
+                               corpo.get("valuta", ""))
+                return False
             r = _ps.calcola(totale, notti, comm,
-                            valuta_estera=self._valuta_estera(corpo))
+                            valuta_estera=self._valuta_estera(corpo), **soglie)
             link = stripe.crea_link_anticipo({
                 "anticipo_cents": r["anticipo_online_cents"],
                 "saldo_cents": r["saldo_in_loco_cents"],
@@ -9722,11 +9757,16 @@ class RouterHTTP:
                 tot = corpo.get("totale_cents")
                 comm = corpo.get("commissione_cents")
                 nn = corpo.get("notti")
+                # le STESSE cifre fisse convertite dell'anticipo vero (voce 255): senza tasso
+                # l'anteprima non offre il «paga in struttura», come poi non lo addebiterebbe
+                soglie = self._soglie_struttura(corpo) if accetta else {}
+                if soglie is None:
+                    accetta = False
                 if (accetta and isinstance(tot, int) and not isinstance(tot, bool) and tot > 0):
                     import fase188_paga_struttura as _ps
                     r = _ps.calcola(tot, nn,
                                     comm if isinstance(comm, int) and not isinstance(comm, bool) else 0,
-                                    valuta_estera=self._valuta_estera(corpo))
+                                    valuta_estera=self._valuta_estera(corpo), **soglie)
                     corpo["paga_in_struttura"] = {
                         "accettato": True,
                         "ospite_paga_totale_cents": r["ospite_paga_totale_cents"],

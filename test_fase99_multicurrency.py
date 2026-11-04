@@ -36,6 +36,20 @@ class TestDenaro(unittest.TestCase):
         self.assertEqual(esponente("BHD"), 3)
         self.assertEqual(esponente("USD"), 2)
 
+    def test_le_valute_senza_decimali_sono_quelle_di_stripe(self):
+        """⛔ VOCE 251 (4/11, PERDE SOLDI). L'ariary malgascio (MGA): Stripe la tratta SENZA
+        decimali (docs.stripe.com/currencies, elenco «zero-decimal», letto il 4/11), il motore ne
+        contava 2. Su un annuncio in MGA il motore mandava a Stripe il prezzo x100 e Stripe lo
+        addebitava come unita' intere: l'ospite pagava cento volte. (ISO 4217 le da' 2 cifre, ma
+        l'importo lo legge Stripe: vale la sua regola.) L'elenco qui sotto e' una COPIA DATATA di
+        quella di Stripe, non derivata dal codice sotto esame; UGX manca apposta (Stripe la vuole
+        a due decimali per retrocompatibilita', come ISK)."""
+        stripe_zero = "BIF CLP DJF GNF JPY KMF KRW MGA PYG RWF VND VUV XAF XOF XPF".split()
+        sbagliate = [v for v in stripe_zero if esponente(v) != 0]
+        self.assertEqual(sbagliate, [], "MONETE SENZA DECIMALI PER STRIPE CHE IL MOTORE CONTA A "
+                                        "DECIMALI: l'ospite pagherebbe cento volte -> %s" % sbagliate)
+        self.assertEqual((esponente("UGX"), esponente("ISK")), (2, 2))
+
     def test_formatta(self):
         self.assertEqual(Denaro(10000, "USD").formatta(), "100.00 USD")
         self.assertEqual(Denaro(1000, "JPY").formatta(), "1000 JPY")

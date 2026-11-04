@@ -1224,6 +1224,75 @@ class TestCostoDellaCarta(unittest.TestCase):
         self.assertEqual(r.corpo["errore"], "prezzo_non_sostenibile")
 
 
+class TestLaQuotaFissaSiConverteNellaMonetaDellAnnuncio(unittest.TestCase):
+    """⛔ VOCE 255 (4/11, PERDE SOLDI e il contratto dice un'altra cosa). La quota FISSA della
+    tariffa tecnica e' in EURO: Stripe la prende in euro, e i testi legali promettono «7% piu'
+    0,25 EUR sugli annunci prezzati in valuta diversa dall'euro». Il motore la sommava cosi'
+    com'era alle unita' minori di QUALUNQUE moneta: 25 «centesimi» diventavano 25 yen (molto
+    meno di 0,25 EUR: la piattaforma ci rimette sulle prenotazioni piccole) o 25 pence (piu'
+    del promesso: l'host paga oltre il contratto). Si converte col cambio del giorno e si
+    arrotonda IN SU; con un fornitore di cambi ma senza il tasso il preventivo NON si fa."""
+
+    PREZZO = 10000              # una notte: 10000 unita' minori della moneta dell'annuncio
+
+    def _proto(self, valuta, tasso):
+        inv = crea_channel_manager()
+        inv.imposta_disponibilita("casa", "2026-09-01", unita_totali=1,
+                                  prezzo_netto_cents=self.PREZZO)
+        cat = crea_catalogo(disponibilita=inv.disponibile)
+        cat.pubblica(SchedaAlloggio(host_id="h", slug="casa", titolo="Casa", citta="Roma",
+                                    prezzo_notte_cents=self.PREZZO, capacita=4, valuta=valuta))
+        return ProtocolloConcierge(inv, FirmaQuote(SEGRETO), catalogo=cat, psp_bps=500,
+                                   psp_bps_valuta_estera=700, psp_fisso_cents=25,
+                                   tasso_cambio=tasso)
+
+    def _quota(self, proto):
+        return proto.quota({"alloggio_id": "casa", "check_in": "2026-09-01",
+                            "check_out": "2026-09-02"})
+
+    def test_in_yen_la_quota_fissa_e_0_25_EUR_convertiti_e_arrotondati_in_su(self):
+        from decimal import Decimal
+        chiesti = []
+
+        def tasso(da, a):
+            chiesti.append((da, a))
+            return Decimal("170.25")            # 1 EUR = 170,25 JPY
+        r = self._quota(self._proto("JPY", tasso))
+        self.assertEqual(r.status, 200, r.corpo)
+        # 0,25 EUR x 170,25 = 42,56 yen -> 43 (in su); la percentuale estera sul totale: 700
+        self.assertEqual(r.corpo["costo_pagamento_cents"], 700 + 43, r.corpo)
+        self.assertIn(("EUR", "JPY"), chiesti, "il cambio va chiesto DALL'EURO alla moneta "
+                                               "dell'annuncio: %r" % (chiesti,))
+
+    def test_in_sterline_non_si_chiede_all_host_piu_di_0_25_EUR(self):
+        from decimal import Decimal
+        r = self._quota(self._proto("GBP", lambda da, a: Decimal("0.85")))
+        self.assertEqual(r.status, 200, r.corpo)
+        # 0,25 EUR x 0,85 = 21,25 pence -> 22 (in su: mai sotto il costo), non 25
+        self.assertEqual(r.corpo["costo_pagamento_cents"], 700 + 22, r.corpo)
+
+    def test_in_euro_la_quota_fissa_resta_quella(self):
+        r = self._quota(self._proto("EUR", lambda da, a: 999))
+        self.assertEqual(r.status, 200, r.corpo)
+        self.assertEqual(r.corpo["costo_pagamento_cents"], 500 + 25, r.corpo)
+
+    def test_con_i_cambi_attivi_ma_senza_il_tasso_il_preventivo_NON_si_fa(self):
+        """Mai una quota sbagliata: meglio «riprova» che un costo che non copre Stripe."""
+        def guasto(da, a):
+            raise RuntimeError("cambio irraggiungibile")
+        for tasso in (lambda da, a: None, guasto, lambda da, a: 0):
+            r = self._quota(self._proto("JPY", tasso))
+            self.assertEqual(r.status, 503, r.corpo)
+            self.assertEqual(r.corpo.get("errore"), "cambio_non_disponibile", r.corpo)
+
+    def test_senza_fornitore_di_cambi_resta_il_calcolo_di_prima_e_lo_si_dichiara(self):
+        """Sviluppo e prove girano senza la chiave dei cambi: li' la quota resta com'era. In
+        produzione la chiave c'e' (letta il 4/11): se sparisse, lo dice l'avvio (`avvisi`)."""
+        r = self._quota(self._proto("JPY", None))
+        self.assertEqual(r.status, 200, r.corpo)
+        self.assertEqual(r.corpo["costo_pagamento_cents"], 700 + 25, r.corpo)
+
+
 class TestCambioIndicativo(unittest.TestCase):
     """La stima «≈ nella tua moneta» e' solo display: l'addebito resta nella valuta
     dell'annuncio. Ma una stima sbagliata fa dubitare del prezzo vero."""

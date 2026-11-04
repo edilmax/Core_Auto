@@ -252,6 +252,121 @@ class TestIlPulsanteDellaControversia(_BancoDelleStrade):
             self.sis.payout.info, self.sis.catalogo.dettaglio = vero_pay, vero_det
 
 
+class TestLeCifreFisseDelPagaInStrutturaSonoInEuro(unittest.TestCase):
+    """⛔ VOCE 255 (4/11, PERDE SOLDI). La copertura carta del «paga in struttura» (`fase188`)
+    ha due cifre FISSE, la quota (0,55) e il minimo (0,50), che coprono un costo che Stripe
+    prende in EURO. Venivano sommate cosi' com'erano alle unita' minori di QUALUNQUE moneta:
+    su un annuncio in yen 55 yen invece di 0,55 EUR, cioe' una copertura sotto costo. Si
+    convertono col cambio del giorno e si arrotondano in su; con i cambi attivi ma senza il
+    tasso il «paga in struttura» non si offre (resta l'online, che non perde niente). La fee
+    per notte NON si converte: e' un guadagno, deciso nella moneta dell'annuncio."""
+
+    class _Tassi:
+        def __init__(self, t):
+            self.t, self.chiesti = t, []
+
+        def tasso(self, da, a):
+            self.chiesti.append((da, a))
+            return self.t
+
+    def setUp(self):
+        from decimal import Decimal
+        self.sys = _sistema()
+        self.r = crea_router(self.sys)
+        self.yen = self._Tassi(Decimal("170.25"))        # 1 EUR = 170,25 JPY
+
+    def test_in_yen_quota_e_minimo_si_convertono_e_si_arrotondano_in_su(self):
+        self.sys.tassi = self.yen
+        # 0,55 EUR x 170,25 = 93,64 -> 94 yen; 0,50 EUR x 170,25 = 85,13 -> 86 yen
+        self.assertEqual(self.r._soglie_struttura({"valuta": "JPY"}),
+                         {"gateway_fisso_cents": 94, "gateway_minimo_cents": 86})
+        self.assertIn(("EUR", "JPY"), self.yen.chiesti)
+
+    def test_in_euro_o_senza_cambi_restano_le_cifre_di_fase188(self):
+        self.sys.tassi = self.yen
+        self.assertEqual(self.r._soglie_struttura({"valuta": "EUR"}), {})
+        self.sys.tassi = None
+        self.assertEqual(self.r._soglie_struttura({"valuta": "JPY"}), {})
+        self.sys.tassi = self._Tassi(None)
+        self.assertIsNone(self.r._soglie_struttura({"valuta": "JPY"}),
+                          "cambi attivi ma nessun tasso: nessuna cifra inventata")
+
+    def test_il_cambio_si_chiede_dalla_moneta_in_cui_incassa_la_piattaforma(self):
+        """Dalla moneta della CONFIGURAZIONE, non da un «EUR» scritto a mano: con una
+        piattaforma che incassa in dollari il cambio si chiede USD -> JPY."""
+        from decimal import Decimal
+        from fase81_bootstrap_casavip import ConfigCasaVIP as _Cfg
+        sys_usd = crea_sistema(_Cfg(abilitato=True, segreto_hmac=SEG, valuta="USD"))
+        sys_usd.tassi = t = self._Tassi(Decimal("150"))
+        # 0,55 USD x 150 = 82,5 -> 83 yen; 0,50 x 150 = 75 yen
+        self.assertEqual(crea_router(sys_usd)._soglie_struttura({"valuta": "JPY"}),
+                         {"gateway_fisso_cents": 83, "gateway_minimo_cents": 75})
+        self.assertEqual(t.chiesti, [("USD", "JPY")])
+
+    def _annuncio_yen(self):
+        from fase57_vetrina import SchedaAlloggio
+        self.sys.catalogo.pubblica(SchedaAlloggio(host_id="h", slug="casa-yen", titolo="Casa",
+                                                  citta="Tokyo", prezzo_notte_cents=30000,
+                                                  capacita=4, valuta="JPY"))
+
+    def test_l_anticipo_che_si_addebita_usa_le_cifre_convertite(self):
+        """Il punto che crea l'addebito vero (`_forse_paga_struttura`): a fase188 arrivano le
+        cifre in yen; senza tasso nessun anticipo, si resta sull'online."""
+        import fase188_paga_struttura as ps
+        from unittest import mock
+        self._annuncio_yen()
+        link = []
+        self.sys.stripe = type("S", (), {"crea_link_anticipo": lambda s, d: link.append(d) or "https://x/cs_1"})()
+        vera, visti = ps.calcola, []
+
+        def spia(*a, **k):
+            visti.append(k)
+            return vera(*a, **k)
+        corpo = {"alloggio_id": "casa-yen", "totale_cents": 60000, "commissione_cents": 0,
+                 "check_in": "2026-09-01", "check_out": "2026-09-03", "valuta": "JPY",
+                 "riferimento": "r-yen"}
+        with mock.patch.dict(os.environ, {"PAGA_STRUTTURA_ATTIVO": "1"}), \
+                mock.patch.object(ps, "calcola", spia):
+            self.sys.tassi = self.yen
+            self.assertTrue(self.r._forse_paga_struttura(dict(corpo), {"modo_pagamento": "in_struttura"}))
+            self.assertEqual((visti[-1].get("gateway_fisso_cents"), visti[-1].get("gateway_minimo_cents")),
+                             (94, 86), visti[-1])
+            self.sys.tassi = self._Tassi(None)
+            n = len(link)
+            self.assertFalse(self.r._forse_paga_struttura(dict(corpo), {"modo_pagamento": "in_struttura"}))
+            self.assertEqual(len(link), n, "senza tasso non deve partire nessun addebito d'anticipo")
+
+    def test_l_anteprima_dell_ospite_usa_le_stesse_cifre_convertite(self):
+        """L'anteprima del preventivo (`_concierge_quote`) deve dire all'ospite gli STESSI numeri
+        che poi si addebitano: stesse cifre convertite, e niente offerta senza tasso."""
+        import fase188_paga_struttura as ps
+        from unittest import mock
+        self._annuncio_yen()
+        for g in ("2026-09-01", "2026-09-02"):
+            self.sys.inventario.imposta_disponibilita("casa-yen", g, unita_totali=1,
+                                                     prezzo_netto_cents=30000)
+        vera, visti = ps.calcola, []
+
+        def spia(*a, **k):
+            visti.append(k)
+            return vera(*a, **k)
+        richiesta = json.dumps({"alloggio_id": "casa-yen", "check_in": "2026-09-01",
+                                "check_out": "2026-09-03"})
+        with mock.patch.dict(os.environ, {"PAGA_STRUTTURA_ATTIVO": "1"}), \
+                mock.patch.object(ps, "calcola", spia):
+            self.sys.tassi = self.yen
+            s, c = self.r.gestisci("POST", "/api/concierge/quote", {}, richiesta, {})
+            self.assertEqual(s, 200, c)
+            self.assertTrue(c["paga_in_struttura"]["accettato"], c.get("paga_in_struttura"))
+            self.assertEqual((visti[-1].get("gateway_fisso_cents"), visti[-1].get("gateway_minimo_cents")),
+                             (94, 86), visti[-1])
+            self.sys.tassi = self._Tassi(None)
+            s, c = self.r.gestisci("POST", "/api/concierge/quote", {}, richiesta, {})
+            self.assertEqual(s, 200, c)
+            self.assertFalse(c["paga_in_struttura"]["accettato"],
+                             "senza tasso l'anteprima non deve offrire il «paga in struttura»")
+
+
 class TestCatalogo(unittest.TestCase):
     def setUp(self):
         self.sys = _sistema()

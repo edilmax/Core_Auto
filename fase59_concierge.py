@@ -359,6 +359,16 @@ class ProtocolloConcierge:
             _psp = self._psp_bps if str(valuta).upper() == str(self._valuta).upper() \
                 else self._psp_bps_estera
             costo_pagamento = (totale * _psp) // 10000 + (self._psp_fisso if totale > 0 else 0)
+            # ⛔ VOCE 255 (4/11): la quota fissa e' in EURO (i testi legali: «piu' 0,25 EUR per
+            # transazione»): su un annuncio in un'altra moneta si CONVERTE, e senza il tasso il
+            # preventivo non si fa. La riga sopra resta IDENTICA (porta un'equivalenza dimostrata
+            # in `collaudi/mutazione_prodotto.py`, ancorata al suo testo); qui la quota in euro si
+            # sostituisce con quella convertita. A questa riga totale >= 1 (la stessa prova).
+            fisso = self._fisso_nella_valuta(valuta)
+            if fisso is None:
+                return RispostaConcierge(503, {"errore": "cambio_non_disponibile",
+                                               "riprova": True})
+            costo_pagamento += fisso - self._psp_fisso
             # PREZZO NON SOSTENIBILE: se il costo carta supera quel che resta all'host
             # (prezzi da centesimi + tassa alta), NESSUNO deve rimetterci: il preventivo
             # viene rifiutato onestamente invece di far "sparire" la differenza a nostro
@@ -440,6 +450,31 @@ class ProtocolloConcierge:
             return val if 0 < val <= MAX_CENTS else 0
         except Exception:
             return 0
+
+    def _fisso_nella_valuta(self, valuta: Any) -> Optional[int]:
+        """La quota fissa (unita' minori della moneta della piattaforma, l'euro) nella moneta
+        dell'annuncio, arrotondata IN SU: mai sotto il costo di Stripe. Stessa moneta o quota
+        zero -> invariata. Senza fornitore di cambi (sviluppo e prove: chiave OXR assente) ->
+        invariata; in produzione la chiave c'e' (letta il 4/11). Con il fornitore ma senza un
+        tasso valido -> None, e il preventivo non si fa (voce 255). Stessa SCALA della stima
+        qui sopra: il tasso e' in unita' MAGGIORI, la quota in unita' minori."""
+        if not self._psp_fisso or str(valuta).upper() == str(self._valuta).upper():
+            return self._psp_fisso
+        if not self._tasso:
+            return self._psp_fisso
+        try:
+            from decimal import ROUND_CEILING, Decimal
+            from fase99_multicurrency import esponente
+            tasso = Decimal(str(self._tasso(self._valuta, str(valuta).upper())))
+            if not tasso > 0:
+                return None
+            scala = Decimal(10) ** (esponente(valuta) - esponente(self._valuta))
+            # in su e con un tasso > 0: vale almeno 1. Una quota assurda (tasso sbagliato) la
+            # ferma il controllo «prezzo_non_sostenibile» poco sotto, nel preventivo.
+            return int((Decimal(self._psp_fisso) * tasso * scala)
+                       .quantize(Decimal(1), rounding=ROUND_CEILING))
+        except Exception:
+            return None
 
     def _alloggio_vendibile(self, slug: Any) -> bool:
         """True se l'annuncio e' PUBBLICATO (vendibile). Sospeso/bozza/inesistente -> False.
