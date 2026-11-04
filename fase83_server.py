@@ -1606,6 +1606,24 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: Any = None) -> Optiona
     return pagina
 
 
+def _totale_prenotazione_cents(dj: Dict[str, Any], riserva: Any = 0) -> int:
+    """Il totale della prenotazione: `totale_cents` (soggiorno + tassa, fase59) e, solo se
+    manca, il soggiorno -- lo stesso ordine con cui fase85 `crea_link` decide l'addebito.
+    `riserva`: il soggiorno firmato nel voucher, se il corpo del pendente non lo porta."""
+    return int(dj.get("totale_cents", 0) or dj.get("prezzo_guest_cents", riserva) or 0)
+
+
+def _pagato_online_cents(dj: Dict[str, Any], riserva: Any = 0) -> int:
+    """⛔ VOCI 228, 247 e 248 (4/11): quanto l'ospite ha pagato ONLINE, cioe' cio' che Stripe
+    ha addebitato. Online il totale; «paga in struttura» solo l'ANTICIPO (fase85
+    `crea_link_anticipo`), perche' il saldo lo da' all'host all'arrivo. Una fonte sola per la
+    ricevuta e per l'email di conferma: la ricevuta scriveva l'intero soggiorno a chi aveva
+    pagato l'anticipo, e l'email il soggiorno senza la tassa a chi aveva pagato online."""
+    if dj.get("modo_pagamento") == "in_struttura":
+        return int(dj.get("anticipo_online_cents", 0) or 0)
+    return _totale_prenotazione_cents(dj, riserva)
+
+
 def pagina_ricevuta_html(sistema: Any, token: Any, lingua: Any = None) -> Optional[str]:
     """RICEVUTA DI PAGAMENTO stampabile (C3 2026-07-20: prima chi pagava con soldi veri
     non riceveva alcun documento). Autenticata dal voucher firmato, SOLO prenotazioni
@@ -1645,20 +1663,28 @@ def pagina_ricevuta_html(sistema: Any, token: Any, lingua: Any = None) -> Option
             c = 0
         return _importo(c, valuta) + " " + str(valuta or "EUR")
 
-    # ⛔ N2 (03/11): «Totale pagato» = cio' che Stripe ha addebitato. fase85.crea_link addebita
-    # `totale_cents` (soggiorno + tassa) e, solo se manca, il soggiorno. Prima qui si leggeva il
-    # soggiorno come totale e gli si toglieva la tassa: 190,00 «pagato» su 190,08 addebitati.
-    totale = int(dj.get("totale_cents", 0)
-                 or dj.get("prezzo_guest_cents", v.get("prezzo_guest_cents", 0)) or 0)
+    # ⛔ N2 (03/11): il soggiorno e' il totale della prenotazione meno la tassa; «pagato» e' cio'
+    # che Stripe ha addebitato (`_pagato_online_cents`). Prima qui si leggeva il soggiorno come
+    # totale e gli si toglieva la tassa: 190,00 «pagato» su 190,08 addebitati.
+    riserva = v.get("prezzo_guest_cents", 0)
+    totale = _totale_prenotazione_cents(dj, riserva)
     tassa = int(v.get("tassa_soggiorno_cents", 0) or 0)
     soggiorno = max(0, totale - tassa)
+    # ⛔ VOCE 247: chi «paga in struttura» ha pagato online solo l'anticipo. La riga in grassetto
+    # lo dice col suo nome e sopra c'e' il saldo da dare all'host: mai un «Totale pagato» pieno.
+    in_struttura = dj.get("modo_pagamento") == "in_struttura"
+    riga_saldo = ("<div class='r'><span>%s</span><strong>%s</strong></div>"
+                  % (e(_ui("ps_saldo_nota", lng)),
+                     e(soldi(int(dj.get("saldo_in_loco_cents", 0) or 0))))) if in_struttura else ""
     righe = ("<div class='r'><span>%s</span><strong>%s</strong></div>"
              % (e(_ui("ric_soggiorno", lng)), e(soldi(soggiorno)))
              + (("<div class='r'><span>%s</span><strong>%s</strong></div>"
                  % (e(_ui("tassa", lng)), e(soldi(tassa)))) if tassa else "")
+             + riga_saldo
              + "<div class='r' style='font-size:1.1rem'><span><strong>%s</strong>"
                "</span><strong>%s</strong></div>"
-               % (e(_ui("ric_totale_pagato", lng)), e(soldi(totale))))
+               % (e(_ui("ps_anticipo_pagato" if in_struttura else "ric_totale_pagato", lng)),
+                  e(soldi(_pagato_online_cents(dj, riserva)))))
     return (
         "<!DOCTYPE html><html lang=\"%s\"><head><meta charset=\"UTF-8\">"
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
@@ -7406,9 +7432,10 @@ class RouterHTTP:
             vurl = (vurl + "?lang=" + lang) if vurl else vurl
             # PAGA IN STRUTTURA: online abbiamo incassato solo l'ANTICIPO -> mostra quello come
             # "pagato" + il SALDO da dare all'host in loco. Online: importo=prezzo, saldo=0.
+            # VOCE 248: l'importo e' cio' che Stripe ha addebitato (fonte unica con la ricevuta);
+            # prima l'online scriveva il soggiorno senza la tassa.
             _in_str = dj.get("modo_pagamento") == "in_struttura"
-            _importo_email = int(dj.get("anticipo_online_cents", 0) or 0) if _in_str \
-                else int(dj.get("prezzo_guest_cents", 0) or 0)
+            _importo_email = _pagato_online_cents(dj)
             _saldo_email = int(dj.get("saldo_in_loco_cents", 0) or 0) if _in_str else 0
             self._email_bg(rec.get("email", ""),
                            oggetto("pc_ogg", lang),
