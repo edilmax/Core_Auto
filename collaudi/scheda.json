@@ -411,11 +411,11 @@
  "506a24febc87": {
   "blocco": 6,
   "comando": "python collaudi/esame_plausibilita.py --scrivi",
-  "commit": "2828401",
+  "commit": "9780ac1",
   "condizione": "ogni numero mostrato ha senso nel mondo vero (modo di rompersi 10)",
-  "denominatore": 14,
+  "denominatore": 2,
   "esito": false,
-  "impronta": "17180c37ab94",
+  "impronta": "de65f30167de",
   "impronte_moduli": {
    "fase107_traduzione_annunci": "e0fc5c8e8eb1",
    "fase113_messaggistica": "c3a8712be969",
@@ -428,13 +428,13 @@
    "fase166_geocoder": "162da4a35b88",
    "fase175_poi_osm": "c1ad5e11dd94",
    "fase26_ricerca": "c51cf25fe989",
-   "fase57_vetrina": "5ee5cae7a69e",
+   "fase57_vetrina": "1a8e6fabbd1a",
    "fase61_localizzazione": "6ca2f962ff78",
    "fase63_recensioni": "5e00244ea3f5",
    "fase74_sensory_engine": "6f64cb3f6e59"
   },
-  "motivo": "[mostrati] casa-test: prezzo a notte in banda (5..5000 EUR) (50 EUR = 0.50 EUR)",
-  "quando": "2026-10-17T15:20:58"
+  "motivo": "[mostrati] il catalogo elenca almeno un annuncio (zero annunci = casella NON misurata) (annunci=0 totale dichiarato=0)",
+  "quando": "2026-11-04T03:41:06"
  },
  "555972b586e3": {
   "blocco": 2,
@@ -736,11 +736,11 @@
  "a36e3373da1d": {
   "blocco": 8,
   "comando": "python collaudi/esame_sentinella.py --scrivi",
-  "commit": "917faf4",
+  "commit": "9780ac1",
   "condizione": "una sentinella ESTERNA (non nostra) si accorge se il sito muore",
   "denominatore": 10,
   "esito": false,
-  "impronta": "638c12f045c0",
+  "impronta": "68b4c2c33ba4",
   "impronte_moduli": {
    "fase13_protocollo_finale": "2dce22f058cc",
    "fase16_outbox": "a47de5874653",
@@ -754,11 +754,11 @@
    "fase42_observability": "a557645447a7",
    "fase60_mcp_server": "56ffc4364819",
    "fase81_bootstrap_casavip": "2817a7a7da80",
-   "fase83_server": "23c0fab94009",
+   "fase83_server": "bd68d5c13e96",
    "fase86_email": "12848db384ba"
   },
-  "motivo": "[sveglia] nelle ultime 24 ore i controlli del monitor non hanno buchi > 15 minuti e l'ultimo ha meno di 15 minuti (controlli nelle 24 ore: 279, buco massimo 20 min, ultimo 5 min fa); [sveglia] GitHub (seconda linea): ultimo giro entro 60 minuti e buco massimo nelle 24 ore sotto i 60 minuti — DECIDE, perche' il monitor esterno manca o non e' sveglio (ultimo giro 2026-10-23 20:40 UTC (1 minuti fa), giri nelle 24 ore: 7, buco massimo 327 minuti)",
-  "quando": "2026-10-23T22:40:59"
+  "motivo": "[sveglia] nelle ultime 24 ore i controlli del monitor non hanno buchi > 15 minuti e l'ultimo ha meno di 15 minuti (controlli nelle 24 ore: 279, buco massimo 21 min, ultimo 4 min fa); [sveglia] GitHub (seconda linea): ultimo giro entro 60 minuti e buco massimo nelle 24 ore sotto i 60 minuti — DECIDE, perche' il monitor esterno manca o non e' sveglio (ultimo giro 2026-11-03 22:35 UTC (246 minuti fa), giri nelle 24 ore: 3, buco massimo 466 minuti)",
+  "quando": "2026-11-04T03:41:21"
  },
  "a5c77ac6c76a": {
   "blocco": 5,

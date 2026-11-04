@@ -1276,7 +1276,9 @@ document.getElementById('btnTrasp').onclick = async ()=>{
   const p = Math.round((parseFloat(document.getElementById('tr_prezzo').value)||0)*100);
   const ota = document.getElementById('tr_ota').value;
   try{
-    const d = await getJson('/api/trasparenza?prezzo_cents='+p+'&ota='+ota);
+    // N18 (03/11): il token dice al server CHI e' l'host -> il conto usa la SUA commissione
+    // (rampa di lancio 0/8/10%), non quella generica.
+    const d = await getJson('/api/trasparenza?prezzo_cents='+p+'&ota='+ota, {headers:authHeaders()});
     if(d.errore || !d.scenario_nostro || !d.scenario_ota){ m.className='msg err'; m.textContent='❌ '+(d.errore?fraseErrore(d.errore):fraseErrore('risposta_non_valida')); return; }
     const noi = d.scenario_nostro.host_netto_cents, loro = d.scenario_ota.host_netto_cents;
     const extra = d.guadagno_extra_host_cents;
