@@ -7774,5 +7774,62 @@ class TestLaRicevutaEIlVoucherDiconoQuelloCheStripeAddebita(_BancoDeiSoldiDelSer
                          "SENZA totale_cents LA RICEVUTA NON DICE CIO' CHE STRIPE HA ADDEBITATO")
 
 
+class TestLePrenotazioniNonPagateHannoUnTettoPerIndirizzo(_BancoDeiSoldiDelServer):
+    """⛔ N1 del giro «da fresca» (3/11, voce 227): ATTACCO «Denial of Inventory» (OWASP
+    Automated Threats OAT-021). Una prenotazione NON pagata tiene le date per tutta la vita
+    del pagamento (fase162, mezz'ora; 24 ore su «su richiesta»): sulla copia locale 9 su 9
+    accettate in pochi secondi da un solo indirizzo con email inventate, e l'ospite vero
+    leggeva «non disponibile». Un concorrente svuotava i calendari ogni mezz'ora.
+    Il tetto: poche prenotazioni NUOVE per indirizzo nella finestra; il doppio clic non
+    conta; IPv6 conta la rete /64 (un abbonato ne ha milioni di indirizzi)."""
+
+    SLUG = "casa-assediata"
+
+    def setUp(self):
+        super().setUp()
+        self.pubblica(self.SLUG)            # giorni [0, 60), una camera
+
+    def preventivo(self, giorni):
+        s, q = self.g("POST", "/api/concierge/quote",
+                      {"alloggio_id": self.SLUG, "check_in": _fra(giorni),
+                       "check_out": _fra(giorni + 1), "party": 2})
+        _deve(s == 200, s, q)
+        return q["quote_token"]
+
+    def prenota_da(self, ip, giorni=None, quote=None):
+        s, c = self.g("POST", "/api/concierge/book",
+                      {"quote_token": quote or self.preventivo(giorni), "email": "x@banco.it"},
+                      {"X-Forwarded-For": ip})
+        return s, c
+
+    def test_dallo_stesso_indirizzo_la_quarta_si_ferma_e_le_date_restano_libere(self):
+        q_ospite_vero = self.preventivo(20)         # chiesto PRIMA: le date sono libere
+        esiti = [self.prenota_da("203.0.113.7", g)[0] for g in (10, 12, 14)]
+        s, c = self.prenota_da("203.0.113.7", 20)
+        altro, _ = self.prenota_da("198.51.100.9", quote=q_ospite_vero)
+        self.assertEqual(
+            ([201, 201, 201], 429, "troppe_prenotazioni_in_attesa", True, 201),
+            (esiti, s, c.get("errore"), int(c.get("riprova_tra_sec") or 0) > 0, altro),
+            "UN SOLO INDIRIZZO TIENE TUTTE LE DATE CHE VUOLE (o la quarta ha bloccato le date)")
+
+    def test_il_doppio_clic_sullo_stesso_preventivo_non_conta(self):
+        q = self.preventivo(10)
+        ripetuti = [self.prenota_da("203.0.113.8", quote=q)[0] for _ in range(4)]
+        nuove = [self.prenota_da("203.0.113.8", g)[0] for g in (12, 14)]
+        quarta, _ = self.prenota_da("203.0.113.8", 16)
+        self.assertEqual((True, [201, 201], 429),
+                         (429 not in ripetuti, nuove, quarta),
+                         "IL DOPPIO CLIC CONSUMA IL TETTO (o il tetto non conta le nuove)")
+
+    def test_ipv6_conta_la_rete_non_il_singolo_indirizzo(self):
+        q_altra_rete = self.preventivo(16)          # chiesto PRIMA: le date sono libere
+        stessa_rete = [self.prenota_da("2001:db8:1:2::%x" % n, g)[0]
+                       for n, g in ((0xa, 10), (0xb, 12), (0xc, 14))]
+        quarta, _ = self.prenota_da("2001:db8:1:2::d", 16)
+        altra_rete, _ = self.prenota_da("2001:db8:1:3::a", quote=q_altra_rete)
+        self.assertEqual(([201, 201, 201], 429, 201), (stessa_rete, quarta, altra_rete),
+                         "CAMBIANDO INDIRIZZO DENTRO LA STESSA RETE IPv6 IL TETTO SI AGGIRA")
+
+
 if __name__ == "__main__":
     unittest.main()

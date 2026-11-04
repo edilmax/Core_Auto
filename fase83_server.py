@@ -2210,6 +2210,29 @@ class RouterHTTP:
                                            base_blocco_sec=30, max_blocco_sec=600)
         except Exception:
             self._rate = None
+        # ⛔ N1 (giro del 3/11, voce 227): «Denial of Inventory» (OWASP OAT-021). Una
+        # prenotazione NON pagata tiene le date finche' vive il pagamento (fase162): da un solo
+        # indirizzo se ne aprivano quante si voleva, e il calendario si svuotava. Stesso
+        # attrezzo del login, contato sulle prenotazioni NUOVE: alla terza nella finestra
+        # l'indirizzo aspetta (il blocco raddoppia, con un tetto); il doppio clic non conta.
+        try:
+            from fase179_rate_limit import crea_rate_limiter
+            from fase162_pagamenti_pendenti import HOLD_SECONDI_DEFAULT
+            self._tetto_hold = crea_rate_limiter(soglia=3, finestra_sec=HOLD_SECONDI_DEFAULT,
+                                                 base_blocco_sec=HOLD_SECONDI_DEFAULT,
+                                                 max_blocco_sec=6 * 3600)
+        except Exception:
+            self._tetto_hold = None
+
+    def _chiave_hold(self, headers):
+        """Chiave del tetto delle prenotazioni non pagate: l'indirizzo, e per IPv6 la sua
+        rete /64 (un abbonato ne riceve una intera: contando l'indirizzo, il tetto si
+        aggirerebbe cambiandolo). Nessun indirizzo (chiamata diretta, senza nginx) ->
+        nessuna chiave, come `_rate_chiave_login`."""
+        ip = self._client_ip(headers)
+        if ":" in ip:
+            ip = str(ipaddress.ip_network(ip + "/64", strict=False).network_address)
+        return ("hold-ip:" + ip) if ip else ""
 
     def _rate_chiave_login(self, headers):
         """Chiave di throttle del login = PER IP (policy fondatore: 5/min per IP). NON
@@ -2321,7 +2344,7 @@ class RouterHTTP:
         if metodo == "POST" and path == "/api/concierge/quote":
             return self._concierge_quote(body)
         if metodo == "POST" and path == "/api/concierge/book":
-            return self._book(body)
+            return self._book(body, headers)
         if metodo == "POST" and path == "/api/concierge/cancella":
             return self._cancella_prenotazione(body)
         if metodo == "GET" and path == "/api/concierge/manifest":
@@ -6416,13 +6439,23 @@ class RouterHTTP:
         except Exception:
             return False
 
-    def _book(self, body):
+    def _book(self, body, headers=None):
         """Prenotazione (fase59) + emissione del DIRITTO di recensione (fase63)."""
         dati = self._json(body)
         if dati is None:
             return 400, {"errore": "json_non_valido"}
         if self._transazioni_bloccate():           # kill-switch globale: niente nuove prenotazioni
             return 503, {"errore": "transazioni_sospese"}
+        # N1 (voce 227): l'indirizzo che ha gia' aperto troppe prenotazioni non pagate aspetta,
+        # e le date restano libere per gli altri (il controllo viene PRIMA di toccarle).
+        chiave_hold = self._chiave_hold(headers)
+        if self._tetto_hold is not None:
+            consentito, attesa = self._tetto_hold.consenti(chiave_hold)
+            if not consentito:
+                logger.warning("TETTO prenotazioni non pagate: rifiutata (429) %s attesa=%ds",
+                               chiave_hold, attesa)
+                return 429, {"errore": "troppe_prenotazioni_in_attesa",
+                             "riprova_tra_sec": attesa}
         # LA DIFESA DAL RITARDO iCal (fase203, 2026-09-05, «autorizzato»): PRIMA di confermare,
         # se l'alloggio ha un calendario esterno collegato e l'ultima lettura ha piu' di un
         # minuto, il feed si rilegge ADESSO: le notti appena vendute sull'OTA vengono bloccate
@@ -6450,6 +6483,8 @@ class RouterHTTP:
                 gia = self._replay_prenotazione(corpo)
                 if gia is not None:
                     return gia
+            elif self._tetto_hold is not None:
+                self._tetto_hold.fallito(chiave_hold)  # una prenotazione NUOVA tiene le date
             allog = corpo.get("alloggio_id", "")
             if self._modalita_alloggio(allog) == "su_richiesta":
                 # SU RICHIESTA: la stanza e' tenuta, l'host deve APPROVARE. Niente voucher/
