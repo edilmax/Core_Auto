@@ -5901,11 +5901,24 @@ class RouterHTTP:
             return 503, {"errore": "service_unavailable"}
         # arricchisco col titolo alloggio (best-effort)
         for c in lista:
+            d = None
             try:
                 d = self._sys.catalogo.dettaglio(c.get("alloggio_id", ""))
                 c["titolo"] = d.get("titolo", "") if isinstance(d, dict) else ""
             except Exception:
                 c["titolo"] = ""
+            # ⛔ VOCE 254 (4/11): la MONETA della somma in garanzia, che l'archivio della garanzia
+            # non ha: quella del bonifico della stessa prenotazione, se no quella dell'annuncio.
+            # Senza, la pagina scriveva «€» e divideva per 100 anche lo yen, e l'admin decideva
+            # il rimborso su una scala sbagliata. Guardia:
+            # `test_happy_admin.HappyAdmin.test_admin_controversia_elenco_e_risoluzione_split`.
+            try:
+                pd = getattr(self._sys, "payout", None)
+                p = pd.info(c.get("prenotazione_id", "")) if pd is not None else None
+                v = (p or {}).get("valuta") or (d.get("valuta") if isinstance(d, dict) else "")
+            except Exception:
+                v = d.get("valuta") if isinstance(d, dict) else ""
+            c["valuta"] = str(v or "EUR").upper()
         return 200, {"controversie": lista}
 
     def _admin_controversia_risolvi(self, body, headers):

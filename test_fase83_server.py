@@ -220,6 +220,37 @@ class TestIlPulsanteDellaControversia(_BancoDelleStrade):
         finally:
             self.sis.garanzia.stato = vero
 
+    def test_l_elenco_delle_controversie_dice_la_moneta_della_somma_in_garanzia(self):
+        """⛔ VOCE 254 (4/11, PERDE SOLDI). L'archivio della garanzia non ha la moneta: senza, la
+        pagina dell'admin scriveva «€» e divideva per 100 anche lo yen, e l'arbitro decideva il
+        rimborso su una scala sbagliata. La moneta e' quella del BONIFICO della prenotazione, e
+        se il bonifico non c'e' quella dell'ANNUNCIO. Sta qui e non solo in `test_happy_admin`
+        perche' questo e' il primo occhio del Giudice su `fase83_server.py`."""
+        ci, co = self.date(38)
+        b, _tot = self.prenota(ci, co, "c5@fase83.it")
+        rif = b["riferimento"]
+        self.paga(rif, "pi_c5")
+        s, _c = self.segnala(b)
+        self.assertEqual(s, 200, "PREMESSA NON VALIDA: la contestazione non riesce: %r" % (_c,))
+
+        def monete():
+            s, el = self.g("GET", "/api/admin/controversie", None, {"X-Admin-Key": "ak"})
+            self.assertEqual(s, 200, el)
+            return [c.get("valuta") for c in el["controversie"] if c.get("prenotazione_id") == rif]
+
+        self.assertEqual(monete(), ["EUR"])
+        vero_pay, vero_det = self.sis.payout.info, self.sis.catalogo.dettaglio
+        try:
+            # il bonifico e' in yen (scritto minuscolo): la riga dice JPY, non una costante
+            self.sis.payout.info = lambda r: dict(vero_pay(r) or {}, valuta="jpy") if r == rif else vero_pay(r)
+            self.assertEqual(monete(), ["JPY"])
+            # nessun bonifico: vale la moneta dell'annuncio
+            self.sis.payout.info = lambda r: None if r == rif else vero_pay(r)
+            self.sis.catalogo.dettaglio = lambda a: dict(vero_det(a) or {}, valuta="KRW")
+            self.assertEqual(monete(), ["KRW"])
+        finally:
+            self.sis.payout.info, self.sis.catalogo.dettaglio = vero_pay, vero_det
+
 
 class TestCatalogo(unittest.TestCase):
     def setUp(self):

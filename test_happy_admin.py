@@ -548,6 +548,17 @@ class HappyAdmin(unittest.TestCase):
         self.assertEqual(c["motivo"], "casa non conforme")
         importo = int(c["importo_host_cents"])
         self.assertGreater(importo, 0)
+        # ⛔ VOCE 254 (4/11, PERDE SOLDI): la riga porta la MONETA della somma in garanzia, quella
+        # del bonifico della stessa prenotazione. Senza, la pagina scriveva «€» e divideva per 100
+        # anche lo yen: l'admin decideva il rimborso su una scala sbagliata. La seconda lettura
+        # finge un bonifico in yen e pretende che la moneta venga da li', non da una costante.
+        from unittest import mock
+        self.assertEqual(c.get("valuta"), "EUR", c)
+        vera = self.sis.payout.info
+        with mock.patch.object(self.sis.payout, "info",
+                               lambda rif: dict(vera(rif) or {}, valuta="JPY")):
+            el_yen = self.rotta("GET", "/api/admin/controversie", 200, headers=self.AK)
+        self.assertEqual(el_yen["controversie"][0].get("valuta"), "JPY", el_yen)
 
         ris = self.rotta("POST", "/api/admin/controversia/risolvi", 200,
                          {"riferimento": self.rif, "percentuale_ospite": 40}, self.AKB)
