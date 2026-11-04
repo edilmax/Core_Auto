@@ -950,9 +950,9 @@
  "d22022c687dd": {
   "blocco": 3,
   "comando": "python collaudi/esame_catene_admin.py --scrivi",
-  "commit": "118593e",
+  "commit": "09070ad",
   "condizione": "ogni gesto del pannello admin -- rotte, bottoni e campi CONTATI dalla pagina a ogni giro, non da un elenco scritto a mano -- ha le sue tre colonne dichiarate (cosa deve succedere e dove finisce il dato · quali importi si muovono e cosa deve coincidere al centesimo · in quale archivio si scrive, se ci resta, se si cancella e per quale legge) e la catena PERCORSA anello per anello, dove ogni anello e' una differenza fra prima e dopo; una voce nuova senza catena e' rossa lo stesso giorno",
-  "denominatore": 85,
+  "denominatore": 92,
   "esito": false,
   "impronta": "92c5092c583c",
   "impronte_moduli": {
@@ -966,8 +966,8 @@
    "fase73_firma_agile": "16cd09e0ed5d",
    "fase80_sentinel": "ebc8a451110f"
   },
-  "motivo": "20 rotte del pannello su 22 non hanno ancora una catena percorsa (debito dichiarato, tetto 20): /api/admin/audit, /api/admin/cancella_attivita, /api/admin/controversia/risolvi, /api/admin/controversie, /api/admin/messaggi, /api/admin/payout/pagato_a_mano, /api/admin/prenotazioni, /api/admin/rimborsa_dovuto, /api/admin/rimborsi_dovuti, /api/admin/rimborso, /api/admin/search, /api/admin/storno_penale, /api/admin/verifica_stato, /api/admin/verifiche, /api/admin/verifiche/dettaglio, /api/admin/verifiche/fascicolo, /api/bunker/login, /api/bunker/logout, /api/gate/logout, /api/marketing/campagna",
-  "quando": "2026-10-22T10:43:32"
+  "motivo": "19 rotte del pannello su 22 non hanno ancora una catena percorsa (debito dichiarato, tetto 19): /api/admin/audit, /api/admin/cancella_attivita, /api/admin/controversia/risolvi, /api/admin/controversie, /api/admin/messaggi, /api/admin/prenotazioni, /api/admin/rimborsa_dovuto, /api/admin/rimborsi_dovuti, /api/admin/rimborso, /api/admin/search, /api/admin/storno_penale, /api/admin/verifica_stato, /api/admin/verifiche, /api/admin/verifiche/dettaglio, /api/admin/verifiche/fascicolo, /api/bunker/login, /api/bunker/logout, /api/gate/logout, /api/marketing/campagna",
+  "quando": "2026-11-04T11:13:51"
  },
  "d4e612aafcd1": {
   "blocco": 9,
