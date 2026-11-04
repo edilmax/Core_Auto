@@ -13525,17 +13525,25 @@ class TestLEsameDelleCateneAdminNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
                          "il debito, ed e' il verde peggiore -- «non ci scappa niente» senza averle viste")
         sano = esame.ULTIMO
         self.assertTrue(sano["censimento"], sano["motivi_censimento"])
-        self.assertEqual([c["rossi"] for c in sano["catene"]], [[]],
-                         "un anello della catena 1 e' rosso sul codice sano: %s"
-                         % [c["motivi"] for c in sano["catene"]])
+        #  ⛔ PER NOME, non per posizione: dal 4/11 le catene sono due, e una lista [[]] avrebbe
+        #     smesso di guardare la seconda senza dirlo.
+        attese = {esame.CATENA_1.voce, esame.CATENA_2.voce}
+        rossi_sano = {c["voce"]: c["rossi"] for c in sano["catene"]}
+        self.assertEqual(set(rossi_sano), attese, "l'esame non ha percorso tutte le catene dichiarate")
+        self.assertEqual({v: r for v, r in rossi_sano.items() if r}, {},
+                         "un anello e' rosso sul codice sano: %s" % [c["motivi"] for c in sano["catene"]])
         self.assertTrue(sano["scoperte"], "il debito e' sparito senza che nessuna catena nuova sia "
                                          "stata scritta: il conto non lo misura piu' nessuno")
         self.assertEqual(esame.main(["--con-guasto"]), 1, "coi guasti dentro NON ha gridato")
         guasto = esame.ULTIMO
         self.assertFalse(guasto["censimento"], "la rotta nuova non ha fatto gridare il censimento")
-        self.assertIn("prenota", guasto["catene"][0]["rossi"],
+        rossi_guasto = {c["voce"]: c["rossi"] for c in guasto["catene"]}
+        self.assertIn("prenota", rossi_guasto.get(esame.CATENA_1.voce, []),
                       "col concierge cieco l'anello che vale i soldi e' rimasto verde: %s"
-                      % guasto["catene"][0]["motivi"])
+                      % [c["motivi"] for c in guasto["catene"]])
+        self.assertIn("garanzia", rossi_guasto.get(esame.CATENA_2.voce, []),
+                      "col pulsante «Lo pago io a mano» cieco sulla garanzia l'anello che vale i soldi "
+                      "e' rimasto verde: %s" % [c["motivi"] for c in guasto["catene"]])
 
     def test_COL_GUASTO_DENTRO_NON_SCRIVE_MAI(self):
         esame = self._esame()

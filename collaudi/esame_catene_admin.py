@@ -71,9 +71,11 @@ preventivo E con la conferma, e con un preventivo firmato PRIMA della sospension
 ⛔ D18, LE QUATTRO CONDIZIONI DI UNO STRUMENTO CHE MISURA:
    1. misura PRIMA se stesso (`precondizioni`): senza la casella nel piano, senza la pagina o
       senza il banco si FERMA e non scrive;
-   2. provato nelle DUE direzioni: `--con-guasto` inietta DUE guasti che colpiscono meta'
+   2. provato nelle DUE direzioni: `--con-guasto` inietta i guasti che colpiscono meta'
       diverse -- il concierge smette di guardare lo stato dell'annuncio (l'anello [prenota]
-      deve gridare) e la pagina nomina una rotta in piu' (il perimetro deve gridare);
+      della catena 1 deve gridare), il pulsante «Lo pago io a mano» smette di guardare se la
+      garanzia e' chiusa (l'anello [garanzia] della catena 2 deve gridare) e la pagina nomina
+      una rotta in piu' (il perimetro deve gridare);
       `--autoprova` giudica perimetri e passi costruiti, senza banco;
    3. dichiara cosa NON ha esaminato: `NON_GUARDA`, stampato a ogni giro;
    4. e' sotto guardia: `test_pipeline_ci.TestLEsameDelleCateneAdminNonPuoBARARE`.
@@ -124,8 +126,12 @@ NON_GUARDA = (
     "le rotte che il pannello NON nomina ma il server espone (es. `/api/admin/partner`): un "
     "perimetro letto dalla pagina vede i gesti di una persona, non l'API intera -- quella la "
     "enumera dal codice `esame_accessi` (Blocco 3, caselle 1-3)",
-    "le catene delle rotte DIVERSE da «Tutti gli annunci»: oggi sono dichiarate solo per la prima "
-    "voce, e le altre risultano ROSSE per costruzione, non per un guasto -- e' lo stato vero",
+    "le catene delle rotte DIVERSE da «Tutti gli annunci» e «Lo pago io a mano»: oggi sono "
+    "dichiarate solo per queste due voci, e le altre risultano ROSSE per costruzione, non per un "
+    "guasto -- e' lo stato vero",
+    "nella catena 2 il bonifico che Stripe ACCETTA, o il cui esito e' sconosciuto: lo Stripe del "
+    "banco li rifiuta tutti. Quei due rami li provano `test_fase83_server.TestIlPagamentoAMano` e "
+    "vicine (gia' su Stripe -> 409 'gia_su_stripe', Stripe muto -> 409 'stripe_non_risponde')",
     "la colonna ARCHIVIO oltre la dichiarazione: qui si scrive DOVE la voce scrive e se resta; che "
     "il diritto all'oblio raggiunga davvero quell'archivio lo misura la casella di `fase156_erasure` "
     "(Blocco 5), e i 27 archivi del server hanno ancora da avere la loro riga uno per uno",
@@ -445,8 +451,233 @@ CATENA_1 = Catena(
     percorre=percorre_catena_1,
 )
 
+
+ANELLI_CATENA_2 = ("porta", "vede", "garanzia", "prende", "soldi", "doppio", "traccia")
+
+
+class _StripeCheRifiuta(object):
+    """Lo Stripe del banco per i bonifici: OGNI bonifico viene rifiutato per saldo insufficiente
+    (il caso vero di produzione: gli 11 centesimi del conto di prova), e la lista dei bonifici di
+    un conto e' vuota. Conta i tentativi: dopo «Lo pago io a mano» non ne deve arrivare nessuno.
+    ⛔ Sta sull'ISTANZA del banco (`b.sis.connect`), mai sulla classe: e senza di lui il Connect
+    del banco parlerebbe con la rete vera."""
+
+    def __init__(self):
+        self.tentati = 0          # POST di bonifici ricevuti (tutti rifiutati)
+        self.per_rif = {}         # gli stessi, per riferimento (`metadata[riferimento]`)
+        self.inattesi = []        # chiamate che questo finto non sa servire
+
+    def post(self, url, body, headers):
+        import urllib.error
+        from urllib.parse import parse_qsl
+        if body is None:
+            return self.get(url, headers)
+        if url != "https://api.stripe.com/v1/transfers":
+            self.inattesi.append(("POST", url))
+            return {}
+        self.tentati += 1
+        rif = dict(parse_qsl(body.decode("utf-8"))).get("metadata[riferimento]", "")
+        self.per_rif[rif] = self.per_rif.get(rif, 0) + 1
+        corpo = json.dumps({"error": {"type": "invalid_request_error", "code": "balance_insufficient",
+                                      "message": "Insufficient funds"}}).encode("utf-8")
+        raise urllib.error.HTTPError(url, 400, "Bad Request", {}, io.BytesIO(corpo))
+
+    def get(self, url, headers):
+        from urllib.parse import urlsplit
+        if urlsplit(url).path != "/v1/transfers":
+            self.inattesi.append(("GET", url))
+            return {}
+        return {"object": "list", "data": [], "has_more": False}
+
+
+def percorre_catena_2(b, BH, con_guasto=False):
+    """La voce «Lo pago io a mano» della scheda audit: Stripe ha rifiutato il bonifico all'host,
+    una persona lo prende in carico e lo paga dalla banca, e nessun giro automatico lo ripaga."""
+    import dataclasses
+    from fase101_stripe_connect import ProviderConnect
+    from fase83_server import _rif_per_registro
+    print("\n--- CATENA 2, «Lo pago io a mano»: Stripe rifiuta -> presa in carico -> nessun doppio ---")
+    rotta = "/api/admin/payout/pagato_a_mano"
+    stripe = _StripeCheRifiuta()
+    connect_prima = b.sis.connect
+    b.sis.connect = ProviderConnect("sk_test_catena", fetch=stripe.post, fetch_get=stripe.get)
+    try:
+        slug = b.alloggio("casa-catena-due", 3, "2027-08-01", "2027-08-31")
+        b.sis.registro_host.imposta_stripe_account(b.host_id, "acct_CATENA2")
+        rif, _vt = b.pagata(slug, "2027-08-05", "2027-08-07")
+        rif_aperta, _vt2 = b.pagata(slug, "2027-08-10", "2027-08-12")
+        if not (rif and rif_aperta):
+            raise RuntimeError("il banco non ha prodotto le due prenotazioni pagate")
+        netto = int((b.sis.payout.info(rif) or {}).get("minori") or 0)
+        if not b.sis.garanzia.conferma_ospite(rif).get("ok"):
+            raise RuntimeError("il banco non ha chiuso la garanzia della prima prenotazione")
+        b.router._ritenta_bonifici_fermi()               # il giro orario: Stripe rifiuta
+
+        def tipi(r):
+            return [m.get("tipo") for m in b.sis.finanza.movimenti(r)]
+
+        #  LA PREMESSA, che NON e' un anello: se manca l'esame non e' verde, e' FERMO (S7).
+        if not (netto > 0 and stripe.tentati >= 1 and b.sis.payout.stato_di(rif) == "maturato"
+                and "payout_manuale" in tipi(rif)):
+            raise RuntimeError("premessa mancata: netto=%s tentativi=%s stato=%s giornale=%s"
+                               % (netto, stripe.tentati, b.sis.payout.stato_di(rif), tipi(rif)))
+
+        def audit(r):
+            #  ⛔ La scheda audit rilegge Stripe con la chiave della configurazione (2 secondi, rete
+            #     VERA). Per la lettura del banco la chiave si toglie sull'ISTANZA del sistema: la
+            #     riga «payout» della scheda non dipende da Stripe, e un esame non esce in rete.
+            cfg = b.sis.config
+            b.sis.config = dataclasses.replace(cfg, stripe_secret_key="")
+            try:
+                s, c = _chiedi(b, "GET", "/api/admin/audit?id=" + r, None, ADMIN)
+            finally:
+                b.sis.config = cfg
+            return (c or {}) if s == 200 else {}
+
+        def host_eur():
+            e = b.payout_host().get("EUR") or {}
+            return int(e.get("maturato") or 0), int(e.get("in_transito") or 0)
+
+        # -- la porta: senza chiave, senza secondo fattore, col ruolo 'supporto' ---------------
+        corpo = {"riferimento": rif}
+        s_senza, _ = b.g("POST", rotta, corpo, {})
+        s_solo, c_solo = b.g("POST", rotta, corpo, ADMIN)
+        b.g("POST", "/api/bunker/admin_accounts",
+            {"azione": "crea", "email": "supporto2@esame.it", "password": "password123",
+             "ruolo": "supporto"}, BH)
+        s_op, c_op = b.g("POST", "/api/admin/login", {"email": "supporto2@esame.it", "password": "password123"})
+        op = ({"X-Admin-Op": (c_op or {}).get("op_token", ""),
+               "X-Bunker-Session": BH.get("X-Bunker-Session", ""),
+               "X-Forwarded-For": IP["X-Forwarded-For"]} if s_op == 200 else None)
+        s_supp, c_supp = b.g("POST", rotta, corpo, op) if op else (None, {})
+        passo("porta", "senza chiave 401 · con la sola chiave 403 'bunker_richiesto' · col ruolo "
+                       "'supporto' 403 'permesso_negato_ruolo' -- e il bonifico resta 'maturato', senza "
+                       "nessuna riga 'payout_host' nel giornale",
+              s_senza == 401 and s_solo == 403 and (c_solo or {}).get("errore") == "bunker_richiesto"
+              and s_supp == 403 and (c_supp or {}).get("errore") == "permesso_negato_ruolo"
+              and b.sis.payout.stato_di(rif) == "maturato" and "payout_host" not in tipi(rif),
+              "senza=%s solo_admin=%s/%s supporto=%s/%s stato=%s"
+              % (s_senza, s_solo, (c_solo or {}).get("errore"), s_supp, (c_supp or {}).get("errore"),
+                 b.sis.payout.stato_di(rif)))
+
+        # -- vede: la scheda audit mostra il bonifico fermo, ed e' li' che la pagina disegna il bottone
+        a_prima = audit(rif)
+        pay = a_prima.get("payout") or {}
+        passo("vede", "la scheda audit della prenotazione dice payout 'maturato' con l'importo del "
+                      "registro dei bonifici (la pagina disegna «Lo pago io a mano» solo li'), e il "
+                      "rifiuto di Stripe e' nei movimenti ('payout_manuale')",
+              a_prima.get("riferimento") == rif and pay.get("stato") == "maturato"
+              and int(pay.get("minori") or -1) == netto
+              and "payout_manuale" in [m.get("tipo") for m in (a_prima.get("movimenti") or [])],
+              "riferimento=%s payout=%s netto=%s" % (a_prima.get("riferimento") == rif, pay, netto))
+
+        # -- garanzia: un soggiorno non confermato non si paga (i soldi non sono ancora dell'host)
+        if con_guasto:
+            # IL GUASTO, sull'ISTANZA del router e mai sul codice: il pulsante smette di guardare
+            # se la garanzia e' chiusa. E' l'anello che vale i soldi: pagare l'host prima che il
+            # soggiorno sia confermato, cioe' con soldi che possono ancora tornare all'ospite.
+            b.router._garanzia_chiusa = lambda _r: True
+        s_ap, c_ap = b.g("POST", rotta, {"riferimento": rif_aperta}, BH)
+        passo("garanzia", "su una prenotazione col soggiorno NON ancora confermato risponde 409 "
+                          "'garanzia_aperta', e quel bonifico resta 'maturato' senza 'payout_host'",
+              s_ap == 409 and (c_ap or {}).get("errore") == "garanzia_aperta"
+              and b.sis.payout.stato_di(rif_aperta) == "maturato" and "payout_host" not in tipi(rif_aperta),
+              "http=%s errore=%s stato=%s" % (s_ap, (c_ap or {}).get("errore"),
+                                              b.sis.payout.stato_di(rif_aperta)))
+
+        # -- prende: il bottone col secondo fattore, e la traccia che lascia ----------------------
+        host_prima = host_eur()
+        tentati_prima = stripe.per_rif.get(rif, 0)
+        registro = []
+
+        class _Presa(logging.Handler):
+            def emit(self, record):
+                try:
+                    registro.append(record.getMessage())
+                except Exception:
+                    registro.append(str(record.msg))
+        presa = _Presa()
+        log_server = logging.getLogger("core_auto.server")
+        livello_prima = log_server.level
+        log_server.addHandler(presa)
+        log_server.setLevel(logging.DEBUG)
+        try:
+            s_am, c_am = b.g("POST", rotta, corpo, BH)
+        finally:
+            log_server.removeHandler(presa)
+            log_server.setLevel(livello_prima)
+        c_am = c_am or {}
+        passo("prende", "col secondo fattore risponde 200 'preso_in_carico' con l'importo del REGISTRO "
+                        "(il browser manda solo il riferimento), e il bonifico passa a 'in_transito'",
+              s_am == 200 and c_am.get("stato") == "preso_in_carico" and c_am.get("importo_cents") == netto
+              and c_am.get("valuta") == "EUR" and b.sis.payout.stato_di(rif) == "in_transito",
+              "http=%s risposta=%s/%s/%s netto=%s stato=%s"
+              % (s_am, c_am.get("stato"), c_am.get("importo_cents"), c_am.get("valuta"), netto,
+                 b.sis.payout.stato_di(rif)))
+
+        # -- soldi: una riga nel giornale, al centesimo; l'host lo vede spostarsi, il totale no ----
+        righe_ph = [m for m in b.sis.finanza.movimenti(rif) if m.get("tipo") == "payout_host"]
+        host_dopo = host_eur()
+        passo("soldi", "il giornale scrive UNA riga 'payout_host' di esattamente il netto, la catena "
+                       "delle impronte regge, e nel pannello dell'host il netto passa da 'maturato' a "
+                       "'in_transito' senza che il totale cambi di un centesimo",
+              len(righe_ph) == 1 and int(righe_ph[0].get("importo_cents") or 0) == netto
+              and b.sis.finanza.verifica_catena().get("ok") is True
+              and host_dopo == (host_prima[0] - netto, host_prima[1] + netto),
+              "righe payout_host=%d importo=%s netto=%s host %s->%s"
+              % (len(righe_ph), [m.get("importo_cents") for m in righe_ph], netto, host_prima, host_dopo))
+
+        # -- doppio: ne' il giro orario, ne' lo sblocco della verifica, ne' un secondo clic ---------
+        b.router._ritenta_bonifici_fermi()
+        s_ver, _ = b.g("POST", "/api/admin/verifica_stato", {"host_id": b.host_id, "stato": "verificato"}, BH)
+        s_due, c_due = b.g("POST", rotta, corpo, BH)
+        a_dopo = audit(rif)
+        passo("doppio", "dopo la presa in carico il giro orario e lo sblocco della verifica NON provano "
+                        "piu' a pagarlo con Stripe (zero tentativi nuovi su QUESTO riferimento), un "
+                        "secondo clic risponde 409 'non_da_pagare', il giornale ha ancora UNA riga e la "
+                        "scheda dice 'in_transito' (il bottone non si disegna piu')",
+              stripe.per_rif.get(rif, 0) == tentati_prima and s_ver == 200 and s_due == 409
+              and (c_due or {}).get("errore") == "non_da_pagare"
+              and tipi(rif).count("payout_host") == 1
+              and ((a_dopo.get("payout") or {}).get("stato")) == "in_transito"
+              and stripe.inattesi == [],
+              "tentativi %d->%d verifica=%s secondo_clic=%s/%s payout_host=%d scheda=%s inattesi=%s"
+              % (tentati_prima, stripe.per_rif.get(rif, 0), s_ver, s_due, (c_due or {}).get("errore"),
+                 tipi(rif).count("payout_host"), (a_dopo.get("payout") or {}).get("stato"), stripe.inattesi))
+
+        righe_gesto = [r for r in registro if "ADMIN_ACTION" in r and "pagato_a_mano" in r
+                       and _rif_per_registro(rif) in r]
+        passo("traccia", "il gesto lascia UNA riga che unisce CHI (ip), COSA (pagato_a_mano) e SU COSA "
+                         "(il riferimento), come gli altri gesti dell'admin",
+              len(righe_gesto) == 1 and IP["X-Forwarded-For"] in righe_gesto[0],
+              "righe scritte durante il gesto=%d, con azione e riferimento=%d"
+              % (len(registro), len(righe_gesto)))
+    finally:
+        b.sis.connect = connect_prima
+        b.router.__dict__.pop("_garanzia_chiusa", None)
+
+
+CATENA_2 = Catena(
+    voce="Scheda audit: Lo pago io a mano",
+    rotte=("/api/admin/payout/pagato_a_mano",),
+    anelli=ANELLI_CATENA_2,
+    bottone="premo «Lo pago io a mano» nella scheda audit di una prenotazione col bonifico 'maturato' "
+            "(Stripe l'ha rifiutato): la rotta prende in carico il bonifico all'host, lo toglie da ogni giro "
+            "automatico e dice di farlo dalla banca; la scheda rilegge 'in_transito' e il bottone sparisce",
+    soldi="muove il bonifico all'host, al centesimo: l'importo e' quello del registro dei bonifici dopo le "
+          "stesse guardie del bonifico automatico, mai quello del browser. Si paga UNA volta: se il giro "
+          "orario o lo sblocco della verifica lo ripagassero con Stripe, l'host prenderebbe due volte gli "
+          "stessi soldi; e un soggiorno non confermato non si paga, perche' quei soldi possono ancora "
+          "tornare all'ospite",
+    archivio="scrive `payout.stato` ('maturato' -> 'in_transito') nell'archivio dei bonifici e UNA riga "
+             "`payout_host` nel giornale dei soldi, che non si cancella e non si riscrive (catena di impronte): "
+             "e' la prova contabile del bonifico. Nessun dato personale nuovo (il soggetto e' l'id dell'host). "
+             "La traccia del gesto (chi/cosa/su quale riferimento) va nel registro del server, anello [traccia]",
+    percorre=percorre_catena_2,
+)
+
 #  ⛔ Una rotta qui che la pagina non nomina piu' e' ROSSA (dichiarazione invecchiata).
-CATENE = {rotta: CATENA_1 for rotta in CATENA_1.rotte}
+CATENE = {rotta: cat for cat in (CATENA_1, CATENA_2) for rotta in cat.rotte}
 
 #  Ogni BOTTONE e ogni CAMPO della pagina va attribuito: alla rotta che il gesto attraversa
 #  (e allora la sua catena e' quella della rotta), oppure a `PAGINA_SOLA` con il perche' --
@@ -524,7 +755,9 @@ CAMPI = {
 #     del giornale) -- le percorrono 12 prove di `test_fase83_server.TestIlPagamentoAMano` e
 #     vicine, NON ancora una catena di questo esame: e' debito di questa casella, scritto in
 #     RIPRENDI_QUI col suo posto, e il tetto torna a 19 quando la catena c'e'.
-ROTTE_SENZA_CATENA_TETTO = 20
+#     ✅ TORNATO A 19 IL 2026-11-04: la CATENA 2 («Lo pago io a mano») percorre quella rotta
+#     anello per anello sul banco (porta · vede · garanzia · prende · soldi · doppio · traccia).
+ROTTE_SENZA_CATENA_TETTO = 19
 
 
 # --------------------------------------------------------------------------------------
