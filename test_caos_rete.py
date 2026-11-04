@@ -336,6 +336,87 @@ async function __main(){
 }
 """
 
+# ⛔ VOCE 32 + 254 di RIPRENDI (4/11): le cifre del pannello admin nella moneta della
+# prenotazione. `auEur` (scheda Audit) e `eur` (scheda Controversie) dividevano SEMPRE per 100
+# e scrivevano «€»: su una prenotazione in yen la garanzia di 10000 yen si leggeva «€100.00», e
+# nel campo del rimborso l'admin scriveva una cifra che la pagina moltiplicava per 100 -- cioe'
+# decideva un rimborso su una scala sbagliata. Qui il JS VERO della pagina gira in Node.
+SCENARI_ADMIN_VALUTA = r"""
+async function __main(){
+  await new Promise(function(r){ setTimeout(r,250); });
+  document.getElementById('adminkey').value='chiave-prova';
+
+  // 1. AUDIT di una prenotazione in YEN (moneta senza decimali)
+  FETCH = function(){ return jsonRes(200, {tipo:'riferimento', riferimento:'rif_yen', prenotazione:null,
+    payout:{stato:'pagato', minori:10000, valuta:'JPY'},
+    garanzia:{stato:'rilasciata', importo_host_cents:10000, host_riceve_cents:7500, ospite_rimborso_cents:2500},
+    movimenti:[{tipo:'incasso', importo_cents:12000, valuta:'JPY', causale:'c'}],
+    note:[{nota_id:'NC1', tipo:'credito', importo_cents:500, valuta:'JPY', stato:'emessa'}],
+    semaforo:{complessivo:'verde', coerenza:{problemi:[]}, stripe:{colore:'verde'}}}); };
+  await auditApri('rif_yen');
+  let au = document.getElementById('au_card').innerHTML;
+  check('audit yen: il bonifico e\' 10000 JPY, non 100.00', au.indexOf('10000 JPY')>=0 && au.indexOf('100.00')<0, au.slice(0,600));
+  check('audit yen: la garanzia e\' 7500 e 2500 JPY, non 75.00/25.00',
+        au.indexOf('7500 JPY')>=0 && au.indexOf('2500 JPY')>=0 && au.indexOf('75.00')<0 && au.indexOf('25.00')<0, au.slice(0,600));
+  check('audit yen: il movimento e\' 12000 JPY', au.indexOf('12000 JPY')>=0 && au.indexOf('120.00')<0, au.slice(0,600));
+  check('audit yen: la nota e\' 500 JPY', au.indexOf('500 JPY')>=0 && au.indexOf('5.00')<0, au.slice(0,600));
+
+  // 2. AUDIT di un HOST con incassi in yen e un debito in yen
+  FETCH = function(){ return jsonRes(200, {tipo:'host', host_id:'h_1', identita:{email:'h@x.it', stato:'attivo'},
+    payout:{JPY:{maturato:3000, in_transito:0, pagato:7000}},
+    debiti_aperti:[{nota:'ND9', residuo_cents:400, valuta:'JPY'}]}); };
+  await auditApri('h_1');
+  au = document.getElementById('au_card').innerHTML;
+  check('audit host yen: 3000 e 7000, non 30.00/70.00', au.indexOf('3000')>=0 && au.indexOf('7000')>=0
+        && au.indexOf('30.00')<0 && au.indexOf('70.00')<0, au.slice(0,600));
+  check('audit host yen: il debito e\' 400 JPY', au.indexOf('400 JPY')>=0 && au.indexOf('4.00')<0, au.slice(0,600));
+
+  // 3. AUDIT in EURO: resta com'era (due decimali)
+  FETCH = function(){ return jsonRes(200, {tipo:'riferimento', riferimento:'rif_eur', prenotazione:null,
+    payout:{stato:'pagato', minori:12345, valuta:'EUR'},
+    garanzia:{stato:'rilasciata', importo_host_cents:12345, host_riceve_cents:12345, ospite_rimborso_cents:0},
+    movimenti:[], note:[], semaforo:{complessivo:'verde', coerenza:{problemi:[]}, stripe:{colore:'verde'}}}); };
+  await auditApri('rif_eur');
+  au = document.getElementById('au_card').innerHTML;
+  check('audit euro: 123.45 EUR come prima', au.indexOf('123.45 EUR')>=0, au.slice(0,600));
+
+  // 4. CONTROVERSIA in YEN: si legge, si sceglie e si MANDA nella moneta della prenotazione
+  let corpo=null;
+  FETCH = function(u,o){
+    if(u.indexOf('/api/admin/controversia/risolvi')>=0){ corpo=JSON.parse(o.body);
+      return jsonRes(200,{rimborso_cliente_cents:corpo.rimborso_ospite_cents, va_all_host_cents:10000-corpo.rimborso_ospite_cents}); }
+    return jsonRes(200,{controversie:[{prenotazione_id:'rif_yen', alloggio_id:'casa', importo_host_cents:10000,
+      valuta:'JPY', motivo:'m', titolo:'Casa'}]}); };
+  await caricaControversie();
+  const cl = document.getElementById('ctr_lista').innerHTML;
+  check('controversia yen: la garanzia si legge 10000 in yen, non €100.00',
+        cl.indexOf('10000')>=0 && cl.indexOf('100.00')<0 && cl.indexOf('JPY')>=0, cl.slice(0,900));
+  check('controversia yen: il campo della cifra non dice «€»', cl.indexOf(' € <input')<0, cl.slice(0,900));
+  document.getElementById('pct_0').value='100'; ctrDaPct(0, 10000);
+  check('controversia yen: al 100% il campo vale 10000 (yen interi)', document.getElementById('eur_0').value==='10000',
+        document.getElementById('eur_0').value);
+  document.getElementById('eur_0').value='4000'; ctrDaEur(0, 10000);
+  await risolviCtr('rif_yen', 0, 10000);
+  check('controversia yen: scritto 4000 si mandano 4000 yen, non 400000',
+        corpo!==null && corpo.rimborso_ospite_cents===4000, JSON.stringify(corpo));
+
+  // 5. CONTROVERSIA in EURO: resta com'era (347,50 in garanzia, 200,00 al cliente)
+  corpo=null;
+  FETCH = function(u,o){
+    if(u.indexOf('/api/admin/controversia/risolvi')>=0){ corpo=JSON.parse(o.body);
+      return jsonRes(200,{rimborso_cliente_cents:corpo.rimborso_ospite_cents, va_all_host_cents:34750-corpo.rimborso_ospite_cents}); }
+    return jsonRes(200,{controversie:[{prenotazione_id:'rif_eur', alloggio_id:'casa', importo_host_cents:34750,
+      valuta:'EUR', motivo:'m', titolo:'Casa'}]}); };
+  await caricaControversie();
+  const ce = document.getElementById('ctr_lista').innerHTML;
+  check('controversia euro: la garanzia si legge 347.50', ce.indexOf('347.50')>=0, ce.slice(0,900));
+  document.getElementById('eur_0').value='200.00'; ctrDaEur(0, 34750);
+  await risolviCtr('rif_eur', 0, 34750);
+  check('controversia euro: scritto 200.00 si mandano 20000 centesimi',
+        corpo!==null && corpo.rimborso_ospite_cents===20000, JSON.stringify(corpo));
+}
+"""
+
 
 class TestGuardieStatiche(unittest.TestCase):
     """Guardie senza Node (valgono anche nell'immagine prod): i pattern anti-caos
@@ -445,6 +526,11 @@ class TestCaosRete(unittest.TestCase):
     def test_caos_admin(self):
         # 10 e non 6 dal 2026-09-29: i quattro check della lista a pagine (D15-D16).
         self._esegui('admin.html', SCENARI_ADMIN, 10)
+
+    def test_le_cifre_dell_admin_sono_nella_moneta_della_prenotazione(self):
+        """VOCE 32 + 254 (4/11, la 254 PERDE SOLDI): Audit e Controversie in yen e in euro.
+        13 check: se uno sparisce in silenzio il denominatore lo dice."""
+        self._esegui('admin.html', SCENARI_ADMIN_VALUTA, 13)
 
 
 if __name__ == '__main__':

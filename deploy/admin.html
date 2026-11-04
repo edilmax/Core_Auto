@@ -498,7 +498,9 @@ document.getElementById('sr_succ').onclick=()=>cercaOperativa(SR_PAGE+1);
 // ── 🔬 AUDIT CONSOLE (fase181): scheda contabile unica + semaforo integrità ──
 const SEM={verde:'🟢',rosso:'🔴',giallo:'🟡',grigio:'⚪'};
 function auRiga(k,v){ return '<div class="riga-sr"><span class="sr-hint" style="min-width:110px">'+esc(k)+'</span><span>'+v+'</span></div>'; }
-function auEur(c){ return (typeof c==='number'? (c/100).toFixed(2):'?'); }
+// ⛔ VOCE 32 (4/11): la cifra nella moneta della riga, coi decimali che sa BV.valExp (lo yen
+// non ne ha). Prima divideva SEMPRE per 100: 10000 yen si leggevano «100.00».
+function auEur(c, v){ if(typeof c!=='number') return '?'; const e=BV.valExp(v||'EUR'); return (c/Math.pow(10,e)).toFixed(e); }
 async function auditApri(id){
   const box=document.getElementById('au_card'), st=document.getElementById('sr_stat');
   const termine=(id||document.getElementById('sr_q').value).trim();
@@ -519,8 +521,8 @@ async function auditApri(id){
       const pay=d.payout||{}, righe=[];
       righe.push('<div style="font-weight:700;margin-bottom:.3rem">🔬 👤 '+esc(d.identita.ragione_sociale||d.identita.email)+' <span class="sr-hint">'+esc(d.host_id)+' · '+esc(d.identita.stato||'')+'</span></div>');
       Object.keys(pay).forEach(v=>{ const s=pay[v]||{};
-        righe.push(auRiga(v, T('st_matA')+' '+auEur(s.maturato)+' · '+T('st_traA')+' '+auEur(s.in_transito)+' · '+T('st_pagA')+' '+auEur(s.pagato))); });
-      (d.debiti_aperti||[]).forEach(x=>righe.push(auRiga('💳 '+T('au_deb'), esc(x.nota||'')+' · '+auEur(x.residuo_cents)+' '+esc(x.valuta||''))));
+        righe.push(auRiga(v, T('st_matA')+' '+auEur(s.maturato, v)+' · '+T('st_traA')+' '+auEur(s.in_transito, v)+' · '+T('st_pagA')+' '+auEur(s.pagato, v))); });
+      (d.debiti_aperti||[]).forEach(x=>righe.push(auRiga('💳 '+T('au_deb'), esc(x.nota||'')+' · '+auEur(x.residuo_cents, x.valuta)+' '+esc(x.valuta||''))));
       box.innerHTML='<div style="border:1px solid #dfe6f0;border-radius:.8rem;padding:.7rem .9rem">'+righe.join('')+'</div>';
       return; }
     // scheda RIFERIMENTO
@@ -532,22 +534,24 @@ async function auditApri(id){
     const p=d.prenotazione;
     if(p) righe.push(auRiga(T('au_pren'), esc(p.alloggio_id||'')+' · '+esc(p.check_in||'')+'→'+esc(p.check_out||'')+' · <b>'+esc(p.stato||'')+'</b>'+(p.email?' · '+esc(p.email):'')));
     // 💶 R1 (21/10): solo su un bonifico 'maturato'; il server rifa' tutte le guardie e rilegge Stripe
-    if(d.payout) righe.push(auRiga('Payout', '<b>'+esc(d.payout.stato||'')+'</b> · '+auEur(d.payout.minori)+' '+esc(d.payout.valuta||'')+
+    if(d.payout) righe.push(auRiga('Payout', '<b>'+esc(d.payout.stato||'')+'</b> · '+auEur(d.payout.minori, d.payout.valuta)+' '+esc(d.payout.valuta||'')+
       (d.payout.stato==='maturato' ? ' <button class="btn-riga" onclick="pagoAMano(\''+esc(d.riferimento||'')+'\','+(Number(d.payout.minori)||0)+',\''+esc(d.payout.valuta||'EUR')+'\')">'+T('au_amano')+'</button>' : '')));
-    if(d.garanzia) righe.push(auRiga(T('au_gar'), '<b>'+esc(d.garanzia.stato||'')+'</b> · host '+auEur(d.garanzia.host_riceve_cents)+' · '+T('au_rimb')+' '+auEur(d.garanzia.ospite_rimborso_cents)));
+    // la garanzia non porta la moneta: e' quella della prenotazione (del bonifico, o dei movimenti)
+    const valRif=(d.payout&&d.payout.valuta)||((d.movimenti||[]).find(m=>m&&m.valuta)||{}).valuta||'EUR';
+    if(d.garanzia) righe.push(auRiga(T('au_gar'), '<b>'+esc(d.garanzia.stato||'')+'</b> · host '+auEur(d.garanzia.host_riceve_cents, valRif)+' '+esc(valRif)+' · '+T('au_rimb')+' '+auEur(d.garanzia.ospite_rimborso_cents, valRif)+' '+esc(valRif)));
     righe.push(auRiga('Stripe', (SEM[sp.colore]||'⚪')+' '+esc(sp.payment_status||sp.nota||'')));
-    (d.movimenti||[]).forEach(m=>righe.push(auRiga('📜 '+esc(m.tipo||''), auEur(m.importo_cents)+' '+esc(m.valuta||'')+' <span class="sr-hint">'+esc(m.causale||'')+'</span>')));
+    (d.movimenti||[]).forEach(m=>righe.push(auRiga('📜 '+esc(m.tipo||''), auEur(m.importo_cents, m.valuta)+' '+esc(m.valuta||'')+' <span class="sr-hint">'+esc(m.causale||'')+'</span>')));
     (d.note||[]).forEach(n=>{
       // ↩️ STORNO (5ª distruttiva, Bunker-gated): solo sulle ND non gia' stornate
       const st1=(n.tipo==='debito' && n.stato!=='stornata')
-        ? ' <button class="btn-riga" style="background:#b02a37" onclick="stornaPenale(\''+esc(n.nota_id)+'\',\''+esc(d.riferimento||'')+'\')">↩️ '+T('au_storna')+'</button>' : '';
-      righe.push(auRiga('🧾 '+esc(n.nota_id||''), esc(n.tipo||'')+' '+auEur(n.importo_cents)+' '+esc(n.valuta||'')+' · '+esc(n.stato||'')+st1));
+        ? ' <button class="btn-riga" style="background:#b02a37" onclick="stornaPenale(\''+esc(n.nota_id)+'\',\''+esc(d.riferimento||'')+'\',\''+esc(n.valuta||'EUR')+'\')">↩️ '+T('au_storna')+'</button>' : '';
+      righe.push(auRiga('🧾 '+esc(n.nota_id||''), esc(n.tipo||'')+' '+auEur(n.importo_cents, n.valuta)+' '+esc(n.valuta||'')+' · '+esc(n.stato||'')+st1));
     });
     box.innerHTML='<div style="border:1px solid #dfe6f0;border-radius:.8rem;padding:.7rem .9rem">'+righe.join('')+'</div>';
   }catch(e){ st.textContent='❌ '+fraseErrore(codRete(e)); }
 }
 document.getElementById('btnAudit').onclick=()=>auditApri('');
-async function stornaPenale(notaId, rif){
+async function stornaPenale(notaId, rif, valuta){
   // 5ª DISTRUTTIVA: serve la sessione Bunker (come rimborso/sospendi/risolvi/cancella)
   const st=document.getElementById('sr_stat');
   if(!bunkerAttivo()){ st.textContent='🏰 '+T('bk_serve'); return; }
@@ -562,7 +566,7 @@ async function stornaPenale(notaId, rif){
       body:JSON.stringify({nota_id:notaId, motivo:motivo.trim()})});
     let d=null; try{ d=await r.json(); }catch(_){ console.warn('bookinvip-admin',_); }
     if(r.status===200 && d){
-      st.textContent='✅ '+T('au_stornata')+(d.restituito_in_da_pagare>0?' ('+T('au_restit')+' €'+(d.restituito_in_da_pagare/100).toFixed(2)+')':'');
+      st.textContent='✅ '+T('au_stornata')+(d.restituito_in_da_pagare>0?' ('+T('au_restit')+' '+money(d.restituito_in_da_pagare, valuta)+')':'');
       if(rif) auditApri(rif);                          // ricarica la scheda aggiornata
     } else if(r.status===403){ st.textContent='🏰 '+T('bk_serve'); }
     else { st.textContent='❌ '+(fraseErrore((d&&d.errore)||'')||r.status); }
@@ -716,7 +720,12 @@ async function cancellaHost(){
 }
 document.getElementById('btnCancellaHost').onclick = cancellaHost;
 
-const eur = (c)=>'€'+((c||0)/100).toFixed(2);
+// ⛔ VOCE 254 (4/11): la cifra nella moneta della prenotazione (BV.money conosce i decimali di
+// ogni valuta). Prima scriveva «€» e divideva per 100 anche lo yen. Senza moneta: euro, come prima.
+const eur = (c, v)=>money(c||0, v||'EUR');
+// La moneta di ogni controversia in elenco (la manda il server con la riga) e il suo esponente.
+const CTR_VAL = [];
+const ctrExp = (i)=>BV.valExp(CTR_VAL[i]||'EUR');
 async function vediChat(rif,i){
   const box=document.getElementById('chat_'+i);
   if(box.style.display!=='none'){ box.style.display='none'; return; }
@@ -743,18 +752,19 @@ async function caricaControversie(){
     if(!d || typeof d!=='object' || Array.isArray(d)){ box.innerHTML='<div style="color:var(--rosso)">'+esc(fraseErrore('risposta_non_valida'))+'</div>'; return; }
     const lst = (d.controversie||[]).filter(Boolean);
     if(!lst.length){ box.innerHTML='<div style="color:var(--testo-tenue)">'+T('ctr_nessuna')+'</div>'; return; }
+    CTR_VAL.length = 0; lst.forEach((c,i)=>{ CTR_VAL[i] = String(c.valuta||'EUR').toUpperCase(); });
     box.innerHTML = lst.map((c,i)=>{
       const imp = c.importo_host_cents||0;
       return `<div style="border:1px solid var(--sfondo-tenue);border-radius:.7rem;padding:.8rem;margin-bottom:.7rem">
         <div><b>${esc(c.titolo||c.alloggio_id||'')}</b> · ${T('ctr_rif')} <code>${esc(c.prenotazione_id)}</code></div>
         <!-- motivo lo scrive l'OSPITE: senza esc() esegue nel browser dell'ADMIN (XSS stored) -->
         <div style="color:#8a5200;font-size:.85rem;margin:.3rem 0">${T('ctr_motivo')} ${esc(c.motivo||'—')}</div>
-        <div style="font-size:.85rem">${T('ctr_garanzia')} <b>${eur(imp)}</b>
+        <div style="font-size:.85rem">${T('ctr_garanzia')} <b>${eur(imp, CTR_VAL[i])} ${esc(CTR_VAL[i])}</b>
           <button onclick="conScudo(this,()=>vediChat('${esc(c.prenotazione_id)}',${i}))" class="btn-riga" style="background:#156b52;margin-left:.5rem">💬 conversazione + prove</button></div>
         <div id="chat_${i}" style="display:none;background:#f7faf8;border-radius:.6rem;padding:.5rem .7rem;margin-top:.4rem;max-height:170px;overflow-y:auto;font-size:.82rem"></div>
         <div style="display:flex;gap:.5rem;align-items:center;margin-top:.5rem;flex-wrap:wrap">
           <label style="font-size:.82rem">${T('ctr_pct')} <input type="number" id="pct_${i}" min="0" max="100" value="100" style="width:70px" oninput="ctrDaPct(${i},${imp})"></label>
-          <label style="font-size:.82rem">${T('ctr_cliente')} € <input type="number" id="eur_${i}" min="0" step="0.01" style="width:110px" oninput="ctrDaEur(${i},${imp})"></label>
+          <label style="font-size:.82rem">${T('ctr_cliente')} ${esc(CTR_VAL[i])} <input type="number" id="eur_${i}" min="0" step="${Math.pow(10,-ctrExp(i))}" style="width:110px" oninput="ctrDaEur(${i},${imp})"></label>
           <span id="split_${i}" style="font-size:.82rem;color:var(--brand-chiaro)"></span>
           <button onclick="conScudo(this,()=>risolviCtr('${esc(c.prenotazione_id)}',${i},${imp}))" class="btn-riga" style="margin-left:auto;background:var(--brand-chiaro)">${T('ctr_risolvi')}</button>
         </div>
@@ -769,20 +779,22 @@ async function caricaControversie(){
 // la sola percentuale INTERA, su 347,50 € in garanzia non esisteva modo di dare 200,00 €: la
 // cifra che l'arbitro aveva deciso non era dichiarabile. Il motore accettava già
 // `rimborso_ospite_cents` — mancava solo il campo (regola 23: costruito ≠ raggiungibile).
-// I due campi restano in accordo; quello in EURO è l'autorevole, ed è quello che si manda.
+// I due campi restano in accordo; quello della CIFRA è l'autorevole, ed è quello che si manda.
+// ⛔ La cifra si scrive nella MONETA della prenotazione (voce 254, 4/11): coi decimali di quella
+// moneta, non sempre per 100 -- in yen «4000» sono 4000 yen, non 400000.
 // ⚠️ Il tetto vero lo mette il SERVER (`min(rimborso, importo)`): qui si aiuta, non si protegge.
 function ctrCent(i){
-  return Math.round((parseFloat(document.getElementById('eur_'+i).value)||0)*100);
+  return Math.round((parseFloat(document.getElementById('eur_'+i).value)||0)*Math.pow(10, ctrExp(i)));
 }
 function ctrMostra(i, imp, cents){
   const c = Math.max(0, Math.min(imp, cents));
-  document.getElementById('split_'+i).textContent = T('ctr_cliente')+' '+eur(c)+' · '+T('ctr_host')+' '+eur(imp-c);
+  document.getElementById('split_'+i).textContent = T('ctr_cliente')+' '+eur(c, CTR_VAL[i])+' · '+T('ctr_host')+' '+eur(imp-c, CTR_VAL[i]);
   return c;
 }
 function ctrDaPct(i, imp){
   const pct = Math.max(0, Math.min(100, parseInt(document.getElementById('pct_'+i).value)||0));
   const c = ctrMostra(i, imp, Math.round(imp*pct/100));
-  document.getElementById('eur_'+i).value = (c/100).toFixed(2);
+  document.getElementById('eur_'+i).value = (c/Math.pow(10, ctrExp(i))).toFixed(ctrExp(i));
 }
 function ctrDaEur(i, imp){
   const c = ctrMostra(i, imp, ctrCent(i));
@@ -791,14 +803,14 @@ function ctrDaEur(i, imp){
 async function risolviCtr(rif, i, imp){
   const cents = ctrMostra(i, imp, ctrCent(i));
   const m = document.getElementById('ctrmsg_'+i);
-  if(!confirm(T('ctr_cliente')+' '+eur(cents)+' · '+T('ctr_host')+' '+eur(imp-cents)+' — '+T('ctr_risolvi')+'?')) return;
+  if(!confirm(T('ctr_cliente')+' '+eur(cents, CTR_VAL[i])+' · '+T('ctr_host')+' '+eur(imp-cents, CTR_VAL[i])+' — '+T('ctr_risolvi')+'?')) return;
   try{
     const res = await fetchTempo(API+'/api/admin/controversia/risolvi', {method:'POST',
       headers:bunkerHdr({'Content-Type':'application/json','X-Admin-Key':key()}),
       body:JSON.stringify({riferimento:rif, rimborso_ospite_cents:cents})});
     const d = await res.json();
     if(res.status===200){ m.style.color='var(--brand-chiaro)';
-      m.textContent='✅ '+T('ctr_fatto')+' '+T('ctr_cliente')+' '+eur(d.rimborso_cliente_cents)+' · '+T('ctr_host')+' '+eur(d.va_all_host_cents);
+      m.textContent='✅ '+T('ctr_fatto')+' '+T('ctr_cliente')+' '+eur(d.rimborso_cliente_cents, CTR_VAL[i])+' · '+T('ctr_host')+' '+eur(d.va_all_host_cents, CTR_VAL[i]);
       setTimeout(caricaControversie, 1200);
     } else if(res.status===403 && d && d.errore==='bunker_richiesto'){ m.style.color='var(--rosso)'; m.textContent='🔒 '+T('bk_serve'); }
     else { m.style.color='var(--rosso)'; m.textContent='❌ '+(d.errore?fraseErrore(d.errore):res.status); }
@@ -838,11 +850,11 @@ async function caricaRimborsiDovuti(){
       const ore = r.attesa_ore||0;
       const col = ore>=72 ? 'var(--rosso)' : (ore>=24 ? '#d19a00' : 'var(--testo-tenue)');
       const azione = r.bottone
-        ? `<button onclick="conScudo(this,()=>eseguiRimborsoDovuto('${esc(r.riferimento||'')}',${i}))" class="btn-riga" style="margin-left:auto;background:var(--rosso)">${T('rd_esegui')} ${eur(r.dovuto_cents||0)}</button>`
+        ? `<button onclick="conScudo(this,()=>eseguiRimborsoDovuto('${esc(r.riferimento||'')}',${i}))" class="btn-riga" style="margin-left:auto;background:var(--rosso)">${T('rd_esegui')} ${eur(r.dovuto_cents||0, r.valuta)}</button>`
         : `<span style="margin-left:auto;font-size:.82rem;color:var(--rosso)">🚫 ${T('rd_manca')} ${esc((r.manca||[]).join(', '))}</span>`;
       return `<div style="border:1px solid var(--sfondo-tenue);border-radius:.7rem;padding:.8rem;margin-bottom:.7rem">
         <div>${T('ctr_rif')} <code>${esc(r.riferimento||'')}</code> · <b style="color:${col}">${T('rd_attesa')} ${ore} h</b></div>
-        <div style="font-size:.85rem;margin:.3rem 0">${T('rd_pagato')} <b>${eur(r.pagato_cents||0)}</b> · ${T('rd_dovuto')} <b>${eur(r.dovuto_cents||0)}</b> · ${r.date_liberate?'✅':'❌'} ${T('rd_date')} · ${r.passi_sicurezza_ok?'✅':'❌'} ${T('rd_passi')}</div>
+        <div style="font-size:.85rem;margin:.3rem 0">${T('rd_pagato')} <b>${eur(r.pagato_cents||0, r.valuta)}</b> · ${T('rd_dovuto')} <b>${eur(r.dovuto_cents||0, r.valuta)}</b> · ${r.date_liberate?'✅':'❌'} ${T('rd_date')} · ${r.passi_sicurezza_ok?'✅':'❌'} ${T('rd_passi')}</div>
         <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">${azione}</div>
         <div id="rdmsg_${i}" style="font-size:.85rem;margin-top:.4rem"></div>
       </div>`;
@@ -859,7 +871,7 @@ async function eseguiRimborsoDovuto(rif, i){
     const d = await res.json();
     if(res.status===200){ m.style.color='var(--brand-chiaro)';
       m.textContent = (d.stato==='gia_rimborsato') ? '✅ '+T('rd_gia')
-                                                   : '✅ '+T('rd_fatto')+' '+eur(d.importo_cents||0);
+                                                   : '✅ '+T('rd_fatto')+' '+eur(d.importo_cents||0, d.valuta);
       setTimeout(caricaRimborsiDovuti, 1200);
     } else if(res.status===202){
       // pacco 1 (25/10): Stripe l'ha preso ma non l'ha ancora restituito, o la risposta non e'
