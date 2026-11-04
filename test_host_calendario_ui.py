@@ -263,5 +263,41 @@ class TestLaTassaDiSoggiornoSiScriveNellaMoneta(unittest.TestCase):
                          "LE FRASI DELLA TASSA CHIEDONO ANCORA I CENTESIMI: %s" % sbagliate)
 
 
+class TestLaMonetaDellAnnuncioSiVedeAccantoAlPrezzoEAllaTassa(unittest.TestCase):
+    """⛔ 4/11, il fondatore: «l'importante che sia facile e comprensibile per ogni host di ogni
+    nazione». La valuta si sceglie in un menu SOPRA, e le caselle del prezzo e della tassa dicevano
+    solo «nella tua valuta» / «nella moneta dell'annuncio»: un host giapponese doveva ricordarsi lui
+    cosa aveva scelto, e le due caselle chiedevano i centesimi anche per lo yen, che non li ha.
+    Accanto alle due etichette compare la moneta scelta, aggiornata a ogni cambio del menu e quando
+    si apre un annuncio salvato; il passo delle caselle segue i decimali della valuta (`BV.valExp`).
+    La prova col browser vero (yen -> «JPY», passo 1) sta in `collaudi/host_pubblica_foto.js`."""
+
+    def _etichetta(self, t, id_input):
+        m = re.search(r"<label[^>]*>(?:(?!</label>).)*id=\"%s\"" % id_input, t, re.S)
+        return m.group(0) if m else ""
+
+    def test_accanto_al_prezzo_e_alla_tassa_c_e_il_posto_della_moneta(self):
+        t = _testo("host.html")
+        prezzo, tassa = self._etichetta(t, "p_prezzo"), self._etichetta(t, "p_tax_pp")
+        self.assertTrue(prezzo and tassa, "misura non valida: etichette non trovate")
+        self.assertEqual((True, True), ('class="val-ann"' in prezzo, 'class="val-ann"' in tassa),
+                         "LA MONETA NON SI VEDE ACCANTO AL PREZZO E ALLA TASSA: l'host straniero non "
+                         "sa in cosa sta scrivendo")
+
+    def test_la_moneta_si_aggiorna_al_cambio_e_all_apertura_e_il_passo_segue_i_decimali(self):
+        t = _testo("host.html")
+        corpo = re.search(r"function mostraValutaAnnuncio\(\)\s*\{(.*?)\n\}", t, re.S)
+        self.assertIsNotNone(corpo, "manca la funzione che scrive la moneta accanto alle caselle")
+        c = corpo.group(1)
+        self.assertIn(".val-ann", c)
+        self.assertIn("BV.valExp(", c, "il passo delle caselle non segue i decimali della valuta")
+        self.assertIn(".step", c)
+        self.assertRegex(t, r"(\w+)=document\.getElementById\('p_valuta'\);[^}]*\1\.addEventListener"
+                            r"\('change',\s*mostraValutaAnnuncio\)",
+                         "cambiando valuta l'etichetta resterebbe sulla moneta di prima")
+        self.assertRegex(t, r"getElementById\('p_valuta'\)\.value=val;\s*mostraValutaAnnuncio\(\);",
+                         "aprendo un annuncio salvato in yen l'etichetta direbbe la moneta di prima")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

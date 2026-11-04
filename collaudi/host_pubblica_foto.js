@@ -103,6 +103,26 @@ function sorveglia(page, dove, sacco) {
   await ph.fill('#p_cap', '3');
   await ph.fill('#p_serv', 'wifi,aria_condizionata');
 
+  // ── LA MONETA ACCANTO AL PREZZO E ALLA TASSA (4/11, il fondatore: «facile e comprensibile per
+  //    ogni host di ogni nazione»). Nel browser vero: in euro le due etichette dicono «EUR» e il
+  //    passo e' 0.01; scelto lo yen dicono «JPY» e le caselle non chiedono decimali (passo 1).
+  //    Poi si torna all'euro, la moneta di questo giro.
+  const monete = () => ph.evaluate(() => ({
+    etichette: [...document.querySelectorAll('.val-ann')].map(s => s.textContent),
+    passoPrezzo: document.getElementById('p_prezzo').step,
+    passoTassa: document.getElementById('p_tax_pp').step }));
+  const inEuro = await monete();
+  await ph.selectOption('#p_valuta', 'JPY');
+  const inYen = await monete();
+  await ph.selectOption('#p_valuta', 'EUR');
+  esigi(inEuro.etichette.length === 2 && inEuro.etichette.every(x => x.includes('EUR'))
+        && inEuro.passoPrezzo === '0.01' && inEuro.passoTassa === '0.01',
+    `in euro le caselle del prezzo e della tassa non dicono la moneta: ${JSON.stringify(inEuro)}`);
+  esigi(inYen.etichette.length === 2 && inYen.etichette.every(x => x.includes('JPY'))
+        && inYen.passoPrezzo === '1' && inYen.passoTassa === '1',
+    `scelto lo yen, le caselle non lo dicono o chiedono ancora i decimali: ${JSON.stringify(inYen)}`);
+  console.log(`[HOST] moneta accanto alle caselle: ${JSON.stringify(inEuro.etichette)} -> ${JSON.stringify(inYen.etichette)}`);
+
   // ── LA FOTO: il primo setInputFiles della cassetta degli attrezzi --------------------
   // Il trasporto e' lungo: FileReader -> base64 -> POST /api/host/upload_foto -> magic
   // bytes -> nome casuale su disco -> thumbnail nel pannello. Se un anello si rompe, la
