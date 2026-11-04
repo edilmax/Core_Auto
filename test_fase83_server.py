@@ -7782,9 +7782,74 @@ class TestLaRicevutaEIlVoucherDiconoQuelloCheStripeAddebita(_BancoDeiSoldiDelSer
                         (json.dumps(cj), rif))
         self.paga(rif, "pi_ricevuta_vecchia")
         ricevuta = fase83_server.pagina_ricevuta_html(self.sis, self.b["voucher_token"], "it")
-        self.assertEqual(self.euro(self.q["prezzo_guest_cents"]),
-                         self.riga(ricevuta, "Totale pagato"),
+        sogg = self.q["prezzo_guest_cents"]
+        self.assertEqual((self.euro(sogg),
+                          self.euro(sogg - self.q["tassa_soggiorno_cents"])),
+                         (self.riga(ricevuta, "Totale pagato"),
+                          self.riga(ricevuta, "Soggiorno")),
                          "SENZA totale_cents LA RICEVUTA NON DICE CIO' CHE STRIPE HA ADDEBITATO")
+
+    def test_l_email_di_conferma_dice_soggiorno_piu_tassa(self):
+        """La stessa N2 dall'altra porta (voce 248, 4/11): l'email «Pagamento ricevuto»
+        dell'online diceva `prezzo_guest_cents`, il soggiorno SENZA la tassa addebitata."""
+        from test_email_ciclo import Finta
+        from fase86_email import oggetto
+        posta = Finta()
+        self.sis.email_provider = posta
+        self.paga(self.b["riferimento"], "pi_email_tassa")
+        ogg = oggetto("pc_ogg", fase83_server._lingua_pagina(None, self.sis.firma.decodifica(
+            self.b["voucher_token"])))                  # la lingua firmata nel voucher
+        _deve(posta.attendi(ogg), "PREMESSA: l'email di conferma e' partita", ogg,
+              [o for _d, o, _h in posta.inviate])
+        corpo = posta.per_oggetto(ogg)[0][2]
+        self.assertIn(self.euro(self.q["totale_cents"]), corpo,
+                      "L'EMAIL «PAGAMENTO RICEVUTO» NON DICE L'IMPORTO CHE STRIPE HA ADDEBITATO")
+
+
+class TestLaRicevutaDiChiPagaInStrutturaDiceSoloLAnticipo(_BancoDeiSoldiDelServer):
+    """⛔ VOCE 247 (4/11, la 246(b) misurata). «Paga in struttura»: online l'ospite paga solo
+    l'ANTICIPO (fase85 `crea_link_anticipo`), il saldo lo da' all'host all'arrivo. La ricevuta
+    scriveva «Totale pagato» = l'intero soggiorno: misurato 99,47 pagati e «Totale pagato
+    900,00». Con quella carta in mano un ospite puo' dire all'host di aver gia' pagato tutto:
+    l'host perde il saldo. In produzione «paga in struttura» e' acceso."""
+
+    SLUG = "casa-in-struttura"
+
+    def setUp(self):
+        self._flag = os.environ.get("PAGA_STRUTTURA_ATTIVO")
+        os.environ["PAGA_STRUTTURA_ATTIVO"] = "1"
+        super().setUp()
+        self.pubblica(self.SLUG)
+
+    def tearDown(self):
+        if self._flag is None:
+            os.environ.pop("PAGA_STRUTTURA_ATTIVO", None)
+        else:
+            os.environ["PAGA_STRUTTURA_ATTIVO"] = self._flag
+        super().tearDown()
+
+    def test_la_ricevuta_dice_l_anticipo_pagato_e_il_saldo_da_pagare(self):
+        import html as _html
+        s, q = self.g("POST", "/api/concierge/quote",
+                      {"alloggio_id": self.SLUG, "check_in": _fra(10), "check_out": _fra(13),
+                       "party": 2})
+        _deve(s == 200, s, q)
+        s, b = self.g("POST", "/api/concierge/book",
+                      {"quote_token": q["quote_token"], "email": "cli@banco.it",
+                       "modo_pagamento": "in_struttura"})
+        _deve(s == 201 and b.get("modo_pagamento") == "in_struttura",
+              "PREMESSA: la prenotazione e' in struttura", s, b)
+        _deve(0 < b["anticipo_online_cents"] < q["totale_cents"], "PREMESSA: anticipo", b)
+        self.paga(b["riferimento"], "pi_struttura")
+        ric = fase83_server.pagina_ricevuta_html(self.sis, b["voucher_token"], "it")
+        riga = TestLaRicevutaEIlVoucherDiconoQuelloCheStripeAddebita.riga
+        euro = TestLaRicevutaEIlVoucherDiconoQuelloCheStripeAddebita.euro
+        self.assertEqual(
+            (euro(b["anticipo_online_cents"]), euro(b["saldo_in_loco_cents"]), None),
+            (riga(ric, "Pagato online (anticipo)"),
+             riga(ric, _html.escape("Saldo da pagare in struttura all'arrivo:")),
+             riga(ric, "Totale pagato")),
+            "LA RICEVUTA DI CHI PAGA IN STRUTTURA DICE PAGATO PIU' DI QUANTO E' STATO PAGATO")
 
 
 class TestLePrenotazioniNonPagateHannoUnTettoPerIndirizzo(_BancoDeiSoldiDelServer):
