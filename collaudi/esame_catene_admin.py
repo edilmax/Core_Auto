@@ -74,8 +74,9 @@ preventivo E con la conferma, e con un preventivo firmato PRIMA della sospension
    2. provato nelle DUE direzioni: `--con-guasto` inietta i guasti che colpiscono meta'
       diverse -- il concierge smette di guardare lo stato dell'annuncio (l'anello [prenota]
       della catena 1 deve gridare), il pulsante «Lo pago io a mano» smette di guardare se la
-      garanzia e' chiusa (l'anello [garanzia] della catena 2 deve gridare) e la pagina nomina
-      una rotta in piu' (il perimetro deve gridare);
+      garanzia e' chiusa (l'anello [garanzia] della catena 2 deve gridare), la riga del bonifico
+      dell'host non scende alla sua quota dopo la decisione dell'arbitro (l'anello [soldi] della
+      catena 3 deve gridare) e la pagina nomina una rotta in piu' (il perimetro deve gridare);
       `--autoprova` giudica perimetri e passi costruiti, senza banco;
    3. dichiara cosa NON ha esaminato: `NON_GUARDA`, stampato a ogni giro;
    4. e' sotto guardia: `test_pipeline_ci.TestLEsameDelleCateneAdminNonPuoBARARE`.
@@ -126,9 +127,14 @@ NON_GUARDA = (
     "le rotte che il pannello NON nomina ma il server espone (es. `/api/admin/partner`): un "
     "perimetro letto dalla pagina vede i gesti di una persona, non l'API intera -- quella la "
     "enumera dal codice `esame_accessi` (Blocco 3, caselle 1-3)",
-    "le catene delle rotte DIVERSE da «Tutti gli annunci» e «Lo pago io a mano»: oggi sono "
-    "dichiarate solo per queste due voci, e le altre risultano ROSSE per costruzione, non per un "
-    "guasto -- e' lo stato vero",
+    "le catene delle rotte DIVERSE da «Tutti gli annunci», «Lo pago io a mano» e «Controversie»: "
+    "oggi sono dichiarate solo per queste tre voci, e le altre risultano ROSSE per costruzione, non "
+    "per un guasto -- e' lo stato vero. ⚠️ «Rimborsa» e «Esegui rimborso» aspettano un pezzo del "
+    "PRODOTTO: `_admin_rimborso` e `_admin_rimborsa_dovuto` scrivono l'esito ma non l'ip di chi ha "
+    "premuto, quindi il loro anello [traccia] sarebbe rosso sul codice sano (voce 35 di RIPRENDI)",
+    "nella catena 3 la controversia aperta dalla BANCA (motivo 'chargeback:', decide la banca), la "
+    "divisione al 100% all'ospite e quella in euro esatti: qui si percorre la divisione in "
+    "percentuale aperta dall'ospite; gli altri rami li provano le guardie di `test_fase83_server`",
     "nella catena 2 il bonifico che Stripe ACCETTA, o il cui esito e' sconosciuto: lo Stripe del "
     "banco li rifiuta tutti. Quei due rami li provano `test_fase83_server.TestIlPagamentoAMano` e "
     "vicine (gia' su Stripe -> 409 'gia_su_stripe', Stripe muto -> 409 'stripe_non_risponde')",
@@ -655,6 +661,9 @@ def percorre_catena_2(b, BH, con_guasto=False):
     finally:
         b.sis.connect = connect_prima
         b.router.__dict__.pop("_garanzia_chiusa", None)
+        #  il conto Stripe dell'host torna com'era: con un conto e il Connect vero del banco, una
+        #  catena percorsa dopo questa potrebbe chiedere un bonifico alla rete vera
+        b.sis.registro_host.imposta_stripe_account(b.host_id, "")
 
 
 CATENA_2 = Catena(
@@ -676,8 +685,199 @@ CATENA_2 = Catena(
     percorre=percorre_catena_2,
 )
 
+
+ANELLI_CATENA_3 = ("vede", "ferma", "porta", "fuori", "decide", "soldi", "doppio", "traccia")
+
+
+def percorre_catena_3(b, BH, con_guasto=False):
+    """Le voci «Controversie» e «Risolvi»: l'ospite contesta, l'admin vede la controversia, decide
+    una divisione, e i conti si spostano esattamente come dice la decisione."""
+    from unittest import mock
+    from fase101_stripe_connect import ProviderConnect
+    from fase83_server import _rif_per_registro
+    print("\n--- CATENA 3, «Controversie»: l'ospite contesta -> l'admin divide -> i conti seguono ---")
+    rotta = "/api/admin/controversia/risolvi"
+    pct = 30
+    stripe = _StripeCheRifiuta()
+    connect_prima = b.sis.connect
+    b.sis.connect = ProviderConnect("sk_test_catena", fetch=stripe.post, fetch_get=stripe.get)
+    try:
+        slug = b.alloggio("casa-catena-tre", 3, "2027-09-01", "2027-09-30")
+        rif, vt = b.pagata(slug, "2027-09-05", "2027-09-07")
+        rif_ok, _vt2 = b.pagata(slug, "2027-09-10", "2027-09-12")
+        if not (rif and rif_ok):
+            raise RuntimeError("il banco non ha prodotto le due prenotazioni pagate")
+        importo = int((b.sis.garanzia.stato(rif) or {}).get("importo_host_cents") or 0)
+        rimborso_atteso = importo * pct // 100
+
+        def in_elenco(r):
+            return [c for c in b.controversie_admin() if c.get("prenotazione_id") == r]
+
+        def tipi(r):
+            return [m.get("tipo") for m in b.sis.finanza.movimenti(r)]
+
+        def stato_g(r):
+            return (b.sis.garanzia.stato(r) or {}).get("stato")
+
+        prima = in_elenco(rif)
+        #  «c'e' un problema» vale dall'arrivo allo sblocco: l'ospite lo preme un'ora prima dello
+        #  sblocco, come in `esame_percorso_ruoli` (il tempo si sposta solo per questa chiamata)
+        sblocco = int((b.sis.garanzia.stato(rif) or {}).get("sblocco_auto_ts") or 0)
+        with mock.patch("time.time", return_value=float(sblocco - 3600)):
+            s_cont, _c = b.g("POST", "/api/garanzia/contesta",
+                             {"voucher_token": vt, "motivo": "la stanza non era quella"})
+        #  LA PREMESSA, che NON e' un anello: se manca l'esame e' FERMO, non verde (S7).
+        if not (importo > 0 and s_cont == 200 and stato_g(rif) == "contestato"):
+            raise RuntimeError("premessa mancata: importo=%s contesta=%s garanzia=%s"
+                               % (importo, s_cont, stato_g(rif)))
+
+        dopo = in_elenco(rif)
+        passo("vede", "la controversia COMPARE nell'elenco dell'admin (prima non c'era) con la somma in "
+                      "garanzia della prenotazione",
+              prima == [] and len(dopo) == 1 and int(dopo[0].get("importo_host_cents") or -1) == importo,
+              "prima=%d dopo=%d importo=%s/%s" % (len(prima), len(dopo),
+                                                  (dopo[0] if dopo else {}).get("importo_host_cents"), importo))
+
+        b.router._ritenta_bonifici_fermi()
+        passo("ferma", "mentre la controversia e' aperta il bonifico dell'host e' 'trattenuto', e il giro "
+                       "orario non prova a pagarlo (zero tentativi su questo riferimento)",
+              b.sis.payout.stato_di(rif) == "trattenuto" and stripe.per_rif.get(rif, 0) == 0,
+              "stato=%s tentativi=%s" % (b.sis.payout.stato_di(rif), stripe.per_rif.get(rif, 0)))
+
+        # -- la porta: senza chiave, senza secondo fattore, col ruolo 'supporto' ---------------
+        corpo = {"riferimento": rif, "percentuale_ospite": pct}
+        s_senza, _ = b.g("POST", rotta, corpo, {})
+        s_solo, c_solo = b.g("POST", rotta, corpo, ADMIN)
+        b.g("POST", "/api/bunker/admin_accounts",
+            {"azione": "crea", "email": "supporto3@esame.it", "password": "password123",
+             "ruolo": "supporto"}, BH)
+        s_op, c_op = b.g("POST", "/api/admin/login", {"email": "supporto3@esame.it", "password": "password123"})
+        op = ({"X-Admin-Op": (c_op or {}).get("op_token", ""),
+               "X-Bunker-Session": BH.get("X-Bunker-Session", ""),
+               "X-Forwarded-For": IP["X-Forwarded-For"]} if s_op == 200 else None)
+        s_supp, c_supp = b.g("POST", rotta, corpo, op) if op else (None, {})
+        passo("porta", "senza chiave 401 · con la sola chiave 403 'bunker_richiesto' · col ruolo "
+                       "'supporto' 403 'permesso_negato_ruolo' -- e la controversia resta aperta, senza "
+                       "nessuna riga 'rimborso' nel giornale",
+              s_senza == 401 and s_solo == 403 and (c_solo or {}).get("errore") == "bunker_richiesto"
+              and s_supp == 403 and (c_supp or {}).get("errore") == "permesso_negato_ruolo"
+              and stato_g(rif) == "contestato" and "rimborso" not in tipi(rif),
+              "senza=%s solo_admin=%s/%s supporto=%s/%s garanzia=%s"
+              % (s_senza, s_solo, (c_solo or {}).get("errore"), s_supp, (c_supp or {}).get("errore"),
+                 stato_g(rif)))
+
+        # -- fuori: una prenotazione NON contestata non si arbitra -------------------------------
+        s_fu, c_fu = b.g("POST", rotta, {"riferimento": rif_ok, "percentuale_ospite": pct}, BH)
+        passo("fuori", "una prenotazione senza controversia risponde 409 'non_in_controversia': la sua "
+                       "garanzia, il suo bonifico e il giornale restano come erano",
+              s_fu == 409 and (c_fu or {}).get("errore") == "non_in_controversia"
+              and stato_g(rif_ok) == "in_garanzia" and b.sis.payout.stato_di(rif_ok) == "maturato"
+              and "rimborso" not in tipi(rif_ok),
+              "http=%s errore=%s garanzia=%s bonifico=%s" % (s_fu, (c_fu or {}).get("errore"),
+                                                            stato_g(rif_ok), b.sis.payout.stato_di(rif_ok)))
+
+        # -- decide: col secondo fattore, la divisione e la traccia che lascia ---------------------
+        if con_guasto:
+            # IL GUASTO, sull'ISTANZA dell'archivio dei bonifici e mai sul codice: la riscrittura della
+            # riga dell'host dice «fatto» e non scrive niente. E' l'anello che vale i soldi: la riga
+            # resterebbe all'importo PIENO, e all'host arriverebbe anche la parte data all'ospite.
+            b.sis.payout.riallinea_maturato = lambda *a, **k: True
+        registro = []
+
+        class _Presa(logging.Handler):
+            def emit(self, record):
+                try:
+                    registro.append(record.getMessage())
+                except Exception:
+                    registro.append(str(record.msg))
+        presa = _Presa()
+        log_server = logging.getLogger("core_auto.server")
+        livello_prima = log_server.level
+        log_server.addHandler(presa)
+        log_server.setLevel(logging.DEBUG)
+        try:
+            s_ris, c_ris = b.g("POST", rotta, corpo, BH)
+        finally:
+            log_server.removeHandler(presa)
+            log_server.setLevel(livello_prima)
+        c_ris = c_ris or {}
+        g_dopo = b.sis.garanzia.stato(rif) or {}
+        passo("decide", "col secondo fattore risponde 200 'risolta' con la divisione esatta (all'ospite la "
+                        "percentuale decisa della somma in garanzia, all'host il resto), e la garanzia "
+                        "dice la stessa cosa",
+              s_ris == 200 and c_ris.get("stato") == "risolta"
+              and c_ris.get("rimborso_cliente_cents") == rimborso_atteso
+              and c_ris.get("va_all_host_cents") == importo - rimborso_atteso
+              and g_dopo.get("stato") == "risolto"
+              and int(g_dopo.get("ospite_rimborso_cents") or -1) == rimborso_atteso
+              and int(g_dopo.get("host_riceve_cents") or -1) == importo - rimborso_atteso,
+              "http=%s risposta=%s/%s/%s attesi=%s/%s garanzia=%s/%s/%s"
+              % (s_ris, c_ris.get("stato"), c_ris.get("rimborso_cliente_cents"), c_ris.get("va_all_host_cents"),
+                 rimborso_atteso, importo - rimborso_atteso, g_dopo.get("stato"),
+                 g_dopo.get("ospite_rimborso_cents"), g_dopo.get("host_riceve_cents")))
+
+        # -- soldi: il giornale, la riga dell'host e la lista dei rimborsi dovuti -----------------
+        righe_r = [m for m in b.sis.finanza.movimenti(rif) if m.get("tipo") == "rimborso"]
+        riga_host = b.sis.payout.info(rif) or {}
+        dovuti = [r for r in b.rimborsi_admin() if ruoli._riferimento(r).startswith(rif)]
+        passo("soldi", "il giornale scrive UNA riga 'rimborso' della cifra decisa, la riga del bonifico "
+                       "dell'host scende alla sua quota e torna pagabile ('maturato'), la cifra dell'ospite "
+                       "compare fra i rimborsi dovuti, e la catena delle impronte regge",
+              len(righe_r) == 1 and int(righe_r[0].get("importo_cents") or -1) == rimborso_atteso
+              and int(riga_host.get("minori") or -1) == importo - rimborso_atteso
+              and riga_host.get("stato") == "maturato"
+              and len(dovuti) == 1 and ruoli._importo(dovuti[0]) == rimborso_atteso
+              and b.sis.finanza.verifica_catena().get("ok") is True,
+              "rimborso=%s riga_host=%s/%s dovuti=%s attesi %s + %s"
+              % ([m.get("importo_cents") for m in righe_r], riga_host.get("minori"), riga_host.get("stato"),
+                 [ruoli._importo(r) for r in dovuti], rimborso_atteso, importo - rimborso_atteso))
+
+        # -- doppio: decidere di nuovo non sposta niente ------------------------------------------
+        s_due, c_due = b.g("POST", rotta, corpo, BH)
+        passo("doppio", "una seconda decisione sulla stessa prenotazione risponde 409 "
+                        "'non_in_controversia': nessuna riga 'rimborso' in piu', la riga dell'host "
+                        "non cambia di un centesimo",
+              s_due == 409 and (c_due or {}).get("errore") == "non_in_controversia"
+              and tipi(rif).count("rimborso") == 1
+              and int((b.sis.payout.info(rif) or {}).get("minori") or -1) == int(riga_host.get("minori") or -2),
+              "http=%s errore=%s rimborsi=%d riga_host=%s"
+              % (s_due, (c_due or {}).get("errore"), tipi(rif).count("rimborso"),
+                 (b.sis.payout.info(rif) or {}).get("minori")))
+
+        righe_gesto = [r for r in registro if "ADMIN_ACTION" in r and "Controversia risolta" in r
+                       and _rif_per_registro(rif) in r]
+        passo("traccia", "la decisione lascia UNA riga che unisce CHI (ip), SU COSA (il riferimento) e "
+                         "QUANTO torna all'ospite",
+              len(righe_gesto) == 1 and IP["X-Forwarded-For"] in righe_gesto[0]
+              and ("RIMBORSO_CENTS: %d" % rimborso_atteso) in righe_gesto[0],
+              "righe scritte durante il gesto=%d, con azione e riferimento=%d"
+              % (len(registro), len(righe_gesto)))
+    finally:
+        b.sis.connect = connect_prima
+        b.sis.payout.__dict__.pop("riallinea_maturato", None)
+
+
+CATENA_3 = Catena(
+    voce="Controversie: elenco e Risolvi",
+    rotte=("/api/admin/controversie", "/api/admin/controversia/risolvi"),
+    anelli=ANELLI_CATENA_3,
+    bottone="apro «Controversie»: compare la prenotazione che l'ospite ha contestato, con la somma in "
+            "garanzia; premo «Risolvi» con la percentuale (o gli euro) da dare all'ospite: la rotta registra "
+            "la decisione, chiude la garanzia e mette la cifra dell'ospite fra i rimborsi da eseguire",
+    soldi="divide la somma in garanzia al centesimo: all'ospite la parte decisa (riga 'rimborso' del "
+          "giornale e riga fra i rimborsi dovuti), all'host il resto (la riga del suo bonifico scende alla "
+          "quota e torna pagabile). Mentre la controversia e' aperta il bonifico dell'host e' fermo; se la "
+          "riga non scendesse, all'host arriverebbe anche la parte data all'ospite",
+    archivio="scrive lo stato della garanzia ('contestato' -> 'risolto', con le due quote) nell'archivio "
+             "delle garanzie, riscrive la riga dell'host nell'archivio dei bonifici, e UNA riga 'rimborso' "
+             "nel giornale dei soldi, che non si cancella (catena di impronte). Nessun dato personale nuovo; "
+             "il motivo scritto dall'ospite resta nella garanzia. La traccia della decisione va nel registro "
+             "del server, anello [traccia]",
+    percorre=percorre_catena_3,
+)
+
 #  ⛔ Una rotta qui che la pagina non nomina piu' e' ROSSA (dichiarazione invecchiata).
-CATENE = {rotta: cat for cat in (CATENA_1, CATENA_2) for rotta in cat.rotte}
+CATENE = {rotta: cat for cat in (CATENA_1, CATENA_2, CATENA_3) for rotta in cat.rotte}
 
 #  Ogni BOTTONE e ogni CAMPO della pagina va attribuito: alla rotta che il gesto attraversa
 #  (e allora la sua catena e' quella della rotta), oppure a `PAGINA_SOLA` con il perche' --
@@ -757,7 +957,9 @@ CAMPI = {
 #     RIPRENDI_QUI col suo posto, e il tetto torna a 19 quando la catena c'e'.
 #     ✅ TORNATO A 19 IL 2026-11-04: la CATENA 2 («Lo pago io a mano») percorre quella rotta
 #     anello per anello sul banco (porta · vede · garanzia · prende · soldi · doppio · traccia).
-ROTTE_SENZA_CATENA_TETTO = 19
+#     ✅ A 17 LO STESSO GIORNO: la CATENA 3 («Controversie: elenco e Risolvi») percorre le due rotte
+#     della voce (vede · ferma · porta · fuori · decide · soldi · doppio · traccia).
+ROTTE_SENZA_CATENA_TETTO = 17
 
 
 # --------------------------------------------------------------------------------------
