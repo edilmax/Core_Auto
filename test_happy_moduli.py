@@ -531,6 +531,9 @@ CODICI_VISIBILI = (
     # pulsanti per il fondatore: con un riferimento sbagliato l'host leggeva la frase
     # generica «riprova fra qualche minuto», cioe' il consiglio sbagliato.
     "prenotazione_non_trovata",
+    # prenotazione dell'ospite (`POST /api/concierge/book`, index.html). 4/11, N1 (voce 227):
+    # il tetto delle prenotazioni non pagate per indirizzo risponde 429 con questo codice.
+    "troppe_prenotazioni_in_attesa",
 )
 
 

@@ -261,17 +261,25 @@ class TestGiroOstileTutteLeRotte(unittest.TestCase):
                           "unita_totali": 3, "prezzo_netto_cents": 30000}, headers=tok)
         return slug
 
+    def ip_ospite(self, email):
+        """Ogni ospite prenota dal SUO indirizzo, come nella vita vera. Fino al 4/11 tutti
+        e otto passavano da `self.IP`: col tetto delle prenotazioni non pagate per indirizzo
+        (voce 227, OWASP OAT-021) la quarta riceveva 429, e il tetto ha ragione."""
+        ospiti = self.__dict__.setdefault("_ip_ospiti", {})
+        ip = ospiti.setdefault(email, "198.51.100.%d" % (len(ospiti) + 1))
+        return {"X-Forwarded-For": ip}
+
     def prenota(self, slug, ci, co, email, atteso_book=201):
         q = self.chiama("POST", "/api/concierge/quote", 200,
                         [("quote_token", str), ("totale_cents", int),
                          ("netto_host_cents", int), ("commissione_cents", int)],
                         body={"alloggio_id": slug, "check_in": ci, "check_out": co,
-                              "party": 2}, headers=self.IP)
+                              "party": 2}, headers=self.ip_ospite(email))
         self.assertGreater(q["totale_cents"], 0, "preventivo a zero: prezzo perso")
         b = self.chiama("POST", "/api/concierge/book", atteso_book,
                         [("riferimento", str), ("totale_cents", int)],
                         body={"quote_token": q["quote_token"], "email": email,
-                              "lang": "it"}, headers=self.IP)
+                              "lang": "it"}, headers=self.ip_ospite(email))
         self.assertEqual(b["totale_cents"], q["totale_cents"],
                          "il totale cambia tra preventivo e prenotazione")
         return b
