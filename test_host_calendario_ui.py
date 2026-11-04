@@ -205,5 +205,63 @@ class TestUnEtichettaDiStatoNonNominaUnaCAUSASOLA(unittest.TestCase):
             % " · ".join(senza))
 
 
+class TestUnAnnuncioNuovoNonParteConCoseCheLHostNonHaScritto(unittest.TestCase):
+    """⛔ VOCE 204 (giro dell'host, 30/10; visto anche nell'annuncio vero del fondatore il
+    3/11). Il campo «Servizi» partiva scritto `wifi,piscina`: chi non lo cambiava pubblicava
+    una piscina che non ha (all'ospite si promette una cosa falsa). LA FAMIGLIA: i campi che
+    il pannello stesso svuota per un annuncio nuovo (l'elenco si LEGGE dal pannello, non si
+    scrive qui) non devono avere un valore gia' scritto nella pagina."""
+
+    def test_i_campi_dell_annuncio_nuovo_partono_vuoti(self):
+        t = _testo("host.html")
+        m = re.search(r"\[((?:'p_[a-z_]+',?)+)\]\.forEach\(id=>document\.getElementById\(id\)"
+                      r"\.value=''\)", t)
+        self.assertIsNotNone(m, "misura non valida: non trovo l'elenco dei campi che il "
+                                "pannello svuota per un annuncio nuovo")
+        ids = re.findall(r"'(p_[a-z_]+)'", m.group(1))
+        self.assertIn("p_serv", ids, "PREMESSA: il campo dei servizi e' nell'elenco")
+        scritti = []
+        for nome in ids:
+            tag = re.search(r"<(?:input|textarea)[^>]*\bid=\"%s\"[^>]*>" % re.escape(nome), t)
+            self.assertIsNotNone(tag, "il campo %s non ha un <input>/<textarea>" % nome)
+            val = re.search(r"\bvalue=\"([^\"]*)\"", tag.group(0))
+            if val and val.group(1).strip():
+                scritti.append("%s=%s" % (nome, val.group(1)))
+        self.assertEqual([], scritti,
+                         "QUESTI CAMPI DI UN ANNUNCIO NUOVO PARTONO GIA' SCRITTI, e chi non li "
+                         "cambia pubblica cose che non ha: %s" % ", ".join(scritti))
+
+
+class TestLaTassaDiSoggiornoSiScriveNellaMoneta(unittest.TestCase):
+    """⛔ VOCE 211 (giro dell'host, 30/10; confermata dal vivo il 3/11). La casella della
+    tassa di soggiorno voleva i CENTESIMI («200 = 2,00 €»), l'unica del pannello: il prezzo
+    si scrive in euro. Chi scriveva 2 dichiarava 2 centesimi: l'ospite pagava 0,08 su due
+    notti in due, e al Comune l'host deve 8 € — la differenza di tasca sua. Visto sul banco
+    e nell'annuncio vero del fondatore. La casella si scrive come il prezzo (nella moneta
+    dell'annuncio, `toCents`/`fromCents`), e nessuna lingua parla piu' di centesimi."""
+
+    def test_si_manda_e_si_rilegge_nella_moneta_dell_annuncio(self):
+        t = _testo("host.html")
+        manda = re.search(r"tassa_pp_notte_cents\s*:\s*toCents\(\s*document\.getElementById"
+                          r"\('p_tax_pp'\)\.value\s*,\s*valp\s*\)", t)
+        rilegge = re.search(r"getElementById\('p_tax_pp'\)\.value\s*=\s*fromCents\("
+                            r"\s*d\.tassa_pp_notte_cents", t)
+        self.assertEqual((True, True), (bool(manda), bool(rilegge)),
+                         "LA TASSA NON SI SCRIVE NELLA MONETA DELL'ANNUNCIO: chi scrive 2 "
+                         "dichiara 2 centesimi (manda=%s, rilegge=%s)" % (bool(manda),
+                                                                          bool(rilegge)))
+
+    def test_nessuna_lingua_chiede_i_centesimi(self):
+        t = _testo("host.html")
+        frasi = re.findall(r"\b(l_tax|h_tax)\s*:\s*\"([^\"]*)\"", t)
+        # PREMESSA (S1): etichetta e suggerimento in tutte e 8 le lingue
+        self.assertEqual(16, len(frasi), "misura non valida: lette %d frasi l_tax/h_tax"
+                         % len(frasi))
+        sbagliate = [f for _k, f in frasi
+                     if re.search(r"cent|セント|（分）|200 =", f, re.IGNORECASE)]
+        self.assertEqual([], sbagliate,
+                         "LE FRASI DELLA TASSA CHIEDONO ANCORA I CENTESIMI: %s" % sbagliate)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

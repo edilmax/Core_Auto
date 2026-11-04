@@ -845,7 +845,8 @@ def pagina_alloggio_html(sistema: Any, slug: str, base_url: str = "") -> Optiona
         "<script type=\"application/ld+json\">%s</script>%s</head><body>"
         "<h1>%s</h1><p><strong>%s</strong>%s</p><p>%s</p>"
         "<p>Prezzo: %s %s / notte</p><ul>%s</ul>%s"
-        "<p><a href=\"/?slug=%s\">Prenota su BookinVIP</a></p></body></html>"
+        # VOCE 203: la home apre un alloggio con `?apri=` (deploy/index.html), non `?slug=`
+        "<p><a href=\"/?apri=%s\">Prenota su BookinVIP</a></p></body></html>"
     ) % (
         e(d.get("titolo", "")), e(d.get("descrizione", ""))[:160], og,
         e(base_url), e(slug), ld, faq_ld_script,
