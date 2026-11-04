@@ -148,6 +148,96 @@ class TestIlServerRifiutaLeValuteInventate(unittest.TestCase):
             self.assertFalse(ok, "accetta valuta %r" % cattiva)
 
 
+#  L'ELENCO DI STRIPE, letto il 2026-11-04 da docs.stripe.com/currencies («Supported presentment
+#  currencies», 134 sigle; nella pagina le valute senza decimali portano il link «zero-decimal»).
+#  E' una copia DATATA, apposta: e' il giudice esterno, non il codice sotto esame. Se Stripe ne
+#  aggiunge una, il menu non la offre finche' qualcuno non la legge e la aggiunge qui.
+STRIPE_VALUTE_20261104 = tuple((
+    "AED AFN ALL AMD ANG AOA ARS AUD AWG AZN BAM BBD BDT BIF "
+    "BMD BND BOB BRL BSD BWP BYN BZD CAD CDF CHF CLP CNY COP "
+    "CRC CVE CZK DJF DKK DOP DZD EGP ETB EUR FJD FKP GBP GEL "
+    "GIP GMD GNF GTQ GYD HKD HNL HTG HUF IDR ILS INR ISK JMD "
+    "JPY KES KGS KHR KMF KRW KYD KZT LAK LBP LKR LRD LSL MAD "
+    "MDL MGA MKD MMK MNT MOP MUR MVR MWK MXN MYR MZN NAD NGN "
+    "NIO NOK NPR NZD PAB PEN PGK PHP PKR PLN PYG QAR RON RSD "
+    "RUB RWF SAR SBD SCR SEK SGD SHP SLE SOS SRD STD SZL THB "
+    "TJS TOP TRY TTD TWD TZS UAH UGX USD UYU UZS VND VUV WST "
+    "XAF XCD XCG XOF XPF YER ZAR ZMW ").split())
+STRIPE_SENZA_DECIMALI_20261104 = frozenset(
+    "BIF CLP DJF GNF JPY KMF KRW MGA PYG RWF UGX VND VUV XAF XOF XPF".split())
+#  UGX e ISK: «backward compatibility requires you to represent it as a two-decimal value» (stessa
+#  pagina, «Special cases»): si mandano a Stripe a DUE decimali anche se non ne hanno.
+STRIPE_A_DUE_PER_RETROCOMPATIBILITA = frozenset(("UGX", "ISK"))
+
+
+class TestOgniMonetaDiStripeSiPuoScegliereCoiDecimaliDiStripe(unittest.TestCase):
+    """⛔ 4/11, il fondatore: «deve valere per tutte le nazioni del mondo». Il server accetta
+    qualunque sigla, ma il menu dell'host ne offriva 24 (il peso filippino no). Ora la tabella
+    del browser ha ogni moneta con cui Stripe accetta pagamenti, e qui la si giudica con
+    l'elenco di STRIPE, non col motore: due fonti diverse, e il motore ha gia' la sua guardia
+    sopra (`TestBrowserEMotoreConcordano`)."""
+
+    def setUp(self):
+        self.browser = tabella_browser()
+
+    def _attesi(self, valuta):
+        if valuta in STRIPE_A_DUE_PER_RETROCOMPATIBILITA:
+            return 2
+        return 0 if valuta in STRIPE_SENZA_DECIMALI_20261104 else 2
+
+    def test_l_elenco_di_stripe_e_stato_letto(self):
+        self.assertEqual(len(STRIPE_VALUTE_20261104), 134, "misura non valida: elenco di Stripe")
+        self.assertEqual(len(set(STRIPE_VALUTE_20261104)), 134, "sigle doppie nell'elenco")
+
+    def test_il_menu_offre_ogni_moneta_di_stripe(self):
+        mancanti = sorted(set(STRIPE_VALUTE_20261104) - set(self.browser) - IN_ATTESA_DEL_SERVER)
+        self.assertEqual(mancanti, [],
+                         "MONETE DI STRIPE CHE L'HOST NON PUO' SCEGLIERE (%d): %s"
+                         % (len(mancanti), " ".join(mancanti)))
+        self.assertIn("PHP", self.browser, "il peso filippino non si puo' scegliere")
+
+    def test_ogni_moneta_offerta_e_di_stripe_e_ha_i_decimali_che_vuole_stripe(self):
+        fuori = sorted(set(self.browser) - set(STRIPE_VALUTE_20261104))
+        self.assertEqual(fuori, [], "monete offerte che Stripe non incassa: %s" % fuori)
+        sbagliate = ["%s: pagina %d, Stripe %d" % (v, e, self._attesi(v))
+                     for v, e in sorted(self.browser.items()) if e != self._attesi(v)]
+        self.assertEqual(sbagliate, [],
+                         "DECIMALI DIVERSI DA STRIPE: l'ospite leggerebbe un prezzo cento volte "
+                         "diverso da quello addebitato -> %s" % sbagliate)
+
+    def test_il_menu_dell_host_si_legge_dalla_tabella_e_non_da_una_lista_sua(self):
+        """Una seconda lista nel pannello resterebbe indietro il giorno che la tabella cresce
+        (fino al 4/11 il menu ne offriva 24 su 27 della tabella)."""
+        t = _leggi(HOST_HTML)
+        self.assertRegex(t, r"const VAL_ORDINE\s*=\s*VAL_PRIME\.concat\(Object\.keys\(BV\.VALUTE\)",
+                         "il menu delle monete dell'host non si legge piu' dalla tabella di app.js")
+        prime = re.search(r"const VAL_PRIME\s*=\s*\[([^\]]*)\]", t)
+        self.assertIsNotNone(prime, "misura non valida: VAL_PRIME non trovato")
+        sigle = re.findall(r"'([A-Z]{3})'", prime.group(1))
+        self.assertEqual([s for s in sigle if s not in self.browser], [],
+                         "il menu mette in cima monete che la tabella non conosce")
+
+    def test_una_moneta_su_cui_server_e_stripe_non_concordano_non_si_offre(self):
+        """MGA (ariary malgascio): Stripe la tratta senza decimali, `fase99.esponente` ne conta
+        2. Offrirla farebbe addebitare cento volte il prezzo. Resta fuori dal menu finche' il
+        server non la conta come Stripe (voce di RIPRENDI); il giorno che lo fa, questa prova
+        lo dice e la moneta puo' entrare."""
+        for v in IN_ATTESA_DEL_SERVER:
+            if esponente(v) != self._attesi(v):
+                self.assertNotIn(v, self.browser,
+                                 "%s e' nel menu ma il server ne conta %d decimali e Stripe %d"
+                                 % (v, esponente(v), self._attesi(v)))
+        self.assertTrue(all(esponente(v) == self._attesi(v)
+                            for v in set(STRIPE_VALUTE_20261104) - IN_ATTESA_DEL_SERVER),
+                        "una moneta di Stripe ha nel server decimali diversi da Stripe: %s"
+                        % [v for v in STRIPE_VALUTE_20261104
+                           if v not in IN_ATTESA_DEL_SERVER and esponente(v) != self._attesi(v)])
+
+
+#  Le monete di Stripe su cui il server oggi sbaglia i decimali: fuori dal menu finche' non si ripara.
+IN_ATTESA_DEL_SERVER = frozenset(("MGA",))
+
+
 class TestLoStrumentoDiCollaudoNonTieneUnaCopia(unittest.TestCase):
     """La regola generale: due copie della stessa verita' divergono sempre."""
 

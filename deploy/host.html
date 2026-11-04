@@ -560,8 +560,12 @@ const scudoTasti = BV.scudoTasti;
 // nella SUA moneta, l'ospite paga in quella). VAL_ORDINE = le valute SCEGLIBILI dal
 // menu' (24, invariate: le extra in tabella servono solo alla resa a schermo).
 const VAL = BV.VALUTE;
-const VAL_ORDINE = ['EUR','USD','GBP','CHF','THB','JPY','AUD','CAD','AED','SGD','CNY','HKD',
-                    'MXN','BRL','ZAR','IDR','KRW','INR','NZD','SEK','NOK','DKK','PLN','TRY'];
+// Le 24 piu' usate in cima, poi TUTTE le altre della tabella di app.js in ordine alfabetico
+// (4/11, «deve valere per tutte le nazioni del mondo»): l'elenco si legge dalla tabella, cosi'
+// non esiste una seconda lista che possa restare indietro.
+const VAL_PRIME = ['EUR','USD','GBP','CHF','THB','JPY','AUD','CAD','AED','SGD','CNY','HKD',
+                   'MXN','BRL','ZAR','IDR','KRW','INR','NZD','SEK','NOK','DKK','PLN','TRY'];
+const VAL_ORDINE = VAL_PRIME.concat(Object.keys(BV.VALUTE).filter(c=>VAL_PRIME.indexOf(c)<0).sort());
 const valSym = BV.valSym;
 const fmt = BV.money;
 const toCents = BV.toCents;

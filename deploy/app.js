@@ -83,7 +83,51 @@
     NOK:{s:'kr',e:2,n:'Norwegian Krone'}, DKK:{s:'kr',e:2,n:'Danish Krone'},
     PLN:{s:'zł',e:2,n:'Polish Zloty'}, TRY:{s:'₺',e:2,n:'Turkish Lira'},
     VND:{s:'₫',e:0,n:'Vietnamese Dong'}, CLP:{s:'CLP$',e:0,n:'Chilean Peso'},
-    ISK:{s:'kr',e:2,n:'Icelandic Krona'}
+    ISK:{s:'kr',e:2,n:'Icelandic Krona'},
+    /* ── 4/11, il fondatore: «deve valere per tutte le nazioni del mondo». Da qui in giu' le
+       monete dell'elenco di Stripe («Supported presentment currencies», docs.stripe.com/currencies,
+       letto il 2026-11-04) che mancavano. Decimali = come le vuole Stripe: 0 per le sue
+       «zero-decimal», 2 per le altre, UGX a 2 come ISK (caso particolare di Stripe). Simbolo e
+       nome dall'Intl inglese; dove il simbolo e' di piu' monete (Rs, C$) o non si legge su molti
+       telefoni, si scrive il codice. ⛔ MGA NON c'e' e non e' una svista: Stripe la vuole senza
+       decimali e il motore (fase99) ne conta 2 -> si addebiterebbe cento volte il prezzo. Entra
+       quando il motore la conta come Stripe (`test_valute_coerenti`, voce di RIPRENDI). */
+    AFN:{s:'؋',e:2,n:'Afghan Afghani'}, ALL:{s:'ALL',e:2,n:'Albanian Lek'}, AMD:{s:'֏',e:2,n:'Armenian Dram'},
+    ANG:{s:'ANG',e:2,n:'Netherlands Antillean Guilder'}, AOA:{s:'Kz',e:2,n:'Angolan Kwanza'}, ARS:{s:'ARS',e:2,n:'Argentine Peso'},
+    AWG:{s:'AWG',e:2,n:'Aruban Florin'}, AZN:{s:'₼',e:2,n:'Azerbaijani Manat'}, BAM:{s:'KM',e:2,n:'Bosnia-Herzegovina Convertible Mark'},
+    BBD:{s:'BBD',e:2,n:'Barbadian Dollar'}, BDT:{s:'৳',e:2,n:'Bangladeshi Taka'}, BIF:{s:'BIF',e:0,n:'Burundian Franc'},
+    BMD:{s:'BMD',e:2,n:'Bermudan Dollar'}, BND:{s:'BND',e:2,n:'Brunei Dollar'}, BOB:{s:'Bs',e:2,n:'Bolivian Boliviano'},
+    BSD:{s:'BSD',e:2,n:'Bahamian Dollar'}, BWP:{s:'P',e:2,n:'Botswanan Pula'}, BYN:{s:'BYN',e:2,n:'Belarusian Ruble'},
+    BZD:{s:'BZD',e:2,n:'Belize Dollar'}, CDF:{s:'CDF',e:2,n:'Congolese Franc'}, COP:{s:'COP',e:2,n:'Colombian Peso'},
+    CRC:{s:'₡',e:2,n:'Costa Rican Colón'}, CVE:{s:'CVE',e:2,n:'Cape Verdean Escudo'}, CZK:{s:'Kč',e:2,n:'Czech Koruna'},
+    DJF:{s:'DJF',e:0,n:'Djiboutian Franc'}, DOP:{s:'DOP',e:2,n:'Dominican Peso'}, DZD:{s:'DZD',e:2,n:'Algerian Dinar'},
+    EGP:{s:'E£',e:2,n:'Egyptian Pound'}, ETB:{s:'ETB',e:2,n:'Ethiopian Birr'}, FJD:{s:'FJD',e:2,n:'Fijian Dollar'},
+    FKP:{s:'FKP',e:2,n:'Falkland Islands Pound'}, GEL:{s:'₾',e:2,n:'Georgian Lari'}, GIP:{s:'GIP',e:2,n:'Gibraltar Pound'},
+    GMD:{s:'GMD',e:2,n:'Gambian Dalasi'}, GNF:{s:'FG',e:0,n:'Guinean Franc'}, GTQ:{s:'Q',e:2,n:'Guatemalan Quetzal'},
+    GYD:{s:'GYD',e:2,n:'Guyanaese Dollar'}, HNL:{s:'L',e:2,n:'Honduran Lempira'}, HTG:{s:'HTG',e:2,n:'Haitian Gourde'},
+    HUF:{s:'Ft',e:2,n:'Hungarian Forint'}, ILS:{s:'₪',e:2,n:'Israeli New Shekel'}, JMD:{s:'JMD',e:2,n:'Jamaican Dollar'},
+    KES:{s:'KES',e:2,n:'Kenyan Shilling'}, KGS:{s:'KGS',e:2,n:'Kyrgyz Som'}, KHR:{s:'៛',e:2,n:'Cambodian Riel'},
+    KMF:{s:'CF',e:0,n:'Comorian Franc'}, KYD:{s:'KYD',e:2,n:'Cayman Islands Dollar'}, KZT:{s:'₸',e:2,n:'Kazakhstani Tenge'},
+    LAK:{s:'₭',e:2,n:'Laotian Kip'}, LBP:{s:'L£',e:2,n:'Lebanese Pound'}, LKR:{s:'LKR',e:2,n:'Sri Lankan Rupee'},
+    LRD:{s:'LRD',e:2,n:'Liberian Dollar'}, LSL:{s:'LSL',e:2,n:'Lesotho Loti'}, MAD:{s:'MAD',e:2,n:'Moroccan Dirham'},
+    MDL:{s:'MDL',e:2,n:'Moldovan Leu'}, MKD:{s:'MKD',e:2,n:'Macedonian Denar'}, MMK:{s:'K',e:2,n:'Myanmar Kyat'},
+    MNT:{s:'₮',e:2,n:'Mongolian Tugrik'}, MOP:{s:'MOP',e:2,n:'Macanese Pataca'}, MUR:{s:'MUR',e:2,n:'Mauritian Rupee'},
+    MVR:{s:'MVR',e:2,n:'Maldivian Rufiyaa'}, MWK:{s:'MWK',e:2,n:'Malawian Kwacha'}, MYR:{s:'RM',e:2,n:'Malaysian Ringgit'},
+    MZN:{s:'MZN',e:2,n:'Mozambican Metical'}, NAD:{s:'NAD',e:2,n:'Namibian Dollar'}, NGN:{s:'₦',e:2,n:'Nigerian Naira'},
+    NIO:{s:'NIO',e:2,n:'Nicaraguan Córdoba'}, NPR:{s:'NPR',e:2,n:'Nepalese Rupee'}, PAB:{s:'PAB',e:2,n:'Panamanian Balboa'},
+    PEN:{s:'PEN',e:2,n:'Peruvian Sol'}, PGK:{s:'PGK',e:2,n:'Papua New Guinean Kina'}, PHP:{s:'₱',e:2,n:'Philippine Peso'},
+    PKR:{s:'PKR',e:2,n:'Pakistani Rupee'}, PYG:{s:'₲',e:0,n:'Paraguayan Guarani'}, QAR:{s:'QAR',e:2,n:'Qatari Riyal'},
+    RON:{s:'lei',e:2,n:'Romanian Leu'}, RSD:{s:'RSD',e:2,n:'Serbian Dinar'}, RUB:{s:'₽',e:2,n:'Russian Ruble'},
+    RWF:{s:'RF',e:0,n:'Rwandan Franc'}, SAR:{s:'SAR',e:2,n:'Saudi Riyal'}, SBD:{s:'SBD',e:2,n:'Solomon Islands Dollar'},
+    SCR:{s:'SCR',e:2,n:'Seychellois Rupee'}, SHP:{s:'SHP',e:2,n:'St. Helena Pound'}, SLE:{s:'SLE',e:2,n:'Sierra Leonean Leone'},
+    SOS:{s:'SOS',e:2,n:'Somali Shilling'}, SRD:{s:'SRD',e:2,n:'Surinamese Dollar'}, STD:{s:'STD',e:2,n:'São Tomé & Príncipe Dobra'},
+    SZL:{s:'SZL',e:2,n:'Swazi Lilangeni'}, TJS:{s:'TJS',e:2,n:'Tajikistani Somoni'}, TOP:{s:'T$',e:2,n:'Tongan Paʻanga'},
+    TTD:{s:'TTD',e:2,n:'Trinidad & Tobago Dollar'}, TWD:{s:'TWD',e:2,n:'New Taiwan Dollar'}, TZS:{s:'TZS',e:2,n:'Tanzanian Shilling'},
+    UAH:{s:'₴',e:2,n:'Ukrainian Hryvnia'}, UGX:{s:'UGX',e:2,n:'Ugandan Shilling'}, UYU:{s:'UYU',e:2,n:'Uruguayan Peso'},
+    UZS:{s:'UZS',e:2,n:'Uzbekistani Som'}, VUV:{s:'VUV',e:0,n:'Vanuatu Vatu'}, WST:{s:'WST',e:2,n:'Samoan Tala'},
+    XAF:{s:'FCFA',e:0,n:'Central African CFA Franc'}, XCD:{s:'XCD',e:2,n:'East Caribbean Dollar'}, XCG:{s:'Cg.',e:2,n:'Caribbean Guilder'},
+    XOF:{s:'F CFA',e:0,n:'West African CFA Franc'}, XPF:{s:'CFPF',e:0,n:'CFP Franc'}, YER:{s:'YER',e:2,n:'Yemeni Rial'},
+    ZMW:{s:'ZK',e:2,n:'Zambian Kwacha'}
   };
   BV.valExp = function(v){ return (BV.VALUTE[v] && BV.VALUTE[v].e!=null) ? BV.VALUTE[v].e : 2; };
   BV.valSym = function(v){ return (BV.VALUTE[v] && BV.VALUTE[v].s) || v || ''; };
