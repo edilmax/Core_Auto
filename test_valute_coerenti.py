@@ -234,8 +234,10 @@ class TestOgniMonetaDiStripeSiPuoScegliereCoiDecimaliDiStripe(unittest.TestCase)
                            if v not in IN_ATTESA_DEL_SERVER and esponente(v) != self._attesi(v)])
 
 
-#  Le monete di Stripe su cui il server oggi sbaglia i decimali: fuori dal menu finche' non si ripara.
-IN_ATTESA_DEL_SERVER = frozenset(("MGA",))
+#  Le monete di Stripe su cui il server sbaglia i decimali: fuori dal menu finche' non si ripara.
+#  Vuoto dal 4/11: MGA (l'unica) l'ha riparata la voce 251. Se un giorno Stripe ne aggiunge una che
+#  il motore conta diversa, si mette qui e il menu non la offre finche' il motore non la impara.
+IN_ATTESA_DEL_SERVER = frozenset()
 
 
 class TestLoStrumentoDiCollaudoNonTieneUnaCopia(unittest.TestCase):

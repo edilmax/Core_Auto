@@ -316,6 +316,12 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
         except Exception:
             _tasso = None
             _tassi = None
+    if _tassi is None:
+        # ⛔ VOCE 255 (4/11): senza cambi la quota fissa della tariffa tecnica (in euro) NON si
+        # converte nelle altre monete (fase59, fase83). In produzione la chiave c'e': se
+        # sparisse lo si deve leggere qui, dove il protocollo di deploy si aspetta «avvisi []».
+        avvisi.append("OXR_APP_ID assente -> la quota fissa della tariffa tecnica NON si converte "
+                      "nelle altre monete (voce 255)")
 
     # SINGLE-USE del Credito Fondatore/Viaggio (fase167): un credito si spende UNA volta sola.
     # Iniettato nel concierge (check al preventivo) e consumato dal server alla finalizzazione.

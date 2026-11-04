@@ -160,7 +160,10 @@ class TestAvvioReale(unittest.TestCase):
         sistema = self._avvia()
         avvisi = sistema.report.get("avvisi", [])
         for a in avvisi:
-            self.assertTrue("Stripe" in a or "SMTP" in a or "avviso host" in a,
+            # OXR_APP_ID: senza la chiave dei cambi la quota fissa non si converte (voce 255);
+            # qui la chiave non c'e' apposta, in produzione si' (e la lista e' vuota).
+            self.assertTrue("Stripe" in a or "SMTP" in a or "avviso host" in a
+                            or "OXR_APP_ID" in a,
                             "avviso inatteso all'avvio: %s" % a)
 
 
