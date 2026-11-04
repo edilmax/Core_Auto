@@ -375,7 +375,7 @@
       </div>
       <label><span data-i18n="l_valuta">Valuta (la tua moneta)</span> <span class="hint" data-i18n="h_valuta">— l'ospite paga in questa</span>
         <select id="p_valuta"></select></label>
-      <label id="lPrezzo"><span data-i18n="l_prezzo_osp">Prezzo/notte che vede l'ospite</span> <span class="hint" data-i18n="h_prezzo_osp">— nella tua valuta; ricevi questo meno la commissione (5% diretto / 10% marketplace), 0% all'ospite</span><input type="number" id="p_prezzo" step="0.01" min="0"></label>
+      <label id="lPrezzo"><span data-i18n="l_prezzo_osp">Prezzo/notte che vede l'ospite</span><b class="val-ann"></b> <span class="hint" data-i18n="h_prezzo_osp">— nella tua valuta; ricevi questo meno la commissione (5% diretto / 10% marketplace), 0% all'ospite</span><input type="number" id="p_prezzo" step="0.01" min="0"></label>
       <label class="full"><span data-i18n="l_pol">Politica di cancellazione</span> <span class="hint" data-i18n="h_pol">— la sceglie l'host, l'ospite la vede prima di prenotare</span>
         <select id="p_pol">
           <option value="flessibile" data-i18n="pol_fles">Gratuita fino a 24h prima (consigliata)</option>
@@ -383,7 +383,7 @@
           <option value="rigida" data-i18n="pol_rig">Gratuita fino a 30 giorni prima (poi 50%, niente sotto i 7 giorni)</option>
           <option value="non_rimborsabile" data-i18n="pol_nr">Non rimborsabile (prezzo più basso)</option>
         </select></label>
-      <label class="full"><span data-i18n="l_tax">Tassa di soggiorno — per persona/notte</span> <span class="hint" data-i18n="h_tax">— la dichiari TU per la tua città (0 se non c'è). Si scrive come il prezzo, nella moneta dell'annuncio: 2,50 vuol dire 2,50 a persona a notte</span><input type="number" id="p_tax_pp" value="0" min="0" step="0.01"></label>
+      <label class="full"><span data-i18n="l_tax">Tassa di soggiorno — per persona/notte</span><b class="val-ann"></b> <span class="hint" data-i18n="h_tax">— la dichiari TU per la tua città (0 se non c'è). Si scrive come il prezzo, nella moneta dell'annuncio: 2,50 vuol dire 2,50 a persona a notte</span><input type="number" id="p_tax_pp" value="0" min="0" step="0.01"></label>
       <label class="full"><span data-i18n="l_tax_max">Tassa — notti massime tassabili</span> <span class="hint" data-i18n="h_tax_max">— 0 = nessun limite</span><input type="number" id="p_tax_max" value="0" min="0"></label>
       <label><span data-i18n="l_sc_sett">Sconto settimana %</span> <span class="hint" data-i18n="h_sc_sett">— per 7+ notti (0 = nessuno)</span><input type="number" id="p_sc_sett" value="0" min="0" max="90"></label>
       <label><span data-i18n="l_sc_mese">Sconto mese %</span> <span class="hint" data-i18n="h_sc_mese">— per 28+ notti (0 = nessuno)</span><input type="number" id="p_sc_mese" value="0" min="0" max="90"></label>
@@ -567,6 +567,16 @@ const fmt = BV.money;
 const toCents = BV.toCents;
 const fromCents = BV.fromCents;
 (function(){ const sel=document.getElementById('p_valuta'); if(sel) sel.innerHTML=VAL_ORDINE.map(c=>`<option value="${c}">${valSym(c)} ${c} — ${VAL[c].n}</option>`).join(''); })();
+// La moneta dell'annuncio ACCANTO al prezzo e alla tassa (4/11, il fondatore: «facile e
+// comprensibile per ogni host di ogni nazione»): l'host vede in cosa sta scrivendo, e per le
+// monete senza centesimi (lo yen) la casella non chiede decimali.
+function mostraValutaAnnuncio(){
+  const v=(document.getElementById('p_valuta')||{}).value||'EUR';
+  const e=BV.valExp(v);
+  document.querySelectorAll('.val-ann').forEach(s=>{ s.textContent=' ('+valSym(v)+' '+v+')'; });
+  ['p_prezzo','p_tax_pp'].forEach(id=>{ const i=document.getElementById(id); if(i) i.step=e>0?(1/Math.pow(10,e)).toFixed(e):'1'; });
+}
+(function(){ const sel=document.getElementById('p_valuta'); if(sel){ sel.addEventListener('change', mostraValutaAnnuncio); mostraValutaAnnuncio(); } })();
 
 // Slug "corrente": l'host sceglie l'alloggio da un menù, MAI digita un codice.
 let CURRENT_SLUG = '';
@@ -1239,7 +1249,7 @@ async function caricaModifica(slug){
     document.getElementById('p_lat').value=(d.lat_micro!=null?d.lat_micro:'');
     document.getElementById('p_lon').value=(d.lon_micro!=null?d.lon_micro:'');
     PIN_MANUALE=!!d.pin_manuale;   // pin fissato in passato: non perderlo al salvataggio
-    document.getElementById('p_valuta').value=val;
+    document.getElementById('p_valuta').value=val; mostraValutaAnnuncio();
     // IL PREZZO BASE, non la vetrina: la vetrina e' il giorno piu' economico del calendario, e
     // rimandata indietro spostava i giorni sbagliati (giro dell'host vero, 30/10)
     BASE_CARICATO = d.prezzo_base_cents || d.prezzo_notte_cents;
