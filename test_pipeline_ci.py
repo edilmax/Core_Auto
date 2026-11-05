@@ -1024,6 +1024,149 @@ class TestTrigger(unittest.TestCase):
                          "il token della CI deve poter solo LEGGERE il repository")
 
 
+REGOLE_ZAP = os.path.join(QUI, ".zap", "regole.tsv")
+
+
+class TestLoZapPuoDiventareRossoDavvero(unittest.TestCase):
+    """Voce 261 di RIPRENDI (5/11/2026): fino a quel giorno il job `zap` NON poteva
+    diventare rosso per un buco di sicurezza.
+
+    Lanciava `zap-baseline.py ... -I -a` senza file di regole: ZAP tratta ogni avviso come
+    WARN ("By default all alerts found by ZAP will be treated as WARNings", zaproxy.org,
+    "ZAP - Baseline Scan") e `-I` rende verdi i WARN, quindi usciva rosso solo se ZAP non
+    faceva il giro. Il verde del lunedi' non guardava niente: modo di rompersi n. 4.
+
+    Queste guardie pretendono le tre cose che rendono vero il rosso: il passo PASSA il file
+    a ZAP, il file si legge COME LO LEGGE ZAP (`zap_common.load_config`: righe `#` saltate,
+    `line.rstrip().split('\\t', 2)` sulle altre), e le regole di sicurezza sono FAIL.
+    """
+
+    # Le regole che non scendono MAI sotto FAIL: ognuna, se scatta sul sito vivo, e' un buco
+    # vero o una difesa caduta. Abbassarne una vuole il motivo scritto qui E nel file.
+    SEMPRE_FAIL = {
+        "2": "Private IP Disclosure",
+        "10003": "Vulnerable JS Library",
+        "10010": "Cookie No HttpOnly Flag",
+        "10011": "Cookie Without Secure Flag",
+        "10020": "Anti-clickjacking Header",
+        "10021": "X-Content-Type-Options Header Missing",
+        "10023": "Information Disclosure - Debug Error Messages",
+        "10033": "Directory Browsing",
+        "10035": "Strict-Transport-Security Header",
+        "10036": "HTTP Server Response Header",
+        "10037": "X-Powered-By",
+        "10038": "Content Security Policy (CSP) Header Not Set",
+        "10040": "Secure Pages Include Mixed Content",
+        "10043": "User Controllable JavaScript Event (XSS)",
+        "10054": "Cookie without SameSite Attribute",
+        "10062": "PII Disclosure",
+        "10063": "Permissions Policy Header Not Set",
+        "10099": "Source Code Disclosure",
+        "10115": "Script Served From Malicious Domain (polyfill)",
+        "90003": "Sub Resource Integrity Attribute Missing",
+        "90022": "Application Error Disclosure",
+        "110009": "Full Path Disclosure",
+    }
+    # OUTOFSCOPE (che ZAP conosce) qui NON e' ammesso: toglie pagine a una regola, cioe' la
+    # spegne in parte. Se un giorno serve, si decide aggiornando questa guardia.
+    LIVELLI_AMMESSI = ("IGNORE", "INFO", "WARN", "FAIL")
+
+    def setUp(self):
+        self.job = _doc_ci()["jobs"]["zap"]
+
+    def _passo_che_lancia_zap(self):
+        passi = self.job.get("steps", [])
+        lancia = [i for i, p in enumerate(passi) if "zap-baseline.py" in str(p.get("run", ""))]
+        # PREMESSA (sbaglio S7): senza quel passo ogni controllo qui sotto non guarda niente.
+        self.assertEqual(
+            len(lancia), 1,
+            "PREMESSA MANCANTE, controllo NON ESEGUITO: nel job `zap` deve esserci UN passo "
+            "che lancia zap-baseline.py; trovati %d" % len(lancia))
+        return passi, lancia[0]
+
+    def _regole(self):
+        """{id: (livello, motivo)} letto come lo legge ZAP; ogni riga sbagliata e' un rosso."""
+        with open(REGOLE_ZAP, "rb") as f:
+            grezzo = f.read()
+        non_ascii = sorted({b for b in grezzo if b > 127})
+        self.assertFalse(
+            non_ascii,
+            "%s contiene byte non ASCII %r: dentro il contenitore di ZAP un file cosi' puo' "
+            "non caricarsi, e allora ZAP esce 3" % (REGOLE_ZAP, non_ascii[:5]))
+        regole = {}
+        # Come ZAP: file di testo con gli a-capo universali (anche un CRLF diventa '\n').
+        with io.open(REGOLE_ZAP, encoding="ascii") as f:
+            righe = list(f)
+        for n, riga in enumerate(righe, 1):
+            if riga.startswith("#") or len(riga) <= 1:
+                continue
+            campi = riga.rstrip().split("\t", 2)
+            self.assertEqual(
+                len(campi), 3,
+                "riga %d di %s: ZAP vuole id, livello e (nome) separati da tab, qui ci sono "
+                "%d campi: %r. ZAP uscirebbe con 3" % (n, REGOLE_ZAP, len(campi), riga))
+            chiave, livello, resto = campi
+            motivo = ""
+            if "\t" in resto:
+                pezzi = resto.rstrip().split("\t")
+                self.assertEqual(
+                    len(pezzi), 2,
+                    "riga %d: dopo (nome) ZAP accetta UN solo campo, il motivo: %r" % (n, riga))
+                motivo = pezzi[1].strip()
+            self.assertIn(
+                livello, self.LIVELLI_AMMESSI,
+                "riga %d: livello %r non ammesso qui (ZAP lo tratterebbe come un avviso "
+                "qualunque, in silenzio)" % (n, livello))
+            self.assertTrue(chiave.isdigit(), "riga %d: id %r non numerico" % (n, chiave))
+            self.assertNotIn(chiave, regole, "riga %d: id %s scritto due volte" % (n, chiave))
+            regole[chiave] = (livello, motivo)
+        self.assertTrue(regole, "PREMESSA MANCANTE: %s non contiene nessuna regola" % REGOLE_ZAP)
+        return regole
+
+    def test_il_passo_passa_il_file_delle_regole_a_ZAP(self):
+        passi, i = self._passo_che_lancia_zap()
+        run = str(passi[i].get("run", ""))
+        riga_zap = [r for r in run.splitlines() if "zap-baseline.py" in r][0]
+        self.assertRegex(
+            riga_zap, r"\s-c\s+regole\.tsv(\s|$)",
+            "zap-baseline.py parte SENZA `-c regole.tsv`: ZAP torna a trattare tutto come "
+            "WARN e con `-I` il job non diventa mai rosso per un buco. Riga letta: %r" % riga_zap)
+        self.assertIn("cp .zap/regole.tsv", run,
+                      "il passo non copia `.zap/regole.tsv` nella cartella che ZAP legge")
+        self.assertRegex(
+            run, r'-v\s+"?\$RUNNER_TEMP/zap:/zap/wrk/?:rw"?',
+            "la cartella delle regole va montata su /zap/wrk in SCRITTURA: zap-baseline.py ci "
+            "copia il suo zap.yaml e, se non puo', il giro si rompe")
+        self.assertNotIn("|| true", run,
+                         "`|| true` sul passo dello zap lo renderebbe verde anche su un FAIL")
+        self.assertFalse(passi[i].get("continue-on-error") or self.job.get("continue-on-error"),
+                         "`continue-on-error` sullo zap nasconderebbe il rosso")
+        checkout = [k for k, p in enumerate(passi)
+                    if str(p.get("uses", "")).startswith("actions/checkout@")]
+        self.assertTrue(checkout and checkout[0] < i,
+                        "senza checkout PRIMA del passo, `.zap/regole.tsv` non esiste sul runner")
+
+    def test_il_file_delle_regole_si_legge_come_lo_legge_ZAP(self):
+        self.assertTrue(self._regole())
+
+    def test_le_regole_di_sicurezza_sono_FAIL(self):
+        regole = self._regole()
+        sbagliate = {k: regole.get(k, ("ASSENTE", ""))[0] for k in self.SEMPRE_FAIL
+                     if regole.get(k, ("ASSENTE", ""))[0] != "FAIL"}
+        self.assertEqual(
+            sbagliate, {},
+            "regole di sicurezza che non sono piu' FAIL (id: livello trovato): %r. Se una di "
+            "queste scatta sul sito vivo, il job resta verde" % sbagliate)
+
+    def test_ogni_regola_che_non_e_FAIL_porta_il_suo_motivo(self):
+        regole = self._regole()
+        senza = sorted(k for k, (liv, motivo) in regole.items() if liv != "FAIL" and not motivo)
+        self.assertEqual(
+            senza, [],
+            "regole sotto FAIL senza il motivo nel quarto campo: %r. Un avviso declassato in "
+            "silenzio e' proprio il verde che questa guardia esiste per impedire" % senza)
+
+
 def _giorni_del_cron(espressione):
     """I giorni della settimana coperti da un'espressione cron, come insieme 0-6.
 
