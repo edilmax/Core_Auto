@@ -164,11 +164,16 @@ class NotificatorePrenotazione:
             dest = (contatti or {}).get(getattr(c, "campo_contatto", "email"), "")
             if not dest:
                 continue
+            # 5/11: ogni canale lascia la sua riga (nome del canale, MAI il destinatario): un
+            # «no» di Telegram spariva in silenzio se l'email diceva «si'».
             try:
                 if c.invia(dest, oggetto, testo):
                     inviati += 1
+                    logger.info("avviso host: canale %s consegnato", type(c).__name__)
                 else:
                     falliti += 1
+                    logger.warning("avviso host: canale %s rifiutato (ha risposto no)",
+                                   type(c).__name__)
             except Exception:
                 falliti += 1
                 logger.warning("canale notifica host fallito (ISOLATO)", exc_info=True)

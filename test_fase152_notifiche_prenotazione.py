@@ -362,5 +362,34 @@ class TestLeGuardieDeiPuntiScoperti(unittest.TestCase):
         self.assertNotIn(None, n._canali)
 
 
+class TestOgniCanaleLasciaLaSuaRiga(unittest.TestCase):
+    """5/11: l'avviso della prenotazione del 4/11 non e' arrivato su Telegram e nel registro non
+    c'era niente da leggere: un canale che risponde «no» spariva in silenzio se un altro diceva
+    «si'». Ogni canale scrive il suo esito, col nome del canale e MAI il destinatario."""
+
+    class _Ok:
+        campo_contatto = "email"
+        def invia(self, d, o, t): return True
+
+    class _No:
+        campo_contatto = "telegram_chat_id"
+        def invia(self, d, o, t): return False
+
+    def test_il_canale_che_rifiuta_si_legge_anche_se_un_altro_consegna(self):
+        n = NotificatorePrenotazione([self._Ok(), self._No()])
+        with self.assertLogs("fase152_notifiche_prenotazione", level="INFO") as reg:
+            esito = n.avvisa({"email": "host@esempio.it", "telegram_chat_id": "12345"},
+                             "Nuova prenotazione", "testo")
+        self.assertEqual(esito, {"inviati": 1, "falliti": 1})
+        righe = "\n".join(reg.output)
+        self.assertIn("_Ok", righe)
+        self.assertIn("_No", righe)
+        self.assertIn("consegnato", righe)
+        self.assertIn("rifiutato", righe)
+        self.assertTrue(any(r.startswith("WARNING") and "_No" in r for r in reg.output), righe)
+        self.assertNotIn("host@esempio.it", righe)
+        self.assertNotIn("12345", righe)
+
+
 if __name__ == "__main__":
     unittest.main()
