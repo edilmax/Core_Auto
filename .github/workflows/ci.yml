@@ -1206,7 +1206,9 @@ jobs:
   # OWASP ZAP: scansione DAST BASELINE (passiva, NON attacca) del sito live. Gira solo sul
   # giro programmato del LUNEDI' o su avvio manuale -> niente crawl della produzione ad ogni
   # commit, e niente crawl quotidiano da quando i giri programmati sono diventati sette.
-  # Report-only (|| true): i rilievi restano nel log del job.
+  # ROSSO quando il sito PEGGIORA su una regola di sicurezza: le regole stanno in
+  # `.zap/regole.tsv` (voce 261 di RIPRENDI). Il rosso arriva su Telegram dal guardiano del
+  # VPS (`deploy/watchdog.sh` legge ogni 10 minuti i controlli di master).
   # FUORI dal "gate" di proposito: su push/PR questo job non gira proprio, e un job saltato
   # non puo' essere una condizione per far passare o bocciare un commit.
   zap:
@@ -1220,13 +1222,22 @@ jobs:
     # parte non fallisce). Contro questo c'e' una guardia in `test_pipeline_ci.py`.
     if: (github.event_name == 'schedule' && github.event.schedule == '17 3 * * 1') || github.event_name == 'workflow_dispatch'
     steps:
-      # STRICT sul GRAVE: -I fa si' che gli AVVISI non blocchino (al primo giro: 0 FAIL,
-      # 59 PASS, 11 avvisi = header di hardening mancanti, non buchi). Esce non-zero SOLO
-      # su un alert FAIL (vulnerabilita' vera). Niente mount: il report va su stdout.
-      - name: OWASP ZAP Baseline sul sito live (STRICT - blocca solo su FAIL grave)
+      - uses: actions/checkout@v5
+      # FINO AL 5/11/2026 QUESTO JOB NON POTEVA DIVENTARE ROSSO PER UN BUCO. Senza file di
+      # regole ZAP tratta ogni avviso come WARN ("By default all alerts found by ZAP will be
+      # treated as WARNings", zaproxy.org, "ZAP - Baseline Scan") e `-I` ("do not return
+      # failure on warning") rende verdi i WARN: usciva rosso solo se ZAP non faceva il giro.
+      # Ora `-c regole.tsv`: FAIL sulle regole di sicurezza che il 2/11 passavano (cricchetto),
+      # WARN col motivo sulle altre. Il file va in una cartella SCRIVIBILE montata su /zap/wrk,
+      # perche' zap-baseline.py ci copia il suo zap.yaml; senza file, o con un file rotto, ZAP
+      # esce 3: rosso, mai un verde finto. Il rapporto resta nel log del job.
+      - name: OWASP ZAP Baseline sul sito live (ROSSO se una regola di sicurezza peggiora)
         run: |
-          docker run --rm -t ghcr.io/zaproxy/zaproxy:stable \
-            zap-baseline.py -t https://bookinvip.com -I -a
+          mkdir -p "$RUNNER_TEMP/zap"
+          cp .zap/regole.tsv "$RUNNER_TEMP/zap/regole.tsv"
+          chmod -R a+rwX "$RUNNER_TEMP/zap"
+          docker run --rm -t -v "$RUNNER_TEMP/zap:/zap/wrk/:rw" ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py -t https://bookinvip.com -c regole.tsv -I -a
 
   # ==========================================================================
   #  GATE — l'ESITO UNICO. E' questo il check da rendere "required" su GitHub.

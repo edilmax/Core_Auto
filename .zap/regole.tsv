@@ -1,0 +1,86 @@
+# Regole della scansione OWASP ZAP del sito vivo: le legge il job `zap` di .github/workflows/ci.yml.
+# Formato di ZAP (zaproxy.org, pagina "ZAP - Baseline Scan"): id, livello, (nome), motivo facoltativo,
+# separati da UN tab. Livelli: FAIL = il job diventa ROSSO se la regola scatta; WARN = si legge nel
+# log e non ferma niente. Una regola di ZAP che qui non c'e' vale WARN.
+# PERCHE' ESISTE (voce 261 di RIPRENDI_QUI.md, 5/11/2026): senza questo file ZAP tratta tutto come
+# WARN e `-I` rende verdi i WARN, quindi il job non poteva diventare rosso per un buco.
+# CRICCHETTO: FAIL per ogni regola di sicurezza che passava il 2/11/2026 (giro 1349: 0 FAIL, 9 WARN,
+# 62 PASS). WARN, col motivo nel quarto campo, per le 9 che scattavano (guardate una per una il 5/11)
+# e per le regole solo informative o rumorose: un falso allarme e' un difetto (regola ferrea 10).
+# Abbassare un FAIL a WARN vuole un motivo scritto qui e la guardia aggiornata.
+# ATTENZIONE: solo ASCII, e ogni riga che non comincia con # deve avere id, livello e (nome)
+# separati da tab. ZAP divide la riga con split('\t', 2): un campo mancante, o una riga fatta di
+# soli spazi, lo fa uscire con 3 (rosso). Lo controlla test_pipeline_ci.TestLoZapPuoDiventareRossoDavvero.
+# --- FAIL: il job diventa rosso se una di queste scatta
+2	FAIL	(Private IP Disclosure)
+3	FAIL	(Session ID in URL Rewrite)
+10003	FAIL	(Vulnerable JS Library)
+10009	FAIL	(In Page Banner Information Leak)
+10010	FAIL	(Cookie No HttpOnly Flag)
+10011	FAIL	(Cookie Without Secure Flag)
+10019	FAIL	(Content-Type Header Missing)
+10020	FAIL	(Anti-clickjacking Header)
+10021	FAIL	(X-Content-Type-Options Header Missing)
+10023	FAIL	(Information Disclosure - Debug Error Messages)
+10024	FAIL	(Information Disclosure - Sensitive Information in URL)
+10025	FAIL	(Information Disclosure - Sensitive Information in HTTP Referrer Header)
+10028	FAIL	(Off-site Redirect)
+10029	FAIL	(Cookie Poisoning)
+10030	FAIL	(User Controllable Charset)
+10032	FAIL	(Viewstate)
+10033	FAIL	(Directory Browsing)
+10034	FAIL	(Heartbleed OpenSSL Vulnerability (Indicative))
+10035	FAIL	(Strict-Transport-Security Header)
+10036	FAIL	(HTTP Server Response Header)
+10037	FAIL	(Server Leaks Information via X-Powered-By HTTP Response Header Field(s))
+10038	FAIL	(Content Security Policy (CSP) Header Not Set)
+10039	FAIL	(X-Backend-Server Header Information Leak)
+10040	FAIL	(Secure Pages Include Mixed Content)
+10041	FAIL	(HTTP to HTTPS Insecure Transition in Form Post)
+10042	FAIL	(HTTPS to HTTP Insecure Transition in Form Post)
+10043	FAIL	(User Controllable JavaScript Event (XSS))
+10044	FAIL	(Big Redirect Detected (Potential Sensitive Information Leak))
+10052	FAIL	(X-ChromeLogger-Data (XCOLD) Header Information Leak)
+10054	FAIL	(Cookie without SameSite Attribute)
+10056	FAIL	(X-Debug-Token Information Leak)
+10057	FAIL	(Username Hash Found)
+10061	FAIL	(X-AspNet-Version Response Header)
+10062	FAIL	(PII Disclosure)
+10063	FAIL	(Permissions Policy Header Not Set)
+10099	FAIL	(Source Code Disclosure)
+10105	FAIL	(Weak Authentication Method)
+10108	FAIL	(Reverse Tabnabbing)
+10115	FAIL	(Script Served From Malicious Domain (polyfill))
+20020	FAIL	(Server Side Technology Version with Known Vulnerabilities)
+90001	FAIL	(Insecure JSF ViewState)
+90002	FAIL	(Java Serialization Object)
+90003	FAIL	(Sub Resource Integrity Attribute Missing)
+90022	FAIL	(Application Error Disclosure)
+90030	FAIL	(WSDL File Detection)
+90033	FAIL	(Loosely Scoped Cookie)
+110009	FAIL	(Full Path Disclosure)
+# --- WARN: si legge nel log e non ferma; ognuna col suo motivo
+10015	WARN	(Re-examine Cache-control Directives)	pagine pubbliche (/, /affitta/*, robots, sitemap): la cache e' voluta e non ci sono dati personali; guardato il 5/11
+10017	WARN	(Cross-Domain JavaScript Source File Inclusion)	Leaflet da unpkg.com, ammesso dalla CSP e caricato dopo; il rischio vero (manca integrity) lo prende la 90003
+10026	WARN	(HTTP Parameter Override)	rumorosa: scatta su ogni form senza action, che da noi gestisce JavaScript
+10027	WARN	(Information Disclosure - Suspicious Comments)	note di lavoro in italiano nel codice pubblico (DB, query, admin.html): nessun segreto, lette il 5/11
+10031	WARN	(User Controllable HTML Element Attribute (Potential XSS))	falso allarme su ?lang=: la lingua viene da un elenco fisso (fase97 _lang_regione); guardato il 5/11
+10049	WARN	(Storable and Cacheable Content)	pagine pubbliche tenute in cache apposta, nessun dato personale
+10050	WARN	(Retrieved from Cache)	informativa: dice solo che una risposta arriva da una cache
+10055	WARN	(CSP: Wildcard Directive)	img-src https: voluto, le foto degli annunci sono esterne (commento in deploy/nginx.casavip.ssl.conf); da stringere quando saranno su /uploads/
+10094	WARN	(Base64 Disclosure)	il codice pubblico di verifica di Google, una gif dentro la pagina e il video mp4: nessun segreto; guardato il 5/11
+10096	WARN	(Timestamp Disclosure)	rumorosa: scatta su numeri che sembrano date
+10097	WARN	(Hash Disclosure)	rumorosa: scatta anche su impronte esadecimali innocue
+10098	WARN	(Cross-Domain Misconfiguration)	Allow-Origin * voluto (fase83 _cors): senza Allow-Credentials il browser non manda cookie
+10109	WARN	(Modern Web Application)	informativa: dice solo che il sito usa JavaScript
+10110	WARN	(Dangerous JS Functions)	informativa: segnala nomi di funzioni JavaScript, non un buco
+10111	WARN	(Authentication Request Identified)	informativa: riconosce una richiesta di accesso
+10112	WARN	(Session Management Response Identified)	informativa: riconosce una sessione
+10113	WARN	(Verification Request Identified)	informativa: riconosce una richiesta di verifica
+10116	WARN	(ZAP is Out of Date)	riguarda la versione di ZAP, non il sito
+10202	WARN	(Absence of Anti-CSRF Tokens)	rumorosa: le nostre API vogliono JSON e header scritti a mano, non form classici
+50001	WARN	(Script Passive Scan Rules)	contenitore delle regole a script: informativa
+50003	WARN	(Stats Passive Scan Rule)	statistiche: informativa
+90004	WARN	(Cross-Origin-Embedder-Policy Header Missing or Invalid)	rinforzo, non un buco: con require-corp sparirebbero le foto esterne degli annunci
+90005	WARN	(Sec-Fetch-Dest Header is Missing)	riguarda le richieste del ragno di ZAP, non le risposte del sito
+90011	WARN	(Charset Mismatch)	informativa
