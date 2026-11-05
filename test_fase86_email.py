@@ -109,5 +109,22 @@ class TestCorpo(unittest.TestCase):
         self.assertIn("&lt;script&gt;", h)
 
 
+class TestLaMailDelBonificoDiceITempiVeri(unittest.TestCase):
+    """5/11: la mail all'host diceva «in banca di norma 1-3 giorni», ma sul conto host vero
+    Stripe tiene i soldi 7 giorni (delay_days letto il 4/11, minimo chiesto e rifiutato). Ogni
+    lingua deve dire che i soldi sono GIA' sul conto Stripe e che la banca arriva dopo, senza
+    promettere i giorni lavorativi di una banca."""
+
+    def test_ogni_lingua_nomina_stripe_e_non_promette_1_3_giorni(self):
+        from fase86_email import _TR
+        tempi = _TR["p_tempi"]
+        self.assertEqual(sorted(tempi), sorted(_TR["p_ogg"]))
+        for lingua, testo in tempi.items():
+            self.assertIn("Stripe", testo, lingua)
+            self.assertIn("7", testo, lingua)
+            for falso in ("1-3", "1 à 3", "1〜3", "1-3 "):
+                self.assertNotIn(falso, testo, lingua)
+
+
 if __name__ == "__main__":
     unittest.main()

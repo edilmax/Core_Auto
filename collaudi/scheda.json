@@ -168,11 +168,11 @@
  "224ae0884a0b": {
   "blocco": 1,
   "comando": "python collaudi/esame_orologi.py --scrivi",
-  "commit": "8a681f0",
+  "commit": "3cca45d",
   "condizione": "hold, payout e penale scadono davvero in un giro contro Stripe di PROVA con l'orologio NOSTRO spostato, e i tre esiti si rileggono da Stripe (rimborso dell'hold, bonifico all'host, penale addebitata)",
   "denominatore": 25,
   "esito": false,
-  "impronta": "882626cffaab",
+  "impronta": "e647fd05e87d",
   "impronte_moduli": {
    "fase101_stripe_connect": "681971dd9a91",
    "fase102_motore_autonomo": "5f821fcc906f",
@@ -199,10 +199,10 @@
    "fase65_split_payment": "2f6d24e7b1fe",
    "fase85_pagamenti_stripe": "033efbd8fcae",
    "fase87_stripe_webhook": "c77544db5a33",
-   "fase99_multicurrency": "61a3b5a0c820"
+   "fase99_multicurrency": "f8008d8445ac"
   },
   "motivo": "[payout] il conto Connect di prova dell'host (come quelli veri) riceve bonifici ( il conto acct_1URZZzJ1I non riceve bonifici (transfers=inactive): la registrazione sulle pagine di Stripe non e' finita; un link nuovo lo da' `--prepara-conto`)",
-  "quando": "2026-11-01T16:10:03"
+  "quando": "2026-11-05T01:02:30"
  },
  "227c35ec4353": {
   "blocco": 1,
@@ -439,15 +439,15 @@
  "555972b586e3": {
   "blocco": 2,
   "comando": "python collaudi/esame_feed_due_versi.py --scrivi",
-  "commit": "4a62245",
+  "commit": "3cca45d",
   "condizione": "il feed esterno vale nei due versi: una notte chiusa da un feed si riapre quando sparisce da QUEL feed (e da nessun altro), con lo stato di prima, e solo se l'host non l'ha toccata nel frattempo; i blocchi esterni sono oggetti con origine, non sovrascritture dell'inventario; l'eco del nostro calendario riesportato dall'OTA non chiude le nostre notti; un feed che passa da N eventi a zero non riapre niente e diventa un'anomalia",
   "denominatore": 14,
   "esito": true,
-  "impronta": "c6dc6f31395c",
+  "impronta": "6739196f9c4a",
   "impronte_moduli": {
    "fase111_cancellazione": "cdaa0ff5cea8",
    "fase135_ical_bidirezionale": "7400c7b99498",
-   "fase152_notifiche_prenotazione": "d43723ad39d6",
+   "fase152_notifiche_prenotazione": "bf8d76d09dc8",
    "fase187_fuso_orario": "831d20429805",
    "fase203_ical_orologio": "ea15acf5d4f9",
    "fase34_prenotazioni": "87f010d9f3cd",
@@ -460,7 +460,7 @@
    "fase82_ical_sync": "1402326ece2b"
   },
   "motivo": "",
-  "quando": "2026-11-04T21:22:24"
+  "quando": "2026-11-05T01:02:49"
  },
  "5c447a0ee514": {
   "blocco": 5,
@@ -736,11 +736,11 @@
  "a36e3373da1d": {
   "blocco": 8,
   "comando": "python collaudi/esame_sentinella.py --scrivi",
-  "commit": "4a62245",
+  "commit": "3cca45d",
   "condizione": "una sentinella ESTERNA (non nostra) si accorge se il sito muore",
   "denominatore": 10,
   "esito": false,
-  "impronta": "c84ef33b5578",
+  "impronta": "15380c2acada",
   "impronte_moduli": {
    "fase13_protocollo_finale": "2dce22f058cc",
    "fase16_outbox": "a47de5874653",
@@ -753,12 +753,12 @@
    "fase39_whatsapp": "e5c341ed59c6",
    "fase42_observability": "a557645447a7",
    "fase60_mcp_server": "56ffc4364819",
-   "fase81_bootstrap_casavip": "2817a7a7da80",
-   "fase83_server": "018728676e60",
-   "fase86_email": "12848db384ba"
+   "fase81_bootstrap_casavip": "91c5a6380318",
+   "fase83_server": "9f5e7db9cb83",
+   "fase86_email": "28a0d03df98f"
   },
-  "motivo": "[sveglia] nelle ultime 24 ore i controlli del monitor non hanno buchi > 15 minuti e l'ultimo ha meno di 15 minuti (controlli nelle 24 ore: 281, buco massimo 19 min, ultimo 4 min fa); [sveglia] GitHub (seconda linea): ultimo giro entro 60 minuti e buco massimo nelle 24 ore sotto i 60 minuti — DECIDE, perche' il monitor esterno manca o non e' sveglio (ultimo giro 2026-11-04 09:58 UTC (405 minuti fa), giri nelle 24 ore: 4, buco massimo 437 minuti)",
-  "quando": "2026-11-04T17:43:30"
+  "motivo": "[sveglia] nelle ultime 24 ore i controlli del monitor non hanno buchi > 15 minuti e l'ultimo ha meno di 15 minuti (controlli nelle 24 ore: 276, buco massimo 41 min, ultimo 1 min fa); [sveglia] GitHub (seconda linea): ultimo giro entro 60 minuti e buco massimo nelle 24 ore sotto i 60 minuti — DECIDE, perche' il monitor esterno manca o non e' sveglio (ultimo giro 2026-11-04 23:35 UTC (27 minuti fa), giri nelle 24 ore: 4, buco massimo 479 minuti)",
+  "quando": "2026-11-05T01:02:54"
  },
  "a5c77ac6c76a": {
   "blocco": 5,
@@ -1119,15 +1119,15 @@
  "ec84faaea398": {
   "blocco": 2,
   "comando": "python collaudi/esame_prenotazioni.py --scrivi",
-  "commit": "4a62245",
+  "commit": "3cca45d",
   "condizione": "la macchina a stati copre cancellazioni, modifiche, no-show e sovra-affitto",
   "denominatore": 34,
   "esito": true,
-  "impronta": "c6dc6f31395c",
+  "impronta": "6739196f9c4a",
   "impronte_moduli": {
    "fase111_cancellazione": "cdaa0ff5cea8",
    "fase135_ical_bidirezionale": "7400c7b99498",
-   "fase152_notifiche_prenotazione": "d43723ad39d6",
+   "fase152_notifiche_prenotazione": "bf8d76d09dc8",
    "fase187_fuso_orario": "831d20429805",
    "fase203_ical_orologio": "ea15acf5d4f9",
    "fase34_prenotazioni": "87f010d9f3cd",
@@ -1140,7 +1140,7 @@
    "fase82_ical_sync": "1402326ece2b"
   },
   "motivo": "",
-  "quando": "2026-11-04T21:23:14"
+  "quando": "2026-11-05T01:02:36"
  },
  "eec63adbaf5b": {
   "blocco": 3,
@@ -1167,15 +1167,15 @@
  "f10f35b6a7b3": {
   "blocco": 2,
   "comando": "python collaudi/esame_ical.py --scrivi",
-  "commit": "4a62245",
+  "commit": "3cca45d",
   "condizione": "iCal ha una difesa dal RITARDO 15 min-2 ore (oggi: zero, e' la finestra delle prenotazioni fantasma)",
   "denominatore": 24,
   "esito": true,
-  "impronta": "c6dc6f31395c",
+  "impronta": "6739196f9c4a",
   "impronte_moduli": {
    "fase111_cancellazione": "cdaa0ff5cea8",
    "fase135_ical_bidirezionale": "7400c7b99498",
-   "fase152_notifiche_prenotazione": "d43723ad39d6",
+   "fase152_notifiche_prenotazione": "bf8d76d09dc8",
    "fase187_fuso_orario": "831d20429805",
    "fase203_ical_orologio": "ea15acf5d4f9",
    "fase34_prenotazioni": "87f010d9f3cd",
@@ -1188,7 +1188,7 @@
    "fase82_ical_sync": "1402326ece2b"
   },
   "motivo": "",
-  "quando": "2026-11-04T21:22:39"
+  "quando": "2026-11-05T01:02:49"
  },
  "f132bc4f619c": {
   "blocco": 10,
@@ -1204,15 +1204,15 @@
  "f5d22a937896": {
   "blocco": 2,
   "comando": "python collaudi/esame_gare.py --scrivi",
-  "commit": "4a62245",
+  "commit": "3cca45d",
   "condizione": "il blocco atomico regge sotto gara (misurato: 10 giri x 24 agenti, 1 conferma)",
   "denominatore": 51,
   "esito": true,
-  "impronta": "c6dc6f31395c",
+  "impronta": "6739196f9c4a",
   "impronte_moduli": {
    "fase111_cancellazione": "cdaa0ff5cea8",
    "fase135_ical_bidirezionale": "7400c7b99498",
-   "fase152_notifiche_prenotazione": "d43723ad39d6",
+   "fase152_notifiche_prenotazione": "bf8d76d09dc8",
    "fase187_fuso_orario": "831d20429805",
    "fase203_ical_orologio": "ea15acf5d4f9",
    "fase34_prenotazioni": "87f010d9f3cd",
@@ -1225,7 +1225,7 @@
    "fase82_ical_sync": "1402326ece2b"
   },
   "motivo": "",
-  "quando": "2026-11-04T21:22:35"
+  "quando": "2026-11-05T01:02:47"
  },
  "fb42414c3b6b": {
   "blocco": 3,
