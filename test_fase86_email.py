@@ -126,5 +126,28 @@ class TestLaMailDelBonificoDiceITempiVeri(unittest.TestCase):
                 self.assertNotIn(falso, testo, lingua)
 
 
+class TestIlPannelloHostDiceGliStessiTempiDellaMail(unittest.TestCase):
+    """5/11: il riquadro «Collega il tuo conto Stripe» del pannello host diceva che dopo il
+    check-in «i tuoi soldi partono da soli verso il tuo conto», e l'host capiva «in banca il
+    giorno dopo». Ora dice che partono verso il conto STRIPE e ripete, parola per parola, la
+    frase dei tempi della banca della mail del bonifico (`p_tempi`): se una delle due cambia da
+    sola, questa prova diventa rossa. Il testo di riserva del paragrafo (quello che si legge
+    prima che giri lo script) e' la versione italiana."""
+
+    def test_it_ed_en_dicono_conto_stripe_e_la_stessa_frase_della_mail(self):
+        import re
+        from pathlib import Path
+        from fase86_email import _TR
+        pagina = (Path(__file__).resolve().parent / "deploy" / "host.html").read_text("utf-8")
+        pannello = dict(re.findall(r'\b([a-z]{2}):\{[^\n]*?\bsc_p:"([^"]*)"', pagina))
+        riserva = re.findall(r'data-i18n="sc_p">([^<]*)<', pagina)
+        self.assertEqual(riserva, [pannello.get("it")])
+        verso = {"it": "verso il tuo conto Stripe.", "en": "to your Stripe account"}
+        for lingua, destinazione in verso.items():
+            frase_mail = _TR["p_tempi"][lingua].split(". ")[1] + "."
+            self.assertIn(destinazione, pannello.get(lingua, ""), lingua)
+            self.assertIn(frase_mail, pannello[lingua], lingua)
+
+
 if __name__ == "__main__":
     unittest.main()

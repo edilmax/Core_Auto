@@ -129,11 +129,11 @@
  "16d2c823889f": {
   "blocco": 1,
   "comando": "python collaudi/mutazione_prodotto.py --modulo fase65_split_payment.py fase85_pagamenti_stripe.py fase87_stripe_webhook.py fase101_stripe_connect.py fase131_payout_dashboard.py --tetto 200 --minuti 90 --killer test_fase65_split_payment test_fase85_pagamenti_stripe test_fase87_stripe_webhook test_fase101_stripe_connect test_fase131_payout_dashboard",
-  "commit": "8a681f0",
+  "commit": "9bf1bd2",
   "condizione": "zero punti di mutazione scoperti sul PERCORSO DEL DENARO -- i cinque moduli che un euro attraversa davvero: entra, viene confermato, va sul conto dell'host, si divide fra ospiti, esce col bonifico -- sul codice che la produzione ESEGUE",
   "denominatore": 366,
   "esito": true,
-  "impronta": "882626cffaab",
+  "impronta": "e647fd05e87d",
   "impronte_moduli": {
    "fase101_stripe_connect": "681971dd9a91",
    "fase102_motore_autonomo": "5f821fcc906f",
@@ -160,10 +160,10 @@
    "fase65_split_payment": "2f6d24e7b1fe",
    "fase85_pagamenti_stripe": "033efbd8fcae",
    "fase87_stripe_webhook": "c77544db5a33",
-   "fase99_multicurrency": "61a3b5a0c820"
+   "fase99_multicurrency": "f8008d8445ac"
   },
   "motivo": "",
-  "quando": "2026-11-01T17:13:04"
+  "quando": "2026-11-05T10:57:07"
  },
  "224ae0884a0b": {
   "blocco": 1,
