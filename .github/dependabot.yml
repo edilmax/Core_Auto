@@ -1,8 +1,11 @@
-# Dependabot: l'unica dipendenza esterna della produzione e' l'immagine base dei Dockerfile (la
-# produzione gira su pura libreria standard: misurato il 2026-09-15, zero pacchetti Python nel
-# contenitore oltre a pip, setuptools e wheel). Con la riga FROM bloccata a un'impronta (digest),
-# e' Dependabot a proporre l'impronta nuova quando esce un'immagine nuova, con una PR che passa
-# dalla CI come tutte le altre. Le Actions dei workflow sono la seconda dipendenza esterna.
+# Dependabot: le dipendenze esterne della produzione sono DUE immagini (5/11/2026, voce 263 di
+# RIPRENDI): la base dei Dockerfile (python) e nginx nel compose di produzione. Fino al 5/11 qui si
+# leggeva «l'unica e' l'immagine base dei Dockerfile», e nginx era `nginx:alpine` senza impronta:
+# il server e' rimasto su nginx 1.31.2 per quattro mesi. La produzione gira su pura libreria
+# standard: nel contenitore ci sono solo i pacchetti dell'immagine base (misurato il 2026-11-05 con
+# `pip list` nel contenitore vivo: packaging, pip, setuptools, wheel; il 2026-09-15 erano gli
+# ultimi tre). Con versione e impronta fissate e' Dependabot a proporre quella nuova, con una PR che
+# passa dalla CI come tutte le altre. Le Actions dei workflow sono la terza dipendenza esterna.
 # Le librerie Python della CI (requirements.txt) restano a pip-audit, nel cricchetto statico:
 # non entrano nell'immagine di produzione. Ricerca R3 in REGISTRO_INGEGNERIA.md.
 version: 2
@@ -12,6 +15,26 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 1
+    # La produzione resta su Python 3.11 finche' il salto non si decide apposta: la PR #191 (15/9)
+    # proponeva la 3.14 e, col limite a 1, ha tenuto ferme per sette settimane anche le impronte
+    # nuove della 3.11 (in produzione 3.11.16 mentre usciva la 3.11.18).
+    ignore:
+      - dependency-name: "python"
+        versions: [">=3.12"]
+  - package-ecosystem: "docker-compose"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # Il codice di Dependabot legge ogni file della cartella che combacia con
+    # /(docker-)?compose(-[\w]+)?(?>\.[\w-]+)?\.ya?ml/i (file_fetcher.rb, letto il 5/11): qui sono
+    # quattro. Conta solo quello che usa il server; i tre di TavolaVIP e Postgres si escludono
+    # (`exclude-paths`, changelog GitHub del 26/8/2025), e il limite a 3 lascia passare nginx
+    # anche se l'esclusione di un file singolo non bastasse.
+    exclude-paths:
+      - "docker-compose.yml"
+      - "docker-compose.tavolavip.yml"
+      - "docker-compose.postgres.yml"
+    open-pull-requests-limit: 3
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

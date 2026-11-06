@@ -6944,13 +6944,45 @@ class TestIlPreVoloVedeIProblemiPRIMA(_GuardieSugliAttrezziDelLavoro):
         riga = pv._RIGA_AMBIENTE.search(sana)
         atteso = re.search(r"Python (\d+\.\d+\.\d+)", riga.group(1)) if riga else None
         self.assertIsNotNone(atteso, "la riga AMBIENTE non dichiara piu' un Python")
+        # openssl come lo DICHIARA la riga AMBIENTE, letta con lo stesso aiutante del pre-volo:
+        # fino al 5/11 qui si cercava la frase in TUTTA la pagina, citazioni comprese (voce 264).
         stato, dettaglio = pv.controllo_4_ambiente(
             pagina=sana, radice=self.RADICE, quale_python=atteso.group(1),
-            quale_openssl=not re.search(r"openssl\s+NON\s+nel\s+PATH", sana, re.I),
+            quale_openssl=not pv.dichiara_openssl_assente(riga.group(1)),
             moduli_presenti={"hypothesis", "yaml", "coverage"})
         self.assertEqual(pv.OK, stato,
                          "sulla macchina esattamente DICHIARATA il controllo grida lo "
                          "stesso: %s" % dettaglio[:400])
+
+    def test_UNA_CITAZIONE_NON_E_UNA_DICHIARAZIONE_DI_OPENSSL(self):
+        """5/11/2026 (voce 264 di RIPRENDI). La riga AMBIENTE dichiara «openssl PRESENTE nel
+        PATH di PowerShell» e, per raccontare la storia, CITA la frase vecchia («dal 2026-09-03
+        la riga diceva ...»). Il controllo cercava quella frase in tutta la riga, trovava la
+        citazione e la prendeva per la dichiarazione: su un PC dove openssl non era piu' nel
+        PATH rispondeva «coincide con la riga AMBIENTE (openssl assente)» mentre la riga dice
+        presente, e le cinque guardie sul ripristino dei backup non giravano. Verde finto.
+        Una frase fra « » e' RIPORTATA, non dichiarata. Le due direzioni (D18 condizione 2)."""
+        pv = self.pv()
+        con_citazione = ("AMBIENTE: Windows · Python 3.9.10\n"
+                         "          · openssl PRESENTE nel PATH di PowerShell; prima la riga\n"
+                         "            diceva «openssl NON nel PATH»\n")
+        senza_citazione = "AMBIENTE: Windows · Python 3.9.10 · openssl NON nel PATH\n"
+        comuni = dict(radice=self.RADICE, quale_python="3.9.10", moduli_presenti=set())
+        stato, dettaglio = pv.controllo_4_ambiente(pagina=con_citazione, quale_openssl=False,
+                                                   **comuni)
+        self.assertEqual(pv.ROSSO, stato,
+                         "la CITAZIONE «openssl NON nel PATH» e' stata presa per la "
+                         "dichiarazione: %s" % dettaglio[:300])
+        self.assertIn("NON e' nel PATH di questa shell", dettaglio,
+                      "e' rosso, ma non perche' manca openssl: %s" % dettaglio[:300])
+        stato, dettaglio = pv.controllo_4_ambiente(pagina=con_citazione, quale_openssl=True,
+                                                   **comuni)
+        self.assertEqual(pv.OK, stato, "dichiarato presente e presente: deve tacere: %s"
+                         % dettaglio[:300])
+        stato, dettaglio = pv.controllo_4_ambiente(pagina=senza_citazione,
+                                                   quale_openssl=False, **comuni)
+        self.assertEqual(pv.OK, stato, "la dichiarazione VERA di assenza deve valere ancora: %s"
+                         % dettaglio[:300])
 
     def test_IL_METRO_SI_ACCORGE_DA_SE_DI_ESSERE_NELLA_SHELL_SBAGLIATA(self):
         """⛔ D18 CONDIZIONE 1: «misura prima se stesso. Un metro storto va scoperto dal

@@ -68,7 +68,9 @@ services:
       start_period: 10s
 
   nginx:
-    image: nginx:alpine
+    # Versione E impronta (voce 263 di RIPRENDI): con `nginx:alpine` il server e' rimasto su 1.31.2
+    # dal 22/6 al 5/11/2026, dentro nove falle riparate. La versione nuova la propone Dependabot.
+    image: nginx:1.31.8-alpine@sha256:a46f57e097e8effc26192437d2e715adf74bcbea836117651ee436c27983fa41
     container_name: casavip_nginx
     restart: unless-stopped
     depends_on:

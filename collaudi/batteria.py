@@ -155,8 +155,13 @@ def main():
 
     # 1-7: fasi pure-Python (nessun server)
     fasi = [
+        # ⛔ 2400 -> 3600 il 2026-11-06, MISURATO e non scelto (ferrea 10: un tetto sotto il
+        # tempo vero e' un falso rosso che aspetta). La suite intera su questo PC, col comando
+        # della CI, il 5/11: 2460 s («Ran 7691 tests in 2458.291s»), cioe' 60 s SOPRA il tetto.
+        # 3600 sta il 46% sopra la misura. Il prezzo: un giro che si impianta si vede 20 minuti
+        # piu' tardi.
         ("1. Suite completa (unittest)", [PY, "-m", "unittest", "discover", "-s", ".",
-                                          "-p", "test_*.py"], 2400, None),
+                                          "-p", "test_*.py"], 3600, None),
         ("2. Master E2E totale", [PY, "collaudi/collaudo_finale_totale.py"], 600, None),
         ("2b. Cammino E2E preciso", [PY, "collaudi/percorso_e2e.py"], 300, None),
         ("3. Mutazione", [PY, "collaudi/mutazione_prodotto.py"], 900, None),

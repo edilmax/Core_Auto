@@ -20,6 +20,28 @@ QUI = os.path.dirname(os.path.abspath(__file__))
 DEPLOY = os.path.join(QUI, "deploy")
 
 
+def _bash_che_capisce_i_percorsi_di_windows(trovato):
+    """Su Windows il `bash` del PATH puo' essere il lanciatore di WSL
+    (`C:\\Windows\\System32\\bash.exe`, su questo PC dal 9/9/2026): apre Ubuntu, dove i percorsi
+    `C:/...` che questa guardia passa allo script non esistono. Il 5/11/2026 (voce 264 di
+    RIPRENDI), con openssl rimesso nel PATH, le cinque guardie qui sotto sono uscite ROSSE per
+    questo, «/bin/bash: C:/Users/.../restore_offsite.sh: No such file or directory», cioe' per
+    la macchina e non per lo script. Serve il bash di Git per Windows, quello che porta con se'
+    `/mingw64/bin/openssl`. Fuori da Windows non cambia niente."""
+    import shutil as _sh
+    sistema = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32").lower()
+    if trovato and not os.path.dirname(os.path.abspath(trovato)).lower().startswith(sistema):
+        return trovato
+    git = _sh.which("git")
+    if git:
+        radice = os.path.dirname(os.path.dirname(os.path.abspath(git)))   # ...\Git\cmd -> ...\Git
+        for candidato in (os.path.join(radice, "bin", "bash.exe"),
+                          os.path.join(radice, "usr", "bin", "bash.exe")):
+            if os.path.isfile(candidato):
+                return candidato
+    return None
+
+
 class TestBackupCompleto(unittest.TestCase):
     def _leggi(self, nome):
         with open(os.path.join(DEPLOY, nome), encoding="utf-8") as f:
@@ -106,6 +128,8 @@ class TestRipristinoAPezziNonPassa(unittest.TestCase):
     def setUpClass(cls):
         import shutil as _sh
         cls.bash = _sh.which("bash")
+        if sys.platform == "win32":
+            cls.bash = _bash_che_capisce_i_percorsi_di_windows(cls.bash)
         cls.openssl = _sh.which("openssl")
         mancanti = [n for n, v in (("bash", cls.bash), ("openssl", cls.openssl)) if not v]
         if mancanti:
