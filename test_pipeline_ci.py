@@ -13750,7 +13750,7 @@ class TestLEsameDelleCateneAdminNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
         self.assertTrue(sano["censimento"], sano["motivi_censimento"])
         #  ⛔ PER NOME, non per posizione: dal 4/11 le catene sono due, e una lista [[]] avrebbe
         #     smesso di guardare la seconda senza dirlo.
-        attese = {esame.CATENA_1.voce, esame.CATENA_2.voce, esame.CATENA_3.voce}
+        attese = {esame.CATENA_1.voce, esame.CATENA_2.voce, esame.CATENA_3.voce, esame.CATENA_4.voce}
         rossi_sano = {c["voce"]: c["rossi"] for c in sano["catene"]}
         self.assertEqual(set(rossi_sano), attese, "l'esame non ha percorso tutte le catene dichiarate")
         self.assertEqual({v: r for v, r in rossi_sano.items() if r}, {},
@@ -13770,6 +13770,9 @@ class TestLEsameDelleCateneAdminNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
         self.assertIn("soldi", rossi_guasto.get(esame.CATENA_3.voce, []),
                       "con la riga dell'host che non scende alla sua quota l'anello che vale i soldi "
                       "della controversia e' rimasto verde: %s" % [c["motivi"] for c in guasto["catene"]])
+        self.assertIn("cifra", rossi_guasto.get(esame.CATENA_4.voce, []),
+                      "con la scheda del rimborso dovuto che restituisce piu' del pagato l'anello che vale "
+                      "i soldi e' rimasto verde: %s" % [c["motivi"] for c in guasto["catene"]])
 
     def test_COL_GUASTO_DENTRO_NON_SCRIVE_MAI(self):
         esame = self._esame()
