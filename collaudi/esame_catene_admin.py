@@ -876,8 +876,262 @@ CATENA_3 = Catena(
     percorre=percorre_catena_3,
 )
 
+
+ANELLI_CATENA_4 = ("porta", "vede", "cieco", "cifra", "rimborsa", "doppio", "divergenza", "traccia")
+
+
+def percorre_catena_4(b, BH, con_guasto=False):
+    """Le voci «Rimborsi dovuti» e «Rimborsa»: l'ospite ha cancellato, la lista dice a chi vanno
+    restituiti i soldi e quanti, e il pulsante li restituisce UNA volta, nella cifra del giornale.
+
+    ⛔ IL GATEWAY E' QUELLO DEL BANCO (`ruoli.GatewayDiProva`, su `b.sis.stripe`): TIENE CONTO di
+       cosa ha restituito, e `muto` vuol dire «NON LO SO». Un finto che annuisse sempre farebbe
+       uscire la riga dalla lista prima del pulsante, e [rimborsa] sarebbe verde senza un centesimo
+       uscito (S7). Le prenotazioni di questa catena sono SUE: ogni lettura si filtra per riferimento,
+       perche' le catene prima di lei lasciano righe loro sullo stesso banco."""
+    from fase83_server import _rif_per_registro
+    print("\n--- CATENA 4, «Rimborsi dovuti» e «Rimborsa»: cancella -> lista -> pulsante -> nessun doppio ---")
+    lista_rotta, rotta = "/api/admin/rimborsi_dovuti", "/api/admin/rimborsa_dovuto"
+    gw = b.gateway
+    pi_viva, viva_prima = "", None
+    try:
+        slug = b.alloggio("casa-catena-quattro", 3, "2027-09-01", "2027-09-30")
+        rif, vt = b.pagata(slug, "2027-09-05", "2027-09-07")
+        rif_viva, _vt2 = b.pagata(slug, "2027-09-12", "2027-09-14")
+        if not (rif and rif_viva):
+            raise RuntimeError("il banco non ha prodotto le due prenotazioni pagate")
+
+        def pi_di(r):
+            #  il pagamento da restituire si legge dove lo legge il prodotto (i pagati recenti), non
+            #  dalla ricetta del banco: se un giorno cambiassero, l'esame lo direbbe
+            for rec in b.sis.pagamenti_pendenti.pagati_recenti(limit=500):
+                if rec.get("riferimento") == r:
+                    try:
+                        return str(json.loads(rec.get("corpo_json") or "{}").get("stripe_pi") or "")
+                    except ValueError:
+                        return ""
+            return ""
+
+        def lista(h=None):
+            s, c = _chiedi(b, "GET", lista_rotta, None, ADMIN if h is None else h)
+            return s, (c or {})
+
+        def mia(c, r):
+            return [x for x in (c.get("rimborsi") or []) if x.get("riferimento") == r]
+
+        def giornale(r, tipo):
+            return [int(m.get("importo_cents") or 0) for m in b.sis.finanza.movimenti(r)
+                    if m.get("tipo") == tipo]
+
+        def richieste(p):
+            return [c for c in gw.chiamate if c[0] == "rimborsa" and c[1] == p]
+
+        def registro_di(fare):
+            righe = []
+
+            class _Presa(logging.Handler):
+                def emit(self, record):
+                    try:
+                        righe.append(record.getMessage())
+                    except Exception:
+                        righe.append(str(record.msg))
+            presa = _Presa()
+            log_server = logging.getLogger("core_auto.server")
+            livello_prima = log_server.level
+            log_server.addHandler(presa)
+            log_server.setLevel(logging.DEBUG)
+            try:
+                esito = fare()
+            finally:
+                log_server.removeHandler(presa)
+                log_server.setLevel(livello_prima)
+            return esito, righe
+
+        #  ⛔ Il pagamento si legge PRIMA della cancellazione: dopo, la prenotazione non e' piu' fra i
+        #     pagati recenti (al primo giro la premessa si e' fermata proprio qui, pi=False).
+        pi, pi_viva = pi_di(rif), pi_di(rif_viva)
+        viva_prima = gw.rimborsati.get(pi_viva)
+        s_prima, c_prima = lista()
+        s_canc, _c_canc = b.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
+        pagato_g, dovuto_g = sum(giornale(rif, "incasso")), sum(giornale(rif, "rimborso"))
+
+        #  LA PREMESSA, che NON e' un anello: se manca l'esame non e' verde, e' FERMO (S7).
+        if not (s_prima == 200 and not mia(c_prima, rif) and s_canc == 200 and pagato_g > 0
+                and 0 < dovuto_g <= pagato_g and pi and pi_viva and not richieste(pi)
+                and not gw.rimborsati.get(pi_viva)):
+            raise RuntimeError("premessa mancata: lista=%s cancella=%s pagato=%s dovuto=%s pi=%s/%s "
+                               "richieste=%d" % (s_prima, s_canc, pagato_g, dovuto_g, bool(pi),
+                                                 bool(pi_viva), len(richieste(pi))))
+
+        # -- la porta: senza chiave, senza secondo fattore, col ruolo 'supporto' ---------------
+        corpo = {"riferimento": rif}
+        s_l_senza, _ = _chiedi(b, "GET", lista_rotta, None, {})
+        s_senza, _ = b.g("POST", rotta, corpo, {})
+        s_solo, c_solo = b.g("POST", rotta, corpo, ADMIN)
+        b.g("POST", "/api/bunker/admin_accounts",
+            {"azione": "crea", "email": "supporto4@esame.it", "password": "password123",
+             "ruolo": "supporto"}, BH)
+        s_op, c_op = b.g("POST", "/api/admin/login", {"email": "supporto4@esame.it", "password": "password123"})
+        op = ({"X-Admin-Op": (c_op or {}).get("op_token", ""),
+               "X-Bunker-Session": BH.get("X-Bunker-Session", ""),
+               "X-Forwarded-For": IP["X-Forwarded-For"]} if s_op == 200 else None)
+        s_supp, c_supp = b.g("POST", rotta, corpo, op) if op else (None, {})
+        passo("porta", "senza chiave la lista e il pulsante rispondono 401 · il pulsante con la sola chiave "
+                       "403 'bunker_richiesto' · col ruolo 'supporto' 403 'permesso_negato_ruolo' -- e a "
+                       "Stripe non e' arrivata nessuna richiesta di rimborso",
+              s_l_senza == 401 and s_senza == 401 and s_solo == 403
+              and (c_solo or {}).get("errore") == "bunker_richiesto"
+              and s_supp == 403 and (c_supp or {}).get("errore") == "permesso_negato_ruolo"
+              and not richieste(pi),
+              "lista_senza=%s senza=%s solo_admin=%s/%s supporto=%s/%s richieste=%d"
+              % (s_l_senza, s_senza, s_solo, (c_solo or {}).get("errore"), s_supp,
+                 (c_supp or {}).get("errore"), len(richieste(pi))))
+
+        # -- vede: UNA riga, con le cifre del giornale e il pulsante pronto ---------------------
+        s_v, c_v = lista()
+        righe = mia(c_v, rif)
+        r0 = righe[0] if len(righe) == 1 else {}
+        passo("vede", "dopo la cancellazione dell'ospite la lista ha UNA riga per quella prenotazione, col "
+                      "dovuto e il pagato del GIORNALE, il pagamento da restituire e il pulsante pronto",
+              s_v == 200 and c_v.get("controllabile") is True and len(righe) == 1
+              and int(r0.get("dovuto_cents") or -1) == dovuto_g
+              and int(r0.get("pagato_cents") or -1) == pagato_g
+              and r0.get("payment_intent") == pi and r0.get("bottone") is True
+              and r0.get("gia_rimborsato") is False,
+              "http=%s controllabile=%s righe=%d dovuto=%s/%s pagato=%s/%s pagamento_giusto=%s bottone=%s"
+              % (s_v, c_v.get("controllabile"), len(righe), r0.get("dovuto_cents"), dovuto_g,
+                 r0.get("pagato_cents"), pagato_g, r0.get("payment_intent") == pi, r0.get("bottone")))
+
+        # -- cieco: Stripe che non sa rispondere vuol dire «non lo so», mai «niente da fare» -----
+        gw.muto = True
+        try:
+            s_c, c_c = lista()
+            s_cp, c_cp = b.g("POST", rotta, corpo, BH)
+        finally:
+            gw.muto = False
+        sua_c = mia(c_c, rif)
+        passo("cieco", "con Stripe che non sa rispondere la lista dice 'non controllabile' col motivo (non "
+                       "«zero»), la riga c'e' ma SENZA pulsante, e il pulsante premuto lo stesso risponde 409 "
+                       "'rifiutato' senza mandare niente a Stripe",
+              s_c == 200 and c_c.get("controllabile") is False and bool(c_c.get("motivo_non_controllabile"))
+              and len(sua_c) == 1 and sua_c[0].get("bottone") is False
+              and all(x.get("bottone") is False for x in (c_c.get("rimborsi") or []))
+              and s_cp == 409 and (c_cp or {}).get("stato") == "rifiutato" and not richieste(pi),
+              "http=%s controllabile=%s motivo=%s sua_riga=%s pulsante=%s/%s richieste=%d"
+              % (s_c, c_c.get("controllabile"), bool(c_c.get("motivo_non_controllabile")),
+                 [x.get("bottone") for x in sua_c], s_cp, (c_cp or {}).get("stato"), len(richieste(pi))))
+
+        # -- cifra e rimborsa: il pulsante, con cifre messe apposta nella richiesta ---------------
+        if con_guasto:
+            # IL GUASTO, sull'ISTANZA del router e mai sul codice: la scheda della riga smette di
+            # tenere il dovuto entro il pagato e restituisce il doppio di quanto dice il giornale. E'
+            # l'anello che vale i soldi: restituire all'ospite piu' di quanto ha pagato.
+            _vera = b.router._rimborso_dovuto_scheda
+
+            def _scheda_storta(r):
+                riga, ok = _vera(r)
+                if isinstance(riga, dict) and riga.get("dovuto_cents"):
+                    riga = dict(riga, dovuto_cents=int(riga["dovuto_cents"]) * 2)
+                return riga, ok
+            b.router._rimborso_dovuto_scheda = _scheda_storta
+        (s_r, c_r), registro = registro_di(lambda: b.g(
+            "POST", rotta, {"riferimento": rif, "importo_cents": pagato_g * 50,
+                            "dovuto_cents": pagato_g * 50}, BH))
+        c_r = c_r or {}
+        req = richieste(pi)
+        passo("cifra", "il pulsante manda a Stripe ESATTAMENTE il dovuto del giornale, mai piu' del pagato, "
+                       "con la chiave stabile 'rimborso:<riferimento>' -- e le cifre messe nella richiesta dal "
+                       "browser non contano",
+              len(req) == 1 and req[0][2] == dovuto_g and req[0][2] <= pagato_g
+              and req[0][3] == "rimborso:" + rif,
+              "richieste=%s dovuto=%s pagato=%s"
+              % ([(x[2], x[3] == "rimborso:" + rif) for x in req], dovuto_g, pagato_g))
+        s_d, c_d = lista()
+        passo("rimborsa", "risponde 200 'rimborsato' con l'importo del giornale, Stripe ha restituito quella "
+                          "cifra, e la riga ESCE dalla lista perche' Stripe lo conferma (non perche' l'abbiamo "
+                          "tolta noi)",
+              s_r == 200 and c_r.get("stato") == "rimborsato"
+              and int(c_r.get("importo_cents") or -1) == dovuto_g
+              and int(gw.rimborsati.get(pi, 0)) == dovuto_g and s_d == 200 and not mia(c_d, rif),
+              "http=%s stato=%s importo=%s dovuto=%s restituito_su_stripe=%s ancora_in_lista=%s"
+              % (s_r, c_r.get("stato"), c_r.get("importo_cents"), dovuto_g, gw.rimborsati.get(pi, 0),
+                 bool(mia(c_d, rif))))
+
+        # -- doppio: un secondo clic non fa uscire niente -----------------------------------------
+        n_giornale = len(giornale(rif, "rimborso"))
+        s_2, c_2 = b.g("POST", rotta, corpo, BH)
+        passo("doppio", "un secondo clic risponde 200 'gia_rimborsato' e NON manda una seconda richiesta a "
+                        "Stripe; il giornale ha ancora UNA riga 'rimborso'",
+              s_2 == 200 and (c_2 or {}).get("stato") == "gia_rimborsato" and len(richieste(pi)) == 1
+              and n_giornale == 1 and len(giornale(rif, "rimborso")) == 1,
+              "http=%s stato=%s richieste=%d righe_rimborso=%d->%d"
+              % (s_2, (c_2 or {}).get("stato"), len(richieste(pi)), n_giornale,
+                 len(giornale(rif, "rimborso"))))
+
+        # -- divergenza: UN centesimo restituito da Stripe fuori dalle nostre decisioni -----------
+        # Il guasto sta NEI DATI del banco (lo stato del gateway finto), mai nel codice: Stripe dice
+        # di aver restituito un centesimo su una prenotazione che per noi e' pagata e viva.
+        gw.rimborsati[pi_viva] = (viva_prima or 0) + 1
+        (s_dv, c_dv), registro_dv = registro_di(lambda: lista())
+        allarmi = [a for a in (c_dv.get("allarmi") or []) if a.get("riferimento") == rif_viva]
+        passo("divergenza", "se Stripe ha restituito anche UN centesimo su una prenotazione che per noi e' "
+                            "pagata e viva, la lista lo mette fra gli allarmi (quanto su Stripe, quanto deciso "
+                            "da noi), il registro grida 'DIVERGENZA CONTI' col riferimento, e quella "
+                            "prenotazione NON diventa una riga col pulsante",
+              s_dv == 200 and len(allarmi) == 1
+              and int(allarmi[0].get("rimborsato_su_stripe_cents") or 0) == 1
+              #  ⛔ confronto DIRETTO con 0: `x or -1` trasforma uno zero vero in -1 (primo giro: ROSSO
+              #     con tutte le letture giuste -- lo strumento mentiva, non il prodotto, S3)
+              and allarmi[0].get("deciso_da_noi_cents") == 0
+              and any("DIVERGENZA CONTI" in x and rif_viva in x for x in registro_dv)
+              and not mia(c_dv, rif_viva),
+              "http=%s allarmi_suoi=%s grida=%s riga_col_pulsante=%s"
+              % (s_dv, allarmi, any("DIVERGENZA CONTI" in x and rif_viva in x for x in registro_dv),
+                 bool(mia(c_dv, rif_viva))))
+
+        # -- traccia: chi, cosa, su cosa -------------------------------------------------------------
+        rif_reg = _rif_per_registro(rif)
+        righe_gesto = [x for x in registro if "ADMIN_ACTION" in x and rif_reg in x]
+        passo("traccia", "il gesto lascia UNA riga che unisce CHI (ip), COSA (il rimborso) e SU COSA (il "
+                         "riferimento), come gli altri gesti dell'admin che muovono denaro",
+              len(righe_gesto) == 1 and IP["X-Forwarded-For"] in righe_gesto[0],
+              "righe scritte durante il gesto=%d, ADMIN_ACTION col riferimento=%d, con l'ip=%s; righe col "
+              "riferimento: %s" % (len(registro), len(righe_gesto),
+                                   bool(righe_gesto) and IP["X-Forwarded-For"] in righe_gesto[0],
+                                   [x[:80] for x in registro if rif_reg in x]))
+    finally:
+        gw.muto = False
+        b.router.__dict__.pop("_rimborso_dovuto_scheda", None)
+        #  lo stato del gateway torna com'era per la prenotazione viva: una catena percorsa dopo
+        #  questa non deve trovarsi un rimborso che nessuno ha deciso
+        if pi_viva:
+            if viva_prima is None:
+                gw.rimborsati.pop(pi_viva, None)
+            else:
+                gw.rimborsati[pi_viva] = viva_prima
+
+
+CATENA_4 = Catena(
+    voce="Rimborsi dovuti: elenco e Rimborsa",
+    rotte=("/api/admin/rimborsi_dovuti", "/api/admin/rimborsa_dovuto"),
+    anelli=ANELLI_CATENA_4,
+    bottone="apro «Rimborsi dovuti»: compare la prenotazione che l'ospite ha cancellato, con quanto ha pagato "
+            "e quanto gli spetta; premo «Rimborsa»: la rotta ricalcola la riga dal giornale, chiede a Stripe "
+            "di restituire il dovuto, e la riga esce dalla lista solo quando Stripe conferma",
+    soldi="restituisce all'ospite il dovuto scritto nel giornale alla cancellazione (riga 'rimborso'), mai "
+          "piu' del pagato (riga 'incasso') e mai una cifra arrivata dal browser; UNA sola richiesta a Stripe "
+          "con la chiave stabile 'rimborso:<riferimento>', cosi' un secondo clic non restituisce due volte. Se "
+          "Stripe non risponde non parte niente; se Stripe ha restituito soldi che noi non abbiamo deciso, "
+          "la lista grida",
+    archivio="non scrive righe nuove nel giornale dei soldi (la riga 'rimborso' nasce alla cancellazione, e il "
+             "giornale non si cancella: catena di impronte); il rimborso vive su Stripe, che fa da testimone, e "
+             "la lista lo rilegge da li'. Nessun dato personale nuovo. La traccia del gesto va nel registro del "
+             "server, anello [traccia]",
+    percorre=percorre_catena_4,
+)
+
 #  ⛔ Una rotta qui che la pagina non nomina piu' e' ROSSA (dichiarazione invecchiata).
-CATENE = {rotta: cat for cat in (CATENA_1, CATENA_2, CATENA_3) for rotta in cat.rotte}
+CATENE = {rotta: cat for cat in (CATENA_1, CATENA_2, CATENA_3, CATENA_4) for rotta in cat.rotte}
 
 #  Ogni BOTTONE e ogni CAMPO della pagina va attribuito: alla rotta che il gesto attraversa
 #  (e allora la sua catena e' quella della rotta), oppure a `PAGINA_SOLA` con il perche' --
@@ -959,7 +1213,9 @@ CAMPI = {
 #     anello per anello sul banco (porta · vede · garanzia · prende · soldi · doppio · traccia).
 #     ✅ A 17 LO STESSO GIORNO: la CATENA 3 («Controversie: elenco e Risolvi») percorre le due rotte
 #     della voce (vede · ferma · porta · fuori · decide · soldi · doppio · traccia).
-ROTTE_SENZA_CATENA_TETTO = 17
+#     ✅ A 15 IL 2026-11-06: la CATENA 4 («Rimborsi dovuti: elenco e Rimborsa») percorre le due rotte
+#     della voce (porta · vede · cieco · cifra · rimborsa · doppio · divergenza · traccia).
+ROTTE_SENZA_CATENA_TETTO = 15
 
 
 # --------------------------------------------------------------------------------------

@@ -4198,6 +4198,32 @@ class TestIlBloccoIncassatoSuUnaCancellazioneDellOspiteSiRestituisce(_OraVeraPer
         self.assertEqual((s2, o2.get("stato"), len(self.stripe.rimborsi)), (200, "gia_rimborsato", 1),
                          "PREMUTO DUE VOLTE: %r %r" % (o2, self.stripe.rimborsi))
 
+    def test_35_il_pulsante_lascia_la_riga_chi_cosa_quanto_su_cosa(self):
+        # voce 35 di RIPRENDI, trovata percorrendo la catena 4 di `collaudi/esame_catene_admin.py`
+        # (anello [traccia], 6/11): il pulsante restituisce denaro e il registro diceva cosa e su
+        # cosa, mai CHI. La riga e' quella degli altri gesti dell'admin che muovono denaro («Lo pago
+        # io a mano»): `ADMIN_ACTION | OGGETTO | AZIONE | ... | IP`. L'indirizzo e' l'ULTIMO di
+        # X-Forwarded-For (quello che aggiunge il nostro nginx), e l'importo atteso lo calcola la
+        # prova dai centesimi, non la funzione del server che scrive la riga.
+        from fase83_server import _rif_per_registro
+        self.stripe = self.sis.stripe = _StripeColBloccoCheRicordaIRimborsi()
+        rif = self._cancellata_col_blocco_incassato_dopo("2027-05-14", "2027-05-16", 9)
+        self._giro(time.time() + 3600)
+        riga = self._riga_in_lista(rif)
+        self.assertTrue(riga and riga.get("bottone") and riga.get("valuta") == "EUR",
+                        "PREMESSA: la riga in euro col pulsante: %r" % (riga,))
+        dovuto = int(riga["dovuto_cents"])
+        chi = dict(_AK_BLOCCO, **{"X-Forwarded-For": "203.0.113.9, 198.51.100.7"})
+        with self.assertLogs("core_auto.server", level="WARNING") as registro:
+            s, o = self.g("POST", "/api/admin/rimborsa_dovuto", {"riferimento": rif}, chi)
+        self.assertEqual((s, o.get("stato")), (200, "rimborsato"), "PREMESSA: il pulsante: %r" % (o,))
+        scritte = [r.getMessage() for r in registro.records]
+        righe = [m for m in scritte if "ADMIN_ACTION" in m and _rif_per_registro(rif) in m]
+        self.assertEqual(len(righe), 1, "IL RIMBORSO NON DICE CHI L'HA FATTO: %r" % (scritte,))
+        self.assertIn("AZIONE: Rimborso dovuto", righe[0])
+        self.assertIn("IMPORTO: %d.%02d EUR" % divmod(dovuto, 100), righe[0])
+        self.assertIn("IP: 198.51.100.7", righe[0], "l'indirizzo dev'essere l'ultimo (quello di nginx)")
+
     def test_143_un_importo_dovuto_di_zero_non_chiede_una_riga(self):
         # mutante della CI della #282 su fase83 :10386 (`>` -> `>=`): come in
         # test_blocco_carta.test_un_totale_a_zero_non_chiede_una_riga_di_rimborso, il chiamante
