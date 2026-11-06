@@ -22,6 +22,7 @@ import datetime
 import gzip
 import logging
 import os
+import re
 import shutil
 import sqlite3
 from dataclasses import dataclass
@@ -68,7 +69,8 @@ def esegui_backup(db_path: str, dir_backup: str, *,
     ts = datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f")
     # anti-collisione: due backup nello stesso tick dell'orologio (Windows ~1-15ms di
     # granularita') avrebbero lo STESSO nome -> il secondo sovrascriveva il primo in
-    # silenzio. Suffisso progressivo finche' il nome e' libero (ordine cronologico salvo).
+    # silenzio. Suffisso progressivo finche' il nome e' libero; l'ordine lo tiene
+    # `_ordine_cronologico`, che legge il suffisso come NUMERO (come testo «-2» va prima).
     base = ts
     n = 1
     while (os.path.exists(os.path.join(dir_backup, f"{prefisso}-{ts}.db.gz"))
@@ -97,10 +99,25 @@ def esegui_backup(db_path: str, dir_backup: str, *,
     return RisultatoBackup(finale, os.path.getsize(finale), rimossi, tot, len(elenco))
 
 
+# Nome: <prefisso>-AAAAMMGG-HHMMSS-micro[-N].db[.gz]. Il suffisso «-N» (anti-collisione, vedi
+# `esegui_backup`) si legge come NUMERO dopo l'istante: ordinati come testo, «...-125961-2»
+# veniva PRIMA di «...-125961» («-» < «.») e la retention cancellava il backup appena fatto
+# (voce 265 di RIPRENDI, 6/11/2026; guardia `test_DUE_BACKUP_NELLO_STESSO_ISTANTE_...`).
+_NOME_BACKUP = re.compile(r"^(?P<istante>.+?-\d{8}-\d{6}(?:-\d{6})?)(?:-(?P<n>\d+))?\.db(?:\.gz)?$")
+
+
+def _ordine_cronologico(nome: str) -> Tuple[str, int]:
+    m = _NOME_BACKUP.match(nome)
+    if m is None:
+        return (nome, 0)
+    return (m.group("istante"), int(m.group("n") or 1))
+
+
 def lista_backup(dir_backup: str,
                  prefisso: str = PREFISSO_DEFAULT) -> List[Tuple[str, int, float]]:
     """Backup esistenti come (percorso, bytes, mtime), dal piu' VECCHIO al piu'
-    recente (il nome contiene il timestamp zero-padded -> ordine cronologico)."""
+    recente: l'istante nel nome (zero-padded), poi il suffisso anti-collisione letto come
+    numero (`_ordine_cronologico`)."""
     if not os.path.isdir(dir_backup):
         return []
     out = []
@@ -109,7 +126,7 @@ def lista_backup(dir_backup: str,
             p = os.path.join(dir_backup, nome)
             if os.path.isfile(p):
                 out.append((p, os.path.getsize(p), os.path.getmtime(p)))
-    out.sort(key=lambda x: os.path.basename(x[0]))  # nome = ordine cronologico
+    out.sort(key=lambda x: _ordine_cronologico(os.path.basename(x[0])))
     return out
 
 
