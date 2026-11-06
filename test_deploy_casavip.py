@@ -356,7 +356,7 @@ class TestIlManifestoDellAppStaNelProgetto(unittest.TestCase):
             percorso = os.path.join("deploy", nome)
             self.assertTrue(os.path.isfile(percorso),
                             "le pagine citano /%s ma deploy/%s non c'e'" % (nome, nome))
-            ignorato = subprocess.run(["git", "check-ignore", "-q", percorso],  # nosec B603 B607
+            ignorato = subprocess.run(["git", "check-ignore", "-q", percorso],  # nosec B603 B607  # noqa: S603, S607
                                       capture_output=True).returncode == 0
             self.assertFalse(ignorato, "deploy/%s e' ESCLUSO da git: in CI e su un server "
                              "nuovo non ci sarebbe" % nome)
