@@ -5797,6 +5797,12 @@ class RouterHTTP:
         # Chiave STABILE: la stessa di `_admin_rimborso`, cosi' le due strade non possono
         # restituire due volte gli stessi soldi nemmeno usando rotte diverse.
         esito = sp.rimborsa(riga["payment_intent"], int(riga["dovuto_cents"]), "rimborso:" + rif)
+        # ⛔ CHI, SU COSA, QUANTO (voce 35, 6/11, «autorizzato»): come «Lo pago io a mano», e PRIMA
+        # di leggere l'esito, perche' anche «in corso» e «sconosciuto» possono aver fatto uscire i
+        # soldi. Guardia: `test_fase83_server...test_35_il_pulsante_lascia_la_riga_chi_cosa_quanto_su_cosa`.
+        logger.warning("ADMIN_ACTION | OGGETTO: %s | AZIONE: Rimborso dovuto | IMPORTO: %s | IP: %s",
+                       _rif_per_registro(rif), self._fmt_importo(int(riga["dovuto_cents"]), riga["valuta"]),
+                       self._client_ip(headers))
         # PACCO 1 (25/10, «autorizzato»), tre risposte e non due. IN CORSO: Stripe l'ha preso ma
         # non l'ha ancora restituito; SCONOSCIUTO: la risposta non e' arrivata e puo' essere
         # partito. In tutti e due i casi NON e' «nessun rimborso e' partito»: rifarlo a mano
