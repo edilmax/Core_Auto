@@ -125,8 +125,31 @@ class TestRetention(_Base):
         for _ in range(3):
             p.append(bk.esegui_backup(self.db, self.bkdir, max_bytes=10**9).percorso)
         nomi = [os.path.basename(x[0]) for x in bk.lista_backup(self.bkdir)]
-        self.assertEqual(nomi, sorted(nomi))             # cronologico
+        # L'ordine giusto e' quello di CREAZIONE. Fino al 6/11/2026 qui c'era `sorted(nomi)`,
+        # cioe' l'ordine alfabetico: lo stesso errore del codice (voce 265 di RIPRENDI).
+        self.assertEqual(nomi, [os.path.basename(x) for x in p])
         self.assertEqual(len(nomi), 3)
+
+    def test_DUE_BACKUP_NELLO_STESSO_ISTANTE_TIENE_IL_PIU_NUOVO(self):
+        """6/11/2026, voce 265 di RIPRENDI. Due backup nello stesso scatto dell'orologio hanno lo
+        stesso istante nel nome, e il secondo prende il suffisso «-2». Ordinati come TESTO,
+        «...-125961-2.db.gz» viene PRIMA di «...-125961.db.gz» (il «-» sta prima del «.»): il
+        backup nuovo passava per il piu' vecchio e la retention lo cancellava. La suite del 6/11
+        lo ha preso per caso (FileNotFoundError alle 10:58); qui la collisione si costruisce
+        apposta fermando l'orologio del modulo, cosi' la prova la vede ogni volta."""
+        import datetime as _dt
+        from unittest import mock
+        fermo = _dt.datetime(2026, 11, 6, 10, 58, 46, 125961)
+        with mock.patch.object(bk, "datetime") as orologio:
+            orologio.datetime.now.return_value = fermo
+            primo = bk.esegui_backup(self.db, self.bkdir, max_bytes=10**9).percorso
+            secondo = bk.esegui_backup(self.db, self.bkdir, max_bytes=10**9).percorso
+            self.assertNotEqual(primo, secondo, "premessa: il secondo prende il suffisso")
+            self.assertEqual([x[0] for x in bk.lista_backup(self.bkdir)], [primo, secondo],
+                             "l'ordine deve essere quello di creazione, non quello alfabetico")
+            terzo = bk.esegui_backup(self.db, self.bkdir, max_bytes=1)   # tetto assurdo
+        self.assertEqual([x[0] for x in bk.lista_backup(self.bkdir)], [terzo.percorso],
+                         "deve restare SOLO il backup appena fatto")
 
 
 class TestScript(unittest.TestCase):
