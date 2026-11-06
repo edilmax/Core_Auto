@@ -654,6 +654,54 @@ class TestIlPianoDeiDieciBlocchiNONPuoDivergereDallaMACCHINA(unittest.TestCase):
                           "il gancio non nomina piu' il blocco %r" % atteso)
 
 
+class TestLaListaUnicaContaANCHELeDecisioniEIlGiaProvato(unittest.TestCase):
+    """6/11/2026 (sessione f60770c9). Il fondatore: «avevamo aggiunto delle caselle nuove? io
+    ricordo che gliele avevo fatte aggiungere perche' erano cose che mancavano» e «peccato che
+    tutto va sempre nel dimenticatoio». Misurato quel giorno: le cose decise il 22/10 -- l'invio
+    dei dati del Reg. UE 2024/1028 («segnala anche questo come casella»), le recensioni solo da
+    chi ha soggiornato, il «contattaci» -- stavano in RIPRENDI (voci 108, 129, 130) ma NON in
+    questo piano (grep: 0 righe), e la fattura elettronica all'host per commissione e tariffa
+    tecnica non stava da nessuna parte (0 righe nel prodotto). La lista «PROVATO SUL VERO» era
+    chiesta dal 18/10 (voce 73) e mai scritta, e una chat ha proposto di rifare una prova con
+    soldi veri che il fondatore aveva gia' fatto piu' volte. Un piano che non conta tutto
+    quello che manca dice «quasi finito» quando non lo e'."""
+
+    def _piano(self):
+        import collaudi.piano as p
+        return p
+
+    def test_LE_CASELLE_DECISE_STANNO_NEL_PIANO_NEL_LORO_BLOCCO(self):
+        p = self._piano()
+        testi = {b["ordine"]: " ".join(b["finito_quando"]) for b in p.BLOCCHI}
+        attese = ((5, "fattura elettronica"), (5, "2024/1028"), (5, "contattarci"),
+                  (6, "soggiornato davvero"))
+        mancano = [(ordine, parola) for ordine, parola in attese
+                   if parola not in testi.get(ordine, "")]
+        self.assertFalse(mancano, "queste cose decise non sono caselle del piano (blocco, parola "
+                                  "cercata): %r -- una chat nuova le dimentichera' di nuovo" % mancano)
+
+    def test_IL_PIANO_STAMPA_CIO_CHE_E_GIA_PROVATO_CON_SOLDI_VERI(self):
+        """Si esegue il programma VERO e si guarda la sua uscita (sbaglio S6: un commento nel
+        sorgente soddisferebbe una ricerca di stringhe)."""
+        import subprocess  # nosec B404 - lancia solo collaudi/piano.py di questo progetto
+        import sys as _sys
+        p = self._piano()
+        provato = getattr(p, "PROVATO_SUL_VERO", ())
+        self.assertTrue(provato, "il piano non elenca niente di gia' provato con soldi veri: e' "
+                                 "assenza di misura, non un verde")
+        self.assertTrue(any("bonifico all'host" in riga for riga in provato),
+                        "manca la riga che dice che il bonifico all'host NON e' ancora stato visto "
+                        "arrivare con soldi veri: senza, «provato sul vero» sembra tutto")
+        radice = os.path.dirname(os.path.abspath(__file__))
+        esito = subprocess.run([_sys.executable, os.path.join(radice, "collaudi", "piano.py")],  # nosec B603  # noqa: S603
+                               cwd=radice, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                               env=dict(os.environ, PYTHONIOENCODING="utf-8"))
+        uscita = esito.stdout.decode("utf-8", errors="replace")
+        self.assertIn("GIA' PROVATO CON SOLDI VERI", uscita)
+        for riga in provato:
+            self.assertIn(riga[:40], uscita, "il piano non stampa: %r" % riga)
+
+
 class TestLaListaDeiLavoriNONPuoMENTIRE(unittest.TestCase):
     """LA LISTA DEI LAVORI IN SOSPESO SI MISURA DA SOLA — perche' mentiva davvero.
 

@@ -141,6 +141,26 @@ ATTREZZI = {
 }
 
 # ==============================================================================
+# 💶 GIA' PROVATO CON SOLDI VERI — non si rifa' (voce 73 di RIPRENDI, chiesta dal 18/10)
+# ==============================================================================
+# Nato il 6/11/2026: una chat ha proposto al fondatore una «prova generale con soldi veri»
+# che lui aveva gia' fatto piu' volte (fondatore: «abbiamo fatto prove come ospite e host piu'
+# volte con prenotazioni vere in vari modi»). La fonte di ogni riga e' RIPRENDI: la voce 73 e
+# la riga «RIMBORSI DELLE PROVE VERE, misurati su Stripe LIVE in sola lettura». Si rifa' una
+# prova solo se cambia il codice che quella strada attraversa E una casella qui sotto lo chiede.
+# ⛔ L'ultima riga dice cio' che NON e' ancora stato visto: senza, «provato sul vero» sembrerebbe tutto.
+PROVATO_SUL_VERO = (
+    "16/8/2026 · pagamento vero con la carta del fondatore e rimborso intero riuscito su Stripe",
+    "29/9-2/10/2026 · pagamento vero e prova della controversia: «Restituisci» riuscito il 2/10",
+    "3/10/2026 · prenotazione vera BVIP-7040 pagata con Link, cancellata dal voucher e rimborsata "
+    "lo stesso giorno",
+    "4/10/2026 · l'host (il fondatore) collegato a Stripe LIVE",
+    "MAI visto con soldi veri: il bonifico all'host arrivato in banca -- la quota di a2c63fd8 e' "
+    "ferma da ottobre perche' il saldo Stripe della piattaforma e' negativo, e si ritenta ogni ora "
+    "(la ricarica non si chiede al fondatore: dall'Italia non si puo')",
+)
+
+# ==============================================================================
 # ⛔ I DIECI BLOCCHI — QUESTO E' IL PIANO
 # ==============================================================================
 # «ordine» = in che sequenza si lavorano. Non e' la grandezza a decidere: decide il
@@ -455,6 +475,27 @@ BLOCCHI = (
             "il giro del CANCELLAMI e' percorso intero: ogni archivio che conteneva il dato "
             "e' pulito oppure DICHIARATO trattenuto per legge col suo perche', e il dato non "
             "si rilegge dai byte di quelli da pulire",
+            # ⛔ IN CODA anche queste tre (6/11/2026, sessione f60770c9). Le ultime due le aveva
+            # decise il fondatore il 22/10 (sull'invio dei dati: «segnala anche questo come
+            # casella») ma erano rimaste solo in RIPRENDI (voci 108 e 129) e in una memoria di
+            # sessione: questo piano non le contava, e il conto diceva «quasi finito». La prima
+            # l'ha trovata il ricontrollo del 6/11 cercando cosa hanno i grandi e noi no: nel
+            # prodotto la parola «fattura elettronica» non c'era (0 righe), e la ricevuta dice
+            # «non costituisce fattura fiscale», mentre la tariffa tecnica si incassa dal primo giorno.
+            "ogni commissione e ogni tariffa tecnica incassata da un host ha il suo documento "
+            "fiscale -- di regola la fattura elettronica passata dallo SdI, che la legge chiede "
+            "anche al regime forfettario -- e il modo di farlo, a mano dal portale gratuito "
+            "dell'Agenzia delle Entrate o in automatico, l'ha deciso il commercialista (⛔ finche' "
+            "un attrezzo non le conta, non lo puo' dire una macchina)",
+            "l'invio dei dati delle notti che il Regolamento UE 2024/1028 chiede alle piattaforme "
+            "(il CIN e' gia' obbligatorio e provato) e' DECISO sulla fonte ufficiale -- a quale "
+            "sportello, ogni quanto, se vale per una piattaforma piccola come la nostra -- e, se "
+            "e' dovuto, parte da solo e si rilegge cosa e' partito",
+            "chiunque -- ospite, host, autorita' -- trova come contattarci e riceve una risposta: "
+            "una pagina contatti col punto di contatto unico (DSA, artt. 11-12) e i dati del "
+            "gestore (D.Lgs. 70/2003, art. 7), un modo per segnalare un contenuto illegale (DSA, "
+            "art. 16), e un ospite in difficolta' all'arrivo sa a chi scrivere a ogni ora: prima "
+            "un agente stretto sul suo compito, poi Claude, il fondatore solo nei casi estremi",
         ),
     },
     {
@@ -479,6 +520,11 @@ BLOCCHI = (
             "l'occhio del fondatore conta ZERO parole ferme sulle pagine che non sono gusci "
             "riempiti dal server",
             "ogni numero mostrato ha senso nel mondo vero (modo di rompersi 10)",
+            # ⛔ IN CODA (6/11/2026): decisa dal fondatore il 22/10 (voce 130 di RIPRENDI), mai
+            # entrata in questo piano. La RISPOSTA dell'host alle recensioni e' una funzione nuova:
+            # resta dopo il lancio, e per questo qui non c'e'.
+            "una recensione la scrive solo chi ha soggiornato davvero -- una prenotazione pagata e "
+            "conclusa -- e arriva fino alla pagina dell'annuncio, che dice come lo verifichiamo",
         ),
     },
     {
@@ -736,6 +782,10 @@ def stampa(breve=False):
     print("  ATTREZZO ha spuntato tutte le sue caselle. La scheda c'e' dal 2026-08-21 e un")
     print("  attrezzo la scrive (`mutazione_prodotto`), ma SCRITTA non vuol dire SPUNTATA:")
     print("  lo stato vero -> python collaudi/scheda.py --blocco 1")
+    print("")
+    print("💶 GIA' PROVATO CON SOLDI VERI (non si rifa' se il codice di quella strada non cambia):")
+    for riga in PROVATO_SUL_VERO:
+        print("  💶 %s" % riga)
     print("")
 
     for b in sorted(BLOCCHI, key=lambda x: x["ordine"]):
