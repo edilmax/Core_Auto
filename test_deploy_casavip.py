@@ -97,6 +97,70 @@ class TestCompose(unittest.TestCase):
         for spia in ("sk_live", "sk_test", "whsec_", "BEGIN PRIVATE KEY"):
             self.assertNotIn(spia, self.testo, "segreto nel compose: %s" % spia)
 
+    def test_ogni_immagine_presa_da_fuori_ha_versione_e_impronta(self):
+        """Voce 263 di RIPRENDI (5/11/2026). nginx di produzione era `image: nginx:alpine`: un nome
+        che su Docker Hub cambia a ogni versione ma che il server NON riscarica da solo. Il VPS e'
+        rimasto su nginx 1.31.2 (immagine del 22/6) mentre nginx.org pubblicava le riparazioni di nove
+        falle del 2026 (la 1.31.2 sta nella fascia di CVE-2026-93479 e CVE-2026-42533: nginx.org/en/CHANGES).
+        L'ha trovato la ricerca del giorno, non una prova: il Dockerfile era fissato per impronta,
+        questo file no, e Dependabot guardava solo i Dockerfile.
+        Regola: un'immagine presa da FUORI si scrive `nome:versione@sha256:<64 cifre>`, cosi' e' la
+        stessa ogni volta e quella nuova arriva solo da una PR che passa dalla CI. Non vale per le
+        immagini costruite QUI (servizio con `build:`) ne' per chi riusa una di quelle (il backup
+        usa l'immagine dell'app)."""
+        import re
+        # La sezione `services:` fino alla prossima chiave di primo livello (un commento a colonna
+        # 0 non la chiude).
+        m = re.search(r"(?ms)^services:[ \t]*\n(.*?)(?=^[^\s#]|\Z)", self.testo)
+        self.assertIsNotNone(m, "manca la sezione `services:` nel compose")
+        sezione = m.group(1)
+        nomi = re.findall(r"(?m)^  (\w[\w-]*):\s*$", sezione)
+        immagini, costruite_qui = {}, set()
+        for nome in nomi:
+            blocco = _blocco_servizio(sezione, nome)
+            img = re.search(r"(?m)^\s{4}image:\s*(\S+)", blocco)   # niente `$`: regge un commento in coda
+            if img:
+                immagini[nome] = img.group(1).strip("\"'")
+                if re.search(r"(?m)^\s{4}build:", blocco):
+                    costruite_qui.add(immagini[nome])
+        # Premesse: se il file cambia forma questa prova deve diventare ROSSA, non verde per assenza.
+        self.assertIn("nginx", immagini, "premessa: il servizio nginx con la sua `image:`")
+        self.assertIn("casavip-app", costruite_qui, "premessa: l'immagine dell'app si costruisce qui")
+        fissata = re.compile(r"^[a-z0-9][a-z0-9._/-]*:[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}$")
+        libere = sorted("%s: %s" % (n, i) for n, i in immagini.items()
+                        if i not in costruite_qui and not fissata.match(i))
+        self.assertEqual(libere, [], "immagini prese da fuori SENZA versione e impronta "
+                         "(`nome:versione@sha256:...`): %s" % libere)
+
+    def test_dependabot_propone_anche_le_immagini_del_compose(self):
+        """Stessa voce 263. Con il solo ecosistema `docker` Dependabot legge i Dockerfile e nessuno
+        propone la versione nuova di nginx. Quale file legge `docker-compose` lo decide il suo codice
+        (dependabot-core, docker/lib/dependabot/docker_compose/file_fetcher.rb, letto il 5/11):
+        `FILENAME_REGEX = /(docker-)?compose(-[\\w]+)?(?>\\.[\\w-]+)?\\.ya?ml/i`, cercato nella cartella
+        data: con `directory: "/"` prende anche `docker-compose.casavip.yml`."""
+        import re
+        d = _leggi(os.path.join(".github", "dependabot.yml"))
+        voci = re.split(r"(?m)^\s*-\s*package-ecosystem:", d)[1:]
+        compose = [v for v in voci
+                   if re.match(r"""\s*["']?docker-compose["']?\s*$""", v.splitlines()[0])]
+        self.assertEqual(len(compose), 1,
+                         "Dependabot non guarda i file docker-compose: nginx resta senza proposte")
+        self.assertRegex(compose[0], r"""(?m)^\s*directory:\s*["']/["']\s*$""",
+                         "il compose di produzione sta nella radice: `directory: \"/\"`")
+        # E il file di produzione non deve stare fra gli esclusi, nemmeno per un glob scritto largo
+        # (es. "docker-compose*.yml"): Dependabot tornerebbe cieco su nginx e questa prova verde.
+        import fnmatch
+        esclusi = []
+        if "exclude-paths:" in compose[0]:
+            dopo = compose[0].split("exclude-paths:", 1)[1]
+            esclusi = re.findall(r"""(?m)^\s*-\s*["']?([^"'\s]+)["']?\s*$""", dopo)
+        # `fnmatch` legge «**/» alla lettera, Dependabot no («**» = anche nessuna cartella):
+        # «**/*.yml» escluderebbe il compose della radice, quindi si prova anche senza «**/».
+        presi = [e for e in esclusi
+                 if fnmatch.fnmatch("docker-compose.casavip.yml", e)
+                 or fnmatch.fnmatch("docker-compose.casavip.yml", e.replace("**/", ""))]
+        self.assertEqual(presi, [], "il compose di produzione e' escluso da Dependabot: %s" % presi)
+
 
 class TestCorazzaNginx(unittest.TestCase):
     """Erano dentro la classe saltata: sono verifiche di SICUREZZA e devono girare."""

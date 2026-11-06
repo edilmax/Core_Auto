@@ -111,6 +111,18 @@ _RIGA_CONSEGNE = re.compile(r"^CONSEGNE AGGIORNATE A:\s*([0-9a-fA-F]{7,40})\s*$"
 _RIGA_SUITE = re.compile(r"^SUITE ATTUALE: Ran (\d+) test", re.M)
 _RIGA_AMBIENTE = re.compile(r"^AMBIENTE:(.*(?:\n[ \t]+.*)*)", re.M)
 
+
+def dichiara_openssl_assente(dichiarato):
+    """La riga AMBIENTE dichiara «openssl NON nel PATH»? Le frasi fra « » si tolgono PRIMA di
+    cercare: sono RIPORTATE, non dichiarate. 5/11/2026 (voce 264 di RIPRENDI): la riga diceva
+    «openssl PRESENTE» e citava la frase vecchia per raccontarne la storia; la ricerca trovava
+    la citazione, e il controllo 4 rispondeva «coincide (openssl assente)» su un PC dove
+    openssl non era piu' nel PATH mentre la riga lo dava presente: cinque guardie sul
+    ripristino dei backup ferme, e verde. La usa anche la guardia che finge la macchina sana
+    (`test_pipeline_ci`), cosi' le due letture non possono piu' divergere."""
+    senza_citazioni = re.sub(r"«[^»]*»", " ", dichiarato)
+    return re.search(r"openssl\s+NON\s+nel\s+PATH", senza_citazioni, re.I) is not None
+
 # Estensioni che si leggono come testo. Un `.png` pieno di byte < 32 non e' un difetto:
 # dichiarato qui invece di essere scoperto come falso rosso (D18 punto 3).
 TESTUALI = (".py", ".md", ".yml", ".yaml", ".sh", ".txt", ".json", ".cfg", ".ini",
@@ -383,8 +395,7 @@ def controllo_4_ambiente(pagina=None, radice=RADICE, quale_python=None, quale_op
     # se manca, e unittest registra UN solo salto senza il nome della classe (D23 punto 3).
     ce_openssl = (shutil.which("openssl") is not None) if quale_openssl is None \
         else bool(quale_openssl)
-    dichiarato_senza_openssl = re.search(r"openssl\s+NON\s+nel\s+PATH", dichiarato,
-                                         re.I) is not None
+    dichiarato_senza_openssl = dichiara_openssl_assente(dichiarato)
     if confronta_path:
         if dichiarato_senza_openssl and ce_openssl:
             scarti.append("la riga AMBIENTE dice «openssl NON nel PATH», ma qui c'e': la "
