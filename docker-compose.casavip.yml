@@ -70,7 +70,10 @@ services:
   nginx:
     # Versione E impronta (voce 263 di RIPRENDI): con `nginx:alpine` il server e' rimasto su 1.31.2
     # dal 22/6 al 5/11/2026, dentro nove falle riparate. La versione nuova la propone Dependabot.
-    image: nginx:1.31.8-alpine@sha256:a46f57e097e8effc26192437d2e715adf74bcbea836117651ee436c27983fa41
+    # ⛔ L'IMPRONTA SI SEGUE ANCHE A VERSIONE FERMA (6/11/2026): Docker Hub ricostruisce lo stesso
+    # 1.31.8 quando cambia la base Alpine. a46f57e0 era la costruzione del 21/10 (Alpine 3.24.3);
+    # questa e' quella del 5/11 (Alpine 3.24.4), provata sul server con `nginx -t` prima del deploy.
+    image: nginx:1.31.8-alpine@sha256:713fc2ebfd92e8217db451477182ee91944b123d2b1ee9fd5a8c6e91ca6c3a11
     container_name: casavip_nginx
     restart: unless-stopped
     depends_on:
