@@ -683,7 +683,7 @@ class TestLaListaUnicaContaANCHELeDecisioniEIlGiaProvato(unittest.TestCase):
     def test_IL_PIANO_STAMPA_CIO_CHE_E_GIA_PROVATO_CON_SOLDI_VERI(self):
         """Si esegue il programma VERO e si guarda la sua uscita (sbaglio S6: un commento nel
         sorgente soddisferebbe una ricerca di stringhe)."""
-        import subprocess
+        import subprocess  # nosec B404 - lancia solo collaudi/piano.py di questo progetto
         import sys as _sys
         p = self._piano()
         provato = getattr(p, "PROVATO_SUL_VERO", ())
@@ -693,7 +693,7 @@ class TestLaListaUnicaContaANCHELeDecisioniEIlGiaProvato(unittest.TestCase):
                         "manca la riga che dice che il bonifico all'host NON e' ancora stato visto "
                         "arrivare con soldi veri: senza, «provato sul vero» sembra tutto")
         radice = os.path.dirname(os.path.abspath(__file__))
-        esito = subprocess.run([_sys.executable, os.path.join(radice, "collaudi", "piano.py")],
+        esito = subprocess.run([_sys.executable, os.path.join(radice, "collaudi", "piano.py")],  # nosec B603  # noqa: S603
                                cwd=radice, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                env=dict(os.environ, PYTHONIOENCODING="utf-8"))
         uscita = esito.stdout.decode("utf-8", errors="replace")
