@@ -334,5 +334,40 @@ class TestIlDeployNONLASCIAILSITOAPPESO(unittest.TestCase):
                 "arriva all'ospite o viene sostituito dalla pagina di attesa")
 
 
+class TestIlManifestoDellAppStaNelProgetto(unittest.TestCase):
+    """6/11/2026, voce 263 di RIPRENDI, limite (d). `deploy/index.html` e `deploy/host.html`
+    citano `<link rel="manifest" href="/manifest.json">`, ma `deploy/manifest.json` esisteva SOLO
+    sul VPS (433 byte, 24/6): la riga `*.json` del `.gitignore` lo escludeva in silenzio (lo
+    sbaglio S13). In produzione 200, sulla copia del sito 404, e un server rifatto da zero
+    l'avrebbe perso. Qui: ogni manifesto citato dalle pagine c'e', NON e' escluso da git, e le
+    sue icone esistono."""
+
+    def test_ogni_manifesto_citato_dalle_pagine_e_nel_progetto(self):
+        import glob
+        import json
+        import re
+        import subprocess  # nosec B404 - `git check-ignore` su un percorso del progetto
+        citati = set()
+        for pagina in glob.glob(os.path.join("deploy", "*.html")):
+            citati.update(re.findall(
+                r"""<link[^>]*rel=["']manifest["'][^>]*href=["']/([^"']+)["']""", _leggi(pagina)))
+        self.assertTrue(citati, "premessa: le pagine citano un manifesto")
+        for nome in sorted(citati):
+            percorso = os.path.join("deploy", nome)
+            self.assertTrue(os.path.isfile(percorso),
+                            "le pagine citano /%s ma deploy/%s non c'e'" % (nome, nome))
+            ignorato = subprocess.run(["git", "check-ignore", "-q", percorso],  # nosec B603 B607
+                                      capture_output=True).returncode == 0
+            self.assertFalse(ignorato, "deploy/%s e' ESCLUSO da git: in CI e su un server "
+                             "nuovo non ci sarebbe" % nome)
+            dati = json.loads(_leggi(percorso))
+            self.assertEqual(dati.get("start_url"), "/", "manifesto senza start_url")
+            icone = [i.get("src", "") for i in dati.get("icons") or []]
+            self.assertTrue(icone, "manifesto senza icone")
+            for src in icone:
+                self.assertTrue(os.path.isfile(os.path.join("deploy", src.lstrip("/"))),
+                                "il manifesto cita l'icona %s che non c'e'" % src)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

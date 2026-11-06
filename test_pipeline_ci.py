@@ -15468,5 +15468,26 @@ class TestLaMisuraSegueIlCodice(unittest.TestCase):
                                  "un punto %s non e' un punto sano" % nome)
 
 
+class TestLeDipendenzeDelBrowserHannoLaVersioneEsatta(unittest.TestCase):
+    """6/11/2026, voce 262 di RIPRENDI. `package.json` diceva `"playwright": "^1.61.1"` e il
+    progetto non ha `package-lock.json`: ogni `npm install` della CI prendeva l'ultima 1.x. Il
+    5/11 Playwright ha pubblicato `playwright@1.65.0` (18:28 UTC) prima del suo
+    `playwright-core@1.65.0` (20:17 UTC), e nel mezzo i job `browser` e `accessibilita` della
+    PR #302 sono morti all'installazione («ETARGET»). Con la versione esatta un rilascio rotto a
+    monte non tocca la CI: la versione nuova si sceglie apposta, con una PR."""
+
+    def test_ogni_dipendenza_di_package_json_ha_la_versione_esatta(self):
+        import json
+        with open(os.path.join(QUI, "package.json"), encoding="utf-8") as f:
+            dati = json.load(f)
+        dipendenze = dict(dati.get("dependencies") or {})
+        dipendenze.update(dati.get("devDependencies") or {})
+        self.assertIn("playwright", dipendenze, "premessa: package.json porta playwright")
+        libere = sorted("%s %s" % (n, v) for n, v in dipendenze.items()
+                        if not re.fullmatch(r"\d+\.\d+\.\d+", str(v)))
+        self.assertEqual(libere, [], "dipendenze del browser SENZA versione esatta "
+                         "(un `^` o un `~` prende da solo la versione nuova): %s" % libere)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
