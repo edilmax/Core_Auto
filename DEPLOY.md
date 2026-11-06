@@ -310,6 +310,25 @@ echo prova > certbot/www/_t && docker exec casavip_nginx cat /var/www/certbot/_t
 > La verifica del punto 4 è la sola che conta: se il container **vede** il file appena scritto,
 > il mount è agganciato bene e Let's Encrypt riuscirà a rinnovare.
 
+### 🔒 Il certificato HTTPS: lo rinnova il certbot DEL SERVER (misurato il 2026-11-06)
+
+- `certbot` è installato sul VPS (`/usr/bin/certbot`), `certbot.timer` è acceso (`systemctl is-enabled`
+  → `enabled`); certificato `bookinvip.com` per `bookinvip.com` e `www.bookinvip.com`.
+- `/etc/letsencrypt/renewal/bookinvip.com.conf`: `authenticator = webroot`, cartella
+  `/var/www/bookinvip/certbot/www` (montata in nginx su `/var/www/certbot`), e
+  `renew_hook = docker exec casavip_nginx nginx -s reload`.
+- nginx legge i certificati da `/etc/letsencrypt` del server, montato in sola lettura dal compose di
+  produzione. Su un server nuovo il certificato si prende con questo certbot (sezione «SE IL SERVER
+  MUORE», passo 5).
+
+⛔ **Ritirati il 2026-11-06: `docker-compose.casavip.ssl.yml` e `deploy/init-letsencrypt.sh`.** Erano
+un secondo modo di avviare il sito, più vecchio: `name: casavip` (un altro progetto Docker, quindi un
+magazzino dei dati **nuovo e vuoto** al posto di `bookinvip_casavip_data`), e nginx, certbot e autoheal
+senza impronta. Sul server nessuno li usava (nessun cron, timer o script; il sito è il progetto
+`bookinvip` avviato da `docker-compose.casavip.yml`). Li sorveglia
+`TestOgniComposeCheUnoScriptDiDeployAvviaHaLeImpronte` in `test_deploy_casavip.py`: uno script di
+`deploy/` che avvia un compose diverso da quello di produzione la fa diventare rossa.
+
 ---
 
 ### Nota storica
