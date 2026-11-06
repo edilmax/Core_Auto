@@ -29,6 +29,11 @@ ricombinato_*.py
 # Preso il 2026-08-13 con `git add --dry-run`, non a occhio: e' lo sbaglio S13, dove una
 # riga scritta mesi prima per tutt'altro motivo esclude un file NUOVO senza dirlo.
 !collaudi/bombe_a_tempo.json
+# ⛔ SECONDA ECCEZIONE (2026-11-06, voce 263 di RIPRENDI, limite (d)): il manifesto dell'app che
+# `deploy/index.html` e `deploy/host.html` citano. Fino a quel giorno viveva SOLO sul VPS
+# (433 byte, 24/6): la riga `*.json` qui sopra lo escludeva in silenzio. Guardia:
+# `test_deploy_casavip.TestIlManifestoDellAppStaNelProgetto`.
+!deploy/manifest.json
 forensic_logs/
 quantum_linker.log
 super_linker_logs/
