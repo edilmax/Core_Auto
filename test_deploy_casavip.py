@@ -26,6 +26,35 @@ def _blocco_servizio(testo, nome):
     return resto[:fine.start()] if fine else resto
 
 
+def _immagini_del_compose(testo):
+    """Le immagini di un compose, senza parser YAML: {servizio: immagine} e l'insieme delle
+    immagini costruite QUI (servizio con `build:`), che non si scaricano da fuori."""
+    import re
+    # La sezione `services:` fino alla prossima chiave di primo livello (un commento a colonna
+    # 0 non la chiude).
+    m = re.search(r"(?ms)^services:[ \t]*\n(.*?)(?=^[^\s#]|\Z)", testo)
+    if not m:
+        return None, None
+    sezione = m.group(1)
+    immagini, costruite_qui = {}, set()
+    for nome in re.findall(r"(?m)^  (\w[\w-]*):\s*$", sezione):
+        blocco = _blocco_servizio(sezione, nome)
+        img = re.search(r"(?m)^\s{4}image:\s*(\S+)", blocco)   # niente `$`: regge un commento in coda
+        if img:
+            immagini[nome] = img.group(1).strip("\"'")
+            if re.search(r"(?m)^\s{4}build:", blocco):
+                costruite_qui.add(immagini[nome])
+    return immagini, costruite_qui
+
+
+def _immagini_senza_impronta(immagini, costruite_qui):
+    """Le immagini prese da FUORI che non sono scritte `nome:versione@sha256:<64 cifre>`."""
+    import re
+    fissata = re.compile(r"^[a-z0-9][a-z0-9._/-]*:[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}$")
+    return sorted("%s: %s" % (n, i) for n, i in immagini.items()
+                  if i not in costruite_qui and not fissata.match(i))
+
+
 
 class TestDockerfile(unittest.TestCase):
     def setUp(self):
@@ -108,27 +137,12 @@ class TestCompose(unittest.TestCase):
         stessa ogni volta e quella nuova arriva solo da una PR che passa dalla CI. Non vale per le
         immagini costruite QUI (servizio con `build:`) ne' per chi riusa una di quelle (il backup
         usa l'immagine dell'app)."""
-        import re
-        # La sezione `services:` fino alla prossima chiave di primo livello (un commento a colonna
-        # 0 non la chiude).
-        m = re.search(r"(?ms)^services:[ \t]*\n(.*?)(?=^[^\s#]|\Z)", self.testo)
-        self.assertIsNotNone(m, "manca la sezione `services:` nel compose")
-        sezione = m.group(1)
-        nomi = re.findall(r"(?m)^  (\w[\w-]*):\s*$", sezione)
-        immagini, costruite_qui = {}, set()
-        for nome in nomi:
-            blocco = _blocco_servizio(sezione, nome)
-            img = re.search(r"(?m)^\s{4}image:\s*(\S+)", blocco)   # niente `$`: regge un commento in coda
-            if img:
-                immagini[nome] = img.group(1).strip("\"'")
-                if re.search(r"(?m)^\s{4}build:", blocco):
-                    costruite_qui.add(immagini[nome])
+        immagini, costruite_qui = _immagini_del_compose(self.testo)
+        self.assertIsNotNone(immagini, "manca la sezione `services:` nel compose")
         # Premesse: se il file cambia forma questa prova deve diventare ROSSA, non verde per assenza.
         self.assertIn("nginx", immagini, "premessa: il servizio nginx con la sua `image:`")
         self.assertIn("casavip-app", costruite_qui, "premessa: l'immagine dell'app si costruisce qui")
-        fissata = re.compile(r"^[a-z0-9][a-z0-9._/-]*:[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}$")
-        libere = sorted("%s: %s" % (n, i) for n, i in immagini.items()
-                        if i not in costruite_qui and not fissata.match(i))
+        libere = _immagini_senza_impronta(immagini, costruite_qui)
         self.assertEqual(libere, [], "immagini prese da fuori SENZA versione e impronta "
                          "(`nome:versione@sha256:...`): %s" % libere)
 
@@ -160,6 +174,54 @@ class TestCompose(unittest.TestCase):
                  if fnmatch.fnmatch("docker-compose.casavip.yml", e)
                  or fnmatch.fnmatch("docker-compose.casavip.yml", e.replace("**/", ""))]
         self.assertEqual(presi, [], "il compose di produzione e' escluso da Dependabot: %s" % presi)
+
+
+class TestOgniComposeCheUnoScriptDiDeployAvviaHaLeImpronte(unittest.TestCase):
+    """Voce 263 di RIPRENDI, 6/11/2026 sera (trovata dalla revisione del codice dopo la #308).
+    La prova sulle impronte guardava SOLO `docker-compose.casavip.yml`. Ma `deploy/init-letsencrypt.sh`
+    (il primo certificato, o un server rifatto da zero) avviava il sito da un SECONDO compose,
+    `docker-compose.casavip.ssl.yml`, con nginx, certbot e autoheal senza impronta (autoheal ha in
+    mano Docker del server) e con `name: casavip`: un altro progetto, quindi un altro magazzino dei
+    dati, creato VUOTO. Sul server nessuno lo usava (misurato il 6/11: il sito e' il progetto
+    `bookinvip` da `docker-compose.casavip.yml`, i certificati li rinnova il certbot del server).
+    Regole: (1) gli script di `deploy/` avviano SOLO il compose di produzione, perche' un secondo
+    modo di montare il sito invecchia senza che nessuno lo guardi; (2) ogni compose che avviano segue
+    la regola delle impronte."""
+
+    def _compose_avviati_dagli_script(self):
+        import glob
+        import re
+        trovati = {}
+        for script in sorted(glob.glob(os.path.join("deploy", "*.sh"))):
+            for riga in _leggi(script).splitlines():
+                if riga.lstrip().startswith("#"):
+                    continue                     # un commento non avvia niente (sbaglio S6)
+                for nome in re.findall(r"-f\s+(docker-compose[\w.-]*\.ya?ml)", riga):
+                    trovati.setdefault(nome, script)
+        return trovati
+
+    def test_gli_script_di_deploy_avviano_solo_il_compose_di_produzione(self):
+        compose = self._compose_avviati_dagli_script()
+        self.assertEqual(sorted(compose), ["docker-compose.casavip.yml"],
+                         "uno script di deploy avvia un compose diverso da quello di produzione: %s"
+                         % compose)
+
+    def test_ogni_compose_avviato_da_uno_script_ha_versione_e_impronta(self):
+        compose = self._compose_avviati_dagli_script()
+        # Premessa: se lo script del deploy cambia forma questa prova deve diventare ROSSA, non verde
+        # per assenza.
+        self.assertIn("docker-compose.casavip.yml", compose,
+                      "premessa: uno script di deploy avvia docker-compose.casavip.yml")
+        libere = {}
+        for nome in sorted(compose):
+            immagini, costruite_qui = _immagini_del_compose(_leggi(nome))
+            self.assertIsNotNone(immagini, "%s: manca la sezione `services:`" % nome)
+            self.assertIn("nginx", immagini, "premessa: %s ha il servizio nginx" % nome)
+            senza = _immagini_senza_impronta(immagini, costruite_qui)
+            if senza:
+                libere[nome] = senza
+        self.assertEqual(libere, {}, "compose avviati dagli script di deploy con immagini prese da "
+                         "fuori SENZA versione e impronta (`nome:versione@sha256:...`): %s" % libere)
 
 
 class TestCorazzaNginx(unittest.TestCase):

@@ -7,7 +7,6 @@
 # il pre-volo e il pre-fatto smettono di girare IN SILENZIO, che e' il modo peggiore in cui
 # un controllo puo' sparire: nessuno vede un errore, si vede solo che non blocca piu' niente.
 deploy/hooks/*  text eol=lf
-deploy/init-letsencrypt.sh text eol=lf
 deploy/backup_casavip.sh   text eol=lf
 
 # File di config Docker/nginx: LF (vengono usati dentro container Linux).
