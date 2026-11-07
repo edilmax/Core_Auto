@@ -11808,6 +11808,42 @@ l'accensione. I controlli non eseguibili finiscono in un elenco «NON ESEGUITI»
 silenzioso. Eseguito sul banco fedele: `PASSI 34 · OK 34 · NON OK 0 · NON ESEGUITI 0`.
 · **Tolto** il controllo «dovuto agli host = incassi − commissioni»: era vero **per
   costruzione** e sarebbe passato verde anche cancellando tutte le prenotazioni.
+· **AGGIORNATO il 2026-11-07: due rossi finti a ogni giro lanciato prima delle 15.** Dal
+  14/10 la controversia vale solo dall'arrivo (le 15 a Milano), e prima di allora il banco
+  la dichiarava giustamente NON ESEGUITA; ma il riferimento `rif_contesa` si riempiva PRIMA
+  della risposta, e il pannello admin e i soldi dell'host n.2 venivano giudicati come se la
+  controversia fosse aperta («gli spetta 0» mentre vedeva la sua quota). Una prima
+  riparazione (svuotarlo nel ramo «prima delle 15») l'ha bocciata la revisione `/code-review`
+  prima del commit: credeva al server sull'ora, quindi un difetto vero dell'arrivo (409 anche
+  alle 17) non poteva piu' far fallire niente. Riparazione vera: `esito_contestazione()` accetta
+  il 409 solo se lo conferma l'orologio del banco (15:00 di Roma), `rif_contesa` si riempie
+  solo a contestazione ACCETTATA, `spetta_all_host()` toglie la prenotazione contestata solo
+  se una controversia c'e', il giorno della n.2 e' quello di Roma, e prima delle 15 il
+  controllo «payout trattenuto» e' dichiarato per nome. Due guardie (POI TOLTE E SOSTITUITE,
+  vedi «SOSTITUITO» qui sotto: i loro nomi non esistono piu') (funzioni vere
+  estratte, due direzioni), viste rosse coi due guasti veri iniettati con l'editor, sha256
+  identico al ripristino. Giro vero alle 11:37: `PASSI 31 · OK 31 · NON OK 0 · NON ESEGUITI 4`.
+  ⚠️ Prima delle 15 (quindi anche la batteria di notte) la controversia e il trattenimento dei
+  soldi NON si misurano: e' un buco dichiarato, aperto in `RIPRENDI_QUI.md`. Il prodotto non e'
+  cambiato.
+  **SOSTITUITO lo stesso pomeriggio** (seconda revisione `/code-review`, 10 punti: la guardia
+  sulle due scritture non vedeva il difetto vero, un 200 prima delle 15 passava verde, e il buco
+  di notte restava). Ora: `contesta_dalla_banca()` (webhook `charge.dispute.created` firmato,
+  col payment_intent della prenotazione) misura trattenimento e pannello admin a OGNI ora;
+  `esito_contestazione()` giudica il reclamo dell'ospite nei due sensi (409 prima delle 15:00 di
+  Roma, 200 dopo, ora legale compresa, ora letta prima della chiamata, giorno d'arrivo vero);
+  le contestate sono un insieme riempito solo a contestazione accettata. Tre guardie, rosse sul
+  codice di prima, verdi dopo, rosse coi due guasti iniettati con l'editor, sha256 identico al
+  ripristino. Giro vero alle 12:51 (`rifai_rossi.ps1`, bbc4703 + queste modifiche):
+  `PASSI 35 · OK 35 · NON OK 0 · NON ESEGUITI 1`.
+  **Terza revisione** (9 punti, tutti presi): ora letta prima E dopo (a cavallo delle 15 = NON
+  ESEGUITO); «senza orologio» solo per 200/409; PREMESSA prima della contestazione della banca
+  (garanzia 'in_garanzia' e bonifico fermabile, letti da `g.db`/`garanzia.db` e `payout.db`),
+  poi la garanzia deve passare a 'contestato'; nel pannello admin deve comparire OGNI
+  prenotazione contestata; archivi illeggibili = NON ESEGUITO col motivo; la guardia sulla
+  banca ESEGUE la funzione e controlla tipo, payment_intent e firma. Guasti iniettati con
+  l'editor e visti rossi: tipo `charge.dispute.updated`; «senza orologio» prima del controllo
+  sullo stato. Giro vero alle 13:12: `PASSI 36 · OK 36 · NON OK 0 · NON ESEGUITI 1`.
 
 **⏳ RESTA DA DECIDERE (fondatore):** il giornale tiene `debiti_vs_host` e la commissione sulle
 prenotazioni cancellate finché l'admin non esegue il rimborso (scostamento misurato: `5820`

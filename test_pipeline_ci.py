@@ -10862,6 +10862,158 @@ class TestIlBancoSIPUOGIUDICAREANCHEFUORIDALCONTENITORE(unittest.TestCase):
             "la funzione esiste ma non la chiama nessuno: e' COSTRUITO != COLLEGATO "
             "(regola #23), e il banco continuerebbe ad accusare i soldi come prima")
 
+    def _chiamate_vere_nel_banco(self, nome):
+        """Quante CHIAMATE eseguibili a `nome(...)` ha `collaudi/giro_banco.py`, contate
+        sull'albero del codice: un commento o una docstring col nome non contano (S6; la
+        revisione del 7/11 aveva visto che il conto sul testo restava verde a chiamata tolta).
+        Questo conta e basta; ESTRARRE una funzione resta compito di `_funzione_del_banco`."""
+        import ast
+        with io.open(os.path.join(QUI, "collaudi", "giro_banco.py"), encoding="utf-8") as f:
+            albero = ast.parse(f.read())
+        return sum(1 for n in ast.walk(albero) if isinstance(n, ast.Call)
+                   and isinstance(n.func, ast.Name) and n.func.id == nome)
+
+    def test_IL_RECLAMO_DELL_OSPITE_SI_GIUDICA_COL_L_OROLOGIO_DEL_BANCO_NEI_DUE_SENSI(self):
+        """⛔ DUE ROSSI FINTI A OGNI GIRO PRIMA DELLE 15, E DUE RIPARAZIONI BOCCIATE (7/11/2026).
+
+        La n.2 del banco arriva OGGI alle 15:00 di Milano, e dal 14/10 «c'e' un problema» vale
+        solo dall'arrivo. Il banco riempiva il riferimento della controversia prima della
+        risposta: prima delle 15 il server rispondeva giusto (409) e il banco giudicava pannello
+        e soldi come se la controversia ci fosse (30 OK, 2 NON OK). Le due riparazioni dello
+        stesso giorno le ha bocciate `/code-review`: la prima credeva al server sull'ora, la
+        seconda guardava l'ora solo per il 409, quindi un server che lascia contestare PRIMA
+        dell'arrivo (la strada di F1) passava verde.
+        Ora il reclamo e' una prova vera A OGNI ORA, nei due sensi, giudicata dall'orologio del
+        banco (le 15:00 di Roma del giorno d'arrivo, ora legale compresa): prima dell'arrivo il
+        server DEVE rifiutare con `409 non_ancora_arrivato`, dall'arrivo in poi DEVE accettare.
+        Il confine e' «<»: alle 15:00:00 l'ospite e' arrivato.
+        """
+        import datetime as _d
+        esito = self._funzione_del_banco("esito_contestazione")
+        utc = _d.timezone.utc
+        no = {"errore": "non_ancora_arrivato"}
+        try:
+            from zoneinfo import ZoneInfo
+            ZoneInfo("Europe/Rome")
+        except Exception:
+            # Niente database dei fusi qui (quarta revisione del 7/11): non si salta (il
+            # pre-volo vieta gli skip interni), si prova il ramo che il banco usa davvero.
+            ora = _d.datetime(2026, 11, 7, 9, 0, tzinfo=utc)
+            self.assertEqual("senza_orologio", esito(409, no, ora, "2026-11-07"))
+            self.assertEqual("sbagliato", esito(500, no, ora, "2026-11-07"))
+            return
+        si = {"ok": True}
+        # 7/11/2026 ora solare: 15:00 Roma = 14:00 UTC. 7/7/2026 ora legale: = 13:00 UTC.
+        casi = (
+            (409, no, _d.datetime(2026, 11, 7, 13, 59, 59, tzinfo=utc), "2026-11-07",
+             "rifiutato_prima_dell_arrivo", "alle 14:59:59 di Roma il rifiuto e' giusto"),
+            (409, no, _d.datetime(2026, 11, 7, 14, 0, 0, tzinfo=utc), "2026-11-07",
+             "sbagliato", "alle 15:00:00 l'ospite e' arrivato: un 409 e' un difetto"),
+            (200, si, _d.datetime(2026, 11, 7, 14, 0, 0, tzinfo=utc), "2026-11-07",
+             "aperto", "alle 15:00:00 il reclamo si apre"),
+            (200, si, _d.datetime(2026, 11, 7, 13, 0, tzinfo=utc), "2026-11-07",
+             "sbagliato", "alle 14 di Roma un reclamo ACCETTATO e' la strada di F1: rosso"),
+            (409, no, _d.datetime(2026, 11, 7, 16, 0, tzinfo=utc), "2026-11-07",
+             "sbagliato", "alle 17 di Roma il server che dice «non ancora arrivato» sbaglia"),
+            (409, no, _d.datetime(2026, 7, 7, 12, 59, tzinfo=utc), "2026-07-07",
+             "rifiutato_prima_dell_arrivo", "d'estate le 14:59 di Roma sono le 12:59 UTC"),
+            (409, no, _d.datetime(2026, 7, 7, 13, 30, tzinfo=utc), "2026-07-07",
+             "sbagliato", "d'estate alle 15:30 di Roma l'ospite e' arrivato: con un fuso "
+             "fisso +1 questa mezz'ora sarebbe cieca"),
+            (200, si, _d.datetime(2026, 7, 7, 13, 0, tzinfo=utc), "2026-07-07",
+             "aperto", "d'estate alle 15:00 di Roma il reclamo si apre"),
+            (409, no, _d.datetime(2026, 11, 7, 16, 0, tzinfo=utc), "2026-11-08",
+             "rifiutato_prima_dell_arrivo", "si giudica sul giorno d'arrivo VERO, non su oggi"),
+            (409, {"errore": "finestra_chiusa"}, _d.datetime(2026, 11, 7, 9, 0, tzinfo=utc),
+             "2026-11-07", "sbagliato", "un 409 per un ALTRO motivo e' un rosso"),
+            (500, no, _d.datetime(2026, 11, 7, 9, 0, tzinfo=utc), "2026-11-07",
+             "sbagliato", "un 500 e' il server che si rompe, non l'ora"),
+            (409, None, _d.datetime(2026, 11, 7, 9, 0, tzinfo=utc), "2026-11-07",
+             "sbagliato", "un corpo illeggibile non e' un rifiuto giusto"),
+        )
+        for stato, corpo, adesso, arrivo, atteso, perche in casi:
+            with self.subTest(stato=stato, adesso=adesso.isoformat(), arrivo=arrivo):
+                self.assertEqual(atteso, esito(stato, corpo, adesso, arrivo), perche)
+        # Senza il database dei fusi si salta SOLO cio' che dipende dall'ora: un 500 resta
+        # rosso (terza revisione del 7/11: prima «senza orologio» copriva anche gli errori).
+        import sys
+        from unittest import mock
+        ora = _d.datetime(2026, 11, 7, 9, 0, tzinfo=utc)
+        with mock.patch.dict(sys.modules, {"zoneinfo": None}):
+            self.assertEqual("sbagliato", esito(500, no, ora, "2026-11-07"),
+                             "un 500 e' sbagliato a qualunque ora, orologio o no")
+            self.assertEqual("senza_orologio", esito(200, si, ora, "2026-11-07"),
+                             "un 200 senza orologio non si puo' giudicare: si dichiara")
+        self.assertGreaterEqual(
+            self._chiamate_vere_nel_banco("esito_contestazione"), 1,
+            "la decisione esiste ma il giro non la chiama: COSTRUITO != COLLEGATO (regola #23)")
+
+    def test_I_SOLDI_DI_UN_HOST_SI_CONTANO_SENZA_LE_PRENOTAZIONI_CONTESTATE_DAVVERO(self):
+        """Quanto spetta a un host: le sue prenotazioni pagate e non cancellate, tolte SOLO
+        quelle contestate davvero in questo giro (reclamo dell'ospite accettato, o contestazione
+        della banca registrata). Una prenotazione restituita senza riferimento conta lo stesso:
+        col vecchio `rif != None` usciva dal conto e l'host veniva accusato (7/11/2026).
+        """
+        spetta = self._funzione_del_banco("spetta_all_host")
+        fatte = [(1, "R2", "v2", "h02", True, False), (2, None, "v3", "h02", True, False),
+                 (5, "R6", "v6", "h02", True, True), (7, "R8", "v8", "h03", True, False)]
+        self.assertEqual(2 * 7, spetta(fatte, "h02", set(), 7),
+                         "senza contestazioni contano le due pagate di h02, anche quella senza "
+                         "riferimento; la cancellata no")
+        self.assertEqual(7, spetta(fatte, "h02", {"R2"}, 7),
+                         "con R2 contestata, R2 esce dal conto e resta l'altra")
+        self.assertEqual(7, spetta(fatte, "h03", {"R2"}, 7),
+                         "la contestazione di un altro host non tocca questo host")
+        self.assertEqual(0, spetta(fatte, "h03", {"R2", "R8"}, 7),
+                         "le contestazioni sono un insieme: anche la seconda esce dal conto")
+        self.assertGreaterEqual(
+            self._chiamate_vere_nel_banco("spetta_all_host"), 1,
+            "il calcolo esiste ma il giro non lo chiama: COSTRUITO != COLLEGATO (regola #23)")
+
+    def test_IL_TRATTENIMENTO_DEI_SOLDI_SI_MISURA_A_OGNI_ORA_CON_LA_CONTESTAZIONE_DELLA_BANCA(self):
+        """⛔ IL BUCO CHE LA SECONDA REVISIONE DEL 7/11 HA INDICATO COME «ALTITUDINE».
+        Col solo reclamo dell'ospite, prima delle 15 -- quindi SEMPRE nella batteria di notte --
+        «i soldi dell'host si FERMANO» e «la controversia nel pannello admin» non si misuravano
+        mai. La contestazione della BANCA (`charge.dispute.created`) ferma la garanzia e il
+        bonifico senza la finestra d'arrivo: il banco la manda firmata come il pagamento, e i
+        due controlli girano a qualunque ora. Si pretende che il giro la mandi davvero.
+        """
+        self.assertGreaterEqual(
+            self._chiamate_vere_nel_banco("contesta_dalla_banca"), 1,
+            "il banco non manda piu' la contestazione della banca: il trattenimento dei soldi "
+            "torna a non misurarsi mai di notte")
+        # Si ESEGUE la funzione vera e si guarda cosa manda (la terza revisione del 7/11 aveva
+        # visto che `callable` era un ornamento: tipo, payment_intent o firma sbagliati
+        # restavano verdi).
+        import json as _json
+        import types
+        from fase87_stripe_webhook import firma_di_test
+        contesta = self._funzione_del_banco("contesta_dalla_banca")
+        mandati = []
+        contesta.__globals__.update(
+            json=_json, os=os, time=types.SimpleNamespace(time=lambda: 1_800_000_000),
+            PREZZO=500, NOTTI=2, pi_pagati={"BVIP-1": "pi_della_prenotazione"},
+            chiama=lambda m, p, corpo=None, testate=None, grezzo=None:
+                mandati.append((m, p, grezzo, testate)) or (200, {}))
+        prima = os.environ.pop("STRIPE_WEBHOOK_SECRET", None)
+        try:
+            contesta("BVIP-1")
+        finally:
+            if prima is not None:
+                os.environ["STRIPE_WEBHOOK_SECRET"] = prima
+        self.assertEqual(1, len(mandati), "una sola chiamata al server")
+        metodo, percorso, carico, testate = mandati[0]
+        self.assertEqual(("POST", "/api/payments/webhook"), (metodo, percorso))
+        evento = _json.loads(carico)
+        self.assertEqual("charge.dispute.created", evento["type"],
+                         "con un altro tipo il server non ferma niente")
+        self.assertEqual("pi_della_prenotazione", evento["data"]["object"]["payment_intent"],
+                         "senza il payment_intent della prenotazione il server non la trova")
+        self.assertEqual(firma_di_test(carico, "whsec_v", 1_800_000_000),
+                         testate.get("Stripe-Signature"),
+                         "la firma deve usare lo stesso ripiego del server ('whsec_v'): con un "
+                         "altro segreto il server risponde 400 e non misura niente")
+
     def test_LA_BATTERIA_DA_AL_SERVER_E_AL_BANCO_LA_STESSA_CARTELLA_DEI_DATI(self):
         """⛔ CINQUE CONTROLLI CONTABILI CHE NON GIRANO MAI, E NESSUNO SE NE ACCORGE.
 

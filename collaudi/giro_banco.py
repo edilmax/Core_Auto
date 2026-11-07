@@ -184,6 +184,75 @@ def non_sto_misurando(stato, corpo):
             and corpo.get("errore") == "firma_non_valida")
 
 
+def esito_contestazione(stato, corpo, adesso, check_in):
+    """Il reclamo dell'ospite giudicato dall'orologio del BANCO, nei DUE sensi:
+    «rifiutato_prima_dell_arrivo» (giusto) · «aperto» (giusto) · «sbagliato» (rosso) ·
+    «senza_orologio» (il banco non ha il database dei fusi: non giudica, lo dichiara).
+
+    ⛔ NASCE DA UN GIRO VERO, il 2026-11-07, e da due riparazioni bocciate da `/code-review`.
+    Dal 14/10 «c'e' un problema» vale solo dall'arrivo (le 15:00 di Roma del giorno d'arrivo,
+    ora legale compresa: annunci a Milano). Prima il banco credeva al server sull'ora; poi
+    guardava l'orologio solo per il 409. Ora prima dell'arrivo il server DEVE rispondere
+    `409 non_ancora_arrivato`, dall'arrivo in poi DEVE accettare: un 200 prima delle 15 e' la
+    strada di F1, un 409 dopo e' un arrivo calcolato male. L'ora e' la regola del fondatore
+    scritta qui apposta, non letta dal prodotto (oracolo indipendente). `adesso` e' un istante
+    con fuso; chi chiama giudica con l'ora letta PRIMA e con quella letta DOPO la chiamata, e
+    se i due giudizi differiscono la chiamata e' «a cavallo» e non si decide.
+    ⚠️ NON COPERTO (D18 punto 3): se il server non ha il database dei fusi, o la citta' smette
+    di dare Europe/Rome, il server ripiega su un arrivo prudente (fino a 20 ore prima) e qui un
+    suo 200 della mattina diventa un rosso: e' una differenza d'ambiente, non del prodotto.
+    Guardia: `test_IL_RECLAMO_DELL_OSPITE_SI_GIUDICA_COL_L_OROLOGIO_DEL_BANCO_NEI_DUE_SENSI`.
+    """
+    import datetime as _d
+    no_arrivo = (stato == 409 and isinstance(corpo, dict)
+                 and corpo.get("errore") == "non_ancora_arrivato")
+    if stato != 200 and not no_arrivo:
+        return "sbagliato"          # sbagliato a QUALUNQUE ora: l'orologio non serve
+    try:
+        from zoneinfo import ZoneInfo
+        roma = ZoneInfo("Europe/Rome")
+    except Exception:
+        return "senza_orologio"     # solo qui: 200 e 409 dipendono dall'ora
+    g = _d.date.fromisoformat(check_in)
+    arrivato = adesso >= _d.datetime(g.year, g.month, g.day, 15, 0, tzinfo=roma)
+    if stato == 200:
+        return "aperto" if arrivato else "sbagliato"
+    return "sbagliato" if arrivato else "rifiutato_prima_dell_arrivo"
+
+
+def spetta_all_host(fatte, slug, contestate, netto):
+    """Quanto deve vedere maturato un host: `netto` per ogni sua prenotazione pagata e non
+    cancellata, tolte SOLO quelle contestate davvero in questo giro (`contestate`, un
+    insieme di riferimenti). Col vecchio `rif != rif_contesa` e nessuna controversia, una
+    prenotazione restituita senza riferimento usciva dal conto e l'host veniva accusato di
+    vedere soldi non suoi (revisione del 2026-11-07). Guardia:
+    `test_I_SOLDI_DI_UN_HOST_SI_CONTANO_SENZA_LE_PRENOTAZIONI_CONTESTATE_DAVVERO`."""
+    return sum(netto for (_i, rif, _vt, sl, pagata, cancellata) in fatte
+               if sl == slug and pagata and not cancellata and rif not in contestate)
+
+
+pi_pagati = {}       # riferimento -> payment_intent consegnato col webhook di pagamento
+
+
+def contesta_dalla_banca(rif):
+    """L'ospite contesta l'addebito con la SUA BANCA: il webhook `charge.dispute.created`, firmato
+    come quello del pagamento, col payment_intent di quella prenotazione. Il server ferma la
+    garanzia e il bonifico SENZA la finestra d'arrivo (`_contestazione_carta`), quindi questo
+    misura il trattenimento dei soldi e il pannello admin a QUALUNQUE ora -- anche nella
+    batteria di notte, dove il reclamo dell'ospite non puo' ancora aprirsi (revisione del
+    2026-11-07, punto «altitudine»). Torna `(stato, corpo)`. Guardia:
+    `test_IL_TRATTENIMENTO_DEI_SOLDI_SI_MISURA_A_OGNI_ORA_CON_LA_CONTESTAZIONE_DELLA_BANCA`."""
+    from fase87_stripe_webhook import firma_di_test
+    og = {"id": "dp_banco_%s" % str(rif)[:12], "object": "dispute",
+          "payment_intent": pi_pagati.get(rif), "amount": PREZZO * NOTTI, "currency": "eur",
+          "reason": "fraudulent", "status": "needs_response"}
+    carico = json.dumps({"type": "charge.dispute.created", "data": {"object": og}})
+    f = firma_di_test(carico, os.environ.get("STRIPE_WEBHOOK_SECRET", "whsec_v"),
+                      int(time.time()))
+    return chiama("POST", "/api/payments/webhook", grezzo=carico,
+                  testate={"Stripe-Signature": f})
+
+
 def paga(rif):
     """Consegna il webhook di pagamento, costruito coi dati VERI della sessione Stripe.
 
@@ -206,6 +275,7 @@ def paga(rif):
           "client_reference_id": sess.get("client_reference_id"),
           "payment_intent": sess.get("payment_intent") or ("pi_test_" + rif[:12])}
     carico = json.dumps({"type": "checkout.session.completed", "data": {"object": og}})
+    pi_pagati[rif] = og["payment_intent"]    # lo usa `contesta_dalla_banca`
     # ⛔ IL RIPIEGO E' QUELLO DEL SERVER, NON UNO NOSTRO. `avvia_server_visivo.py` verifica
     # con "whsec_v": firmare con "" faceva rifiutare OGNI pagamento (400 firma_non_valida) e
     # il banco lo contava come tredici guasti dei soldi. Guardia:
@@ -228,7 +298,21 @@ print("=" * 80)
 print("\n-- [1] %d HOST DIVERSI, OGNUNO COL SUO ANNUNCIO --" % QUANTE)
 from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256   # noqa: E402
 
-oggi = datetime.date.today()
+# ⛔ IL GIORNO E' QUELLO DI ROMA, non quello della macchina che lancia il banco: gli annunci
+# sono a Milano e l'arrivo della n.2 si giudica alle 15 di Roma. Con `date.today()` una
+# macchina avanti di fuso (Asia) dopo la sua mezzanotte prenotava la n.2 per il giorno dopo
+# di Milano, e la controversia non si misurava nemmeno dopo le 15 (revisione del 2026-11-07).
+try:
+    from zoneinfo import ZoneInfo   # noqa: E402
+    oggi = datetime.datetime.now(ZoneInfo("Europe/Rome")).date()
+except Exception:
+    # Senza il database dei fusi (un contenitore senza `tzdata`) il banco non muore prima di
+    # stampare: ripiega sul giorno della macchina, e il reclamo dell'ospite si dichiara
+    # «senza orologio» invece di essere giudicato (revisione del 2026-11-07).
+    oggi = datetime.date.today()
+    print("  ⚠️  database dei fusi assente: giorno della MACCHINA, non di Roma")
+# ⚠️ NON COPERTO (D18 punto 3): un giro che passa la mezzanotte di Roma fra l'inizio e il
+# preventivo della n.2 la prenota per «ieri» e riceve 422: e' un rosso del banco, non del sito.
 host = []          # (host_id, token, slug)
 for i in range(QUANTE):
     slug = "banco-h%02d" % (i + 1)
@@ -279,6 +363,7 @@ print("     SULLO STESSO alloggio e deve essere RIFIUTATA · l'ultima resta NON 
 print("     · la n.2 finisce in CONTROVERSIA")
 
 fatte = []            # (indice, rif, voucher, slug, pagata, cancellata)
+arrivi = {}           # rif -> giorno d'arrivo VERO: il reclamo si giudica su questo, non su «oggi»
 pagate = cancellate = rifiutate = 0
 for i in range(QUANTE):
     doppia = (i == 3 and QUANTE > 4)          # la n.4 duplica la n.3
@@ -315,6 +400,7 @@ for i in range(QUANTE):
             passo("prenotazione del giro %d" % (i + 1), False, 201, "%s %s" % (s, b))
         continue
     rif, vt = b.get("riferimento"), b.get("voucher_token")
+    arrivi[rif] = ci
     if i == QUANTE - 1:
         print("  %2d  %s  %s  prenotata, LASCIATA NON PAGATA -- voluto" % (i + 1, slug, ci))
         fatte.append((i, rif, vt, slug, False, False))
@@ -427,42 +513,129 @@ else:
 # [5] LA CONTROVERSIA
 # ---------------------------------------------------------------------------
 print("\n-- [5] LA CONTROVERSIA: l'ospite contesta, i soldi si FERMANO --")
+
+
+def stato_in(nome_db, tabella, rif):
+    """Lo `stato` di `rif` in `tabella` di `nome_db`, oppure il MOTIVO per cui non si puo'
+    leggere (`(None, motivo)`). Un archivio assente, vecchio o bloccato non fa morire il giro
+    prima del verdetto: diventa un NON ESEGUITO col suo motivo (revisione del 7/11)."""
+    # La garanzia ha due nomi: `g.db` sul banco (`avvia_server_visivo.py`), `garanzia.db` nel
+    # contenitore. Cercarne uno solo dichiarava la premessa mancante a ogni giro (7/11).
+    nomi = ("garanzia", "g") if nome_db == "garanzia" else (nome_db,)
+    c = next((x for x in (db(n) for n in nomi) if x is not None), None)
+    if c is None:
+        return None, ("nessun %s in BANCO_DATI (la cartella che il banco dichiara all'avvio) "
+                      "ne' in /data: non c'e' niente da leggere"
+                      % " ne' ".join(n + ".db" for n in nomi))
+    try:
+        r = c.execute("SELECT stato FROM %s WHERE prenotazione_id=?" % tabella,
+                      (rif,)).fetchone()
+        return (r[0] if r else ""), ""
+    except sqlite3.Error as e:
+        return None, "%s.db illeggibile (%s)" % (nome_db, e)
+    finally:
+        c.close()
+
+
+def soldi_fermati(rif, chi):
+    """Il bonifico di `rif` e' passato a 'trattenuto'? Senza misura: NON ESEGUITO, mai rosso --
+    un rosso senza misura insegnerebbe a ignorare i rossi."""
+    nome = "i soldi dell'host si FERMANO (%s)" % chi
+    st, perche = stato_in("payout", "payout", rif)
+    if st is None:
+        saltato(nome, perche)
+    else:
+        passo(nome, st == "trattenuto", "trattenuto", st or None)
+
+
+# ⛔ Le prenotazioni si contano come contestate SOLO dopo che il server ha ACCETTATO la
+# contestazione. Prima il riferimento si riempiva prima della risposta, e ogni reclamo non
+# aperto faceva giudicare pannello e soldi dell'host n.2 come se ci fosse (7/11/2026).
+contestate = set()
+
+# [5a] IL RECLAMO DELL'OSPITE: una prova vera A OGNI ORA, nei due sensi. La n.2 arriva oggi
+# alle 15 di Roma: prima il server DEVE rifiutare, dopo DEVE accettare.
 contesa = [f for f in fatte if f[0] == 1 and f[4] and not f[5]]
-rif_contesa = None
 if contesa:
-    _, rif_contesa, vt_c, slug_c, _, _ = contesa[0]
+    _, rif_n2, vt_c, _, _, _ = contesa[0]
+    # L'ora si legge PRIMA e DOPO la chiamata: il server legge la sua in mezzo. Se i due
+    # giudizi non coincidono la chiamata e' caduta a cavallo delle 15 e non si decide
+    # (revisione del 7/11: leggere solo prima toglieva il rosso finto in un verso solo).
+    arrivo_n2 = arrivi.get(rif_n2, oggi.isoformat())
+    adesso = datetime.datetime.now(datetime.timezone.utc)
     s, out = chiama("POST", "/api/garanzia/contesta",
                     {"voucher_token": vt_c, "motivo": "la stanza non e' come nell'annuncio"})
-    prima_delle_15 = (s == 409 and isinstance(out, dict)
-                      and out.get("errore") == "non_ancora_arrivato")
-    if prima_delle_15:
-        # NON un rosso: la n.2 arriva oggi alle 15:00 ora di Milano e prima di allora l'ospite
-        # non puo' segnalare (regola dell'arrivo, 14/10). Si rilancia il giro dopo le 15.
-        saltato("controversia", "la n.2 arriva oggi alle 15:00 ora di Milano: prima di allora "
-                "«c'e' un problema» non vale ancora (409 non_ancora_arrivato). Rilancia il "
-                "giro dopo le 15")
+    dopo = datetime.datetime.now(datetime.timezone.utc)
+    esito_c = esito_contestazione(s, out, adesso, arrivo_n2)
+    if esito_c != esito_contestazione(s, out, dopo, arrivo_n2):
+        esito_c = "a_cavallo"
+    if s == 200:
+        # Il server l'ha APERTA, qualunque sia il giudizio sull'ora (anche se sbagliava ad
+        # accettarla): i suoi soldi sono fermi e il conto dell'host deve saperlo, o un difetto
+        # solo stampa due rossi (quarta revisione del 7/11).
+        contestate.add(rif_n2)
+    if esito_c == "a_cavallo":
+        saltato("il reclamo dell'ospite rispetta l'ora d'arrivo",
+                "la chiamata e' caduta a cavallo delle 15:00 di Roma (%s-%s UTC): non si "
+                "puo' sapere con che ora l'ha giudicata il server. Rilancia il giro"
+                % (adesso.strftime("%H:%M:%S"), dopo.strftime("%H:%M:%S")))
+    elif esito_c == "rifiutato_prima_dell_arrivo":
+        passo("prima dell'arrivo il reclamo dell'ospite e' RIFIUTATO (409)", True)
+    elif esito_c == "aperto":
+        passo("dall'arrivo l'ospite apre il reclamo", True)
+        soldi_fermati(rif_n2, "reclamo dell'ospite")
+    elif esito_c == "senza_orologio":
+        saltato("il reclamo dell'ospite rispetta l'ora d'arrivo",
+                "il banco non ha il database dei fusi: non sa che ore sono a Roma")
     else:
-        passo("l'ospite apre la contestazione", s == 200, 200, "%s %s" % (s, out))
-        c = db("payout")
-        if c is None:
-            # Stesso caso del libro giornale: senza il database, questo controllo non e' rosso
-            # -- e' NON ESEGUITO. Segnarlo rosso insegnerebbe a ignorare i rossi, che e' il modo
-            # di perdere quello vero.
-            saltato("i soldi dell'host si FERMANO (payout trattenuto)",
-                    "nessun payout.db in BANCO_DATI (la cartella che il banco dichiara "
-                    "all'avvio) ne' in /data: non c'e' niente da leggere, quindi NON si misura")
-        else:
-            stato = None
-            try:
-                r = c.execute("SELECT stato FROM payout WHERE prenotazione_id=?",
-                              (rif_contesa,)).fetchone()
-                stato = r[0] if r else None
-            finally:
-                c.close()
-            passo("i soldi dell'host si FERMANO (payout trattenuto)", stato == "trattenuto",
-                  "trattenuto", stato)
+        passo("il reclamo dell'ospite rispetta l'ora d'arrivo (15:00 di Roma del %s)"
+              % arrivi.get(rif_n2), False, "409 prima delle 15, 200 dopo",
+              "%s %s, chiesto alle %s UTC" % (s, out, adesso.strftime("%H:%M:%S")))
 else:
-    saltato("controversia", "la prenotazione n.2 non e' pagata e viva")
+    saltato("il reclamo dell'ospite rispetta l'ora d'arrivo",
+            "la prenotazione n.2 non e' pagata e viva")
+
+# [5b] LA CONTESTAZIONE DELLA BANCA, che non dipende dall'ora: e' qui che il trattenimento
+# dei soldi e il pannello admin si misurano anche nella batteria di notte.
+banca = [f for f in fatte if f[4] and not f[5] and f[1] not in contestate and f[0] != 1
+         and pi_pagati.get(f[1])]
+if banca:
+    rif_b = banca[0][1]
+    # ⛔ PREMESSA, prima di giudicare (S7): una garanzia aperta e un bonifico ancora fermabile.
+    # Senza, il server risponde 200 lo stesso e un rosso sui soldi accuserebbe il prodotto di
+    # cio' che il banco non ha preparato (revisione del 7/11).
+    st_g, perche_g = stato_in("garanzia", "garanzia", rif_b)
+    st_p, perche_p = stato_in("payout", "payout", rif_b)
+    if st_g != "in_garanzia" or st_p not in ("in_attesa", "maturato"):
+        motivo = ("premessa mancante: garanzia %r, bonifico %r -- servono 'in_garanzia' e "
+                  "'in_attesa'/'maturato' %s" % (st_g, st_p, (perche_g or perche_p)))
+        saltato("la banca contesta l'addebito e il server lo registra", motivo)
+        saltato("i soldi dell'host si FERMANO (contestazione della banca)", motivo)
+    else:
+        s, out = contesta_dalla_banca(rif_b)
+        # Il 200 dice solo «ricevuto»: che il server l'abbia REGISTRATO lo dicono la garanzia
+        # contestata e i soldi fermati, misurati qui sotto e nel pannello admin.
+        passo("la banca contesta l'addebito e il server risponde 200", s == 200, 200,
+              "%s %s" % (s, out))
+        if s == 200:
+            st_g, perche_g = stato_in("garanzia", "garanzia", rif_b)
+            st_p, _ = stato_in("payout", "payout", rif_b)
+            # Contestata SOLO se l'effetto si vede (garanzia contestata o soldi fermi): un 200 su
+            # un payment_intent sconosciuto non ferma niente, e contarla avrebbe trasformato un
+            # difetto in quattro rossi (quarta revisione del 7/11).
+            if st_g == "contestato" or st_p == "trattenuto":
+                contestate.add(rif_b)
+            passo("la garanzia passa a 'contestato' (contestazione della banca)",
+                  st_g == "contestato", "contestato", st_g if st_g is not None else perche_g)
+            soldi_fermati(rif_b, "contestazione della banca")
+        else:
+            saltato("i soldi dell'host si FERMANO (contestazione della banca)",
+                    "il server non ha accettato la contestazione (il rosso qui sopra)")
+else:
+    saltato("la banca contesta l'addebito e il server lo registra",
+            "nessuna prenotazione pagata e viva col suo payment_intent")
+    saltato("i soldi dell'host si FERMANO (contestazione della banca)",
+            "nessuna contestazione della banca mandata")
 
 # ---------------------------------------------------------------------------
 # [6] IL PANNELLO ADMIN
@@ -486,14 +659,19 @@ else:
     passo("l'admin vede l'elenco delle prenotazioni (%d)" % quante, s == 200, 200, s)
     # ⛔ NON si dichiara OK una controversia che non e' stata aperta: sarebbe un verde
     #    che non ha guardato niente. Se manca la premessa, il controllo e' un BUCO.
-    if rif_contesa is None:
+    if not contestate:
         saltato("la controversia compare nel pannello admin",
                 "nessuna controversia e' stata aperta in questo giro")
     else:
         s, contro = chiama("GET", "/api/admin/controversie", None, admin)
-        n_contro = len(contro.get("controversie", [])) if isinstance(contro, dict) else 0
-        passo("la controversia compare nel pannello admin", s == 200 and n_contro >= 1,
-              "200 e >=1", "%s e %d" % (s, n_contro))
+        visti = {c.get("prenotazione_id") for c in (contro.get("controversie", [])
+                 if isinstance(contro, dict) else []) if isinstance(c, dict)}
+        # OGNI prenotazione contestata deve comparire, non «almeno una»: con due contestazioni
+        # (reclamo dell'ospite e banca) una sola bastava a coprire l'altra (revisione del 7/11).
+        mancano = sorted(str(r) for r in contestate if r not in visti)
+        passo("ogni controversia aperta compare nel pannello admin (%d)" % len(contestate),
+              s == 200 and not mancano, "200 e nessuna mancante",
+              "%s, mancano %s" % (s, mancano or "nessuna"))
     s, _ = chiama("GET", "/api/admin/prenotazioni")
     passo("senza chiave l'elenco NON si apre", s == 401, 401, s)
 
@@ -633,10 +811,7 @@ for _hid, tok, slug in host:
     # conti giusti. Ora le due voci si RICAVANO dal motore, come tutto il resto.
     _tec = (PREZZO * NOTTI * _psp_bps_del_motore()) // 10000 + _psp_fisso_del_motore()
     _comm = (PREZZO * NOTTI * _commissione_bps_del_banco()) // 10000
-    atteso = 0
-    for (_i, rif, _vt, sl, pagata, cancellata) in fatte:
-        if sl == slug and pagata and not cancellata and rif != rif_contesa:
-            atteso += PREZZO * NOTTI - _comm - _tec
+    atteso = spetta_all_host(fatte, slug, contestate, PREZZO * NOTTI - _comm - _tec)
     if mio != atteso:
         sballati.append((slug, "vede %d, gli spetta %d" % (mio, atteso)))
 # ⛔ L'ALTRA FACCIA DEL VERDE PER ASSENZA (2026-08-21). Questo controllo non legge il
