@@ -1049,6 +1049,7 @@ jobs:
             server_visivo.log
             server_percorso.log
             server_pin.log
+            storna_guasto.png
           retention-days: 14
 
   # ATHERIS: fuzzing coverage-guided sui motori-soldi. Un invariante rotto = job ROSSO

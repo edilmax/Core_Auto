@@ -181,14 +181,36 @@ async function penaleDi(rif) {
   const [stornataTesto, chiediMotivo] = await p.evaluate(() => [T('au_stornata'), T('au_storna_mot')]);
   const stato = () => p.evaluate(() => (document.getElementById('sr_stat').textContent || '').trim());
   // Preme e aspetta che il pannello si FERMI, poi legge quello che l'admin ha davanti.
-  const premi = async () => {
+  // ⛔ Niente attese a tempo fisso (skill e2e-testing, «network timing»): se il gesto arriva al
+  //    server si aspetta la SUA risposta e poi la frase che la pagina ci scrive sopra; se non ci
+  //    arriva (motivo vuoto, ripensamento) la pagina risponde subito, senza rete.
+  const premi = async (attesa) => {
     visti.length = 0;
     await p.evaluate(() => { document.getElementById('sr_stat').textContent = ''; });
-    await p.click(bottone);
-    await p.waitForLoadState('networkidle').catch(() => {});
-    await p.waitForTimeout(800);
+    if (attesa === 'server') {
+      await Promise.all([
+        p.waitForResponse(r => r.url().includes('/api/admin/storno_penale'), { timeout: 20000 }),
+        p.click(bottone),
+      ]);
+      //  la ricarica scrive prima il suo «…» o «❌», poi il pulsante ci mette sopra l'esito: si
+      //  aspetta l'esito (se non arriva, l'asserzione sotto dice cosa c'e' scritto davvero)
+      await p.waitForFunction(() => (document.getElementById('sr_stat').textContent || '').trim()
+        .startsWith('✅'), null, { timeout: 20000 }).catch(() => {});
+    } else {
+      await p.click(bottone);
+      if (attesa === 'frase') {
+        await p.waitForFunction(() => (document.getElementById('sr_stat').textContent || '').trim(),
+          null, { timeout: 10000 }).catch(() => {});
+      } else {
+        // un «non succede niente» non ha un evento da aspettare: si lascia passare un istante
+        // e si controlla anche che nessuna richiesta di storno sia partita (`richieste`)
+        await p.waitForTimeout(500);
+      }
+    }
     return stato();
   };
+  const richieste = [];
+  p.on('request', r => { if (r.url().includes('/api/admin/storno_penale')) richieste.push(r.method()); });
   const ancoraIntatta = async (giro) => {
     const s = await penaleDi(P.rif);
     esigi(s.debito.length === 1 && s.debito[0].stato !== 'stornata' && s.credito.length === 0,
@@ -198,7 +220,7 @@ async function penaleDi(rif) {
 
   // 1. MOTIVO VUOTO: il perche' e' obbligatorio, e lo dice la pagina, non solo il server.
   risposte = { motivo: '   ', conferma: true };
-  const t1 = await premi();
+  const t1 = await premi('frase');
   console.log(`[ADMIN] 1. motivo vuoto -> ${JSON.stringify(t1)} riquadri=${visti}`);
   esigi(t1.includes(chiediMotivo) && !t1.includes(stornataTesto),
     `1. col motivo vuoto la pagina dice ${JSON.stringify(t1)} invece di chiedere il motivo`);
@@ -207,27 +229,30 @@ async function penaleDi(rif) {
 
   // 2. RIQUADRO ANNULLATO: l'admin ci ripensa, non succede niente.
   risposte = { motivo: null, conferma: true };
-  const t2 = await premi();
+  const t2 = await premi('nulla');
   console.log(`[ADMIN] 2. riquadro annullato -> ${JSON.stringify(t2)} riquadri=${visti}`);
   esigi(!t2.includes(stornataTesto), `2. annullato il riquadro la pagina dice ${JSON.stringify(t2)}`);
   await ancoraIntatta('2. riquadro annullato');
 
   // 3. MOTIVO SCRITTO, CONFERMA NEGATA: ancora niente.
   risposte = { motivo: MOTIVO, conferma: false };
-  const t3 = await premi();
+  const t3 = await premi('nulla');
   console.log(`[ADMIN] 3. conferma negata -> ${JSON.stringify(t3)} riquadri=${visti}`);
   esigi(visti.includes('prompt') && visti.includes('confirm'),
     `3. la pagina non ha chiesto motivo E conferma (riquadri visti: ${visti})`);
   esigi(!t3.includes(stornataTesto), `3. con la conferma negata la pagina dice ${JSON.stringify(t3)}`);
   await ancoraIntatta('3. conferma negata');
+  esigi(richieste.length === 0,
+    `nei primi tre giri la pagina ha mandato ${richieste.length} richiesta/e di storno al server`);
 
   // 4. MOTIVO E CONFERMA: lo storno vero -- e la ricarica della scheda che CADE (la rete se ne
   //    va proprio dopo lo storno). L'admin deve leggere TUTTE E DUE le cose: lo storno riuscito e
   //    la ricarica fallita; nessuna delle due copre l'altra (come la D di admin_rimborsa_browser).
   risposte = { motivo: MOTIVO, conferma: true };
   await p.route('**/api/admin/audit**', r => r.abort('failed'));
-  const t4 = await premi();
+  const t4 = await premi('server');
   await p.unroute('**/api/admin/audit**');
+  esigi(richieste.length === 1, `lo storno confermato ha mandato ${richieste.length} richieste (attesa: UNA)`);
   console.log(`[ADMIN] 4. storno confermato, ricarica caduta -> ${JSON.stringify(t4)}`);
   esigi(t4.startsWith('✅') && t4.includes(stornataTesto),
     `4. storno confermato, ma a cose ferme la pagina dice ${JSON.stringify(t4)} e non ${JSON.stringify(stornataTesto)}`);
@@ -255,11 +280,17 @@ async function penaleDi(rif) {
     `il server non ha la penale 'stornata': ${JSON.stringify(dopo.debito)}`);
   esigi(dopo.credito.length === 1 && dopo.credito[0].importo_cents === ND.importo_cents,
     `il server non ha UNA nota di credito della stessa cifra della penale: ${JSON.stringify(dopo.credito)}`);
-  await fine(browser, sacco);
+  await fine(browser, sacco, p);
 })().catch(e => { console.error('CRASH del percorso:', e); process.exit(2); });
 
-async function fine(browser, sacco) {
+async function fine(browser, sacco, pagina) {
   sacco.forEach(e => guasti.push(e));
+  // QUANDO SI ROMPE, LA FOTO DI COSA AVEVA DAVANTI L'ADMIN (skill e2e-testing, «artifacts»): la CI
+  // la allega coi registri dei banchi; senza, un rosso in CI si legge solo dalle frasi.
+  if (guasti.length && pagina) {
+    await pagina.screenshot({ path: 'storna_guasto.png', fullPage: true }).catch(() => {});
+    console.log('foto dello schermo al momento del guasto: storna_guasto.png');
+  }
   await browser.close();
   console.log('\n====== ESITO ======');
   if (!guasti.length) {
