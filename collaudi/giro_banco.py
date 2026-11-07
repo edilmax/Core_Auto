@@ -528,8 +528,11 @@ def stato_in(nome_db, tabella, rif):
                       "ne' in /data: non c'e' niente da leggere"
                       % " ne' ".join(n + ".db" for n in nomi))
     try:
-        r = c.execute("SELECT stato FROM %s WHERE prenotazione_id=?" % tabella,
-                      (rif,)).fetchone()
+        # Domande FISSE, niente nome di tabella incollato nel testo (il cricchetto statico della
+        # CI conta S608, la richiesta SQL costruita: la #310 l'aveva fatto salire di uno).
+        domanda = {"payout": "SELECT stato FROM payout WHERE prenotazione_id=?",
+                   "garanzia": "SELECT stato FROM garanzia WHERE prenotazione_id=?"}[tabella]
+        r = c.execute(domanda, (rif,)).fetchone()
         return (r[0] if r else ""), ""
     except sqlite3.Error as e:
         return None, "%s.db illeggibile (%s)" % (nome_db, e)
