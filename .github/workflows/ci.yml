@@ -1028,6 +1028,14 @@ jobs:
           BASE_VISIVO: http://127.0.0.1:8095
         run: node collaudi/admin_rimborsa_browser.js
 
+      # «↩️ STORNA» LA PENALE DAL PANNELLO ADMIN (7/11): l'host cancella una prenotazione pagata,
+      # nasce la penale; il browser prova il riquadro del motivo (vuoto, annullato, conferma negata,
+      # confermato) e pretende che a cose ferme la pagina dica «stornata» e il server lo confermi.
+      - name: Storna la penale dal pannello admin (il riquadro del motivo funziona)
+        env:
+          BASE_VISIVO: http://127.0.0.1:8095
+        run: node collaudi/admin_storna_browser.js
+
       - name: Spegni il terzo banco
         if: always()
         run: kill "$(cat server_pin.pid)" 2>/dev/null || true
