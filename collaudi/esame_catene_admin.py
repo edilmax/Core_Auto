@@ -127,11 +127,9 @@ NON_GUARDA = (
     "le rotte che il pannello NON nomina ma il server espone (es. `/api/admin/partner`): un "
     "perimetro letto dalla pagina vede i gesti di una persona, non l'API intera -- quella la "
     "enumera dal codice `esame_accessi` (Blocco 3, caselle 1-3)",
-    "le catene delle rotte DIVERSE da «Tutti gli annunci», «Lo pago io a mano» e «Controversie»: "
-    "oggi sono dichiarate solo per queste tre voci, e le altre risultano ROSSE per costruzione, non "
-    "per un guasto -- e' lo stato vero. ⚠️ «Rimborsa» e «Esegui rimborso» aspettano un pezzo del "
-    "PRODOTTO: `_admin_rimborso` e `_admin_rimborsa_dovuto` scrivono l'esito ma non l'ip di chi ha "
-    "premuto, quindi il loro anello [traccia] sarebbe rosso sul codice sano (voce 35 di RIPRENDI)",
+    "le rotte del pannello che non hanno ancora una catena (l'elenco `CATENE` dice quali ce l'hanno; "
+    "il numero lo stampa il verdetto della casella): risultano ROSSE per costruzione, non per un "
+    "guasto -- e' lo stato vero",
     "nella catena 3 la controversia aperta dalla BANCA (motivo 'chargeback:', decide la banca), la "
     "divisione al 100% all'ospite e quella in euro esatti: qui si percorre la divisione in "
     "percentuale aperta dall'ospite; gli altri rami li provano le guardie di `test_fase83_server`",
@@ -1130,8 +1128,433 @@ CATENA_4 = Catena(
     percorre=percorre_catena_4,
 )
 
+ANELLI_CATENA_5 = ("porta", "vede", "rimborsa", "soldi", "doppio", "controversia", "traccia")
+
+
+def percorre_catena_5(b, BH, con_guasto=False):
+    """Il pulsante «Rimborsa» della tabella delle prenotazioni (`.danger`): l'admin annulla una
+    prenotazione pagata, le date tornano libere, i soldi dell'host si fermano e quelli dell'ospite
+    tornano indietro UNA volta, nella cifra pagata.
+
+    Scritta e percorsa il 2026-11-07 (la riga ADMIN_ACTION che il suo anello [traccia] pretende
+    l'ha aggiunta `fase83_server` lo stesso giorno). Le letture si filtrano per riferimento,
+    perche' le catene prima lasciano righe loro sullo stesso banco."""
+    from fase83_server import _rif_per_registro
+    print("\n--- CATENA 5, «Rimborsa» (tabella prenotazioni): annulla -> date -> soldi -> nessun doppio ---")
+    rotta = "/api/admin/rimborso"
+    gw = b.gateway
+    try:
+        #  UNA camera: con tre, una prenotazione lascia le date prenotabili e gli anelli che
+        #  guardano le date non vedono niente (primo giro del 7/11: «occupate_prima=False»).
+        slug = b.alloggio("casa-catena-cinque", 1, "2027-10-01", "2027-10-30")
+        rif, _vt = b.pagata(slug, "2027-10-05", "2027-10-07")
+        rif2, _vt2 = b.pagata(slug, "2027-10-12", "2027-10-14")
+        if not (rif and rif2):
+            raise RuntimeError("il banco non ha prodotto le due prenotazioni pagate")
+
+        def riga_di(r):
+            #  la riga si prende dalla lista che legge il pannello, come la prende il pulsante
+            s, c = _chiedi(b, "GET", "/api/admin/prenotazioni", None, ADMIN)
+            for p in ((c or {}).get("prenotazioni") or []):
+                if str(p.get("idem_key") or "").startswith(r) or p.get("riferimento") == r:
+                    return s, p
+            return s, None
+
+        def corpo_di(p):
+            return {"alloggio_id": p.get("alloggio_id"), "check_in": p.get("check_in"),
+                    "check_out": p.get("check_out"), "idem_key": p.get("idem_key")}
+
+        def pi_di(r):
+            for rec in b.sis.pagamenti_pendenti.pagati_recenti(limit=500):
+                if rec.get("riferimento") == r:
+                    try:
+                        return str(json.loads(rec.get("corpo_json") or "{}").get("stripe_pi") or "")
+                    except ValueError:
+                        return ""
+            return ""
+
+        def giornale(r, tipo):
+            return [int(m.get("importo_cents") or 0) for m in b.sis.finanza.movimenti(r)
+                    if m.get("tipo") == tipo]
+
+        def richieste(p):
+            return [c for c in gw.chiamate if c[0] == "rimborsa" and c[1] == p]
+
+        def libere(p):
+            s, q = b.g("POST", "/api/concierge/quote", {"alloggio_id": p.get("alloggio_id"),
+                                                        "check_in": p.get("check_in"),
+                                                        "check_out": p.get("check_out"), "party": 2})
+            return s == 200 and bool((q or {}).get("quote_token"))
+
+        def registro_di(fare):
+            righe = []
+
+            class _Presa(logging.Handler):
+                def emit(self, record):
+                    try:
+                        righe.append(record.getMessage())
+                    except Exception:
+                        righe.append(str(record.msg))
+            presa = _Presa()
+            log_server = logging.getLogger("core_auto.server")
+            livello_prima = log_server.level
+            log_server.addHandler(presa)
+            log_server.setLevel(logging.DEBUG)
+            try:
+                esito = fare()
+            finally:
+                log_server.removeHandler(presa)
+                log_server.setLevel(livello_prima)
+            return esito, righe
+
+        s_v, p = riga_di(rif)
+        s_v2, p2 = riga_di(rif2)
+        pi, pi2 = pi_di(rif), pi_di(rif2)
+        pagato = sum(giornale(rif, "incasso"))
+        #  LA PREMESSA, che NON e' un anello: senza, l'esame e' FERMO, non verde (S7).
+        if not (p and p2 and pi and pi2 and pagato > 0 and not richieste(pi) and not richieste(pi2)):
+            raise RuntimeError("premessa della catena 5 mancante: righe=%s/%s pi=%s/%s pagato=%s"
+                               % (bool(p), bool(p2), bool(pi), bool(pi2), pagato))
+        corpo = corpo_di(p)
+
+        # -- porta ------------------------------------------------------------------------------------
+        s_senza, _ = b.g("POST", rotta, corpo, {})
+        s_solo, _ = b.g("POST", rotta, corpo, ADMIN)
+        passo("porta", "senza chiave il pulsante risponde 401, con la sola chiave admin 403 (serve il "
+                       "bunker: muove soldi), e nessuna delle due manda niente a Stripe",
+              s_senza == 401 and s_solo == 403 and not richieste(pi),
+              "senza=%s solo_chiave=%s richieste=%d" % (s_senza, s_solo, len(richieste(pi))))
+
+        # -- vede -------------------------------------------------------------------------------------
+        passo("vede", "la prenotazione pagata compare nella tabella del pannello come RIMBORSABILE, con "
+                      "alloggio, date e chiave che il pulsante manda",
+              s_v == 200 and p.get("rimborsabile") is True and all(corpo.values()),
+              "http=%s rimborsabile=%s corpo=%s" % (s_v, p.get("rimborsabile"), corpo))
+
+        # -- rimborsa ---------------------------------------------------------------------------------
+        occupate_prima = not libere(p)
+        if con_guasto:
+            # IL GUASTO, sull'ISTANZA del router e mai sul codice: il rimborso «dimentica» di fermare
+            # il bonifico dell'host. E' l'anello che vale i soldi: l'ospite riavrebbe tutto e l'host
+            # incasserebbe lo stesso una prenotazione rimborsata -- la piattaforma paga due volte.
+            b.router._payout_trattieni = lambda r: True
+        try:
+            (s_r, c_r), registro = registro_di(lambda: b.g("POST", rotta, corpo, BH))
+        finally:
+            #  il guasto si toglie SEMPRE, come nelle catene 4 e 6 (/code-review 7/11): se il gesto
+            #  solleva, il router del banco non resta con un rimborso che non ferma il bonifico
+            b.router.__dict__.pop("_payout_trattieni", None)
+        c_r = c_r or {}
+        libere_dopo = libere(p)          # misurata UNA volta: il dettaglio dice il valore giudicato
+        passo("rimborsa", "risponde 200 'rimborsato' senza passi falliti, e le date che erano occupate "
+                          "tornano prenotabili",
+              s_r == 200 and c_r.get("stato") == "rimborsato" and c_r.get("passi_falliti") == []
+              and occupate_prima and libere_dopo,
+              "http=%s stato=%s falliti=%s occupate_prima=%s libere_dopo=%s rimborso=%s"
+              % (s_r, c_r.get("stato"), c_r.get("passi_falliti"), occupate_prima, libere_dopo,
+                 c_r.get("rimborso_stripe")))
+
+        # -- soldi ------------------------------------------------------------------------------------
+        rq = richieste(pi)
+        st_pay = b.sis.payout.stato_di(rif) if getattr(b.sis, "payout", None) is not None else None
+        try:
+            st_gz = (b.sis.garanzia.stato(rif) or {}).get("stato")
+        except Exception as e:
+            st_gz = "illeggibile (%s)" % e
+        #  Nessun soldo era partito verso l'host: `_payout_trattieni` TOGLIE la riga del bonifico
+        #  (stato '' = assente), non la lascia 'trattenuto' -- cosi' il pannello host non la conta
+        #  per sempre fra i soldi «Fermi» (D13 della prova vera, 29/9).
+        passo("soldi", "UNA richiesta a Stripe per ESATTAMENTE il pagato, con la chiave stabile "
+                       "'rimborso:<riferimento>'; UNA riga 'rimborso' nel giornale della stessa cifra; la "
+                       "riga del bonifico dell'host TOLTA (nessun soldo era partito) e la garanzia "
+                       "'annullato' (l'host non incassa una prenotazione rimborsata)",
+              len(rq) == 1 and rq[0][2] == pagato and rq[0][3] == "rimborso:" + rif
+              and gw.rimborsati.get(pi) == pagato and giornale(rif, "rimborso") == [pagato]
+              and st_pay == "" and st_gz == "annullato",
+              "richieste=%s pagato=%s rimborsati=%s giornale=%s bonifico=%s garanzia=%s"
+              % ([(x[2], x[3]) for x in rq], pagato, gw.rimborsati.get(pi), giornale(rif, "rimborso"),
+                 st_pay, st_gz))
+
+        # -- doppio -----------------------------------------------------------------------------------
+        s_2, c_2 = b.g("POST", rotta, corpo, BH)
+        passo("doppio", "un secondo clic non restituisce di nuovo: Stripe ha restituito una volta sola e il "
+                        "giornale ha ancora UNA riga 'rimborso'",
+              s_2 in (200, 409) and gw.rimborsati.get(pi) == pagato
+              and giornale(rif, "rimborso") == [pagato],
+              "http=%s risposta=%s rimborsati=%s giornale=%s"
+              % (s_2, {k: (c_2 or {}).get(k) for k in ("stato", "errore", "rimborso_stripe")},
+                 gw.rimborsati.get(pi), giornale(rif, "rimborso")))
+
+        # -- controversia -----------------------------------------------------------------------------
+        #  con una controversia aperta decide l'arbitro o la banca: l'admin NON rimborsa (pacco 1, voce 2)
+        esito_c = b.sis.garanzia.contesta(rif2, motivo="catena 5: l'ospite contesta")
+        corpo2 = corpo_di(p2)
+        s_c, c_c = b.g("POST", rotta, corpo2, BH)
+        passo("controversia", "con la controversia aperta il pulsante risponde 409 'controversia_aperta', "
+                              "Stripe non riceve niente e le date restano occupate",
+              bool((esito_c or {}).get("ok")) and s_c == 409
+              and (c_c or {}).get("errore") == "controversia_aperta" and not richieste(pi2)
+              and not libere(p2),
+              "contestata=%s http=%s errore=%s richieste=%d libere=%s"
+              % ((esito_c or {}).get("ok"), s_c, (c_c or {}).get("errore"), len(richieste(pi2)),
+                 libere(p2)))
+
+        # -- traccia ----------------------------------------------------------------------------------
+        rif_reg = _rif_per_registro(rif)
+        righe_gesto = [x for x in registro if "ADMIN_ACTION" in x and rif_reg in x]
+        passo("traccia", "il gesto lascia UNA riga che unisce CHI (ip), COSA (il rimborso) e SU COSA (il "
+                         "riferimento), come gli altri gesti dell'admin che muovono denaro",
+              len(righe_gesto) == 1 and IP["X-Forwarded-For"] in righe_gesto[0],
+              "righe durante il gesto=%d, ADMIN_ACTION col riferimento=%d; righe col riferimento: %s"
+              % (len(registro), len(righe_gesto), [x[:80] for x in registro if rif_reg in x]))
+    except RuntimeError as e:
+        for anello in ANELLI_CATENA_5:
+            passo(anello, "premessa della catena 5", False, str(e))
+
+
+CATENA_5 = Catena(
+    voce="Prenotazioni: Rimborsa",
+    rotte=("/api/admin/rimborso",),
+    anelli=ANELLI_CATENA_5,
+    bottone="nella tabella delle prenotazioni premo «Rimborsa» su una prenotazione pagata: la prenotazione "
+            "e' annullata, le date tornano prenotabili e la riga lo dice",
+    soldi="restituisce all'ospite ESATTAMENTE il pagato, con UNA richiesta a Stripe e la chiave stabile "
+          "'rimborso:<riferimento>' (un secondo clic non restituisce due volte); la riga del bonifico dell'host "
+          "si toglie (nessun soldo era partito) e la garanzia passa a 'annullato'. Con una controversia aperta non parte niente: decide "
+          "l'arbitro o la banca",
+    archivio="scrive UNA riga 'rimborso' nel giornale dei soldi (il debito verso l'ospite: il giornale non si "
+             "cancella, catena di impronte); segna il pagamento 'da rimborsare' nei pendenti; nessun dato "
+             "personale nuovo. La traccia del gesto va nel registro del server, anello [traccia]",
+    percorre=percorre_catena_5,
+)
+
+ANELLI_CATENA_6 = ("porta", "vede", "motivo", "storna", "soldi", "doppio", "solo_penali", "traccia")
+
+
+def percorre_catena_6(b, BH, con_guasto=False):
+    """Il pulsante «↩️ Storna» della scheda audit, sulle note di debito (le penali): l'admin
+    corregge una penale sbagliata. Il giornale non si cancella: nasce la nota di credito contraria,
+    la penale e il suo debito si chiudono, e quello che era GIA' stato trattenuto all'host torna nei
+    suoi «da pagare» -- una volta sola.
+
+    Scritta il 2026-11-07. La premessa la costruisce il prodotto, non una scorciatoia: un bonifico
+    dell'host 'maturato' (prenotazione A), poi l'host cancella una prenotazione pagata (B) e la
+    penale si compensa su A. Lo Stripe dei bonifici e' quello della catena 2, che rifiuta tutto:
+    senza, il banco parlerebbe con la rete vera."""
+    import dataclasses
+    from fase101_stripe_connect import ProviderConnect
+    from fase83_server import _rif_per_registro
+    print("\n--- CATENA 6, «Storna» (scheda audit): penale -> nota contraria -> trattenuto restituito ---")
+    rotta = "/api/admin/storno_penale"
+    fc = b.sis.finanza
+    stripe = _StripeCheRifiuta()
+    connect_prima = b.sis.connect
+    b.sis.connect = ProviderConnect("sk_test_catena6", fetch=stripe.post, fetch_get=stripe.get)
+    storna_vera = None
+    try:
+        slug = b.alloggio("casa-catena-sei", 1, "2027-11-01", "2027-11-30")
+        rif_a, _va = b.pagata(slug, "2027-11-05", "2027-11-07")
+        rif_b, _vb = b.pagata(slug, "2027-11-12", "2027-11-14")
+        if not (rif_a and rif_b):
+            raise RuntimeError("il banco non ha prodotto le due prenotazioni pagate")
+        if not b.sis.garanzia.conferma_ospite(rif_a).get("ok"):
+            raise RuntimeError("il banco non ha chiuso la garanzia della prenotazione A")
+        netto_a = int((b.sis.payout.info(rif_a) or {}).get("minori") or 0)
+        s_hc, c_hc = b.g("POST", "/api/host/cancella", {"riferimento": rif_b}, b.tk)
+
+        def nd_di(r):
+            return [n for n in fc.note_per_riferimento(r) if n.get("tipo") == "debito"]
+
+        def offset_di(nid, r):
+            tot = 0
+            for m in fc.movimenti(r):
+                ev = str(m.get("evento_id") or "")
+                if m.get("tipo") == "penale_offset" and ev.startswith("offset:%s:" % nid):
+                    tot += int(m.get("importo_cents") or 0)
+            return tot
+
+        def nc_di(nid, r):
+            return [n for n in fc.note_per_riferimento(r)
+                    if n.get("tipo") == "credito" and n.get("storno_di") == nid]
+
+        def audit(r):
+            #  come nella catena 2: la chiave di Stripe si toglie sull'ISTANZA, l'esame non esce in rete
+            cfg = b.sis.config
+            b.sis.config = dataclasses.replace(cfg, stripe_secret_key="")
+            try:
+                s, c = _chiedi(b, "GET", "/api/admin/audit?id=" + r, None, ADMIN)
+            finally:
+                b.sis.config = cfg
+            return s, (c or {})
+
+        def registro_di(fare):
+            righe = []
+
+            class _Presa(logging.Handler):
+                def emit(self, record):
+                    try:
+                        righe.append(record.getMessage())
+                    except Exception:
+                        righe.append(str(record.msg))
+            presa = _Presa()
+            log_server = logging.getLogger("core_auto.server")
+            livello_prima = log_server.level
+            log_server.addHandler(presa)
+            log_server.setLevel(logging.DEBUG)
+            try:
+                esito = fare()
+            finally:
+                log_server.removeHandler(presa)
+                log_server.setLevel(livello_prima)
+            return esito, righe
+
+        nds = nd_di(rif_b)
+        nd = nds[0] if len(nds) == 1 else {}
+        nid = str(nd.get("nota_id") or "")
+        penale = int(nd.get("importo_cents") or 0)
+        trattenuto = offset_di(nid, rif_b) if nid else 0
+        #  LA PREMESSA, che NON e' un anello: senza, l'esame e' FERMO, non verde (S7).
+        #  ⚠️ La penale si compensa sul bonifico 'maturato' PIU' VECCHIO dell'host (FIFO), e sul banco
+        #  le catene prima ne lasciano: non e' detto che sia quello di A. Si pretende solo che una parte
+        #  sia stata trattenuta davvero (primo giro del 7/11: trattenuto 3000, A intatto a 16400).
+        if not (s_hc == 200 and nid and penale > 0 and trattenuto > 0 and netto_a > 0
+                and nd.get("stato") != "stornata"):
+            raise RuntimeError("premessa della catena 6 mancante: cancella=%s/%s note_debito=%d penale=%s "
+                               "trattenuto=%s netto_A=%s"
+                               % (s_hc, (c_hc or {}).get("errore") or (c_hc or {}).get("stato"),
+                                  len(nds), penale, trattenuto, netto_a))
+        corpo = {"nota_id": nid, "motivo": "catena 6: penale emessa per sbaglio"}
+
+        # -- porta ------------------------------------------------------------------------------------
+        s_senza, _ = b.g("POST", rotta, corpo, {})
+        s_solo, c_solo = b.g("POST", rotta, corpo, ADMIN)
+        passo("porta", "senza chiave 401, con la sola chiave admin 403 'bunker_richiesto' (muove soldi), e "
+                       "la penale resta com'era, senza nessuna nota contraria",
+              s_senza == 401 and s_solo == 403 and (c_solo or {}).get("errore") == "bunker_richiesto"
+              and (fc.nota(nid) or {}).get("stato") != "stornata" and not nc_di(nid, rif_b),
+              "senza=%s solo_chiave=%s/%s stato_nota=%s note_contrarie=%d"
+              % (s_senza, s_solo, (c_solo or {}).get("errore"), (fc.nota(nid) or {}).get("stato"),
+                 len(nc_di(nid, rif_b))))
+
+        # -- vede -------------------------------------------------------------------------------------
+        s_au, au = audit(rif_b)
+        sua = [n for n in (au.get("note") or []) if n.get("nota_id") == nid]
+        passo("vede", "la scheda audit della prenotazione mostra la penale come nota di DEBITO non stornata, "
+                      "con la cifra del giornale (la pagina disegna «Storna» solo li')",
+              s_au == 200 and len(sua) == 1 and sua[0].get("tipo") == "debito"
+              and sua[0].get("stato") != "stornata" and int(sua[0].get("importo_cents") or 0) == penale,
+              "http=%s nota=%s" % (s_au, sua))
+
+        # -- motivo -----------------------------------------------------------------------------------
+        s_m, c_m = b.g("POST", rotta, {"nota_id": nid, "motivo": "   "}, BH)
+        passo("motivo", "senza un perche' il pulsante risponde 422 'motivo_obbligatorio' e la penale non si "
+                        "tocca: una correzione di soldi ha sempre un motivo scritto",
+              s_m == 422 and (c_m or {}).get("errore") == "motivo_obbligatorio"
+              and (fc.nota(nid) or {}).get("stato") != "stornata" and not nc_di(nid, rif_b),
+              "http=%s errore=%s stato_nota=%s" % (s_m, (c_m or {}).get("errore"),
+                                                   (fc.nota(nid) or {}).get("stato")))
+
+        # -- storna -----------------------------------------------------------------------------------
+        if con_guasto:
+            # IL GUASTO, sull'ISTANZA del controllore e mai sul codice: lo storno chiude la penale ma
+            # «dimentica» il registro dei bonifici, quindi il trattenuto non torna all'host. E' l'anello
+            # che vale i soldi: l'host avrebbe pagato una penale che noi stessi diciamo sbagliata.
+            storna_vera = fc.storna_penale
+
+            def _senza_restituire(**k):
+                k["payout"] = None
+                return storna_vera(**k)
+            fc.storna_penale = _senza_restituire
+        (s_s, c_s), registro = registro_di(lambda: b.g("POST", rotta, corpo, BH))
+        if storna_vera is not None:
+            fc.__dict__.pop("storna_penale", None)
+            storna_vera = None
+        c_s = c_s or {}
+        ncs = nc_di(nid, rif_b)
+        debiti = [d for d in fc.debiti_host(b.host_id) if d.get("debito_id") == nid]
+        passo("storna", "risponde 200 con la nota contraria; la penale diventa 'stornata', nasce UNA nota "
+                        "di credito della STESSA cifra che la nomina, e il debito dell'host va a zero "
+                        "('stornato'): nessun giro lo riscuotera' piu'",
+              s_s == 200 and c_s.get("gia_stornata") is False and bool(c_s.get("nc_id"))
+              and (fc.nota(nid) or {}).get("stato") == "stornata"
+              and len(ncs) == 1 and int(ncs[0].get("importo_cents") or 0) == penale
+              and all(int(d.get("residuo_cents") or 0) == 0 and d.get("stato") == "stornato" for d in debiti),
+              "http=%s risposta=%s stato_nota=%s note_contrarie=%s debiti=%s"
+              % (s_s, c_s, (fc.nota(nid) or {}).get("stato"),
+                 [(n.get("nota_id"), n.get("importo_cents")) for n in ncs],
+                 [(d.get("residuo_cents"), d.get("stato")) for d in debiti]))
+
+        # -- soldi ------------------------------------------------------------------------------------
+        riga_rest = b.sis.payout.info("stornoND-" + nid) or {}
+        passo("soldi", "quello che era gia' stato trattenuto all'host torna nei suoi «da pagare»: UNA riga "
+                       "'maturato' di ESATTAMENTE il trattenuto (non la penale intera, non zero), e la "
+                       "risposta lo dice",
+              int(c_s.get("riscosso_cents") or -1) == trattenuto
+              and int(c_s.get("restituito_in_da_pagare") or -1) == trattenuto
+              and b.sis.payout.stato_di("stornoND-" + nid) == "maturato"
+              and int(riga_rest.get("minori") or 0) == trattenuto,
+              "trattenuto=%s penale=%s risposta riscosso/restituito=%s/%s riga=%s/%s"
+              % (trattenuto, penale, c_s.get("riscosso_cents"), c_s.get("restituito_in_da_pagare"),
+                 b.sis.payout.stato_di("stornoND-" + nid), riga_rest.get("minori")))
+
+        # -- doppio -----------------------------------------------------------------------------------
+        s_2, c_2 = b.g("POST", rotta, corpo, BH)
+        riga_dopo = b.sis.payout.info("stornoND-" + nid) or {}
+        passo("doppio", "un secondo clic risponde 'gia_stornata' e non fa niente: ancora UNA nota contraria "
+                        "e la riga restituita con la stessa cifra (l'host non e' rimborsato due volte)",
+              s_2 == 200 and (c_2 or {}).get("gia_stornata") is True and len(nc_di(nid, rif_b)) == 1
+              and int(riga_dopo.get("minori") or 0) == int(riga_rest.get("minori") or -1),
+              "http=%s gia_stornata=%s note_contrarie=%d riga=%s->%s"
+              % (s_2, (c_2 or {}).get("gia_stornata"), len(nc_di(nid, rif_b)), riga_rest.get("minori"),
+                 riga_dopo.get("minori")))
+
+        # -- solo_penali ------------------------------------------------------------------------------
+        nc_id = str((ncs[0] if ncs else {}).get("nota_id") or "")
+        s_nc, c_nc = b.g("POST", rotta, {"nota_id": nc_id, "motivo": "catena 6: provo a stornare il credito"},
+                         BH)
+        passo("solo_penali", "una nota di CREDITO non si storna: 404 'nota_non_trovata_o_non_ND', e non nasce "
+                             "nessuna nota nuova",
+              bool(nc_id) and s_nc == 404 and (c_nc or {}).get("errore") == "nota_non_trovata_o_non_ND"
+              and len(fc.note_per_riferimento(rif_b)) == 2,
+              "nc=%s http=%s errore=%s note=%d" % (nc_id, s_nc, (c_nc or {}).get("errore"),
+                                                   len(fc.note_per_riferimento(rif_b))))
+
+        # -- traccia ----------------------------------------------------------------------------------
+        rif_reg = _rif_per_registro(nid)
+        righe_gesto = [x for x in registro if "ADMIN_ACTION" in x and "Storno penale" in x and rif_reg in x]
+        passo("traccia", "il gesto lascia UNA riga che unisce CHI (ip), COSA (lo storno, col motivo) e SU COSA "
+                         "(la nota), come gli altri gesti dell'admin che muovono denaro",
+              len(righe_gesto) == 1 and IP["X-Forwarded-For"] in righe_gesto[0],
+              "righe durante il gesto=%d, ADMIN_ACTION con la nota=%d; %s"
+              % (len(registro), len(righe_gesto), [x[:90] for x in righe_gesto]))
+    except RuntimeError as e:
+        for anello in ANELLI_CATENA_6:
+            passo(anello, "premessa della catena 6", False, str(e))
+    finally:
+        if storna_vera is not None:
+            fc.__dict__.pop("storna_penale", None)
+        b.sis.connect = connect_prima
+
+
+CATENA_6 = Catena(
+    voce="Scheda audit: Storna la penale",
+    rotte=("/api/admin/storno_penale",),
+    anelli=ANELLI_CATENA_6,
+    bottone="nella scheda audit premo «↩️ Storna» su una nota di debito (una penale), scrivo il perche' e "
+            "confermo: la penale risulta 'stornata' e la scheda si ricarica",
+    soldi="la penale si annulla con una nota di credito della stessa cifra (il giornale non si riscrive); il "
+          "debito dell'host va a zero; quello che gli era gia' stato trattenuto torna nei suoi «da pagare» "
+          "come riga 'maturato' da pagare A MANO (mai un bonifico automatico), una volta sola",
+    archivio="scrive UNA nota di credito e la riga contraria nel giornale dei soldi (catena di impronte, non "
+             "si cancella); cambia lo stato della nota e del debito; aggiunge la riga `stornoND-<nota>` "
+             "nell'archivio dei bonifici. Nessun dato personale nuovo (il soggetto e' l'id dell'host). La "
+             "traccia del gesto va nel registro del server, anello [traccia]",
+    percorre=percorre_catena_6,
+)
+
 #  ⛔ Una rotta qui che la pagina non nomina piu' e' ROSSA (dichiarazione invecchiata).
-CATENE = {rotta: cat for cat in (CATENA_1, CATENA_2, CATENA_3, CATENA_4) for rotta in cat.rotte}
+CATENE = {rotta: cat for cat in (CATENA_1, CATENA_2, CATENA_3, CATENA_4, CATENA_5, CATENA_6)
+          for rotta in cat.rotte}
 
 #  Ogni BOTTONE e ogni CAMPO della pagina va attribuito: alla rotta che il gesto attraversa
 #  (e allora la sua catena e' quella della rotta), oppure a `PAGINA_SOLA` con il perche' --
@@ -1215,7 +1638,9 @@ CAMPI = {
 #     della voce (vede · ferma · porta · fuori · decide · soldi · doppio · traccia).
 #     ✅ A 15 IL 2026-11-06: la CATENA 4 («Rimborsi dovuti: elenco e Rimborsa») percorre le due rotte
 #     della voce (porta · vede · cieco · cifra · rimborsa · doppio · divergenza · traccia).
-ROTTE_SENZA_CATENA_TETTO = 15
+#     ✅ A 13 IL 2026-11-07: la CATENA 5 («Prenotazioni: Rimborsa») e la CATENA 6 («Scheda audit:
+#     Storna la penale») percorrono una rotta ciascuna.
+ROTTE_SENZA_CATENA_TETTO = 13
 
 
 # --------------------------------------------------------------------------------------
