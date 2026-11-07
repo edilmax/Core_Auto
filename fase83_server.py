@@ -5250,11 +5250,8 @@ class RouterHTTP:
         # ⛔ CHI, SU COSA, CON CHE ESITO (voce 35, 7/11, «autorizzato»): come «Rimborso dovuto».
         # Trovato percorrendo la catena 5 (`collaudi/esame_catene_admin.py`, anello [traccia]).
         rif = idem[len("reblock:"):] if idem.startswith("reblock:") else idem[:24]
-        logger.warning("ADMIN_ACTION | OGGETTO: %s | AZIONE: Rimborso | ESITO: %s | IP: %s",
-                       _rif_per_registro(rif),
-                       _testo_per_registro(str((esito or {}).get("stato") or (esito or {}).get("errore")
-                                               or stato) if isinstance(esito, dict) else stato),
-                       self._client_ip(headers))
+        logger.warning("ADMIN_ACTION | OGGETTO: %s | AZIONE: Rimborso | HTTP: %s | IP: %s",
+                       _rif_per_registro(rif), stato, self._client_ip(headers))
         return stato, esito
 
     def _admin_rimborso_sotto_chiave(self, alloggio, ci, co, idem):

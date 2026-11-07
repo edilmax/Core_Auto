@@ -162,6 +162,12 @@ async function penaleDi(rif) {
   // La scheda Audit della prenotazione, dal campo di ricerca e dal bottone 🔬, come fa l'admin.
   const bottone = `#au_card button[onclick^="stornaPenale('${ND.nota_id}'"]`;
   await p.fill('#sr_q', P.rif);
+  //  ⛔ Scrivere nel campo fa partire da sola la ricerca dal vivo dopo 350 ms (admin.html,
+  //     `sr_q` input), e la ricerca svuota la riga dei messaggi quando risponde. Sulla CI
+  //     rispondeva DOPO il primo clic e cancellava il «⚠️» del motivo vuoto (7/11): si aspetta
+  //     che la ricerca sia arrivata, poi si apre la scheda.
+  await p.waitForResponse(r => r.url().includes('/api/admin/search'), { timeout: 20000 }).catch(() => {});
+  await p.waitForLoadState('networkidle').catch(() => {});
   await p.click('#btnAudit');
   const c_e = await p.waitForSelector(bottone, { state: 'visible', timeout: 20000 })
     .then(() => true).catch(() => false);
