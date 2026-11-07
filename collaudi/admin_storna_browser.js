@@ -184,28 +184,36 @@ async function penaleDi(rif) {
   // ⛔ Niente attese a tempo fisso (skill e2e-testing, «network timing»): se il gesto arriva al
   //    server si aspetta la SUA risposta e poi la frase che la pagina ci scrive sopra; se non ci
   //    arriva (motivo vuoto, ripensamento) la pagina risponde subito, senza rete.
-  const premi = async (attesa) => {
+  //  ⛔ Un clic che non riesce (il pulsante e' sparito, la richiesta non parte) e' un GUASTO del
+  //     prodotto, non una premessa mancante: si scrive fra i guasti e si va avanti fino a `fine`,
+  //     che stampa tutto e fa la foto. Prima finiva nel `catch` in fondo: uscita 2 «NON ESEGUITO»
+  //     e il motivo perso (/code-review del fondatore, 7/11).
+  const premi = async (attesa, giro) => {
     visti.length = 0;
-    await p.evaluate(() => { document.getElementById('sr_stat').textContent = ''; });
-    if (attesa === 'server') {
-      await Promise.all([
-        p.waitForResponse(r => r.url().includes('/api/admin/storno_penale'), { timeout: 20000 }),
-        p.click(bottone),
-      ]);
-      //  la ricarica scrive prima il suo «…» o «❌», poi il pulsante ci mette sopra l'esito: si
-      //  aspetta l'esito (se non arriva, l'asserzione sotto dice cosa c'e' scritto davvero)
-      await p.waitForFunction(() => (document.getElementById('sr_stat').textContent || '').trim()
-        .startsWith('✅'), null, { timeout: 20000 }).catch(() => {});
-    } else {
-      await p.click(bottone);
-      if (attesa === 'frase') {
-        await p.waitForFunction(() => (document.getElementById('sr_stat').textContent || '').trim(),
-          null, { timeout: 10000 }).catch(() => {});
+    try {
+      await p.evaluate(() => { document.getElementById('sr_stat').textContent = ''; });
+      if (attesa === 'server') {
+        await Promise.all([
+          p.waitForResponse(r => r.url().includes('/api/admin/storno_penale'), { timeout: 20000 }),
+          p.click(bottone, { timeout: 10000 }),
+        ]);
+        //  la ricarica scrive prima il suo «…» o «❌», poi il pulsante ci mette sopra l'esito: si
+        //  aspetta l'esito (se non arriva, l'asserzione sotto dice cosa c'e' scritto davvero)
+        await p.waitForFunction(() => (document.getElementById('sr_stat').textContent || '').trim()
+          .startsWith('✅'), null, { timeout: 20000 }).catch(() => {});
       } else {
-        // un «non succede niente» non ha un evento da aspettare: si lascia passare un istante
-        // e si controlla anche che nessuna richiesta di storno sia partita (`richieste`)
-        await p.waitForTimeout(500);
+        await p.click(bottone, { timeout: 10000 });
+        if (attesa === 'frase') {
+          await p.waitForFunction(() => (document.getElementById('sr_stat').textContent || '').trim(),
+            null, { timeout: 10000 }).catch(() => {});
+        } else {
+          // un «non succede niente» non ha un evento da aspettare: si lascia passare un istante
+          // e si controlla anche che nessuna richiesta di storno sia partita (`richieste`)
+          await p.waitForTimeout(500);
+        }
       }
+    } catch (e) {
+      esigi(false, `${giro}: il gesto non si e' potuto compiere (${String(e).split('\n')[0].slice(0, 160)})`);
     }
     return stato();
   };
@@ -220,7 +228,7 @@ async function penaleDi(rif) {
 
   // 1. MOTIVO VUOTO: il perche' e' obbligatorio, e lo dice la pagina, non solo il server.
   risposte = { motivo: '   ', conferma: true };
-  const t1 = await premi('frase');
+  const t1 = await premi('frase', '1. motivo vuoto');
   console.log(`[ADMIN] 1. motivo vuoto -> ${JSON.stringify(t1)} riquadri=${visti}`);
   esigi(t1.includes(chiediMotivo) && !t1.includes(stornataTesto),
     `1. col motivo vuoto la pagina dice ${JSON.stringify(t1)} invece di chiedere il motivo`);
@@ -229,14 +237,14 @@ async function penaleDi(rif) {
 
   // 2. RIQUADRO ANNULLATO: l'admin ci ripensa, non succede niente.
   risposte = { motivo: null, conferma: true };
-  const t2 = await premi('nulla');
+  const t2 = await premi('nulla', '2. riquadro annullato');
   console.log(`[ADMIN] 2. riquadro annullato -> ${JSON.stringify(t2)} riquadri=${visti}`);
   esigi(!t2.includes(stornataTesto), `2. annullato il riquadro la pagina dice ${JSON.stringify(t2)}`);
   await ancoraIntatta('2. riquadro annullato');
 
   // 3. MOTIVO SCRITTO, CONFERMA NEGATA: ancora niente.
   risposte = { motivo: MOTIVO, conferma: false };
-  const t3 = await premi('nulla');
+  const t3 = await premi('nulla', '3. conferma negata');
   console.log(`[ADMIN] 3. conferma negata -> ${JSON.stringify(t3)} riquadri=${visti}`);
   esigi(visti.includes('prompt') && visti.includes('confirm'),
     `3. la pagina non ha chiesto motivo E conferma (riquadri visti: ${visti})`);
@@ -245,19 +253,33 @@ async function penaleDi(rif) {
   esigi(richieste.length === 0,
     `nei primi tre giri la pagina ha mandato ${richieste.length} richiesta/e di storno al server`);
 
-  // 4. MOTIVO E CONFERMA: lo storno vero -- e la ricarica della scheda che CADE (la rete se ne
-  //    va proprio dopo lo storno). L'admin deve leggere TUTTE E DUE le cose: lo storno riuscito e
-  //    la ricarica fallita; nessuna delle due copre l'altra (come la D di admin_rimborsa_browser).
+  // 4. MOTIVO E CONFERMA: lo storno vero -- e la ricarica della scheda che il SERVER rifiuta
+  //    (503 col suo JSON, proprio dopo lo storno). L'admin deve leggere TUTTE E DUE le cose: lo
+  //    storno riuscito e la ricarica fallita; nessuna delle due copre l'altra. Col 503 (e non con la
+  //    rete tolta) dal /code-review del 7/11: un rifiuto del server si leggeva «non trovato», senza
+  //    nessun «❌»; la rete tolta la prova il giro 5 qui sotto.
   risposte = { motivo: MOTIVO, conferma: true };
-  await p.route('**/api/admin/audit**', r => r.abort('failed'));
-  const t4 = await premi('server');
+  await p.route('**/api/admin/audit**', r => r.fulfill({ status: 503, contentType: 'application/json',
+    body: JSON.stringify({ errore: 'service_unavailable' }) }));
+  const t4 = await premi('server', '4. storno confermato');
   await p.unroute('**/api/admin/audit**');
   esigi(richieste.length === 1, `lo storno confermato ha mandato ${richieste.length} richieste (attesa: UNA)`);
-  console.log(`[ADMIN] 4. storno confermato, ricarica caduta -> ${JSON.stringify(t4)}`);
+  console.log(`[ADMIN] 4. storno confermato, ricarica rifiutata (503) -> ${JSON.stringify(t4)}`);
   esigi(t4.startsWith('✅') && t4.includes(stornataTesto),
     `4. storno confermato, ma a cose ferme la pagina dice ${JSON.stringify(t4)} e non ${JSON.stringify(stornataTesto)}`);
   esigi(t4.includes('❌'),
-    `4. la ricarica della scheda e' caduta ma la pagina non lo dice: ${JSON.stringify(t4)}`);
+    `4. il server ha rifiutato la ricarica della scheda ma la pagina non lo dice: ${JSON.stringify(t4)}`);
+
+  // 5. LA SCHEDA SENZA RETE: dal bottone 🔬, la rete se ne va. La riga dei messaggi deve dirlo.
+  await p.route('**/api/admin/audit**', r => r.abort('failed'));
+  await p.evaluate(() => { document.getElementById('sr_stat').textContent = ''; });
+  await p.click('#btnAudit', { timeout: 10000 }).catch(e => esigi(false, `5. il bottone 🔬 non si preme (${String(e).split('\n')[0]})`));
+  await p.waitForFunction(() => (document.getElementById('sr_stat').textContent || '').trim()
+    .startsWith('❌'), null, { timeout: 10000 }).catch(() => {});
+  const t5 = await stato();
+  await p.unroute('**/api/admin/audit**');
+  console.log(`[ADMIN] 5. scheda senza rete -> ${JSON.stringify(t5)}`);
+  esigi(t5.startsWith('❌'), `5. la scheda non si e' caricata (rete tolta) ma la pagina dice ${JSON.stringify(t5)}`);
   // la rete torna: l'admin riapre la scheda e vede la penale stornata
   await Promise.all([
     p.waitForResponse(r => r.url().includes('/api/admin/audit'), { timeout: 20000 }).catch(() => {}),

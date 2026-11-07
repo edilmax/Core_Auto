@@ -511,6 +511,8 @@ async function auditApri(id){
     const r=await fetchTempo(API+'/api/admin/audit?id='+encodeURIComponent(termine),
                              {headers:{'X-Admin-Key':key()}});
     if(r.status===401){ st.textContent='⚠️ '+T('err_key'); return; }
+    if(r.status!==200){ let e=null; try{ e=await r.json(); }catch(_){ console.warn('bookinvip-admin',_); }
+      st.textContent='❌ '+(fraseErrore((e&&e.errore)||'')||r.status); return; }   // un 503 non e' «non trovato»
     const d=await r.json(); st.textContent='';
     if(d.tipo==='ambiguo'){
       box.innerHTML='<div class="sr-hint">'+T('au_amb')+' '+
@@ -566,8 +568,8 @@ async function stornaPenale(notaId, rif, valuta){
       body:JSON.stringify({nota_id:notaId, motivo:motivo.trim()})});
     let d=null; try{ d=await r.json(); }catch(_){ console.warn('bookinvip-admin',_); }
     if(r.status===200 && d){
-      if(rif) await auditApri(rif);                    // ricarica la scheda PRIMA: svuota la riga dei messaggi
-      const ric=st.textContent;                        // se la ricarica e' caduta, il suo avviso resta accanto
+      let ric='';                                      // ricarica la scheda PRIMA: svuota la riga dei messaggi;
+      if(rif){ await auditApri(rif); ric=st.textContent; }   // se e' caduta, il suo avviso resta accanto
       st.textContent='✅ '+T('au_stornata')+(d.restituito_in_da_pagare>0?' ('+T('au_restit')+' '+money(d.restituito_in_da_pagare, valuta)+')':'')+(ric?' · '+ric:'');
     } else if(r.status===403){ st.textContent='🏰 '+T('bk_serve'); }
     else { st.textContent='❌ '+(fraseErrore((d&&d.errore)||'')||r.status); }

@@ -129,9 +129,7 @@ NON_GUARDA = (
     "enumera dal codice `esame_accessi` (Blocco 3, caselle 1-3)",
     "le rotte del pannello che non hanno ancora una catena (l'elenco `CATENE` dice quali ce l'hanno; "
     "il numero lo stampa il verdetto della casella): risultano ROSSE per costruzione, non per un "
-    "guasto -- e' lo stato vero. ⚠️ Il «Rimborsa» della tabella prenotazioni (catena 5) aspetta un pezzo "
-    "del PRODOTTO: `_admin_rimborso` scrive l'esito ma non l'ip di chi ha premuto, quindi il suo anello "
-    "[traccia] e' rosso sul codice sano finche' `fase83_server` non lo ripara (voce 35 di RIPRENDI)",
+    "guasto -- e' lo stato vero",
     "nella catena 3 la controversia aperta dalla BANCA (motivo 'chargeback:', decide la banca), la "
     "divisione al 100% all'ospite e quella in euro esatti: qui si percorre la divisione in "
     "percentuale aperta dall'ospite; gli altri rami li provano le guardie di `test_fase83_server`",
@@ -1138,9 +1136,9 @@ def percorre_catena_5(b, BH, con_guasto=False):
     prenotazione pagata, le date tornano libere, i soldi dell'host si fermano e quelli dell'ospite
     tornano indietro UNA volta, nella cifra pagata.
 
-    Scritta il 2026-11-07 mentre il PC era occupato dalla mutazione del blocco 2: NON ancora
-    percorsa sul banco quando e' stata scritta (lo dice RIPRENDI_QUI). Le letture si filtrano per
-    riferimento, perche' le catene prima lasciano righe loro sullo stesso banco."""
+    Scritta e percorsa il 2026-11-07 (la riga ADMIN_ACTION che il suo anello [traccia] pretende
+    l'ha aggiunta `fase83_server` lo stesso giorno). Le letture si filtrano per riferimento,
+    perche' le catene prima lasciano righe loro sullo stesso banco."""
     from fase83_server import _rif_per_registro
     print("\n--- CATENA 5, «Rimborsa» (tabella prenotazioni): annulla -> date -> soldi -> nessun doppio ---")
     rotta = "/api/admin/rimborso"
@@ -1240,15 +1238,20 @@ def percorre_catena_5(b, BH, con_guasto=False):
             # il bonifico dell'host. E' l'anello che vale i soldi: l'ospite riavrebbe tutto e l'host
             # incasserebbe lo stesso una prenotazione rimborsata -- la piattaforma paga due volte.
             b.router._payout_trattieni = lambda r: True
-        (s_r, c_r), registro = registro_di(lambda: b.g("POST", rotta, corpo, BH))
-        b.router.__dict__.pop("_payout_trattieni", None)
+        try:
+            (s_r, c_r), registro = registro_di(lambda: b.g("POST", rotta, corpo, BH))
+        finally:
+            #  il guasto si toglie SEMPRE, come nelle catene 4 e 6 (/code-review 7/11): se il gesto
+            #  solleva, il router del banco non resta con un rimborso che non ferma il bonifico
+            b.router.__dict__.pop("_payout_trattieni", None)
         c_r = c_r or {}
+        libere_dopo = libere(p)          # misurata UNA volta: il dettaglio dice il valore giudicato
         passo("rimborsa", "risponde 200 'rimborsato' senza passi falliti, e le date che erano occupate "
                           "tornano prenotabili",
               s_r == 200 and c_r.get("stato") == "rimborsato" and c_r.get("passi_falliti") == []
-              and occupate_prima and libere(p),
+              and occupate_prima and libere_dopo,
               "http=%s stato=%s falliti=%s occupate_prima=%s libere_dopo=%s rimborso=%s"
-              % (s_r, c_r.get("stato"), c_r.get("passi_falliti"), occupate_prima, libere(p),
+              % (s_r, c_r.get("stato"), c_r.get("passi_falliti"), occupate_prima, libere_dopo,
                  c_r.get("rimborso_stripe")))
 
         # -- soldi ------------------------------------------------------------------------------------

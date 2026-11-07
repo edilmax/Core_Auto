@@ -13711,6 +13711,39 @@ class TestLEsitoDeiPulsantiDellaSchedaAuditNonSiCancella(unittest.TestCase):
             self.assertIn("(ric?' · '+ric:'')", ramo,
                           "%s: una ricarica caduta dopo il pulsante non si legge piu':\n%s" % (funzione, ramo))
 
+    def _righe_di_codice(self, funzione):
+        with open(os.path.join(QUI, "deploy", "admin.html"), encoding="utf-8") as f:
+            testo = f.read()
+        inizio = testo.index("async function %s(" % funzione)
+        corpo = testo[inizio:testo.index("\n}\n", inizio)]
+        return [r.split("//")[0] for r in corpo.splitlines()]
+
+    def test_UNA_RICARICA_RIFIUTATA_DAL_SERVER_NON_SI_LEGGE_COME_RIUSCITA(self):
+        """⛔ D20 (/code-review del fondatore, 7/11): `auditApri` trattava come buona OGNI risposta
+        diversa da 401 -- un 503 o un 429 col suo JSON svuotava la riga dei messaggi e disegnava
+        «non trovato». Dopo «Storna» la pagina diceva «✅ stornata» accanto a «non trovato», senza
+        nessun segno che la ricarica fosse caduta: proprio il caso che il «ric» doveva far vedere.
+        Il browser (`admin_storna_browser.js`, giro 4) lo prova con un 503 vero; questa guardia
+        tiene il punto: la riga si svuota solo DOPO aver visto un 200."""
+        righe = self._righe_di_codice("auditApri")
+        svuota = next((n for n, r in enumerate(righe) if "st.textContent=''" in r), None)
+        self.assertIsNotNone(svuota, "auditApri non svuota piu' la riga dei messaggi: guardia da rifare")
+        prima = "\n".join(righe[:svuota + 1])
+        self.assertIn("r.status!==200", prima,
+                      "auditApri svuota la riga dei messaggi senza aver controllato che la risposta "
+                      "sia un 200: un 503 del server si legge come «non trovato»:\n%s" % prima)
+
+    def test_SENZA_RIFERIMENTO_IL_MESSAGGIO_NON_SI_PORTA_DIETRO_I_PUNTINI(self):
+        """⛔ D20 (/code-review del fondatore, 7/11): con `rif` vuoto la scheda non si ricarica, ma
+        `ric` leggeva lo stesso la riga dei messaggi, dove c'era ancora il «…» dell'attesa: «✅
+        stornata · …», un «sto lavorando» per sempre accanto a un gesto sui soldi finito."""
+        righe = self._righe_di_codice("stornaPenale")
+        lettura = [r for r in righe if "=st.textContent" in r]
+        self.assertTrue(lettura, "stornaPenale non rilegge piu' la riga dei messaggi: guardia da rifare")
+        for r in lettura:
+            self.assertIn("if(rif)", r, "stornaPenale rilegge la riga dei messaggi anche quando la "
+                                       "scheda non e' stata ricaricata: %r" % r)
+
 
 class TestOgniGestoDellAdminLasciaLaSuaRiga(_GuardieSugliAttrezziDelLavoro):
     """⛔ D20 PER UN DIFETTO VIVO: quattro gesti dell'admin cambiavano lo stato o muovevano denaro
@@ -13807,6 +13840,26 @@ class TestOgniGestoDellAdminLasciaLaSuaRiga(_GuardieSugliAttrezziDelLavoro):
                         {"nota_id": nota["nota_id"], "motivo": "emessa per errore"}, BH))
         self.assertEqual(esito[0], 200, esito)
         self._pretendi_la_riga("storno_penale", righe, nota["nota_id"])
+
+    def test_UN_RIMBORSO_CHE_SI_ROMPE_A_META_LASCIA_LA_SUA_RIGA(self):
+        """⛔ D20 (/code-review del fondatore, 7/11): la riga ADMIN_ACTION del «Rimborsa» si
+        scriveva solo se il corpo del rimborso tornava normalmente. Se solleva -- la garanzia
+        illeggibile che solleva APPOSTA, o un passo dopo che i soldi si sono gia' mossi -- il
+        cliente legge 500 e il registro non dice chi ha tentato cosa: proprio il caso che qualcuno
+        andra' a indagare. Il guasto si inietta sull'ISTANZA del banco, non sul modulo."""
+        _ruoli, b, BH = self._apri_banco()
+
+        def _rotto(*_a, **_k):
+            raise RuntimeError("guasto di prova a meta' del rimborso")
+
+        b.router._admin_rimborso_sotto_chiave = _rotto
+        esito, righe = self._registro_del_gesto(
+            lambda: b.g("POST", "/api/admin/rimborso",
+                        {"alloggio_id": "casa-traccia-rotta", "check_in": "2027-10-01",
+                         "check_out": "2027-10-03", "idem_key": "reblock:RIF-ROTTO-1"}, BH))
+        self.assertEqual(esito[0], 500, "il guasto di prova non e' arrivato al corpo del rimborso: "
+                                        "la guardia non misurerebbe niente (S7): %r" % (esito,))
+        self._pretendi_la_riga("rimborso rotto a meta'", righe, "RIF-ROTTO-1", "HTTP: 500")
 
     def test_RISOLVERE_UNA_CONTROVERSIA_LASCIA_LA_SUA_RIGA(self):
         _ruoli, b, BH = self._apri_banco()
