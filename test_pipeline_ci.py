@@ -13707,6 +13707,9 @@ class TestLEsitoDeiPulsantiDellaSchedaAuditNonSiCancella(unittest.TestCase):
             self.assertLess(ramo.index("await auditApri("), ramo.index("'✅ '"),
                             "%s: il «✅» si scrive PRIMA della ricarica, che lo cancella:\n%s"
                             % (funzione, ramo))
+            #  e se la ricarica cade, il suo avviso resta accanto al «✅» invece di sparire
+            self.assertIn("(ric?' · '+ric:'')", ramo,
+                          "%s: una ricarica caduta dopo il pulsante non si legge piu':\n%s" % (funzione, ramo))
 
 
 class TestOgniGestoDellAdminLasciaLaSuaRiga(_GuardieSugliAttrezziDelLavoro):

@@ -221,12 +221,25 @@ async function penaleDi(rif) {
   esigi(!t3.includes(stornataTesto), `3. con la conferma negata la pagina dice ${JSON.stringify(t3)}`);
   await ancoraIntatta('3. conferma negata');
 
-  // 4. MOTIVO E CONFERMA: lo storno vero.
+  // 4. MOTIVO E CONFERMA: lo storno vero -- e la ricarica della scheda che CADE (la rete se ne
+  //    va proprio dopo lo storno). L'admin deve leggere TUTTE E DUE le cose: lo storno riuscito e
+  //    la ricarica fallita; nessuna delle due copre l'altra (come la D di admin_rimborsa_browser).
   risposte = { motivo: MOTIVO, conferma: true };
+  await p.route('**/api/admin/audit**', r => r.abort('failed'));
   const t4 = await premi();
-  console.log(`[ADMIN] 4. storno confermato -> ${JSON.stringify(t4)}`);
+  await p.unroute('**/api/admin/audit**');
+  console.log(`[ADMIN] 4. storno confermato, ricarica caduta -> ${JSON.stringify(t4)}`);
   esigi(t4.startsWith('✅') && t4.includes(stornataTesto),
     `4. storno confermato, ma a cose ferme la pagina dice ${JSON.stringify(t4)} e non ${JSON.stringify(stornataTesto)}`);
+  esigi(t4.includes('❌'),
+    `4. la ricarica della scheda e' caduta ma la pagina non lo dice: ${JSON.stringify(t4)}`);
+  // la rete torna: l'admin riapre la scheda e vede la penale stornata
+  await Promise.all([
+    p.waitForResponse(r => r.url().includes('/api/admin/audit'), { timeout: 20000 }).catch(() => {}),
+    p.click('#btnAudit'),
+  ]);
+  await p.waitForFunction(id => (document.getElementById('au_card').textContent || '').includes(id),
+    ND.nota_id, { timeout: 20000 }).catch(() => {});
   const via = await p.waitForSelector(bottone, { state: 'detached', timeout: 20000 })
     .then(() => true).catch(() => false);
   esigi(via, '4. dopo lo storno la scheda mostra ancora «Storna» sulla stessa penale');
