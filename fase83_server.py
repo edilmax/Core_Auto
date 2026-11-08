@@ -8755,7 +8755,12 @@ class RouterHTTP:
                     gia_uscito = (int(st.get("host_riceve_cents", 0) or 0)
                                   + int(st.get("ospite_rimborso_cents", 0) or 0))
                 tratt = r.get("trattenuto_cents", 0)
-                host_tiene = (imp * tratt // pagato) if (imp and pagato and tratt) else 0
+                # AT1 (8/11): la garanzia comprende la tassa, che torna sempre all'ospite: la quota
+                # dell'host si calcola sul solo soggiorno, o quei soldi uscirebbero due volte
+                _tassa_g = v.get("tassa_soggiorno_cents", 0)
+                _tassa_g = _tassa_g if isinstance(_tassa_g, int) and not isinstance(_tassa_g, bool) else 0
+                _base_g = max(0, imp - max(0, _tassa_g))
+                host_tiene = (_base_g * tratt // pagato) if (_base_g and pagato and tratt) else 0
                 if host_tiene > 0:
                     esito_gz = gz.chiudi_proporzionale(rif, host_tiene)
                     if not (isinstance(esito_gz, dict) and esito_gz.get("ok")):

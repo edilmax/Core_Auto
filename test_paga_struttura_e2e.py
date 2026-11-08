@@ -392,6 +392,40 @@ class TestPagaStrutturaE2E(unittest.TestCase):
                          "totale %s, anticipo %s: la riga deve valere l'anticipo"
                          % (q["totale_cents"], b["anticipo_online_cents"]))
 
+    def test_AT1_online_la_tassa_resa_all_ospite_non_va_anche_all_host(self):
+        # Soggiorno non rimborsabile pagato online: all'ospite torna la tassa, all'host il soggiorno.
+        import datetime
+        oggi = datetime.date.today()
+        d_in = (oggi + datetime.timedelta(days=1)).isoformat()
+        d_out = (oggi + datetime.timedelta(days=3)).isoformat()
+        self.g("POST", "/api/host/pubblica",
+               {"slug": "casanr", "titolo": "CasaNR", "citta": "Roma",
+                "prezzo_notte_cents": 30000, "capacita": 4, "tassa_pp_notte_cents": 200,
+                "politica_cancellazione": "non_rimborsabile"}, {"X-Host-Token": self.tok})
+        self.g("POST", "/api/host/disponibilita_range",
+               {"alloggio_id": "casanr", "da": d_in,
+                "a": (oggi + datetime.timedelta(days=5)).isoformat(),
+                "unita_totali": 2, "prezzo_netto_cents": 30000}, {"X-Host-Token": self.tok})
+        s, q = self.g("POST", "/api/concierge/quote",
+                      {"alloggio_id": "casanr", "check_in": d_in, "check_out": d_out, "party": 2})
+        self.assertEqual(s, 200, q)
+        tassa = q.get("tassa_soggiorno_cents", 0)
+        self.assertGreater(tassa, 0, "premessa: serve una tassa > 0")
+        s, b = self.g("POST", "/api/concierge/book",
+                      {"quote_token": q["quote_token"], "email": "cli@ps.it"})
+        self.assertEqual(s, 201, b)
+        rif = b["riferimento"]
+        s, _ = self._webhook(rif)
+        self.assertEqual(s, 200)
+        prima = self.sys.garanzia.stato(rif)
+        self.assertEqual(prima.get("stato"), "in_garanzia", prima)
+        s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": b["voucher_token"]})
+        self.assertEqual(s, 200, c)
+        self.assertEqual(c.get("rimborso_cents", 0), tassa, c)
+        dopo = self.sys.garanzia.stato(rif)
+        self.assertEqual(int(dopo["host_riceve_cents"]), int(prima["importo_host_cents"]) - tassa,
+                         "la tassa e' tornata all'ospite: non puo' andare anche all'host")
+
     def test_zero_notti_e_date_impossibili_rifiutate(self):
         # 0 notti / date invertite: il preventivo/prenotazione NON deve confermare nulla,
         # a prescindere dal modo di pagamento.
