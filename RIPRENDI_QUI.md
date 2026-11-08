@@ -4192,7 +4192,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 164f98a
+CONSEGNE AGGIORNATE A: 2dc80ed
 
 - AGGIORNAMENTO 7/11 notte (sessione 35dc0a15, account nuovo del fondatore; stessa cartella e stesso ramo della #311). Ricontrollo della sessione efd8a163: GitHub 69ed50c, PR #311 aperta con 17 controlli verdi, mutazione del blocco 2 viva. Il `/code-review` lanciato dal fondatore sulla #311 ha trovato 3 difetti veri del prodotto (dettaglio nel REGISTRO, riga «↩️ «RIMBORSA» DELLA TABELLA»): «❌» mancante quando il SERVER rifiuta la ricarica della scheda (non solo la rete), «…» attaccato al «✅» con riferimento vuoto, riga ADMIN_ACTION persa se il «Rimborsa» solleva. Riparati col via «autorizzato» scritto dal fondatore in questa finestra, D20 rispettata (3 guardie rosse, poi verdi; browser rosso col difetto rimesso, sha256 identico). Presi anche i rilievi sugli strumenti (catena 5 col guasto tolto in `finally`, dichiarazione superata tolta, clic falliti = guasti); NON presi, perche' sono pulizia e non trovano errori: le 7 copie della regola «rif dalla chiave» in fase83 e le 6 copie dell'acchiappa-registro nelle catene. I 4 agenti ECC sul blocco dei soldi (sola lettura) hanno dato 27 rilievi DA VERIFICARE, scritti fuori dal progetto in `Desktop\Core_Auto_GUARDIE_PRONTE\S_20261107_agenti_soldi\rilievi_da_verificare.txt`; verificati sul codice finora DB1 (storno della penale fuori dal lucchetto dei bonifici: un debito stornato puo' tornare aperto) e DB2 (restituzione persa se il registro dei bonifici fallisce dopo la nota 'stornata'). Caricatore 7712.
 
@@ -6715,7 +6715,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 7731 test
+SUITE ATTUALE: Ran 7737 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

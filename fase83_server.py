@@ -5499,9 +5499,8 @@ class RouterHTTP:
                 dj = json.loads(rec.get("corpo_json") or "{}")
             except Exception:
                 dj = {}
-            # CP1/CP2 (8/11): il freno confronta con cio' che la carta ha pagato davvero
-            pagato = _incassato_online(dj, int(dj.get("totale_cents", 0)
-                                               or dj.get("prezzo_guest_cents", 0) or 0))
+            pagato = int(dj.get("totale_cents", 0) or dj.get("prezzo_guest_cents", 0) or 0)
+            pagato = _incassato_online(dj, pagato)   # CP1/CP2 (8/11): il freno guarda la carta
             pi_ = str(dj.get("stripe_pi") or "")
             # Il rilascio delle date e' la PRIMA cosa che fa la cancellazione, e senza di
             # esso non si arriva mai a questi stati: se lo stato c'e', le date sono libere.
@@ -8757,10 +8756,8 @@ class RouterHTTP:
                 tratt = r.get("trattenuto_cents", 0)
                 # AT1 (8/11): la garanzia comprende la tassa, che torna sempre all'ospite: la quota
                 # dell'host si calcola sul solo soggiorno, o quei soldi uscirebbero due volte
-                _tassa_g = v.get("tassa_soggiorno_cents", 0)
-                _tassa_g = _tassa_g if isinstance(_tassa_g, int) and not isinstance(_tassa_g, bool) else 0
-                _base_g = max(0, imp - max(0, _tassa_g))
-                host_tiene = (_base_g * tratt // pagato) if (_base_g and pagato and tratt) else 0
+                _base_g = max(0, imp - _intero_positivo(v.get("tassa_soggiorno_cents", 0)))
+                host_tiene = (_base_g * tratt // pagato) if pagato else 0
                 if host_tiene > 0:
                     esito_gz = gz.chiudi_proporzionale(rif, host_tiene)
                     if not (isinstance(esito_gz, dict) and esito_gz.get("ok")):
@@ -8857,10 +8854,7 @@ class RouterHTTP:
         # CREDITO VIAGGIO ANTI-RIMPIANTO: se hai perso qualcosa, una parte torna come credito
         # (non-cashabile, riscattabile su una prossima prenotazione; ci costa solo margine futuro).
         # la tassa di soggiorno (pass-through) si rimborsa SEMPRE per intero: niente soggiorno = niente tassa
-        tassa = v.get("tassa_soggiorno_cents", 0)
-        tassa = tassa if (isinstance(tassa, int) and not isinstance(tassa, bool) and tassa > 0) else 0
-        if not pagato_davvero or v.get("modo_pagamento") == "in_struttura":
-            tassa = 0                          # mai versata online -> niente da rimborsare (CP1, 8/11)
+        tassa = _tassa_da_rendere(v, pagato_davvero)
         rimborso_totale = r.get("rimborso_cents", 0) + tassa
         # LA CONTABILITA' DEVE SAPERE CHE QUEI SOLDI SONO DOVUTI. Difetto MISURATO il
         # 2026-08-08 su banco fedele, 15 prenotazioni: 6 cancellate, e per tutte e 6 il
@@ -13876,8 +13870,8 @@ def _riprendi_cancellazione_host(sistema: Any, router: Any, rec: Dict[str, Any])
     pen = dj.get("penale_host_cents")
     # la penale nasce solo su una prenotazione PAGATA (`_host_cancella`)
     pagata = isinstance(pen, int) and pen > 0
-    guest = _incassato_online(dj, int(dj.get("totale_cents", 0)
-                                      or dj.get("prezzo_guest_cents", 0) or 0))
+    guest = int(dj.get("totale_cents", 0) or dj.get("prezzo_guest_cents", 0) or 0)
+    guest = _incassato_online(dj, guest)
     valuta = str(dj.get("valuta") or "EUR")
     try:
         if _cancellazione_host_a_meta(sistema, rec, rif, pagata=pagata, guest=guest):
@@ -13914,8 +13908,19 @@ def _incassato_online(dj: Any, totale: int) -> int:
     una riga di rimborso sul totale la rifiuta Stripe e l'ospite non riavrebbe niente."""
     if not (isinstance(dj, dict) and dj.get("modo_pagamento") == "in_struttura"):
         return totale
-    anticipo = dj.get("anticipo_online_cents")
-    return anticipo if isinstance(anticipo, int) and not isinstance(anticipo, bool) and anticipo > 0 else 0
+    return _intero_positivo(dj.get("anticipo_online_cents"))
+
+
+def _intero_positivo(valore: Any) -> int:
+    """Un importo letto da un documento: intero vero e positivo, o zero (mai un bool o un testo)."""
+    return max(0, valore) if isinstance(valore, int) and not isinstance(valore, bool) else 0
+
+
+def _tassa_da_rendere(voucher: Any, pagato_davvero: bool) -> int:
+    """CP1 (8/11): la tassa torna solo se e' passata online; in struttura la incassa l'host."""
+    if not pagato_davvero or voucher.get("modo_pagamento") == "in_struttura":
+        return 0
+    return _intero_positivo(voucher.get("tassa_soggiorno_cents", 0))
 
 
 def _penale_finita(fc: Any, rif: str) -> bool:

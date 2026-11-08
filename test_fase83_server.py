@@ -8082,5 +8082,30 @@ class TestLePrenotazioniNonPagateHannoUnTettoPerIndirizzo(_BancoDeiSoldiDelServe
                          "CAMBIANDO INDIRIZZO DENTRO LA STESSA RETE IPv6 IL TETTO SI AGGIRA")
 
 
+class TestImportiDellaPagaInStruttura(unittest.TestCase):
+    """Campagna soldi 8/11: i tre pezzi che decidono quanto si rimborsa (primo occhio del Giudice)."""
+
+    def test_intero_positivo_accetta_solo_interi_veri(self):
+        for valore, atteso in ((7, 7), (0, 0), (-3, 0), (True, 0), ("5", 0), (None, 0), (2.5, 0)):
+            self.assertEqual(fase83_server._intero_positivo(valore), atteso, repr(valore))
+
+    def test_incassato_online(self):
+        f = fase83_server._incassato_online
+        self.assertEqual(f({"modo_pagamento": "online", "anticipo_online_cents": 5}, 900), 900)
+        self.assertEqual(f("non un documento", 900), 900)
+        self.assertEqual(f({"modo_pagamento": "in_struttura", "anticipo_online_cents": 66}, 900), 66)
+        self.assertEqual(f({"modo_pagamento": "in_struttura", "anticipo_online_cents": True}, 900), 0)
+        self.assertEqual(f({"modo_pagamento": "in_struttura"}, 900), 0)
+
+    def test_la_tassa_torna_solo_se_e_passata_online(self):
+        f = fase83_server._tassa_da_rendere
+        online = {"tassa_soggiorno_cents": 800}
+        struttura = {"modo_pagamento": "in_struttura", "tassa_soggiorno_cents": 800}
+        self.assertEqual(f(online, True), 800)
+        self.assertEqual(f(online, False), 0)
+        self.assertEqual(f(struttura, True), 0)
+        self.assertEqual(f(struttura, False), 0)
+
+
 if __name__ == "__main__":
     unittest.main()
