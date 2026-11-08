@@ -3718,9 +3718,12 @@ class RouterHTTP:
         fc = getattr(self._sys, "finanza", None)
         if fc is None or not hasattr(fc, "storna_penale"):
             return 503, {"errore": "finanza_non_attiva"}
-        esito = fc.storna_penale(nota_id=nota_id, motivo=motivo,
-                                 payout=getattr(self._sys, "payout", None),
-                                 emittente="super-admin@" + self._client_ip(headers))
+        # DB1 (8/11): sotto `_BONIFICI_LOCK`, come il bonifico che riscuote i debiti. Fuori, un
+        # bonifico in volo compensava la stessa nota mentre lo storno ne contava il riscosso.
+        with _BONIFICI_LOCK:
+            esito = fc.storna_penale(nota_id=nota_id, motivo=motivo,
+                                     payout=getattr(self._sys, "payout", None),
+                                     emittente="super-admin@" + self._client_ip(headers))
         if esito is None:
             n = fc.nota(nota_id)
             if n is None or n.get("tipo") != "debito":
@@ -3729,9 +3732,16 @@ class RouterHTTP:
         # TRACCIA DEL GESTO (vedi `_admin_alloggio_stato`): una nota di debito stornata muove soldi
         # veri e il motivo e' obbligatorio -- ma senza questa riga non restava scritto CHI l'ha
         # deciso. Guardia: `test_pipeline_ci.TestOgniGestoDellAdminLasciaLaSuaRiga`.
-        logger.warning("ADMIN_ACTION | OGGETTO: %s | AZIONE: Storno penale | MOTIVO: %s | IP: %s",
-                       _rif_per_registro(nota_id), _testo_per_registro(motivo),
-                       self._client_ip(headers))
+        # STORNO A META' (8/11, silent-failure-hunter): nota di credito emessa e debito chiuso,
+        # ma il riscosso NON e' tornato all'host. Non e' un «fatto»: la traccia lo dice e il
+        # pannello riceve un errore, cosi' lo storno si ripete (ogni passo e' idempotente).
+        a_meta = bool(esito.get("a_meta"))
+        logger.warning("ADMIN_ACTION | OGGETTO: %s | AZIONE: Storno penale%s | MOTIVO: %s | IP: %s",
+                       _rif_per_registro(nota_id),
+                       " A META' (restituzione mancata: ripetere)" if a_meta else "",
+                       _testo_per_registro(motivo), self._client_ip(headers))
+        if a_meta:
+            return 503, dict(esito, errore="storno_a_meta")
         return 200, esito
 
     def _admin_alloggio_stato(self, body, headers):
@@ -5489,7 +5499,9 @@ class RouterHTTP:
                 dj = json.loads(rec.get("corpo_json") or "{}")
             except Exception:
                 dj = {}
-            pagato = int(dj.get("totale_cents", 0) or dj.get("prezzo_guest_cents", 0) or 0)
+            # CP1/CP2 (8/11): il freno confronta con cio' che la carta ha pagato davvero
+            pagato = _incassato_online(dj, int(dj.get("totale_cents", 0)
+                                               or dj.get("prezzo_guest_cents", 0) or 0))
             pi_ = str(dj.get("stripe_pi") or "")
             # Il rilascio delle date e' la PRIMA cosa che fa la cancellazione, e senza di
             # esso non si arriva mai a questi stati: se lo stato c'e', le date sono libere.
@@ -8117,6 +8129,7 @@ class RouterHTTP:
         except Exception:
             dj = {}
         guest = int(dj.get("totale_cents", 0)) or int(dj.get("prezzo_guest_cents", 0))
+        rimborso_ospite = _incassato_online(dj, guest)   # CP2 (8/11): la penale resta sul totale
         valuta = dj.get("valuta", "EUR")
         pagata = rec.get("stato") == "pagato"
         # PENALE host = 15% del valore prenotazione (solo se il cliente aveva PAGATO: se non
@@ -8175,13 +8188,14 @@ class RouterHTTP:
                         logger.error("host cancella %s: codice: nota_debito_rinviata | messaggio: "
                                      "GIORNALE non scrivibile, la cancellazione prosegue e la nota "
                                      "la scrive lo sweeper", _rif_per_registro(ref))
-            self._completa_cancellazione_host(ref, rec, pagata=pagata, guest=guest, valuta=valuta,
-                                              dal_vivo=True)
+            self._completa_cancellazione_host(ref, rec, pagata=pagata, guest=rimborso_ospite,
+                                              valuta=valuta, dal_vivo=True)
         logger.info("HOST ha cancellato %s: cliente rimborso %s, penale host %s",
-                    _rif_per_registro(ref), self._fmt_importo(guest if pagata else 0, valuta),
+                    _rif_per_registro(ref),
+                    self._fmt_importo(rimborso_ospite if pagata else 0, valuta),
                     self._fmt_importo(penale, valuta))
         corpo_ok = {"stato": "cancellata_host", "riferimento": ref,
-                    "rimborso_cliente_cents": (guest if pagata else 0),
+                    "rimborso_cliente_cents": (rimborso_ospite if pagata else 0),
                     "penale_host_cents": penale, "valuta": valuta,
                     "nota": ("cliente rimborsato al 100%; penale a carico host; date liberate"
                              if pagata else "cliente non aveva pagato: nessuna penale; date liberate")}
@@ -8840,8 +8854,8 @@ class RouterHTTP:
         # la tassa di soggiorno (pass-through) si rimborsa SEMPRE per intero: niente soggiorno = niente tassa
         tassa = v.get("tassa_soggiorno_cents", 0)
         tassa = tassa if (isinstance(tassa, int) and not isinstance(tassa, bool) and tassa > 0) else 0
-        if not pagato_davvero:
-            tassa = 0                          # mai versata -> niente da rimborsare
+        if not pagato_davvero or v.get("modo_pagamento") == "in_struttura":
+            tassa = 0                          # mai versata online -> niente da rimborsare (CP1, 8/11)
         rimborso_totale = r.get("rimborso_cents", 0) + tassa
         # LA CONTABILITA' DEVE SAPERE CHE QUEI SOLDI SONO DOVUTI. Difetto MISURATO il
         # 2026-08-08 su banco fedele, 15 prenotazioni: 6 cancellate, e per tutte e 6 il
@@ -10515,8 +10529,10 @@ class RouterHTTP:
                 pm = info.get("stripe_payment_method", "")
                 if not (cust and pm):
                     continue                  # niente carta -> resta al just-in-time (email)
-                r = fc.riscuoti_da_carta(host_id=hid, provider_carta=carta,
-                                         customer=cust, payment_method=pm)
+                # DB5 (8/11): sotto `_BONIFICI_LOCK`, come lo storno della penale e i bonifici
+                with _BONIFICI_LOCK:
+                    r = fc.riscuoti_da_carta(host_id=hid, provider_carta=carta,
+                                             customer=cust, payment_method=pm)
                 esito["host"] += 1
                 esito["incassati_cents"] += int(r.get("incassati_cents", 0))
                 esito["saldati"] += int(r.get("debiti_saldati", 0))
@@ -13855,7 +13871,8 @@ def _riprendi_cancellazione_host(sistema: Any, router: Any, rec: Dict[str, Any])
     pen = dj.get("penale_host_cents")
     # la penale nasce solo su una prenotazione PAGATA (`_host_cancella`)
     pagata = isinstance(pen, int) and pen > 0
-    guest = int(dj.get("totale_cents", 0) or dj.get("prezzo_guest_cents", 0) or 0)
+    guest = _incassato_online(dj, int(dj.get("totale_cents", 0)
+                                      or dj.get("prezzo_guest_cents", 0) or 0))
     valuta = str(dj.get("valuta") or "EUR")
     try:
         if _cancellazione_host_a_meta(sistema, rec, rif, pagata=pagata, guest=guest):
@@ -13885,6 +13902,15 @@ def _riprendi_cancellazione_host(sistema: Any, router: Any, rec: Dict[str, Any])
                      "riprova il giro dopo", _rif_per_registro(rif))
     else:
         logger.warning("riasserzione penale %s: ND emessa dallo sweeper", _rif_per_registro(rif))
+
+
+def _incassato_online(dj: Any, totale: int) -> int:
+    """Quanto e' passato davvero dalla carta. CP2 (8/11): con «paga in struttura» solo l'anticipo:
+    una riga di rimborso sul totale la rifiuta Stripe e l'ospite non riavrebbe niente."""
+    if not (isinstance(dj, dict) and dj.get("modo_pagamento") == "in_struttura"):
+        return totale
+    anticipo = dj.get("anticipo_online_cents")
+    return anticipo if isinstance(anticipo, int) and not isinstance(anticipo, bool) and anticipo > 0 else 0
 
 
 def _penale_finita(fc: Any, rif: str) -> bool:

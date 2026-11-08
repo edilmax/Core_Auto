@@ -340,6 +340,58 @@ class TestPagaStrutturaE2E(unittest.TestCase):
         self.assertEqual(c.get("rimborso_cents", 0), 0,
                          "fuori ripensamento l'anticipo NON e' rimborsabile: rimborso deve essere 0")
 
+    # ── CAMPAGNA SOLDI 8/11 (CP1 e CP2): guardie scritte PRIMA della riparazione (D20) ──
+    def _prenota_con_tassa_vicina(self):
+        import datetime
+        oggi = datetime.date.today()
+        d_in = (oggi + datetime.timedelta(days=1)).isoformat()
+        d_out = (oggi + datetime.timedelta(days=3)).isoformat()
+        self.g("POST", "/api/host/pubblica",
+               {"slug": "casatassa", "titolo": "CasaTassa", "citta": "Roma",
+                "prezzo_notte_cents": 30000, "capacita": 4, "tassa_pp_notte_cents": 200,
+                "politica_cancellazione": "flessibile"}, {"X-Host-Token": self.tok})
+        self.g("POST", "/api/host/disponibilita_range",
+               {"alloggio_id": "casatassa", "da": d_in,
+                "a": (oggi + datetime.timedelta(days=5)).isoformat(),
+                "unita_totali": 2, "prezzo_netto_cents": 30000}, {"X-Host-Token": self.tok})
+        s, q = self.g("POST", "/api/concierge/quote",
+                      {"alloggio_id": "casatassa", "check_in": d_in, "check_out": d_out,
+                       "party": 2})
+        self.assertEqual(s, 200, q)
+        self.assertGreater(q.get("tassa_soggiorno_cents", 0), 0, "premessa: serve una tassa > 0")
+        s, b = self.g("POST", "/api/concierge/book",
+                      {"quote_token": q["quote_token"], "email": "cli@ps.it",
+                       "modo_pagamento": "in_struttura"})
+        self.assertEqual(s, 201, b)
+        self.assertEqual(b.get("modo_pagamento"), "in_struttura", b)
+        s, _ = self._webhook(b["riferimento"])
+        self.assertEqual(s, 200)
+        return q, b
+
+    def _righe_rimborso(self, rif):
+        return [m for m in self.sys.finanza.movimenti(rif) if m.get("tipo") == "rimborso"]
+
+    def test_CP1_ospite_cancella_la_tassa_mai_incassata_online_non_si_rimborsa(self):
+        # La tassa di un'in-struttura la incassa l'host di persona: da noi non e' mai passata.
+        _, b = self._prenota_con_tassa_vicina()
+        s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": b["voucher_token"]})
+        self.assertEqual(s, 200, c)
+        self.assertEqual(c.get("rimborso_cents", 0), 0,
+                         "promesso un rimborso di una tassa mai incassata online")
+        self.assertEqual(self._righe_rimborso(b["riferimento"]), [],
+                         "riga di rimborso per soldi mai incassati online")
+
+    def test_CP2_host_cancella_il_rimborso_dovuto_e_l_anticipo_non_il_totale(self):
+        # Stripe ha addebitato solo l'anticipo: la riga da restituire non puo' superarlo.
+        q, b = self._prenota_con_tassa_vicina()
+        s, c = self.g("POST", "/api/host/cancella", {"riferimento": b["riferimento"]},
+                      {"X-Host-Token": self.tok})
+        self.assertEqual(s, 200, c)
+        righe = self._righe_rimborso(b["riferimento"])
+        self.assertEqual([int(r["importo_cents"]) for r in righe], [b["anticipo_online_cents"]],
+                         "totale %s, anticipo %s: la riga deve valere l'anticipo"
+                         % (q["totale_cents"], b["anticipo_online_cents"]))
+
     def test_zero_notti_e_date_impossibili_rifiutate(self):
         # 0 notti / date invertite: il preventivo/prenotazione NON deve confermare nulla,
         # a prescindere dal modo di pagamento.

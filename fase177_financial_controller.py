@@ -640,6 +640,12 @@ class FinancialController:
                     return dict(r)
                 # riga di giornale senza nota (crash a meta'): la nota si RIASSERISCE
             con.execute("BEGIN IMMEDIATE")
+            # DB6 (8/11): il doppio clic intrecciato ha visto la riga «idempotente» prima che il
+            # primo clic scrivesse la sua nota. Dentro la transazione si guarda di nuovo.
+            r = con.execute("SELECT * FROM note WHERE giornale_seq=?", (mv["seq"],)).fetchone()
+            if r is not None:
+                con.execute("ROLLBACK")
+                return dict(r)
             nota_id = self._prossimo_nota_id(con, tipo, anno)
             con.execute("INSERT INTO note (nota_id, tipo, riferimento, causale, ts,"
                         " emittente, soggetto, importo_cents, valuta, stato, storno_di,"
@@ -703,7 +709,9 @@ class FinancialController:
                             " residuo_cents, valuta, stato, aggiornato_ts)"
                             " VALUES (?,?,?,?,?,?,?)"
                             " ON CONFLICT(debito_id) DO UPDATE SET residuo_cents=?,"
-                            " stato=?, aggiornato_ts=?",
+                            " stato=?, aggiornato_ts=?"
+                            # DB1 (8/11): un debito stornato non torna mai aperto o saldato
+                            " WHERE debiti.stato <> 'stornato'",
                             (debito_id, host_id, riferimento, residuo, valuta, stato,
                              self._now(), residuo, stato, self._now()))
         finally:
@@ -747,6 +755,13 @@ class FinancialController:
                                 emittente=emittente, evento_id="penale:" + riferimento)
         if nota is None:
             return None
+        # DB1 (8/11): con lo storno della nota GIA' INIZIATO (la sua nota di credito e' il primo
+        # passo di `storna_penale`) la penale non si compensa piu' su nessun payout.
+        if self.esiste_evento("storno-nota:%s" % nota["nota_id"]):
+            logger.warning("PENALE GIA' IN STORNO | NOTA: %s | nessuna compensazione",
+                           nota["nota_id"])
+            return {"nota_id": nota["nota_id"], "penale_cents": imp, "offset_cents": 0,
+                    "residuo_cents": 0, "stornata": True}
         # RESIDUO DALLA VERITA' DEL GIORNALE (principio del modulo): in replay le righe
         # payout gia' consumate NON esistono piu' -> ricalcolare da quelle direbbe il
         # falso. Si somma quanto gia' compensato (offset - storni) e si riparte da li'.
@@ -773,6 +788,8 @@ class FinancialController:
             disp = _cent(r.get("minori"))
             if not pid or pid == riferimento or disp <= 0:
                 continue
+            if self.esiste_evento("storno-nota:%s" % nota["nota_id"]):
+                break                        # DB1 (8/11): storno entrato a meta' del giro
             quota = min(disp, residuo)
             mv = self.registra(evento_id="offset:%s:%s" % (nota["nota_id"], pid),
                                tipo="penale_offset", riferimento=riferimento,
@@ -812,7 +829,7 @@ class FinancialController:
         con = self._apri()
         try:
             with con:
-                con.execute("UPDATE note SET stato=? WHERE nota_id=?",
+                con.execute("UPDATE note SET stato=? WHERE nota_id=? AND stato <> 'stornata'",
                             (stato_nota, nota["nota_id"]))
         finally:
             con.close()
@@ -958,6 +975,7 @@ class FinancialController:
             except Exception:
                 logger.warning("riscuoti: lettura payout fallita (ISOLATA)", exc_info=True)
                 righe = []
+            in_storno = False
             for r in righe:
                 if residuo <= 0:
                     break
@@ -965,6 +983,11 @@ class FinancialController:
                 disp = _cent(r.get("minori"))
                 if not pid or pid == rif_deb or disp <= 0:
                     continue
+                # DB1 (8/11): i debiti si leggono UNA volta, in cima; se intanto e' partito lo
+                # storno della nota, niente piu' compensazioni (il riscosso lo ha gia' contato)
+                if self.esiste_evento("storno-nota:%s" % nota_id):
+                    in_storno = True
+                    break
                 quota = min(disp, residuo)
                 mv = self.registra(evento_id="offset:%s:%s" % (nota_id, pid),
                                    tipo="penale_offset", riferimento=rif_deb,
@@ -996,6 +1019,8 @@ class FinancialController:
                     continue
                 residuo -= quota
                 esito["riscossi_cents"] += quota
+            if in_storno:
+                continue          # stornato: ne' saldato ne' aperto (lo chiude lo storno)
             if residuo != _cent(deb.get("residuo_cents")):
                 stato = "saldato" if residuo == 0 else "aperto"
                 self._debito_scrivi(nota_id, host_id, rif_deb, residuo, valuta, stato)
@@ -1004,8 +1029,8 @@ class FinancialController:
                     con = self._apri()
                     try:
                         with con:
-                            con.execute("UPDATE note SET stato='saldata' WHERE nota_id=?",
-                                        (nota_id,))
+                            con.execute("UPDATE note SET stato='saldata' WHERE nota_id=?"
+                                        " AND stato <> 'stornata'", (nota_id,))
                     finally:
                         con.close()
                     logger.warning("DEBITO SALDATO | HOST_ID: %s | NOTA: %s | "
@@ -1052,6 +1077,10 @@ class FinancialController:
                 continue                       # basta: serve intervento manuale/umano
             if isinstance(prossimo, int) and not isinstance(prossimo, bool) and prossimo > ora:
                 continue                       # ancora in backoff: non ritentare adesso
+            # DB5 (8/11): lo storno della nota e' partito dopo la lettura dei debiti -> niente
+            # addebito (lo storno conta solo le compensazioni: questi soldi non tornerebbero)
+            if self.esiste_evento("storno-nota:%s" % nota_id):
+                continue
             idem = "carta:%s:%d" % (nota_id, residuo)
             try:
                 r = provider_carta.addebita(customer=customer, payment_method=payment_method,
@@ -1096,7 +1125,8 @@ class FinancialController:
         con = self._apri()
         try:
             with con:
-                con.execute("UPDATE note SET stato='saldata' WHERE nota_id=?", (nota_id,))
+                con.execute("UPDATE note SET stato='saldata' WHERE nota_id=?"
+                            " AND stato <> 'stornata'", (nota_id,))
         except Exception:
             logger.warning("carta: nota->saldata fallita (ISOLATO)", exc_info=True)
         finally:
@@ -1144,15 +1174,11 @@ class FinancialController:
         val = str(n["valuta"])
         imp = _cent(n["importo_cents"])
         host_id = str(n.get("soggetto") or "").partition(":")[2]
-        # quanto era GIA' stato riscosso: verita' dal giornale (offset - storni della nota)
-        riscosso = 0
-        for m in self.movimenti(rif):
-            ev = str(m.get("evento_id") or "")
-            if m.get("tipo") == "penale_offset" and ev.startswith("offset:%s:" % nid):
-                riscosso += int(m.get("importo_cents") or 0)
-            elif m.get("tipo") == "storno" and ev.startswith("storno-offset:%s:" % nid):
-                riscosso -= int(m.get("importo_cents") or 0)
-        riscosso = max(0, riscosso)
+        # DB2 (8/11): l'ORDINE e' la riparazione. Prima la NC (da li' in poi processa_penale e
+        # riscuoti_debiti non compensano piu' questa nota), poi il debito chiuso, poi la
+        # restituzione, e SOLO ALLA FINE la ND 'stornata'. Prima la ND diventava 'stornata' per
+        # prima: se il resto falliva o il processo moriva, il secondo tentativo usciva con
+        # gia_stornata e la restituzione (o la chiusura del debito) era persa per sempre.
         nc = self.emetti_nota(tipo="credito", riferimento=rif,
                               soggetto="host:" + host_id, importo_cents=imp,
                               valuta=val,
@@ -1162,13 +1188,17 @@ class FinancialController:
                               evento_id="storno-nota:%s" % nid, storno_di=nid)
         if nc is None:
             return None                       # giornale non scrivibile -> 503 onesto
-        con = self._apri()
-        try:
-            with con:
-                con.execute("UPDATE note SET stato='stornata' WHERE nota_id=?", (nid,))
-        finally:
-            con.close()
         self._debito_scrivi(nid, host_id, rif, 0, val, "stornato")
+        # quanto era GIA' stato riscosso: verita' dal giornale (offset - storni della nota),
+        # letto DOPO la NC: una compensazione arrivata prima e' contata, dopo non ne arrivano
+        riscosso = 0
+        for m in self.movimenti(rif):
+            ev = str(m.get("evento_id") or "")
+            if m.get("tipo") == "penale_offset" and ev.startswith("offset:%s:" % nid):
+                riscosso += int(m.get("importo_cents") or 0)
+            elif m.get("tipo") == "storno" and ev.startswith("storno-offset:%s:" % nid):
+                riscosso -= int(m.get("importo_cents") or 0)
+        riscosso = max(0, riscosso)
         restituito = 0
         if riscosso > 0 and payout is not None:
             try:
@@ -1178,6 +1208,21 @@ class FinancialController:
                 logger.warning("storno: restituzione in da_pagare fallita (ISOLATA: "
                                "il riscosso resta documentato nel giornale)",
                                exc_info=True)
+        if restituito != riscosso:
+            # ERROR: il Guardiano legge solo questi. La ND resta NON stornata apposta, cosi' il
+            # prossimo «Storna» rifa' i passi (tutti idempotenti) e restituisce.
+            from fase101_stripe_connect import _importo_per_registro
+            logger.error("STORNO A META' | NOTA: %s | codice: restituzione_mancata | messaggio: "
+                         "nota di credito emessa e debito chiuso, ma %s riscossi NON sono tornati "
+                         "in da_pagare: ripetere lo storno", nid,
+                         _importo_per_registro(riscosso, val))
+        else:
+            con = self._apri()
+            try:
+                with con:
+                    con.execute("UPDATE note SET stato='stornata' WHERE nota_id=?", (nid,))
+            finally:
+                con.close()
         from fase101_stripe_connect import _importo_per_registro   # r2-bis: non in centesimi
         logger.warning("PENALE_STORNATA | NOTA: %s | NC: %s | HOST: %s | IMPORTO: %s | "
                        "RISCOSSO_DA_RESTITUIRE: %s | MOTIVO: %s | EMITTENTE: %s",
@@ -1185,7 +1230,7 @@ class FinancialController:
                        _importo_per_registro(riscosso, val), (motivo or "-")[:120], emittente)
         return {"nota_id": nid, "nc_id": nc.get("nota_id"),
                 "riscosso_cents": riscosso, "restituito_in_da_pagare": restituito,
-                "gia_stornata": False}
+                "gia_stornata": False, "a_meta": restituito != riscosso}
 
 
 def crea_financial_controller(percorso: str, *, orologio: Any = None
