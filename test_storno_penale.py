@@ -567,6 +567,87 @@ class TestStornoPenaleOgniRigaHaLaSuaProva(_BaseStorno):
         self.assertFalse(out["a_meta"], out)
         self.assertEqual(reg2.errori(), [])
 
+    def test_R2_il_segnale_illeggibile_non_lascia_il_debito_col_residuo_vecchio(self):
+        """/code-review 8/11: il controllo «storno partito» esplode a meta' giro, dopo che una
+        riga e' gia' stata compensata. Il debito deve scendere comunque, o al giro dopo si
+        riscuote di nuovo la stessa somma su altri bonifici; e l'errore deve vedersi."""
+        nd = self._nd_con_debito()
+        self.assertGreater(nd["importo_cents"], 200)            # premessa: il debito non si chiude
+        self.pd.registra_maturato("PRIMA", self.hid, 100, "EUR")
+        self.pd.registra_maturato("SECONDA", self.hid, 100, "EUR")
+        vero = self.fc.esiste_evento
+        chiamate = []
+
+        def esplode_alla_seconda(*a):
+            if not str(a[0]).startswith(("storno-nota:", "ND-")):
+                return vero(*a)
+            chiamate.append(1)
+            if len(chiamate) >= 2:
+                raise RuntimeError("database is locked")
+            return False
+
+        self.fc.esiste_evento = esplode_alla_seconda
+        self.fc._storno_partito = esplode_alla_seconda          # il nome del segnale riparato
+        try:
+            with _RigheDelRegistro("core_auto.financial_controller") as reg:
+                ris = self.fc.riscuoti_debiti(host_id=self.hid, payout=self.pd)
+        finally:
+            del self.fc.esiste_evento
+            del self.fc._storno_partito
+        self.assertEqual(ris["riscossi_cents"], 100, ris)
+        self.assertEqual(self._debito(nd["nota_id"])["residuo_cents"], nd["importo_cents"] - 100)
+        self.assertTrue(reg.errori(), reg.righe)
+
+    def test_R3_nota_di_credito_mai_nata_la_penale_si_continua_a_riscuotere(self):
+        """/code-review 8/11: la riga di giornale dello storno si scrive prima della nota. Se la
+        nota fallisce lo storno NON e' avvenuto: la penale resta da riscuotere; e ripetendo lo
+        storno quanto riscosso nel frattempo torna all'host."""
+        nd = self._nd_con_debito()
+        self.pd.registra_maturato("DOPO", self.hid, 100, "EUR")
+
+        def guasto(*a, **kw):
+            raise RuntimeError("database is locked")
+
+        self.fc._prossimo_nota_id = guasto
+        try:
+            out = self.fc.storna_penale(nota_id=nd["nota_id"], motivo="x", payout=self.pd)
+        finally:
+            del self.fc._prossimo_nota_id
+        self.assertIsNone(out)                                  # premessa: la nota non e' nata
+        self.assertEqual(self._nc_di(nd), [])
+        self.assertEqual(self.fc.riscuoti_debiti(host_id=self.hid, payout=self.pd)
+                         ["riscossi_cents"], 100)
+        self.assertEqual(self._debito(nd["nota_id"])["residuo_cents"], nd["importo_cents"] - 100)
+        out2 = self.fc.storna_penale(nota_id=nd["nota_id"], motivo="x", payout=self.pd)
+        self.assertEqual((out2["riscosso_cents"], out2["restituito_in_da_pagare"]), (100, 100), out2)
+        self.assertEqual(len(self._nc_di(nd)), 1)
+
+    def test_R10_lo_storno_a_meta_non_si_registra_come_stornato(self):
+        """Nota del ricontrollo 8/11: la riga PENALE_STORNATA dice che e' finita; a meta' non va
+        scritta, a storno completo si'."""
+        nd = self._nd_riscossa_qui()
+        self.pd.registra_maturato = lambda *a, **kw: False
+        try:
+            with _RigheDelRegistro("core_auto.financial_controller") as reg:
+                self.fc.storna_penale(nota_id=nd["nota_id"], motivo="x", payout=self.pd)
+        finally:
+            del self.pd.registra_maturato
+        self.assertFalse([m for _, m in reg.righe if "PENALE_STORNATA" in m], reg.righe)
+        with _RigheDelRegistro("core_auto.financial_controller") as reg2:
+            self.fc.storna_penale(nota_id=nd["nota_id"], motivo="x", payout=self.pd)
+        self.assertEqual(len([m for _, m in reg2.righe if "PENALE_STORNATA" in m]), 1, reg2.righe)
+
+    def test_R5_il_pannello_dice_di_ripetere_lo_storno_a_meta(self):
+        """/code-review 8/11: con storno_a_meta il pannello mostrava un errore generico: deve dire
+        di ripetere lo storno e quanto non e' tornato, in tutte le lingue del pannello."""
+        import os
+        import re
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "deploy", "admin.html"),
+                  encoding="utf-8") as f:
+            html = f.read()
+        self.assertRegex(html, r"errore==='storno_a_meta'\)\{[^\n]*au_storno_meta[^\n]*riscosso_cents")
+        self.assertEqual(len(re.findall(r'au_storno_meta:"[^"]+"', html)), 8)
+
     def _nd_riscossa_qui(self):
         nd = self._nd_con_debito()
         self.pd.registra_maturato("ALTRA", self.hid, 50000, "EUR")

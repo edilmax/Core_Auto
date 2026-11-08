@@ -304,6 +304,17 @@ class FinancialController:
         finally:
             con.close()
 
+    def _storno_partito(self, nota_id: str) -> bool:
+        """Lo storno di una nota e' partito se la sua nota di credito ESISTE. La riga di giornale
+        non basta: si scrive prima della nota e, se la nota fallisce, la penale resterebbe aperta
+        senza che nessuno la riscuota piu'."""
+        con = self._apri()
+        try:
+            return con.execute("SELECT 1 FROM note WHERE storno_di=? AND tipo='credito'",
+                               (nota_id,)).fetchone() is not None
+        finally:
+            con.close()
+
     def movimenti(self, riferimento: str) -> List[Dict[str, Any]]:
         con = self._apri()
         try:
@@ -757,7 +768,7 @@ class FinancialController:
             return None
         # DB1 (8/11): con lo storno della nota GIA' INIZIATO (la sua nota di credito e' il primo
         # passo di `storna_penale`) la penale non si compensa piu' su nessun payout.
-        if self.esiste_evento("storno-nota:%s" % nota["nota_id"]):
+        if self._storno_partito(nota["nota_id"]):
             logger.warning("PENALE GIA' IN STORNO | NOTA: %s | nessuna compensazione",
                            nota["nota_id"])
             return {"nota_id": nota["nota_id"], "penale_cents": imp, "offset_cents": 0,
@@ -788,7 +799,7 @@ class FinancialController:
             disp = _cent(r.get("minori"))
             if not pid or pid == riferimento or disp <= 0:
                 continue
-            if self.esiste_evento("storno-nota:%s" % nota["nota_id"]):
+            if self._storno_partito(nota["nota_id"]):
                 break                        # DB1 (8/11): storno entrato a meta' del giro
             quota = min(disp, residuo)
             mv = self.registra(evento_id="offset:%s:%s" % (nota["nota_id"], pid),
@@ -985,7 +996,16 @@ class FinancialController:
                     continue
                 # DB1 (8/11): i debiti si leggono UNA volta, in cima; se intanto e' partito lo
                 # storno della nota, niente piu' compensazioni (il riscosso lo ha gia' contato)
-                if self.esiste_evento("storno-nota:%s" % nota_id):
+                try:
+                    _partito = self._storno_partito(nota_id)
+                except Exception:
+                    # si smette di compensare ma il residuo si scrive lo stesso qui sotto, o la
+                    # quota appena presa verrebbe riscossa di nuovo al giro dopo
+                    logger.error("RISCOSSIONE INTERROTTA | NOTA: %s | codice: segnale_storno_"
+                                 "illeggibile | messaggio: compensazione fermata a meta', il "
+                                 "resto al prossimo giro", nota_id, exc_info=True)
+                    break
+                if _partito:
                     in_storno = True
                     break
                 quota = min(disp, residuo)
@@ -1079,7 +1099,7 @@ class FinancialController:
                 continue                       # ancora in backoff: non ritentare adesso
             # DB5 (8/11): lo storno della nota e' partito dopo la lettura dei debiti -> niente
             # addebito (lo storno conta solo le compensazioni: questi soldi non tornerebbero)
-            if self.esiste_evento("storno-nota:%s" % nota_id):
+            if self._storno_partito(nota_id):
                 continue
             idem = "carta:%s:%d" % (nota_id, residuo)
             try:
@@ -1155,14 +1175,16 @@ class FinancialController:
         non si cancella MAI nulla — si emette la NOTA DI CREDITO contraria (storno_di=ND)
         per l'intero importo. Passi (tutti idempotenti o protetti da chiave):
           1) NC contraria (evento_id 'storno-nota:<ND>': doppio click = UNO storno);
-          2) ND -> stato 'stornata'; il suo debito -> residuo 0, stato 'stornato'
+          2) il debito -> residuo 0, stato 'stornato'
              (riscuoti_debiti non lo riprendera' MAI piu': filtra stato='aperto');
           3) RESTITUZIONE dell'eventuale gia' RISCOSSO (verita' dal giornale: offset
              della nota meno storni) -> riga payout 'maturato' `stornoND-<ND>` visibile
              in da_pagare per il bonifico MANUALE del fondatore (una correzione la firma
-             un umano, mai un transfer automatico; PK fissa = zero doppi accrediti).
+             un umano, mai un transfer automatico; PK fissa = zero doppi accrediti);
+          4) SOLO ALLA FINE ND -> 'stornata': se la restituzione manca resta com'e' e
+             `a_meta` e' True, cosi' un nuovo storno rifa' i passi.
         Ritorna {'nota_id','nc_id','riscosso_cents','restituito_in_da_pagare',
-        'gia_stornata'} o None (nota inesistente/non-ND o giornale non scrivibile)."""
+        'gia_stornata','a_meta'} o None (nota inesistente/non-ND o giornale non scrivibile)."""
         n = self.nota(nota_id)
         if n is None or n.get("tipo") != "debito":
             return None                       # si stornano SOLO le note di debito (ND)
@@ -1208,10 +1230,10 @@ class FinancialController:
                 logger.warning("storno: restituzione in da_pagare fallita (ISOLATA: "
                                "il riscosso resta documentato nel giornale)",
                                exc_info=True)
+        from fase101_stripe_connect import _importo_per_registro   # r2-bis: non in centesimi
         if restituito != riscosso:
             # ERROR: il Guardiano legge solo questi. La ND resta NON stornata apposta, cosi' il
             # prossimo «Storna» rifa' i passi (tutti idempotenti) e restituisce.
-            from fase101_stripe_connect import _importo_per_registro
             logger.error("STORNO A META' | NOTA: %s | codice: restituzione_mancata | messaggio: "
                          "nota di credito emessa e debito chiuso, ma %s riscossi NON sono tornati "
                          "in da_pagare: ripetere lo storno", nid,
@@ -1223,11 +1245,10 @@ class FinancialController:
                     con.execute("UPDATE note SET stato='stornata' WHERE nota_id=?", (nid,))
             finally:
                 con.close()
-        from fase101_stripe_connect import _importo_per_registro   # r2-bis: non in centesimi
-        logger.warning("PENALE_STORNATA | NOTA: %s | NC: %s | HOST: %s | IMPORTO: %s | "
-                       "RISCOSSO_DA_RESTITUIRE: %s | MOTIVO: %s | EMITTENTE: %s",
-                       nid, nc.get("nota_id"), host_id, _importo_per_registro(imp, val),
-                       _importo_per_registro(riscosso, val), (motivo or "-")[:120], emittente)
+            logger.warning("PENALE_STORNATA | NOTA: %s | NC: %s | HOST: %s | IMPORTO: %s | "
+                           "RISCOSSO_DA_RESTITUIRE: %s | MOTIVO: %s | EMITTENTE: %s",
+                           nid, nc.get("nota_id"), host_id, _importo_per_registro(imp, val),
+                           _importo_per_registro(riscosso, val), (motivo or "-")[:120], emittente)
         return {"nota_id": nid, "nc_id": nc.get("nota_id"),
                 "riscosso_cents": riscosso, "restituito_in_da_pagare": restituito,
                 "gia_stornata": False, "a_meta": restituito != riscosso}

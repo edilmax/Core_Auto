@@ -59,10 +59,8 @@ class TestStornoDellaPenale(unittest.TestCase):
 
     def test_storno_entrato_a_meta_giro_lascia_il_debito_com_era(self):
         self._penale(_Registro())
-        vero_esiste = self.fc.esiste_evento
         risposte = iter([False, True])
-        self.fc.esiste_evento = lambda ev: (next(risposte) if ev.startswith("storno-nota:")
-                                            else vero_esiste(ev))
+        self.fc._storno_partito = lambda nota_id: next(risposte)
         self.fc.riscuoti_debiti(host_id="h1", payout=_Registro([("P1", 1000), ("P2", 1000)]))
         debito = self.fc.debiti_host("h1")[0]
         self.assertEqual((debito["stato"], debito["residuo_cents"]), ("aperto", 3000))
