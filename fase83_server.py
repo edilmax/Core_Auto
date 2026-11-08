@@ -4200,8 +4200,10 @@ class RouterHTTP:
         viol = {k: len(v) for k, v in rap.get("violazioni", {}).items()}
         logger.warning("INVARIANTI_SCAN | letti=%d | violazioni=%r | IP: %s",
                        rap.get("prenotazioni_lette", 0), viol, self._client_ip(headers))
-        return 200, {"ok": not viol, "violazioni": viol,
-                     "prenotazioni_lette": rap.get("prenotazioni_lette", 0)}
+        illeggibili = rap.get("db_illeggibili", [])
+        return 200, {"ok": not viol and not illeggibili, "violazioni": viol,
+                     "prenotazioni_lette": rap.get("prenotazioni_lette", 0),
+                     "db_illeggibili": illeggibili}
 
     def _bunker_riconciliazione(self, query, headers):
         """RICONCILIAZIONE STRIPE (fase182, ultimo fantasma del pre-mortem): confronta il
