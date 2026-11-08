@@ -6681,6 +6681,10 @@ class RouterHTTP:
             cfg = getattr(self._sys, "config", None)
             incasso = str(getattr(cfg, "valuta", "EUR") or "EUR").upper()
             dest = str((corpo or {}).get("valuta") or incasso).upper()
+            # EN5 (8/11): un cambio vecchio di giorni non fissa le soglie: resta l'online
+            eta = tassi.stato().get("eta_ore")
+            if eta is None or eta > 48:
+                return None
             t = Decimal(str(tassi.tasso(incasso, dest)))
             if not t > 0:
                 return None

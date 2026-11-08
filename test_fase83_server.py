@@ -269,6 +269,9 @@ class TestLeCifreFisseDelPagaInStrutturaSonoInEuro(unittest.TestCase):
             self.chiesti.append((da, a))
             return self.t
 
+        def stato(self):
+            return {"eta_ore": 1.0}
+
     def setUp(self):
         from decimal import Decimal
         self.sys = _sistema()
@@ -8105,6 +8108,44 @@ class TestImportiDellaPagaInStruttura(unittest.TestCase):
         self.assertEqual(f(online, False), 0)
         self.assertEqual(f(struttura, True), 0)
         self.assertEqual(f(struttura, False), 0)
+
+
+class TestEN5IlCambioVecchioNonFissaLeSoglie(unittest.TestCase):
+    """EN5 (8/11): un guasto del cambio non si vede, e un tasso vecchio di giorni fissava le
+    soglie del paga in struttura. Con un tasso troppo vecchio resta solo il pagamento online."""
+
+    def _soglie(self, eta_ore):
+        import types
+        from decimal import Decimal
+        from fase83_server import RouterHTTP
+        tassi = types.SimpleNamespace(tasso=lambda o, d: Decimal(1),
+                                      stato=lambda: {"eta_ore": eta_ore})
+        finto = types.SimpleNamespace(
+            _valuta_estera=lambda c: True,
+            _sys=types.SimpleNamespace(tassi=tassi, config=types.SimpleNamespace(valuta="EUR")))
+        return RouterHTTP._soglie_struttura(finto, {"valuta": "USD"})
+
+    def test_tasso_fresco_si_usa(self):
+        self.assertTrue(self._soglie(1.0))
+
+    def test_tasso_al_limite_si_usa(self):
+        self.assertTrue(self._soglie(48.0))
+
+    def test_tasso_troppo_vecchio_non_si_usa(self):
+        self.assertIsNone(self._soglie(48.1))
+
+    def test_tasso_di_eta_ignota_non_si_usa(self):
+        self.assertIsNone(self._soglie(None))
+
+    def test_il_guasto_del_cambio_si_scrive(self):
+        from fase99_multicurrency import crea_provider_tassi
+
+        def guasto(url):
+            raise RuntimeError("rete giu'")
+
+        with self.assertLogs("core_auto.cambi", level="WARNING") as reg:
+            self.assertIs(crea_provider_tassi("chiave", fetch=guasto).aggiorna(), False)
+        self.assertIn("tassi_non_aggiornati", reg.output[0])
 
 
 if __name__ == "__main__":

@@ -14282,7 +14282,7 @@ sempre "morto": molti sono librerie usate da altri moduli.
 | 96 | `fase96_fonte_osm.py` | — | Lead discovery MONDIALE da DATI PUBBLICI APERTI (OpenStreetMap). |
 | 97 | `fase97_inbound_seo.py` | +router | Inbound SEO/AEO — "essere la risposta" (acquisizione SENZA tetto). |
 | 98 | `fase98_policy_commissione.py` | boot+router | Policy commissione: RAMPA DI LANCIO per anzianità (0% ≤90gg · 8% ≤1 anno · 10% a regime) + canale diretto 5%. Le costanti "split 2%/8%" nel file sono LEGACY mai cablate (il modello vivo è 0% ospite, tutto dedotto dall'host). |
-| 99 | `fase99_multicurrency.py` | boot | Multi-Currency Like-for-Like Ledger (Moduli 1-2 dello studio). |
+| 99 | `fase99_multicurrency.py` | boot (2026-11-08, EN5, +5 prove di cui 3 viste ROSSE: scarico dei cambi fallito scritto nel registro; un cambio troppo vecchio non fissa le soglie del paga in struttura, resta l'online) | Multi-Currency Like-for-Like Ledger (Moduli 1-2 dello studio). |
 | 100 | `fase100_dac7.py` | — | DAC7 gate (Modulo 6). GATED EU (attivo=False default), soglie |
 | 101 | `fase101_stripe_connect.py` | boot | Stripe Connect split-all'origine (Modulo 3 - tutela forfettario). |
 | 102 | `fase102_motore_autonomo.py` | — | Motore autonomo vendi+incassa (Regola 3). |
