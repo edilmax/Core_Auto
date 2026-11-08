@@ -9096,6 +9096,38 @@ class RouterHTTP:
                          "(sconto gia' applicato, credito NON bruciato)", exc_info=True)
             return "errore"
 
+    @staticmethod
+    def _corpo_del_pendente(rec):
+        """Il corpo salvato con la prenotazione in attesa; {} se manca o e' illeggibile."""
+        try:
+            corpo = json.loads(rec.get("corpo_json") or "{}")
+        except Exception:
+            corpo = {}
+        return corpo if isinstance(corpo, dict) else {}
+
+    def _libera_credito(self, rec):
+        """EN1 (8/11): prenotazione scaduta senza pagamento: il credito bruciato per lei torna
+        all'ospite. Un guasto qui non deve fermare la liberazione della stanza, ma si deve vedere."""
+        store = getattr(self._sys, "credito_usati", None)
+        cid = self._corpo_del_pendente(rec).get("credito_id")
+        if store is None or not (isinstance(cid, str) and cid):
+            return
+        try:
+            store.libera(cid, rec.get("riferimento"))
+        except Exception:
+            logger.error("CREDITO NON RESTITUITO | RIF: %s | codice: credito_non_liberato | "
+                         "messaggio: prenotazione scaduta, il credito dell'ospite resta bruciato: "
+                         "liberarlo a mano", _rif_per_registro(rec.get("riferimento")), exc_info=True)
+
+    def _credito_tardivo(self, rec, rif):
+        """EN1 (8/11): la scadenza aveva restituito il credito, ma chi paga in ritardo ha pagato
+        col suo sconto: si riprende. Se intanto lo ha speso altrove i soldi sono gia' entrati e
+        la prenotazione non si rifiuta: il doppio uso deve pero' vedersi."""
+        if self._consuma_credito(self._corpo_del_pendente(rec), rif) in ("diverso", "errore"):
+            logger.error("CREDITO USATO DUE VOLTE | RIF: %s | codice: credito_tardivo | messaggio: "
+                         "pagamento tardivo con uno sconto non piu' riprendibile: controllare",
+                         _rif_per_registro(rif))
+
     def _rilascia_per_credito(self, dati, allog, ci, co, ref):
         """Libera la stanza quando una finalizzazione viene RIFIUTATA per credito gia' usato.
         Usa la stessa idem_key del blocco (firma del quote_token) -> rilascio idempotente."""
@@ -11008,6 +11040,8 @@ class RouterHTTP:
                                        idem_key=idem, origine="pagamento_tardivo") if inv else None
                 except Exception:
                     esito = None
+                if getattr(esito, "ok", False):
+                    self._credito_tardivo(rec, rif)
                 if not getattr(esito, "ok", False):
                     try:
                         pp.marca_da_rimborsare(rif)
@@ -11119,6 +11153,8 @@ class RouterHTTP:
                                    idem_key=idem, origine="anticipo_tardivo") if inv else None
             except Exception:
                 esito = None
+            if getattr(esito, "ok", False):
+                self._credito_tardivo(rec, rif)
             if not getattr(esito, "ok", False):
                 logger.error("RIMBORSARE anticipo: pagamento tardivo su stanza gia' presa - "
                              "rif '%s' (alloggio %s %s->%s). Rimborsare l'anticipo.",
@@ -13813,6 +13849,7 @@ def sweep_hold_una_passata(sistema: Any, router: Any) -> None:
                 _pd = getattr(sistema, "payout", None)
                 if _pd is not None:
                     _pd.rimuovi(rec["riferimento"])
+                router._libera_credito(rec)     # EN1: mai pagata, il credito torna all'ospite
                 # RECUPERO ONESTO (errore dei colossi = spam; noi UNA email transazionale):
                 # pagamento non completato -> le date sono di nuovo libere, link per riprovare.
                 router._email_recupero_hold(rec)

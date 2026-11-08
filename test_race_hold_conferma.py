@@ -196,6 +196,72 @@ class TestGaraSweeperConferma(unittest.TestCase):
         sonda = self.sys.inventario.blocca("casa-race", CI, CO, idem_key="ladro2")
         self.assertFalse(sonda.ok, "il pagamento tardivo deve ri-bloccare le date")
 
+    # ── EN1 (8/11): il credito si brucia alla prenotazione, PRIMA del pagamento ────
+    def _hold_col_credito(self, rif, modo=""):
+        """Hold scaduto di chi ha usato il credito: bruciato per questa prenotazione."""
+        from fase167_credito_single_use import crea_registro_crediti_usati
+        self.reg = crea_registro_crediti_usati(":memory:")
+        self.reg.inizializza_schema()
+        self.sys.credito_usati = self.reg
+        corpo = {"credito_id": "CRED-1", "sconto_credito_cents": 500}
+        if modo:
+            corpo["modo_pagamento"] = modo
+        e = self.sys.inventario.blocca("casa-race", CI, CO, idem_key="hold_" + rif)
+        self.assertTrue(e.ok, getattr(e, "errore", ""))
+        self.pp.registra(rif, alloggio_id="casa-race", check_in=CI, check_out=CO,
+                         idem_key="hold_" + rif, scadenza_ts=int(time.time()) - 10,
+                         corpo_json=json.dumps(corpo))
+        self.assertEqual(self.reg.consuma("CRED-1", rif), "nuovo")
+
+    def test_EN1_hold_scaduto_restituisce_il_credito(self):
+        self._hold_col_credito("EN1A")
+        sweep_hold_una_passata(self.sys, self.r)
+        self.assertEqual(self.pp.info("EN1A")["stato"], "scaduto")      # premessa
+        self.assertFalse(self.reg.usato("CRED-1"), "credito perso: l'ospite non ha mai pagato")
+
+    def test_EN1_se_il_pagamento_vince_la_gara_il_credito_resta_bruciato(self):
+        self._hold_col_credito("EN1B")
+        self.sys.pagamenti_pendenti = _PPTrappola(self.pp, lambda: self.r._conferma_pagamento("EN1B"))
+        sweep_hold_una_passata(self.sys, self.r)
+        self.sys.pagamenti_pendenti = self.pp
+        self.assertEqual(self.pp.info("EN1B")["stato"], "pagato")       # premessa
+        self.assertTrue(self.reg.usato("CRED-1"))
+
+    def test_EN1_pagamento_tardivo_riprende_il_credito(self):
+        self._hold_col_credito("EN1C")
+        sweep_hold_una_passata(self.sys, self.r)
+        self.assertFalse(self.reg.usato("CRED-1"))                      # premessa
+        self.r._conferma_pagamento("EN1C")
+        self.assertEqual(self.pp.info("EN1C")["stato"], "pagato")
+        self.assertEqual(self.reg.consuma("CRED-1", "ALTRA"), "diverso")
+
+    def test_EN1_pagamento_tardivo_in_struttura_riprende_il_credito(self):
+        self._hold_col_credito("EN1D", modo="in_struttura")
+        sweep_hold_una_passata(self.sys, self.r)
+        self.assertFalse(self.reg.usato("CRED-1"))                      # premessa
+        self.r._conferma_pagamento("EN1D")
+        self.assertEqual(self.pp.info("EN1D")["stato"], "pagato")
+        self.assertTrue(self.reg.usato("CRED-1"))
+
+    def test_EN1_credito_speso_altrove_prima_del_tardivo_si_vede(self):
+        """Ha gia' pagato col suo sconto: la prenotazione non si rifiuta, ma il doppio uso si
+        deve vedere (il Guardiano legge gli ERROR)."""
+        self._hold_col_credito("EN1E")
+        sweep_hold_una_passata(self.sys, self.r)
+        self.assertEqual(self.reg.consuma("CRED-1", "ALTRA"), "nuovo")
+        with self.assertLogs("core_auto.server", level="ERROR") as reg:
+            self.r._conferma_pagamento("EN1E")
+        self.assertEqual(self.pp.info("EN1E")["stato"], "pagato")
+        self.assertTrue(any("credito_tardivo" in r for r in reg.output), reg.output)
+
+    def test_EN1_tardivo_su_stanza_rubata_non_riprende_il_credito(self):
+        self._hold_col_credito("EN1F")
+        sweep_hold_una_passata(self.sys, self.r)
+        self.assertTrue(self.sys.inventario.blocca("casa-race", CI, CO, idem_key="ladro3").ok)
+        self.r._conferma_pagamento("EN1F")
+        self.assertEqual(self.pp.info("EN1F")["stato"], "rimborsato")   # premessa
+        self.assertFalse(self.reg.usato("CRED-1"), "rimborsato: il credito non va ribruciato")
+
     def test_pagamento_tardivo_su_stanza_rubata_rimborso(self):
         # sweep libera; un ALTRO cliente prende la stanza; poi arriva il pagamento tardivo:
         # niente conferma, marcato da rimborsare (mai soldi-senza-stanza).

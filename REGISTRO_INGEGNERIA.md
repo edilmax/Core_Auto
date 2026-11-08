@@ -14324,7 +14324,7 @@ sempre "morto": molti sono librerie usate da altri moduli.
 | 164 | `fase164_pool_ai.py` | — | Pool AI a rotazione con failover ("una funziona sempre"). |
 | 165 | `fase165_adattatori_esterni.py` | boot | Adattatori esterni gated (provider AI a rotazione + upload YouTube). |
 | 166 | `fase166_geocoder.py` | boot | Geocoder (indirizzo/città -> coordinate) per la mappa nella ricerca. |
-| 167 | `fase167_credito_single_use.py` | boot | Registro SINGLE-USE crediti (un Credito Fondatore/Viaggio si spende UNA volta). |
+| 167 | `fase167_credito_single_use.py` | boot | 2026-11-08, EN1 (+7 prove viste ROSSE): `libera` restituisce il credito se la prenotazione scade senza pagamento (`sweep_hold_una_passata`), il pagamento tardivo lo riprende (`_credito_tardivo`) e se e' gia' speso altrove scrive ERROR. Registro SINGLE-USE crediti (un Credito Fondatore/Viaggio si spende UNA volta). |
 | 169 | `fase169_indexnow.py` | +router (key-file) | IndexNow: notifica istantanea multi-motore (Bing/Yandex/Seznam/Naver). GATED da env INDEXNOW_KEY (submit SPENTO default). |
 | 171 | `fase171_cervello_seo.py` | via 173 | CERVELLO SEO/AEO "Fact-Ledger" (vincitrice benchmark 4 varianti): punteggio 0-100 + query long-tail vincibili + gap azionabili dallo stesso ledger di fatti citabili. ACCESO via fase173. |
 | 173 | `fase173_motore_seo.py` | +router (publish-hook + /api/host/seo_report) | MOTORE SEO AUTONOMO: a ogni publish reale valuta col cervello 171, contesto da provider iniettabili (tassa 147 + POI 175 cablati; quartiere futuro), specchio del JSON-LD reale, ping IndexNow 169 (gated). Blindato: mai rompe il publish. |

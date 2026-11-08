@@ -15165,6 +15165,8 @@ class TestOgniCancellazioneDichiaraSeAzzeraIByte(unittest.TestCase):
                    "vecchio, ma passa dallo stesso archivio astratto di fase16"),
         "fase58_channel_manager.py": (False, "disponibilita' e blocchi di calendario: date, "
                                              "non persone"),
+        "fase167_credito_single_use.py": (False, "identificativo di un credito e riferimento "
+                                                 "di una prenotazione: nessun contatto"),
         "fase131_payout_dashboard.py": (False, "identificativo dell'host e un importo, senza "
                                                "nessun contatto: pseudonimo, non anagrafica"),
     }
