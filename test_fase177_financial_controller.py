@@ -83,6 +83,19 @@ class TestStornoDellaPenale(unittest.TestCase):
         tipi = self._tipi("RC")
         self.assertEqual((tipi.count("debito_all_ospite"), tipi.count("storno_commissione")), (1, 1))
 
+    def test_VA7_storno_della_compensazione_non_scritto_si_vede(self):
+        """Il registro non si aggiorna e nemmeno lo storno riesce: la quota risulta presa nel
+        giornale senza esserlo nei bonifici. Due guasti insieme, ma non deve restare muto."""
+        self._penale(_Registro())
+        registro = _Registro([("P1", 1000)])
+        registro.imposta_importo = registro.rimuovi = lambda *a, **k: False
+        vero = self.fc.registra
+        self.fc.registra = lambda **kw: (None if kw["evento_id"].startswith("storno-offset:")
+                                         else vero(**kw))
+        with self.assertLogs("core_auto.financial_controller", level="ERROR") as reg:
+            self.fc.riscuoti_debiti(host_id="h1", payout=registro)
+        self.assertTrue(any("storno_offset_non_scritto" in r for r in reg.output), reg.output)
+
     # 1 gennaio 2026, 00:30 in Italia: per l'ora di Greenwich e' ancora il 31 dicembre 2025
     _CAPODANNO = 1767223800
 

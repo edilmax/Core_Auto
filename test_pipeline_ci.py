@@ -490,8 +490,10 @@ class TestIgieneDelFile(unittest.TestCase):
                       "fondatore seleziona nella branch protection di GitHub, e "
                       "rinominarlo scollega silenziosamente la protezione del ramo")
         for nome, job in doc["jobs"].items():
-            self.assertEqual(job.get("runs-on"), "ubuntu-latest",
-                             "il job %r non dichiara il runner" % nome)
+            # 9/11: su 'ubuntu-latest' GitHub e' passato a una versione dove la nostra Python non
+            # si installa piu', e la CI e' diventata rossa senza che il codice fosse cambiato
+            self.assertEqual(job.get("runs-on"), "ubuntu-24.04",
+                             "il job %r non dichiara il runner fissato" % nome)
             self.assertTrue(_passi(job), "il job %r non ha passi" % nome)
 
 
