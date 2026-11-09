@@ -316,6 +316,33 @@ class TestIRegaliNonSuperanoLaCommissione(unittest.TestCase):
         self._conferma()
         self.assertEqual(self._sconti_scritti(fc), [(1700, "JPY")])
 
+    def _rendi_yen(self, fc):
+        tutto = sum(m["importo_cents"] for m in fc.movimenti("REF1") if m["tipo"] == "incasso")
+        self.assertGreater(tutto, 0, "premessa: l'incasso e' nel giornale")
+        from fase83_server import RouterHTTP
+        r = RouterHTTP.__new__(RouterHTTP)
+        r._sys = self.sys
+        r._giornale(tipo="rimborso", riferimento="REF1", soggetto="ospite:REF1", importo_cents=tutto,
+                    valuta="JPY", causale="prova", evento_id="rimb:REF1")
+
+    def test_RV3_il_credito_reso_torna_nella_sua_moneta(self):
+        fc = self._con_giornale()
+        self._annuncio_in_yen(1700, _TassiFinti(170))
+        self._conferma()
+        self._rendi_yen(fc)
+        self.assertEqual(self.viral.credito_disponibile("host1"), self.credito_iniziale,
+                         "1700 yen a 170 per euro sono 10,00 euro da rendere, non 1700 centesimi")
+
+    def test_RV3_senza_cambio_il_credito_non_si_inventa_e_si_grida(self):
+        fc = self._con_giornale()
+        self._annuncio_in_yen(1700, _TassiFinti(170))
+        self._conferma()
+        self.sys.tassi = _TassiFinti(None)
+        with self.assertLogs("core_auto", level="ERROR") as reg:
+            self._rendi_yen(fc)
+        self.assertEqual(self.credito_iniziale - self.viral.credito_disponibile("host1"), 1000)
+        self.assertTrue(any("credito_non_reso" in x for x in reg.output), reg.output)
+
     def test_DA3_senza_credito_usato_nessuna_riga(self):
         fc = self._con_giornale()
         self._annuncio_in_yen(1700, None)

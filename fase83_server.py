@@ -7427,6 +7427,8 @@ class RouterHTTP:
                                     "e' stato fatto (l'host trattiene una penale). Limite "
                                     "dichiarato, non una dimenticanza.",
                                     _rif_per_registro(riferimento))
+                    else:
+                        self._rendi_credito_referral(str(riferimento), fc)
                 except Exception:
                     # ISOLATO come tutto il giornale: la scatola nera non ferma i soldi veri.
                     logger.warning("storno prenotazione fallito (ISOLATO) su %s",
@@ -10781,6 +10783,7 @@ class RouterHTTP:
         if stato == "succeeded":
             pp.segna_blocco(rif, blocco_incassato_ts=int(_t.time()))
             self._riasserisci_incasso(pp.info(rif), rif)
+            self._credito_host_al_pagamento(rif, pp.info(rif))
             logger.info("BLOCCO SULLA CARTA | INCASSATO | rif %s | pi %s",
                         _rif_per_registro(rif), pi)
             # DIFETTO A (macchina delle combinazioni dei soldi, 11/10): «tutto ok» o l'arbitro
@@ -11229,20 +11232,7 @@ class RouterHTTP:
             # REFERRAL: se l'host di questa prenotazione è stato INVITATO e raggiunge la soglia
             # di prenotazioni pagate -> premia il referente (una volta sola, mai in perdita).
             hid_pag = rec.get("host_id") if isinstance(rec, dict) else None
-            # scala il credito referral dell'host sulla commissione di questa prenotazione
-            try:
-                import json as _jc
-                dj = _jc.loads(rec.get("corpo_json") or "{}") if isinstance(rec, dict) else {}
-            except Exception:
-                dj = {}
-            scontato = self._applica_credito_host(rif, hid_pag, self._commissione_regalabile(dj), dj)
-            # DA3: la riga `commissione` e' gia' scritta piena; lo sconto la corregge nel giornale.
-            # Solo qui: la conferma immediata non scrive nessuna riga `commissione`.
-            self._giornale(tipo="sconto_commissione", riferimento=rif,
-                           soggetto="host:" + str(hid_pag), importo_cents=scontato,
-                           valuta=dj.get("valuta") or "EUR",
-                           causale="credito referral scalato dalla commissione",
-                           evento_id="sconto_commissione:" + str(rif))
+            self._credito_host_al_pagamento(rif, rec)
             self._forse_qualifica_referral(hid_pag, pd)
             # C53-B1-5: bonifico rimasto fermo -> False (503); il ritentativo passa dal ramo
             # 'pagato' qui sopra e lo matura senza rifare email e crediti
@@ -11349,6 +11339,53 @@ class RouterHTTP:
         except (AttributeError, TypeError, ValueError):
             return 0
         return max(0, comm - gia_dato)
+
+    def _credito_host_al_pagamento(self, rif, rec):
+        """Scala il credito referral sulla commissione e lo scrive nel giornale (DA3: la riga
+        `commissione` e' gia' scritta piena, lo sconto la corregge; la conferma immediata non la
+        scrive e non passa di qui). Revisione 9/11: coi soldi solo autorizzati la commissione non
+        esiste ancora e il blocco si puo' annullare: si aspetta `_incassa_blocco`."""
+        if _blocco(rec)["stato"] in ("aperto", "annullato"):
+            return
+        evento = "sconto_commissione:" + str(rif)
+        fc = getattr(self._sys, "finanza", None)
+        if fc is not None and fc.esiste_evento(evento):
+            return
+        try:
+            dj = json.loads(rec.get("corpo_json") or "{}") if isinstance(rec, dict) else {}
+        except Exception:
+            dj = {}
+        hid = rec.get("host_id") if isinstance(rec, dict) else None
+        scontato = self._applica_credito_host(rif, hid, self._commissione_regalabile(dj), dj)
+        self._giornale(tipo="sconto_commissione", riferimento=rif, soggetto="host:" + str(hid),
+                       importo_cents=scontato, valuta=dj.get("valuta") or "EUR",
+                       causale="credito referral scalato dalla commissione", evento_id=evento)
+
+    def _rendi_credito_referral(self, rif, fc):
+        """Revisione 9/11 (DA3 a): rimborso totale, lo sconto sulla commissione non c'e' piu' e
+        il credito torna all'host, una volta sola. Mai solleva: il rimborso non si ferma."""
+        try:
+            righe = [m for m in fc.movimenti(rif) if m.get("tipo") == "sconto_commissione"]
+            if not righe:
+                return
+            host = str(righe[0].get("soggetto") or "")[len("host:"):]
+            sconto = int(righe[0].get("importo_cents") or 0)
+            pp = getattr(self._sys, "pagamenti_pendenti", None)
+            rec = pp.info(rif) if pp is not None else None
+            dj = json.loads((rec or {}).get("corpo_json") or "{}")
+            valore = self._valore_del_credito(dj)
+            viral = getattr(self._sys, "viral", None)
+            if valore is None or viral is None:
+                logger.error("CREDITO REFERRAL | codice: credito_non_reso | messaggio: host %s, "
+                             "prenotazione %s rimborsata: sconto di %s da restituire A MANO come "
+                             "credito (cambio non disponibile)", host, _rif_per_registro(rif),
+                             self._fmt_importo(sconto, dj.get("valuta") or "EUR"))
+                return
+            viral.rendi_credito(host, int(sconto / valore), "reso:" + str(rif))
+        except Exception:
+            logger.error("CREDITO REFERRAL | codice: credito_non_reso | messaggio: prenotazione "
+                         "%s rimborsata: credito da restituire A MANO", _rif_per_registro(rif),
+                         exc_info=True)
 
     def _valore_del_credito(self, corpo):
         """DA2 (8/11). Il credito referral e' nella moneta in cui incassiamo e non porta la

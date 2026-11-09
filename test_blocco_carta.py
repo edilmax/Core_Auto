@@ -389,6 +389,71 @@ class TestAFineFinestraSiIncassa(_Base):
                          "commissione di Stripe")
         self.assertEqual(self.movimenti(rif, "incasso"), [])
 
+    def _credito_referral(self, cents=None):
+        """Con `cents` lo accredita all'host di prova; poi dice quanto gliene resta."""
+        viral = self.sis.viral
+        if cents is not None:
+            con = viral._apri()
+            viral._accredita(con, "demo", cents, int(time.time()) + 86400, int(time.time()), "prova")
+            con.commit()
+            con.close()
+        return viral.credito_disponibile("demo")
+
+    def _sconti(self, rif):
+        return [m["importo_cents"] for m in self.movimenti(rif, "sconto_commissione")]
+
+    def test_RV2_il_credito_referral_si_scala_solo_a_soldi_incassati(self):
+        """Revisione 9/11: col blocco la commissione nasce all'incasso, e lo sconto nasceva prima."""
+        self._credito_referral(1000)
+        rif, _vt, _tot, _pi = self._bloccata()
+        self.assertEqual(self._credito_referral(), 1000, "credito speso su soldi solo autorizzati")
+        self.assertEqual(self._sconti(rif), [], "sconto scritto senza commissione")
+        self.r._incassa_blocchi(ora_ts=int(time.time()) + SECONDI_RIPENSAMENTO + 60)
+        self.assertEqual(self._sconti(rif), [1000 - self._credito_referral()])
+        self.assertLess(self._credito_referral(), 1000, "all'incasso lo sconto deve scattare")
+        self.assertEqual(len(self.movimenti(rif, "commissione")), 1)
+
+    def test_RV2_blocco_annullato_il_credito_resta_intero(self):
+        self._credito_referral(1000)
+        rif, vt, _tot, _pi = self._bloccata()
+        self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
+        self.assertEqual(self._credito_referral(), 1000)
+        self.assertEqual(self._sconti(rif), [])
+
+    def test_RV2_il_credito_non_si_scala_due_volte_se_il_giro_si_ripete(self):
+        self._credito_referral(1000)
+        rif, _vt, _tot, _pi = self._bloccata()
+        self.r._incassa_blocchi(ora_ts=int(time.time()) + SECONDI_RIPENSAMENTO + 60)
+        dopo = self._credito_referral()
+        self.r._credito_host_al_pagamento(rif, self.sis.pagamenti_pendenti.info(rif))
+        self.assertEqual(self._credito_referral(), dopo)
+
+    def _incassata_con_credito(self):
+        self._credito_referral(1000)
+        rif, _vt, tot, _pi = self._bloccata()
+        self.r._incassa_blocchi(ora_ts=int(time.time()) + SECONDI_RIPENSAMENTO + 60)
+        self.assertLess(self._credito_referral(), 1000, "premessa: credito usato")
+        return rif, tot
+
+    def _rimborso(self, rif, importo):
+        self.r._giornale(tipo="rimborso", riferimento=rif, soggetto="ospite:" + rif,
+                         importo_cents=importo, valuta="EUR", causale="rimborso di prova",
+                         evento_id="rimborso:" + rif)
+
+    def test_RV3_rimborso_totale_il_credito_torna_una_volta_sola(self):
+        """Revisione 9/11 (DA3 a): la prenotazione rimborsata non da' lo sconto, il credito resta suo."""
+        rif, tot = self._incassata_con_credito()
+        self._rimborso(rif, tot)
+        self.assertEqual(self._credito_referral(), 1000)
+        self._rimborso(rif, tot)
+        self.assertEqual(self._credito_referral(), 1000, "credito reso due volte")
+
+    def test_RV3_rimborso_parziale_il_credito_resta_consumato(self):
+        rif, tot = self._incassata_con_credito()
+        dopo = self._credito_referral()
+        self._rimborso(rif, tot - 100)
+        self.assertEqual(self._credito_referral(), dopo)
+
     def test_A_FINE_FINESTRA_SI_INCASSA_E_NASCONO_I_CONTI(self):
         rif, _vt, tot, pi = self._bloccata()
         self.r._incassa_blocchi(ora_ts=int(time.time()) + SECONDI_RIPENSAMENTO + 60)
