@@ -5362,7 +5362,7 @@ class RouterHTTP:
                     if tot > 0 and _era_pagato and not _senza_incasso:
                         self._giornale(tipo="rimborso", riferimento=rif, soggetto="ospite:" + rif,
                                        importo_cents=tot, valuta=_valuta,
-                                       causale="rimborso disposto da admin")
+                                       causale="rimborso disposto da admin (blocco chiuso dopo)")
                     elif tot > 0 and _era_pagato:
                         # Voce 179: come la cancellazione dell'ospite (voce 143). Se l'annullo non e'
                         # riuscito e poi i soldi risultano INCASSATI, il giro orario scrive la riga
