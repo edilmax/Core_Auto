@@ -95,6 +95,20 @@ class _SysFinto:
         self.config = None
 
 
+class _TassiFinti:
+    """Il fornitore dei cambi nella forma che legge il server: `tasso` e l'eta' del dato."""
+
+    def __init__(self, tasso, eta_ore=1.0):
+        self._tasso = tasso
+        self._eta = eta_ore
+
+    def stato(self):
+        return {"eta_ore": self._eta}
+
+    def tasso(self, origine, dest):
+        return self._tasso
+
+
 class TestIRegaliNonSuperanoLaCommissione(unittest.TestCase):
 
     def setUp(self):
@@ -234,6 +248,79 @@ class TestIRegaliNonSuperanoLaCommissione(unittest.TestCase):
                          "senza sconto all'ospite l'host deve poter usare tutta la "
                          "commissione: attesi %d, scalati %d"
                          % (COMMISSIONE_CENTS, consumato))
+
+    # ⛔ DA2 (campagna soldi 8/11). Il credito referral nasce in euro e non porta la moneta:
+    # veniva consumato 1 a 1 contro la commissione nella moneta dell'annuncio. Lo yen non ha
+    # decimali: una commissione di 1700 yen (10 euro) bruciava 17 euro di credito.
+    def _annuncio_in_yen(self, commissione, tassi):
+        corpo = json.loads(self.rec["corpo_json"])
+        corpo.update(valuta="JPY", commissione_cents=commissione, sconto_credito_cents=0)
+        self.rec["corpo_json"] = json.dumps(corpo)
+        self.sys.pagamenti_pendenti = _PendentiFinti(self.rec)
+        if tassi is not None:
+            self.sys.tassi = tassi
+        return corpo
+
+    def test_DA2_il_credito_in_euro_si_converte_nella_moneta_dell_annuncio(self):
+        self._annuncio_in_yen(1700, _TassiFinti(170))
+        self.assertEqual(self._conferma(), 1000,
+                         "1700 yen a 170 yen per euro sono 10,00 euro di credito")
+        self.assertEqual(self.payout.aumenti, [1700],
+                         "l'host deve incassare in yen la commissione scontata")
+
+    def test_DA2_anche_la_conferma_immediata_converte(self):
+        """I punti di chiamata sono due: ripararne uno solo lascia vivo il difetto."""
+        corpo = self._annuncio_in_yen(1700, _TassiFinti(170))
+        corpo["netto_host_cents"] = 15300
+        corpo["tassa_soggiorno_cents"] = 0
+        corpo.pop("payment_url", None)
+
+        class _Catalogo:
+            @staticmethod
+            def host_di_alloggio(allog):
+                return "host1"
+
+        class _PayoutImmediato(_PayoutFinto):
+            def registra_maturato(self, ref, host, minori, valuta):
+                return True
+
+        self.sys.payout = _PayoutImmediato()
+        self.sys.catalogo = _Catalogo()
+        from fase83_server import RouterHTTP
+        r = RouterHTTP.__new__(RouterHTTP)
+        r._sys = self.sys
+        r._registra_payout("REF2", "casa1", corpo)
+        self.assertEqual(self.credito_iniziale - self.viral.credito_disponibile("host1"), 1000)
+        self.assertEqual(self.sys.payout.aumenti, [1700])
+
+    def test_DA2_credito_minore_della_commissione_vale_al_cambio(self):
+        self._annuncio_in_yen(1700000, _TassiFinti(170))
+        self.assertEqual(self._conferma(), self.credito_iniziale,
+                         "il credito e' meno della commissione: si usa tutto")
+        self.assertEqual(self.payout.aumenti, [self.credito_iniziale * 17 // 10],
+                         "ogni centesimo di euro vale 1,7 yen, non 1")
+
+    def test_DA2_il_cambio_di_48_ore_vale_ancora(self):
+        self._annuncio_in_yen(1700, _TassiFinti(170, eta_ore=48))
+        self.assertEqual(self._conferma(), 1000)
+
+    def test_DA2_senza_un_cambio_buono_il_credito_resta_intero(self):
+        casi = (("fornitore assente", None),
+                ("tasso assente", _TassiFinti(None)),
+                ("tasso zero", _TassiFinti(0)),
+                ("cambio vecchio", _TassiFinti(170, eta_ore=48.1)),
+                ("cambio mai arrivato", _TassiFinti(170, eta_ore=None)))
+        for nome, tassi in casi:
+            with self.subTest(nome):
+                self.sys.__dict__.pop("tassi", None)
+                self.payout.aumenti.clear()
+                self._annuncio_in_yen(1700, tassi)
+                with self.assertLogs("core_auto", level="WARNING") as reg:
+                    consumato = self._conferma()
+                self.assertEqual(consumato, 0, "credito scalato senza sapere quanto vale")
+                self.assertEqual(self.payout.aumenti, [])
+                self.assertTrue(any("cambio_non_disponibile" in x for x in reg.output),
+                                "il mancato sconto deve restare udibile: %r" % (reg.output,))
 
 
 if __name__ == "__main__":

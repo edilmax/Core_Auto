@@ -7351,7 +7351,7 @@ class RouterHTTP:
             else:
                 self._riga_payout_scritta(pd.registra_maturato(ref, host, netto, valuta), ref)
                 # conferma immediata (no Stripe): scala subito il credito referral dell'host
-                self._applica_credito_host(ref, host, self._commissione_regalabile(corpo))
+                self._applica_credito_host(ref, host, self._commissione_regalabile(corpo), corpo)
                 self._forse_qualifica_referral(host, pd)
         except Exception:
             logger.warning("registra payout fallito (ignorato)", exc_info=True)
@@ -11210,7 +11210,7 @@ class RouterHTTP:
                 dj = _jc.loads(rec.get("corpo_json") or "{}") if isinstance(rec, dict) else {}
             except Exception:
                 dj = {}
-            self._applica_credito_host(rif, hid_pag, self._commissione_regalabile(dj))
+            self._applica_credito_host(rif, hid_pag, self._commissione_regalabile(dj), dj)
             self._forse_qualifica_referral(hid_pag, pd)
             # C53-B1-5: bonifico rimasto fermo -> False (503); il ritentativo passa dal ramo
             # 'pagato' qui sopra e lo matura senza rifare email e crediti
@@ -11318,10 +11318,31 @@ class RouterHTTP:
             return 0
         return max(0, comm - gia_dato)
 
-    def _applica_credito_host(self, ref, host_id, commissione_cents):
+    def _valore_del_credito(self, corpo):
+        """DA2 (8/11). Il credito referral e' nella moneta in cui incassiamo e non porta la
+        valuta: quante unita' minime della moneta dell'annuncio vale un suo centesimo.
+        1 = stessa moneta. None = nessun cambio buono (assente o vecchio): non si scala."""
+        if not self._valuta_estera(corpo):
+            return 1
+        try:
+            from decimal import Decimal
+            from fase99_multicurrency import esponente
+            tassi = getattr(self._sys, "tassi", None)
+            eta = tassi.stato().get("eta_ore")
+            if eta is None or eta > 48:
+                return None
+            incasso = str(getattr(getattr(self._sys, "config", None), "valuta", "EUR") or "EUR").upper()
+            dest = str(corpo.get("valuta")).upper()
+            t = Decimal(str(tassi.tasso(incasso, dest)))
+            return t * Decimal(10) ** (esponente(dest) - esponente(incasso)) if t > 0 else None
+        except Exception:
+            return None
+
+    def _applica_credito_host(self, ref, host_id, commissione_cents, corpo=None):
         """Scala il credito referral dell'host sulla commissione di questa prenotazione:
         meno commissione paga l'host -> più incassa. Il credito è non-cashabile, si consuma qui.
-        Ritorna quanti cent sono stati scalati."""
+        `corpo` dice la moneta dell'annuncio. Ritorna quanto e' salito il payout, in quella
+        moneta."""
         try:
             viral = getattr(self._sys, "viral", None)
             pd = getattr(self._sys, "payout", None)
@@ -11331,9 +11352,16 @@ class RouterHTTP:
                 not isinstance(commissione_cents, bool) and commissione_cents > 0 else 0
             if comm <= 0:
                 return 0
-            res = viral.usa_credito(host_id, comm)   # <- QUI il credito e' gia' COMMITTATO
-            used = int(res.get("scontato_cents", 0)) if isinstance(res, dict) else 0
-            if used > 0:
+            valore = self._valore_del_credito(corpo)
+            if valore is None:
+                logger.warning("CREDITO REFERRAL | codice: cambio_non_disponibile | messaggio: "
+                               "host %s, prenotazione %s: niente sconto, il credito resta intero",
+                               host_id, _rif_per_registro(ref))
+                return 0
+            res = viral.usa_credito(host_id, int(comm / valore))   # <- QUI il credito e' gia' COMMITTATO
+            scalato = int(res.get("scontato_cents", 0)) if isinstance(res, dict) else 0
+            used = int(scalato * valore)
+            if scalato > 0:
                 try:
                     # ATTENZIONE al valore di ritorno: `aumenta_payout` fa un UPDATE e torna
                     # False (SENZA sollevare) se non esiste una riga payout per questa
@@ -11354,7 +11382,7 @@ class RouterHTTP:
                     # servono l'host e i centesimi esatti.
                     logger.error("CREDITO REFERRAL PERSO: host %s, %d cent gia' scalati dal suo "
                                  "credito ma NON applicati alla commissione di %s -> "
-                                 "restituirglieli a mano", host_id, used,
+                                 "restituirglieli a mano", host_id, scalato,
                                  _rif_per_registro(ref), exc_info=True)
                     return 0
                 logger.info("Credito referral scalato: host %s -%d di commissione su %s",
