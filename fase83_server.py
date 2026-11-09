@@ -7638,6 +7638,7 @@ class RouterHTTP:
             if fc is None or pd is None:
                 raise RuntimeError("giornale o registro dei bonifici assente")
             if fc.esiste_evento("ritenuta:" + str(rif)):
+                self._completa_ritenuta(fc, pd, str(rif))
                 return True                           # gia' operata: i ritentativi non la rifanno
             corpo = _jr.loads(rec.get("corpo_json") or "{}")
             if penale or corpo.get("modo_pagamento") == "in_struttura":
@@ -7668,16 +7669,17 @@ class RouterHTTP:
             minori = int(riga["minori"])
             if ritenuta >= minori:
                 raise RuntimeError("la ritenuta (%d) non sta nel bonifico (%d)" % (ritenuta, minori))
-            if not pd.imposta_importo(str(rif), minori - ritenuta):
-                raise RuntimeError("registro dei bonifici non aggiornato")
+            # VA4 (8/11): prima il giornale, poi il bonifico. Al contrario, un processo morto in
+            # mezzo lasciava il bonifico ridotto senza riga e il giro dopo toglieva di nuovo
             fatto = fc.movimento(tipo="ritenuta", riferimento=str(rif),
                                  soggetto="host:" + str(host_id), importo_cents=ritenuta,
                                  valuta=corpo.get("valuta") or "EUR",
-                                 causale="ritenuta locazione breve | base=%d | notti=%d"
-                                 % (base, notti))
+                                 causale="ritenuta locazione breve | base=%d | notti=%d | bonifico=%d"
+                                 % (base, notti, minori - ritenuta))
             if not fatto:
-                pd.imposta_importo(str(rif), minori)  # senza la riga nel giornale non si trattiene
                 raise RuntimeError("giornale non scritto")
+            if not pd.imposta_importo(str(rif), minori - ritenuta):
+                raise RuntimeError("registro dei bonifici non aggiornato")
             logger.warning("RITENUTA OPERATA | RIF: %s | HOST_ID: %s | BASE: %d | RITENUTA: %d "
                            "| BONIFICO: %d -> %d", _rif_per_registro(rif), host_id, base,
                            ritenuta, minori, minori - ritenuta)
@@ -7687,6 +7689,20 @@ class RouterHTTP:
                          "FERMO finche' una persona non guarda", _rif_per_registro(rif),
                          exc_info=True)
             return False
+
+    @staticmethod
+    def _completa_ritenuta(fc, pd, rif):
+        """VA4 (8/11): riga di giornale scritta e bonifico non ancora ridotto (processo morto
+        in mezzo): si riduce. Solo se il bonifico e' ancora quello PIENO: una penale compensata
+        dopo l'ha cambiato legittimamente, e non va restituita."""
+        riga = next((m for m in fc.movimenti(rif) if m.get("tipo") == "ritenuta"), None)
+        obiettivo = str((riga or {}).get("causale") or "").rpartition("bonifico=")[2]
+        attuale = pd.info(rif)
+        if not obiettivo.isdigit() or attuale is None:
+            return
+        if int(attuale["minori"]) == int(obiettivo) + int(riga["importo_cents"]):
+            if not pd.imposta_importo(rif, int(obiettivo)):
+                raise RuntimeError("registro dei bonifici non aggiornato")
 
     def _trasferisci_all_host(self, rif, importo_cents, penale=False, a_mano=False):
         """SOLDI ALL'HOST IN AUTOMATICO (strategia fondatore): allo sblocco dell'escrow
