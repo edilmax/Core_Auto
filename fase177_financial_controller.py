@@ -405,9 +405,6 @@ class FinancialController:
                  "parziale": False}
         if not (isinstance(riferimento, str) and riferimento):
             return fatto
-        if self.esiste_evento("debito_all_ospite:" + riferimento):
-            fatto["gia_fatto"] = True
-            return fatto
         incassato = commissione = 0
         soggetto_host = "host:?"
         valuta = "EUR"
@@ -419,6 +416,12 @@ class FinancialController:
                 valuta = m.get("valuta") or valuta
             elif tipo == "commissione":
                 commissione += importo
+        # PY1 (8/11): gia' fatto solo se ci sono TUTTE le righe dovute: se il processo moriva
+        # fra le due, la prima faceva da cancello e lo storno della commissione non nasceva piu'
+        if (self.esiste_evento("debito_all_ospite:" + riferimento)
+                and (not commissione or self.esiste_evento("storno_commissione:" + riferimento))):
+            fatto["gia_fatto"] = True
+            return fatto
         if incassato <= 0:
             return fatto                      # niente e' mai entrato: non c'e' nulla da girare
         # ⛔ LIMITE DICHIARATO (D18 punto 3): si storna solo il rimborso TOTALE.

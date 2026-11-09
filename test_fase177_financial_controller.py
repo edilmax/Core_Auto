@@ -57,6 +57,39 @@ class TestStornoDellaPenale(unittest.TestCase):
         self.assertIs(self.fc.storna_penale(nota_id=nota, payout=_Registro(restituisce=True))["a_meta"],
                       False)
 
+    def _prenotazione_incassata(self, rif):
+        for tipo, importo in (("incasso", 10000), ("commissione", 1000)):
+            self.assertIsNotNone(self.fc.movimento(tipo=tipo, riferimento=rif, soggetto="host:h1",
+                                                   importo_cents=importo, valuta="EUR", causale="x"))
+
+    def _tipi(self, rif):
+        return [m["tipo"] for m in self.fc.movimenti(rif)]
+
+    def test_PY1_crash_fra_le_due_righe_si_completa_ritentando(self):
+        self._prenotazione_incassata("RC")
+        vero = self.fc.movimento
+
+        def muore_alla_seconda(**kw):
+            if kw["tipo"] == "storno_commissione":
+                raise RuntimeError("processo morto")
+            return vero(**kw)
+
+        self.fc.movimento = muore_alla_seconda
+        with self.assertRaises(RuntimeError):
+            self.fc.storna_prenotazione(riferimento="RC")
+        del self.fc.movimento
+        self.assertNotIn("storno_commissione", self._tipi("RC"))        # premessa
+        self.fc.storna_prenotazione(riferimento="RC")
+        tipi = self._tipi("RC")
+        self.assertEqual((tipi.count("debito_all_ospite"), tipi.count("storno_commissione")), (1, 1))
+
+    def test_PY1_ripetere_a_lavoro_completo_non_raddoppia(self):
+        self._prenotazione_incassata("RD")
+        self.assertIs(self.fc.storna_prenotazione(riferimento="RD")["gia_fatto"], False)
+        self.assertIs(self.fc.storna_prenotazione(riferimento="RD")["gia_fatto"], True)
+        tipi = self._tipi("RD")
+        self.assertEqual((tipi.count("debito_all_ospite"), tipi.count("storno_commissione")), (1, 1))
+
     def test_storno_entrato_a_meta_giro_lascia_il_debito_com_era(self):
         self._penale(_Registro())
         risposte = iter([False, True])
