@@ -5326,6 +5326,17 @@ class RouterHTTP:
                 rec = pp.info(rif)
                 if rec is not None and rec.get("stato") != "rimborsato":
                     _era_pagato = (rec.get("stato") == "pagato")
+                    # VA3 (8/11): il debito verso l'ospite si scrive PRIMA di 'rimborsato': se il
+                    # processo moriva in mezzo, il ritentativo non vedeva piu' nessun incasso. Il
+                    # blocco sulla carta resta dopo: serve la marcatura per chiuderlo.
+                    if _era_pagato and _blocco(rec)["stato"] not in ("aperto", "annullato"):
+                        _dj0 = self._corpo_del_pendente(rec)
+                        _tot0 = _pagato_online_cents(_dj0)
+                        if _tot0 > 0:
+                            self._giornale(tipo="rimborso", riferimento=rif,
+                                           soggetto="ospite:" + rif, importo_cents=_tot0,
+                                           valuta=_dj0.get("valuta") or "EUR",
+                                           causale="rimborso disposto da admin")
                     pp.marca_da_rimborsare(rif)        # blocca il transfer + nessuna conferma tardiva
                     # SCATOLA NERA del rimborso admin (importo = totale ospite dal record)
                     import json as _jr
