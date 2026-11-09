@@ -8110,6 +8110,50 @@ class TestImportiDellaPagaInStruttura(unittest.TestCase):
         self.assertEqual(f(struttura, False), 0)
 
 
+class TestEN7IlBloccoGlobale(unittest.TestCase):
+    """EN7 (8/11): il registro non deve dire «attivato» se non lo e', e col blocco globale
+    acceso il giro delle carte non deve addebitare."""
+
+    def _imposta(self, riuscito):
+        import types
+        from fase83_server import RouterHTTP
+        bg = types.SimpleNamespace(imposta=lambda a, motivo, chi: riuscito,
+                                   stato=lambda: {"attivo": riuscito})
+        finto = types.SimpleNamespace(_bunker_auth=lambda h, azione: True,
+                                      _sys=types.SimpleNamespace(blocco_globale=bg),
+                                      _json=lambda b: {"attivo": True, "motivo": "prova"})
+        with self.assertLogs("core_auto.server", level="CRITICAL") as reg:
+            s, _ = RouterHTTP._bunker_blocco_globale_imposta(finto, "{}", {})
+        return s, reg.output[0]
+
+    def test_accensione_fallita_non_si_dice_attivata(self):
+        s, riga = self._imposta(False)
+        self.assertEqual(s, 500)
+        self.assertNotIn("ATTIVATO (freeze soldi)", riga)
+        self.assertIn("NON RIUSCITO", riga)
+
+    def test_accensione_riuscita_si_dice_attivata(self):
+        s, riga = self._imposta(True)
+        self.assertEqual(s, 200)
+        self.assertIn("ATTIVATO (freeze soldi)", riga)
+
+    def test_col_blocco_globale_il_giro_carte_non_addebita(self):
+        import os
+        import types
+        from unittest import mock
+        from fase83_server import RouterHTTP
+
+        def non_deve(*a, **k):
+            raise AssertionError("sistema toccato col blocco acceso")
+
+        finto = types.SimpleNamespace(_transazioni_bloccate=lambda: True,
+                                      _sys=types.SimpleNamespace(finanza=types.SimpleNamespace(
+                                          debiti_host=non_deve, riscuoti_da_carta=non_deve)))
+        with mock.patch.dict(os.environ, {"SCATTO3_ATTIVO": "1"}):
+            self.assertEqual(RouterHTTP.riscuoti_debiti_carta(finto).get("saltato"),
+                             "blocco_globale")
+
+
 class TestEN5IlCambioVecchioNonFissaLeSoglie(unittest.TestCase):
     """EN5 (8/11): un guasto del cambio non si vede, e un tasso vecchio di giorni fissava le
     soglie del paga in struttura. Con un tasso troppo vecchio resta solo il pagamento online."""

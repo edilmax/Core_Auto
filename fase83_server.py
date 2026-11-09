@@ -4947,7 +4947,8 @@ class RouterHTTP:
         motivo = str(dati.get("motivo", ""))[:200]
         ok = bg.imposta(attivo, motivo=motivo, chi="super-admin")
         logger.critical("KILL-SWITCH GLOBALE %s | motivo=%s",
-                        "ATTIVATO (freeze soldi)" if attivo else "disattivato",
+                        ("ATTIVATO (freeze soldi)" if attivo else "disattivato") if ok
+                        else "CAMBIO NON RIUSCITO: stato precedente invariato",
                         _testo_per_registro(motivo or "-"))
         st = bg.stato()
         return (200 if ok else 500), {**st, "impostato": ok}
@@ -10548,6 +10549,8 @@ class RouterHTTP:
         import os as _os
         if _os.environ.get("SCATTO3_ATTIVO", "0") != "1":
             return {"saltato": "non_attivo"}
+        if self._transazioni_bloccate():       # EN7: col blocco globale nessun addebito
+            return {"saltato": "blocco_globale"}
         fc = getattr(self._sys, "finanza", None)
         carta = getattr(self._sys, "carta", None)
         reg = getattr(self._sys, "registro_host", None)
