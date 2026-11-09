@@ -389,6 +389,33 @@ class TestDossierLegale(BaseSala):
             "la vecchia voce e' tornata: rimetteva la nostra tariffa fra i costi deducibili")
         self.assertIn("promo", csv)                                # scaglione dell'host
 
+    def test_DA4_le_altre_monete_hanno_le_loro_righe_nella_loro_unita(self):
+        """DA4 (8/11): il commercialista leggeva yen e dollari sommati agli euro e divisi per 100."""
+        hid, _tk = self.host()
+        self.invecchia(hid, 0)
+        vero = self.sis.pagamenti_pendenti.aggrega_costi_tecnici
+
+        def con_altre_monete():
+            out = vero()
+            out["per_valuta"]["JPY"] = {"incassate_cents": 1700, "perdite_cents": 300, "conteggio": 2}
+            out["per_valuta"]["USD"] = {"incassate_cents": 1250, "perdite_cents": 0, "conteggio": 1}
+            return out
+
+        self.sis.pagamenti_pendenti.aggrega_costi_tecnici = con_altre_monete
+        s, d = self.g("GET", "/api/bunker/export_legale", None, self.bunker(), {"formato": "csv"})
+        self.assertEqual(s, 200, d)
+        righe = d["contenuto"].splitlines()
+        attese = (("tariffa_tecnica_incassata_JPY", "1700,1700"),
+                  ("tariffa_tecnica_non_incassata_JPY", "300,300"),
+                  ("tariffa_tecnica_incassata_USD", "1250,12.50"))
+        for voce, coda in attese:
+            with self.subTest(voce):
+                riga = [r for r in righe if r.startswith(voce + ",")]
+                self.assertEqual(len(riga), 1, "voce assente: %s" % voce)
+                self.assertTrue(riga[0].endswith("," + coda), riga[0])
+        self.assertFalse([r for r in righe if r.startswith("tariffa_tecnica_incassata_EUR")],
+                         "gli euro hanno gia' la loro riga in testa")
+
     def test_json_strutturato(self):
         hid, _tk = self.host()
         self.invecchia(hid, 400)

@@ -856,8 +856,9 @@ class PagamentiPendenti:
             valuta = str(dj.get("valuta") or "EUR")[:8].upper()
             persa = r["stato"] in ("rimborsato", "cancellata_host")
             chiave = "perdite" if persa else "incassate"
-            out[chiave]["conteggio"] += 1
-            out[chiave]["cents"] += costo
+            if valuta == "EUR":             # DA4 (8/11): le altre monete stanno in `per_valuta`
+                out[chiave]["conteggio"] += 1
+                out[chiave]["cents"] += costo
             v = out["per_valuta"].setdefault(valuta, {"incassate_cents": 0, "perdite_cents": 0,
                                                       "conteggio": 0})
             v["conteggio"] += 1

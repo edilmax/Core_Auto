@@ -4506,6 +4506,21 @@ class RouterHTTP:
                          "%d,,\r\n" % _ign.get("conteggio", 0))
             yield emetti("coperto_netto,saldo,,%d,%.2f\r\n"
                          % (inc - per, (inc - per) / 100.0))
+            # DA4 (8/11): le righe qui sopra sono in euro; le altre monete hanno righe loro
+            from fase99_multicurrency import esponente as _esp
+            for _v, _r in sorted((costi.get("per_valuta") or {}).items()):
+                if _v == "EUR":
+                    continue
+                for _voce, _cl, _k in (
+                        ("tariffa_tecnica_incassata",
+                         "RICAVO TECNICO COPERTO (ribaltato all'host)", "incassate_cents"),
+                        ("tariffa_tecnica_non_incassata",
+                         "RICAVO TECNICO MANCATO - NON e' un costo sostenuto", "perdite_cents")):
+                    buf = _io.StringIO()
+                    _csv.writer(buf).writerow([
+                        self._cella_csv_sicura("%s_%s" % (_voce, _v)), _cl, "", _r[_k],
+                        "%.*f" % (_esp(_v), _r[_k] / 10 ** _esp(_v))])
+                    yield emetti(buf.getvalue())
             yield emetti("# nota,Il gestore di pagamento NON restituisce la sua commissione sui "
                          "rimborsi: QUELLA e' la perdita deducibile ed e' la riga "
                          "commissione_gestore_non_restituita. La tariffa tecnica non incassata "
