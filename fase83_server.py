@@ -4267,6 +4267,7 @@ class RouterHTTP:
         rotta = None
         errore = False
         try:
+            from fase99_multicurrency import esponente as _esp
             sorgente = fc.stream_giornale() if fc is not None else iter(())
             for r in sorgente:
                 canon = "|".join([r["evento_id"], str(r["ts"]), r["tipo"], r["riferimento"],
@@ -4288,7 +4289,8 @@ class RouterHTTP:
                 buf = _io.StringIO()
                 _csv.writer(buf).writerow([self._cella_csv_sicura(x) for x in (
                     r["seq"], data, r["tipo"], r["riferimento"], r["soggetto"],
-                    r["conto_dare"], r["conto_avere"], imp, "%.2f" % (imp / 100.0),
+                    r["conto_dare"], r["conto_avere"], imp,
+                    "%.*f" % (_esp(r["valuta"]), imp / 10 ** _esp(r["valuta"])),   # DA7 (8/11)
                     r["valuta"], r["causale"], r["emittente"], r["hash"])])
                 yield buf.getvalue()
         except Exception:
