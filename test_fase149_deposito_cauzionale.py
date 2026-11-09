@@ -47,6 +47,18 @@ class TestDeposito(unittest.TestCase):
         self.assertFalse(d.cattura_danno("p1", 5000))
         self.assertEqual(d.stato("p1")["stato"], "autorizzato")   # invariato
 
+    def test_EN6_rilascio_rifiutato_non_si_segna_rilasciato(self):
+        d = dep(rel=lambda ref: False)
+        d.autorizza("p1", "pi_1", 30000)
+        self.assertFalse(d.rilascia("p1"))
+        self.assertEqual(d.stato("p1")["stato"], "autorizzato")
+
+    def test_EN6_danno_zero_con_rilascio_rifiutato_resta_autorizzato(self):
+        d = dep(rel=lambda ref: False)
+        d.autorizza("p1", "pi_1", 30000)
+        self.assertFalse(d.cattura_danno("p1", 0))
+        self.assertEqual(d.stato("p1")["stato"], "autorizzato")
+
     def test_capture_gated_senza_psp(self):
         d = crea_deposito_cauzionale(":memory:")           # niente capture
         d.inizializza_schema()

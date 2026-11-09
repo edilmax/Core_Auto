@@ -14311,7 +14311,7 @@ sempre "morto": molti sono librerie usate da altri moduli.
 | 143 | `fase143_kyc_host.py` | — | Verifica identità host KYC (handoff a provider, no PII sui ns server). |
 | 145 | `fase145_contratto_pdf.py` | +router | Contratto di locazione breve PDF precompilato (zero dipendenze). |
 | 147 | `fase147_tassa_comunale.py` | boot | Tassa di soggiorno comunale automatica (registro + ledger riscossioni). |
-| 149 | `fase149_deposito_cauzionale.py` | — | Deposito cauzionale pre-autorizzazione (hold, no addebito). |
+| 149 | `fase149_deposito_cauzionale.py` | — (2026-11-08, EN6, +2 prove viste ROSSE: se il PSP non libera la carta il deposito non risulta rilasciato) | Deposito cauzionale pre-autorizzazione (hold, no addebito). |
 | 151 | `fase151_alloggiati_web.py` | — | Export "Alloggiati Web" (Questura / Polizia di Stato). |
 | 152 | `fase152_notifiche_prenotazione.py` | boot+router | Fase 152 - Notifiche di prenotazione all'HOST (chiude il buco: oggi solo l'OSPITE riceve |
 | 154 | `fase154_giurisdizioni_marketing.py` | — | Database GIURISDIZIONI MARKETING mondiale (compliance per nazione). |
