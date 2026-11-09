@@ -7746,6 +7746,16 @@ class RouterHTTP:
         with _BONIFICI_LOCK:
             return self._trasferisci_sotto_chiave(rif, importo_cents, penale, a_mano)
 
+    @staticmethod
+    def _bonifici_forse_partiti(connect, acct, host_id, fc_, pd):
+        """PR4 (8/11). Una riga 'maturato' puo' avere il bonifico gia' partito con la risposta
+        persa. Prima di riscuotere un debito si rilegge Stripe: vero se ne trova uno o non sa."""
+        if not acct or not fc_.debiti_host(host_id, stato="aperto"):
+            return False
+        letture = (connect.bonifico_di(acct, r["prenotazione_id"])
+                   for r in pd.elenca(host_id, stato="maturato"))
+        return any(not x.get("ok") or x.get("bonifico") is not None for x in letture)
+
     def _trasferisci_sotto_chiave(self, rif, importo_cents, penale, a_mano):
         """Il corpo di `_trasferisci_all_host`, che lo chiama tenendo `_BONIFICI_LOCK`."""
         try:
@@ -7835,7 +7845,14 @@ class RouterHTTP:
             fc_ = getattr(self._sys, "finanza", None)
             if fc_ is not None and pd is not None and hasattr(fc_, "riscuoti_debiti"):
                 try:
-                    ris = fc_.riscuoti_debiti(host_id=host_id, payout=pd)
+                    if self._bonifici_forse_partiti(connect, acct, host_id, fc_, pd):
+                        logger.error("DEBITI NON RISCOSSI | HOST_ID: %s | codice: "
+                                     "bonifico_forse_gia_partito | messaggio: un bonifico risulta "
+                                     "su Stripe o non si riesce a leggerlo: si riprova al giro "
+                                     "dopo, per non compensare su soldi gia' usciti", host_id)
+                        ris = {}
+                    else:
+                        ris = fc_.riscuoti_debiti(host_id=host_id, payout=pd)
                     if ris.get("riscossi_cents"):
                         logger.warning("DEBT_COLLECTED | HOST_ID: %s | RISCOSSI: %d cents "
                                        "| SALDATI: %d | ANCORA APERTI: %d", host_id,

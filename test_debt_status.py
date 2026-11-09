@@ -40,6 +40,9 @@ class ConnectFinto:
         self.transfers.append((acct, amount, currency, rif))
         return "tr_%d" % len(self.transfers)
 
+    def bonifico_di(self, acct, rif):
+        return {"ok": True, "bonifico": None}       # PR4: su Stripe non c'e' ancora niente
+
 
 class TestDebtStatus(unittest.TestCase):
     @classmethod
