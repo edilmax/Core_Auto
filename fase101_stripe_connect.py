@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 import urllib.parse
 from typing import Any, Callable, Dict, List, Optional
 
@@ -289,7 +290,13 @@ class ProviderConnect:
             if gia is not None:                       # gia' partito ('tr_...'), o non si sa ("")
                 return gia
         esito: Dict[str, Any] = {}
-        r = self._post(self.TRANSFERS, params, idem_key="transfer_" + (rif or account_id),
+        # ST4 (9/11): con una chiave fissa Stripe ripete il vecchio rifiuto anche a soldi arrivati
+        # (docs.stripe.com/api/idempotent_requests). Cambia ogni giorno: col riferimento, qui sopra
+        # si e' appena riletto che il bonifico non c'e'. Senza riferimento quella rilettura non
+        # c'e', e la chiave resta fissa.
+        giorno = time.strftime("%Y%m%d", time.gmtime(time.time()))
+        r = self._post(self.TRANSFERS, params,
+                       idem_key="transfer_%s_%s" % (rif, giorno) if rif else "transfer_" + account_id,
                        esito=esito)
         tid = r.get("id") if r else None
         if isinstance(tid, str) and tid.startswith("tr_"):
