@@ -14242,7 +14242,7 @@ sempre "morto": molti sono librerie usate da altri moduli.
 | 55 | `fase55_bootstrap.py` | — | Bootstrap / Composition-root del funnel Mango. |
 | 56 | `fase56_gateway_tavoli.py` | — | Gateway Tavoli VIP - Contratti JSON + integrazione Gateway. |
 | 57 | `fase57_vetrina.py` | boot+router | Vetrina / Catalogo pubblico (lo storefront che mancava). |
-| 58 | `fase58_channel_manager.py` | boot | Channel Manager / Inventario host in TEMPO REALE (anti-overbooking). |
+| 58 | `fase58_channel_manager.py` | boot (2026-11-08, VA2 e AT8, +5 prove, 4 viste ROSSE: `stato_blocco`; con le date gia' liberate e la prenotazione ancora 'pagato' un nuovo clic finisce la cancellazione senza un secondo Credito Viaggio, il pagamento tardivo libera il suo 'reblock:', e il giro della garanzia non paga l'host e scrive ERROR) | Channel Manager / Inventario host in TEMPO REALE (anti-overbooking). |
 | 59 | `fase59_concierge.py` | boot+router | Protocollo Concierge AI (booking AGENT-DISCOVERABLE). |
 | 60 | `fase60_mcp_server.py` | boot | MCP Server (Model Context Protocol) per l'hospitality. |
 | 61 | `fase61_localizzazione.py` | +router | Localizzazione (i18n) a COSTO ZERO - la Torre di Babele polverizzata. |

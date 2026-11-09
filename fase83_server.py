@@ -7959,6 +7959,17 @@ class RouterHTTP:
                        self._fmt_importo(int(importo_cents), valuta))
         return ""
 
+    def _cancellazione_ospite_a_meta(self, rif):
+        """VA2 (8/11): prenotazione 'pagato' con le date gia' liberate dalla cancellazione: il
+        processo e' morto prima dei passi sui soldi. Il pagamento tardivo ha un suo blocco vivo
+        ('reblock:') e non e' questo caso."""
+        rec = self._sys.pagamenti_pendenti.info(rif)
+        if not rec or rec.get("stato") != "pagato" or not rec.get("idem_key"):
+            return False
+        inv = self._sys.inventario
+        return (inv.stato_blocco(rec["idem_key"]) == "rilasciato"
+                and inv.stato_blocco("reblock:" + str(rif)) != "occupato")
+
     def _sblocca_garanzie_scadute(self, ora_ts=None):
         """Il giro orario della garanzia (tick di `avvia_server`): 24h di silenzio = tutto ok ->
         rilascio + bonifico AUTOMATICO all'host. PREVENZIONE perdita: non si versa l'escrow
@@ -7973,7 +7984,15 @@ class RouterHTTP:
         def _rimborsata(_rif):
             try:
                 _i = pp.info(_rif) if pp is not None else None
-                return bool(_i) and _i.get("stato") in ("rimborsato", "cancellata_host")
+                if bool(_i) and _i.get("stato") in ("rimborsato", "cancellata_host"):
+                    return True
+                if not self._cancellazione_ospite_a_meta(_rif):
+                    return False
+                logger.error("CANCELLAZIONE A META' | RIF: %s | codice: cancellazione_a_meta | "
+                             "messaggio: date liberate ma soldi non sistemati: bonifico all'host "
+                             "fermo; finire la cancellazione dal voucher o dal pannello",
+                             _rif_per_registro(_rif))
+                return True
             except Exception:
                 return False
         # Voce 177, 26/10 («autorizzato» per delega): il rilascio sotto `_BONIFICI_LOCK`, come il
@@ -8722,7 +8741,8 @@ class RouterHTTP:
             return 503, {"errore": "service_unavailable"}
         if not getattr(e, "ok", False):
             return 409, {"stato": "rifiutato", "motivo": getattr(e, "motivo", "")}
-        if getattr(e, "idempotente", False):
+        if getattr(e, "idempotente", False) and not (_rec is not None
+                                                     and _rec.get("stato") == "pagato"):
             # REPLAY: la cancellazione era GIA' stata processata (il rilascio delle date e'
             # idempotente sulla idem_key del voucher). Qui si ESCE: NON riconiare il Credito
             # Viaggio, NON ri-toccare payout/escrow. BUG PROVATO al collaudo: la guardia
@@ -8735,6 +8755,17 @@ class RouterHTTP:
                          "rimborso_cents": 0, "credito_viaggio_cents": 0,
                          "credito_viaggio_token": "", "money_unit": "cents_integer",
                          "nota": "prenotazione gia' cancellata: nessun nuovo credito."}
+        # VA2 e AT8 (8/11): date gia' liberate ma prenotazione ancora 'pagato'. O un pagamento
+        # tardivo, che tiene le date con 'reblock:' e va liberato adesso, o una cancellazione morta
+        # a meta': si finisce, senza coniare un secondo Credito Viaggio.
+        _ripresa = False
+        if getattr(e, "idempotente", False):
+            try:
+                _e2 = self._sys.inventario.rilascia(allog, ci, co, idem_key="reblock:" + str(rif))
+            except Exception:
+                logger.error("cancella prenotazione: rilascio reblock esploso", exc_info=True)
+                return 503, {"errore": "service_unavailable"}
+            _ripresa = not getattr(_e2, "ok", False) or bool(getattr(_e2, "idempotente", False))
         # IL BLOCCO SULLA CARTA, PRIMA della cassaforte e del bonifico: nelle 48 ore il blocco si
         # ANNULLA (niente riga di rimborso: i soldi non sono mai entrati); con una penale si
         # INCASSA tutto prima, cosi' la quota dell'host esiste davvero quando parte il bonifico.
@@ -8943,7 +8974,7 @@ class RouterHTTP:
                              self._fmt_importo(int(rimborso_totale), v.get("valuta", "EUR")))
         return {"r": r, "pagato_davvero": pagato_davvero, "senza_incasso": _senza_incasso,
                 "tratt_originale": tratt_originale, "tassa": tassa,
-                "rimborso_totale": rimborso_totale}
+                "rimborso_totale": rimborso_totale, "ripresa": _ripresa}
 
     def _cancella_prenotazione_coda(self, v, rif, giorni, fatto):
         """La coda di `_cancella_prenotazione`, FUORI dal lucchetto: credito, email e penale in
@@ -8954,8 +8985,9 @@ class RouterHTTP:
         # il credito nasce dal trattenuto ORIGINALE della politica: il taglio anti-perdita
         # (tetto di cassa) non deve MAI coniare Credito Viaggio nuovo dal nulla.
         # (e su un blocco mai incassato la penale non e' mai entrata: niente credito da coniare)
-        cv_cents, cv_token = self._credito_anti_rimpianto(0 if _senza_incasso else tratt_originale,
-                                                          v.get("valuta", "EUR"))
+        cv_cents, cv_token = self._credito_anti_rimpianto(
+            0 if (_senza_incasso or fatto.get("ripresa")) else tratt_originale,
+            v.get("valuta", "EUR"))
         if pagato_davvero:                     # C3: conferma cancellazione + rimborso in email
             self._email_cancellazione(rif, rimborso_totale, v.get("valuta", "EUR"), cv_cents)
         # PAGA IN STRUTTURA (FASE 3): PENALE tardiva. Regola fondatore: normale -> si trattiene
