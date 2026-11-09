@@ -156,6 +156,41 @@ class TestPagaStrutturaE2E(unittest.TestCase):
         self.assertIn("setup_future_usage%5D=off_session", ant)                     # carta salvata
         self.assertIn(f"saldo_cents%5D={atteso['saldo_in_loco_cents']}", ant)       # saldo nei metadata
 
+    def _ripeti_book(self, q):
+        return self.g("POST", "/api/concierge/book",
+                      {"quote_token": q["quote_token"], "email": "cli@ps.it",
+                       "modo_pagamento": "in_struttura"})
+
+    def test_VA1_doppio_clic_ridà_il_link_dell_anticipo_non_del_totale(self):
+        q, b = self._prenota("2026-09-05", "2026-09-08", modo="in_struttura")
+        self.assertEqual(b.get("modo_pagamento"), "in_struttura", b)            # premessa
+        chieste = []
+        self.sys.stripe.crea_link_anticipo = lambda d: (chieste.append(d), "https://anticipo")[1]
+        s, b2 = self._ripeti_book(q)
+        self.assertEqual(s, 201, b2)
+        self.assertEqual(b2.get("payment_url"), "https://anticipo", b2)
+        self.assertEqual([d["anticipo_cents"] for d in chieste], [b["anticipo_online_cents"]])
+        self.assertEqual(chieste[0]["saldo_cents"], b["saldo_in_loco_cents"])
+        self.assertEqual(chieste[0]["riferimento"], b["riferimento"])
+
+    def test_VA1_doppio_clic_senza_link_anticipo_non_ridà_il_totale(self):
+        q, _ = self._prenota("2026-09-05", "2026-09-08", modo="in_struttura")
+        self.sys.stripe.crea_link_anticipo = lambda d: None
+        s, b2 = self._ripeti_book(q)
+        self.assertEqual(s, 503, b2)
+        self.assertNotIn("payment_url", b2)
+
+    def test_VA1_doppio_clic_online_resta_com_era(self):
+        q, b = self._prenota("2026-09-05", "2026-09-08")
+        self.assertNotEqual(b.get("modo_pagamento"), "in_struttura", b)         # premessa
+        def non_deve(d):
+            raise AssertionError("link anticipo chiesto per una prenotazione online")
+        self.sys.stripe.crea_link_anticipo = non_deve
+        s, b2 = self.g("POST", "/api/concierge/book",
+                       {"quote_token": q["quote_token"], "email": "cli@ps.it"})
+        self.assertEqual(s, 201, b2)
+        self.assertTrue(b2.get("payment_url"), b2)
+
     def test_in_struttura_NON_apre_escrow_ne_payout(self):
         q, b = self._prenota("2026-09-05", "2026-09-08", modo="in_struttura")
         rif = b["riferimento"]

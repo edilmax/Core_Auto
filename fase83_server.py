@@ -6637,8 +6637,30 @@ class RouterHTTP:
             fuori.pop("payment_url", None)
             fuori["stato"] = "in_attesa_host"
         else:
+            if (fuori.get("modo_pagamento") == "in_struttura"
+                    and not self._rifai_link_anticipo(fuori, rec)):
+                return 503, {"errore": "pagamento_non_disponibile", "riprova": True}
             fuori["stato"] = "in_attesa_pagamento"
         return 201, fuori
+
+    def _rifai_link_anticipo(self, fuori, rec):
+        """VA1 (8/11): al doppio clic fase59 rifa' il link del TOTALE; chi paga in struttura deve
+        ricevere di nuovo quello dell'ANTICIPO. False se non si e' potuto: mai il totale."""
+        try:
+            link = self._sys.stripe.crea_link_anticipo({
+                "anticipo_cents": fuori.get("anticipo_online_cents"),
+                "saldo_cents": fuori.get("saldo_in_loco_cents"),
+                "valuta": fuori.get("valuta", "EUR"),
+                "email": rec.get("email", ""),
+                "riferimento": fuori.get("riferimento", "")})
+        except Exception:
+            logger.error("paga-struttura: link anticipo non rifatto al doppio clic (ISOLATO) | "
+                         "RIF: %s", _rif_per_registro(fuori.get("riferimento")), exc_info=True)
+            return False
+        if not link:
+            return False
+        fuori["payment_url"] = link
+        return True
 
     def _modalita_alloggio(self, slug):
         try:

@@ -379,7 +379,9 @@ def dimostra_transizioni() -> Dict[str, str]:
       - PREN_monotona_senza_cicli     : ogni transizione SALE di rango (⇒ grafo aciclico).
     PAYOUT (tabella _TRANSIZIONI letta DIRETTAMENTE dalla produzione fase131):
       - PAY_pagato_assorbente         : da 'pagato' (soldi partiti e arrivati) non si esce;
-      - PAY_mai_ritorno_in_coda       : nulla rientra in 'in_attesa'; 'maturato' solo da 'in_attesa';
+      - PAY_mai_ritorno_in_coda       : nulla rientra in 'in_attesa'; 'maturato' solo da 'in_attesa'
+                                        (vale per la TABELLA: `riallinea_maturato`, la quota
+                                        decisa dall'arbitro, ne sta fuori di proposito);
       - PAY_monotono_mai_indietro     : il rango di pipeline non scende MAI;
       - PAY_cicli_solo_coppia_hold    : ogni movimento a rango costante è dentro la coppia
                                         hold {in_transito,trattenuto} (sospensione/ripresa del
