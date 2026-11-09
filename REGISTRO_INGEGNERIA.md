@@ -14302,7 +14302,7 @@ sempre "morto": molti sono librerie usate da altri moduli.
 | 125 | `fase125_confronto_guest.py` | +router | Confronto OTA risparmio GUEST (prezzo finale lato ospite). |
 | 127 | `fase127_checkin_digitale.py` | — | Check-in digitale guest (pre-registrazione + sblocco verificabile). |
 | 129 | `fase129_traduzione_recensioni.py` | — | Traduzione recensioni guest multilingua (gratis, coerente fase61/107). |
-| 131 | `fase131_payout_dashboard.py` | boot | Host payout dashboard (tracciamento incassi/payout per valuta). |
+| 131 | `fase131_payout_dashboard.py` | boot (2026-11-08, PY4, +1 prova vista ROSSA: `aggiorna_stato` scrive solo se lo stato e' ancora quello letto) | Host payout dashboard (tracciamento incassi/payout per valuta). |
 | 133 | `fase133_split_quote_uguali.py` | +router | Split-payment di gruppo a quote uguali (conservazione esatta). |
 | 135 | `fase135_ical_bidirezionale.py` | — | Sincronizzazione iCal BIDIREZIONALE. |
 | 137 | `fase137_fedelta_guest.py` | — | Programma fedeltà guest (punti per soggiorni → sconti). |
