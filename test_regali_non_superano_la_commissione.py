@@ -300,6 +300,28 @@ class TestIRegaliNonSuperanoLaCommissione(unittest.TestCase):
         self.assertEqual(self.payout.aumenti, [self.credito_iniziale * 17 // 10],
                          "ogni centesimo di euro vale 1,7 yen, non 1")
 
+    def _con_giornale(self):
+        from fase177_financial_controller import crea_financial_controller
+        self.sys.finanza = crea_financial_controller(self.dir + "/fin.db")
+        self.sys.finanza.inizializza_schema()
+        return self.sys.finanza
+
+    def _sconti_scritti(self, fc):
+        return [(m["importo_cents"], m["valuta"]) for m in fc.movimenti("REF1")
+                if m["tipo"] == "sconto_commissione"]
+
+    def test_DA3_il_credito_usato_finisce_nel_giornale_nella_moneta_dell_annuncio(self):
+        fc = self._con_giornale()
+        self._annuncio_in_yen(1700, _TassiFinti(170))
+        self._conferma()
+        self.assertEqual(self._sconti_scritti(fc), [(1700, "JPY")])
+
+    def test_DA3_senza_credito_usato_nessuna_riga(self):
+        fc = self._con_giornale()
+        self._annuncio_in_yen(1700, None)
+        self.assertEqual(self._conferma(), 0, "premessa: niente cambio, niente sconto")
+        self.assertEqual(self._sconti_scritti(fc), [])
+
     def test_DA2_il_cambio_di_48_ore_vale_ancora(self):
         self._annuncio_in_yen(1700, _TassiFinti(170, eta_ore=48))
         self.assertEqual(self._conferma(), 1000)

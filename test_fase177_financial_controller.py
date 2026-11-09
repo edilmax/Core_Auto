@@ -120,6 +120,34 @@ class TestStornoDellaPenale(unittest.TestCase):
         tipi = self._tipi("RD")
         self.assertEqual((tipi.count("debito_all_ospite"), tipi.count("storno_commissione")), (1, 1))
 
+    # DA3 (campagna soldi 8/11): il credito referral abbassa la commissione trattenuta, ma il
+    # giornale restava alla commissione piena: ricavo gonfiato e netto DAC7 dell'host basso.
+    def _con_sconto(self, rif, importo=400):
+        self._prenotazione_incassata(rif)
+        self.assertIsNotNone(
+            self.fc.movimento(tipo="sconto_commissione", riferimento=rif, soggetto="host:h1",
+                              importo_cents=importo, valuta="EUR", causale="credito"),
+            "il giornale non conosce il movimento dello sconto")
+
+    def test_DA3_lo_sconto_toglie_dal_ricavo_e_torna_debito_verso_l_host(self):
+        self._con_sconto("RS")
+        saldi = self.fc.saldi()
+        self.assertEqual(saldi["ricavi_commissioni"], -600)
+        self.assertEqual(saldi["debiti_vs_host"], -9400)
+
+    def test_DA3_il_dac7_conta_la_commissione_scontata(self):
+        self.fc._now = lambda: self._CAPODANNO
+        self._con_sconto("RS")
+        riga = self.fc.aggrega_dac7(2026)["h1"]
+        self.assertEqual((riga["commissioni"], riga["netto"]), (600, 9400))
+
+    def test_DA3_lo_storno_rende_solo_la_commissione_davvero_trattenuta(self):
+        self._con_sconto("RS")
+        esito = self.fc.storna_prenotazione(riferimento="RS")
+        self.assertEqual((esito["storno_commissione"], esito["debito_all_ospite"]), (600, 9400))
+        self.assertEqual(self.fc.saldi().get("ricavi_commissioni", 0), 0,
+                         "dopo il rimborso totale non deve restare ne' ricavo ne' ammanco")
+
     def test_storno_entrato_a_meta_giro_lascia_il_debito_com_era(self):
         self._penale(_Registro())
         risposte = iter([False, True])

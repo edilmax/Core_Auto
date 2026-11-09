@@ -11210,7 +11210,14 @@ class RouterHTTP:
                 dj = _jc.loads(rec.get("corpo_json") or "{}") if isinstance(rec, dict) else {}
             except Exception:
                 dj = {}
-            self._applica_credito_host(rif, hid_pag, self._commissione_regalabile(dj), dj)
+            scontato = self._applica_credito_host(rif, hid_pag, self._commissione_regalabile(dj), dj)
+            # DA3: la riga `commissione` e' gia' scritta piena; lo sconto la corregge nel giornale.
+            # Solo qui: la conferma immediata non scrive nessuna riga `commissione`.
+            self._giornale(tipo="sconto_commissione", riferimento=rif,
+                           soggetto="host:" + str(hid_pag), importo_cents=scontato,
+                           valuta=dj.get("valuta") or "EUR",
+                           causale="credito referral scalato dalla commissione",
+                           evento_id="sconto_commissione:" + str(rif))
             self._forse_qualifica_referral(hid_pag, pd)
             # C53-B1-5: bonifico rimasto fermo -> False (503); il ritentativo passa dal ramo
             # 'pagato' qui sopra e lo matura senza rifare email e crediti
