@@ -2421,6 +2421,9 @@ class _ConnectCheRicorda:
         self.bonifici.append((acct, importo, valuta, rif))
         return "tr_%d" % len(self.bonifici)
 
+    def bonifico_di(self, acct, rif):
+        return {"ok": True, "bonifico": None}       # PR4: la rilettura prima di compensare
+
 
 class _BancoDeiSoldiDelServer(unittest.TestCase):
     """Sistema VERO su file (pendenti, bonifici, garanzia, giornale), webhook firmato,

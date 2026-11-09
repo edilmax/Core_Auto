@@ -7746,16 +7746,6 @@ class RouterHTTP:
         with _BONIFICI_LOCK:
             return self._trasferisci_sotto_chiave(rif, importo_cents, penale, a_mano)
 
-    @staticmethod
-    def _bonifici_forse_partiti(connect, acct, host_id, fc_, pd):
-        """PR4 (8/11). Una riga 'maturato' puo' avere il bonifico gia' partito con la risposta
-        persa. Prima di riscuotere un debito si rilegge Stripe: vero se ne trova uno o non sa."""
-        if not acct or not fc_.debiti_host(host_id, stato="aperto"):
-            return False
-        letture = (connect.bonifico_di(acct, r["prenotazione_id"])
-                   for r in pd.elenca(host_id, stato="maturato"))
-        return any(not x.get("ok") or x.get("bonifico") is not None for x in letture)
-
     def _trasferisci_sotto_chiave(self, rif, importo_cents, penale, a_mano):
         """Il corpo di `_trasferisci_all_host`, che lo chiama tenendo `_BONIFICI_LOCK`."""
         try:
@@ -7845,7 +7835,8 @@ class RouterHTTP:
             fc_ = getattr(self._sys, "finanza", None)
             if fc_ is not None and pd is not None and hasattr(fc_, "riscuoti_debiti"):
                 try:
-                    if self._bonifici_forse_partiti(connect, acct, host_id, fc_, pd):
+                    if (acct and fc_.debiti_host(host_id, stato="aperto")
+                            and _bonifici_forse_partiti(connect, acct, host_id, pd)):
                         logger.error("DEBITI NON RISCOSSI | HOST_ID: %s | codice: "
                                      "bonifico_forse_gia_partito | messaggio: un bonifico risulta "
                                      "su Stripe o non si riesce a leggerlo: si riprova al giro "
@@ -8294,7 +8285,7 @@ class RouterHTTP:
                     esito_fin = fc.processa_penale(
                         riferimento=ref, host_id=(host_id or rec.get("host_id") or ""),
                         penale_cents=penale, valuta=valuta,
-                        payout=getattr(self._sys, "payout", None))
+                        payout=_payout_per_penale(self._sys, host_id or rec.get("host_id") or ""))
                 except Exception:
                     logger.error("host cancella %s: codice: nota_debito_rinviata | messaggio: la "
                                  "nota della penale e' ESPLOSA, la cancellazione prosegue e la "
@@ -14098,7 +14089,7 @@ def _riprendi_cancellazione_host(sistema: Any, router: Any, rec: Dict[str, Any])
         return
     esito = fc.processa_penale(riferimento=rif, host_id=str(rec.get("host_id") or ""),
                                penale_cents=pen, valuta=valuta,
-                               payout=getattr(sistema, "payout", None))
+                               payout=_payout_per_penale(sistema, str(rec.get("host_id") or "")))
     if esito is None:
         # (None anche con host o penale non validi, fase177: la causa non e' sempre il giornale)
         logger.error("riasserzione penale %s: codice: nota_debito_rinviata | messaggio: nota non "
@@ -14126,6 +14117,42 @@ def _tassa_da_rendere(voucher: Any, pagato_davvero: bool) -> int:
     if not pagato_davvero or voucher.get("modo_pagamento") == "in_struttura":
         return 0
     return _intero_positivo(voucher.get("tassa_soggiorno_cents", 0))
+
+
+def _bonifici_forse_partiti(connect: Any, acct: str, host_id: str, pd: Any) -> bool:
+    """PR4 (8/11). Una riga 'maturato' puo' avere il bonifico gia' partito con la risposta persa.
+    Prima di compensarci sopra si rilegge Stripe: vero se ne trova uno, o se non si sa."""
+    letture = (connect.bonifico_di(acct, r["prenotazione_id"])
+               for r in pd.elenca(host_id, stato="maturato"))
+    return any(not x.get("ok") or x.get("bonifico") is not None for x in letture)
+
+
+class _NessunaRigaDaCompensare:
+    """Il registro dei bonifici per una penale che non puo' compensare: tutta a debito."""
+
+    @staticmethod
+    def elenca(*_a: Any, **_k: Any) -> List[Any]:
+        return []
+
+
+def _payout_per_penale(sistema: Any, host_id: str) -> Any:
+    """PR4: se un bonifico dell'host e' forse gia' partito la penale diventa tutta debito, e la
+    riscossione la riprende quando la riga e' chiara. Non si sa -> debito: mai sui soldi usciti."""
+    pd = getattr(sistema, "payout", None)
+    connect = getattr(sistema, "connect", None)
+    reg = getattr(sistema, "registro_host", None)
+    if pd is None or connect is None or reg is None:
+        return pd
+    try:
+        acct = (reg.info_host(host_id) or {}).get("stripe_account_id", "")
+        if not acct or not _bonifici_forse_partiti(connect, acct, host_id, pd):
+            return pd
+    except Exception:
+        logger.warning("penale di %s: lettura dei bonifici fallita, tutta a debito", host_id,
+                       exc_info=True)
+    logger.error("PENALE NON COMPENSATA | HOST_ID: %s | codice: bonifico_forse_gia_partito | "
+                 "messaggio: la penale resta a debito e si riscuote piu' avanti", host_id)
+    return _NessunaRigaDaCompensare()
 
 
 def _penale_finita(fc: Any, rif: str) -> bool:
