@@ -457,6 +457,30 @@ class TestPagaStrutturaE2E(unittest.TestCase):
         self.assertEqual(pp.info(rif)["stato"], "pagato")                       # premessa
         return b
 
+    # ── VA6 e SF1 (8/11): la riga del bonifico dell'host che non nasce deve vedersi ──
+    def _errori_registrati(self, fa):
+        import fase83_server as _srv
+        with mock.patch.object(_srv.logger, "error") as err:
+            fa()
+        return " ".join(str(c.args[0]) for c in err.call_args_list if c.args)
+
+    def _rifiuta_riga(self, nome):
+        vero = getattr(self.sys.payout, nome)
+        self.addCleanup(setattr, self.sys.payout, nome, vero)
+        setattr(self.sys.payout, nome, lambda *a, **k: False)
+
+    def test_VA6_riga_in_attesa_non_scritta_si_vede(self):
+        self._rifiuta_riga("registra_in_attesa")
+        self.assertIn("riga_payout_non_scritta", self._errori_registrati(
+            lambda: self._prenota("2026-09-05", "2026-09-08")))
+
+    def test_VA6_riga_del_pagamento_tardivo_non_scritta_si_vede(self):
+        self._rifiuta_riga("registra_maturato")
+        self.assertIn("riga_payout_non_scritta", self._errori_registrati(self._pagata_in_ritardo))
+
+    def test_VA6_riga_scritta_nessun_allarme(self):
+        self.assertNotIn("riga_payout_non_scritta", self._errori_registrati(self._pagata_in_ritardo))
+
     def test_AT8_pagata_in_ritardo_non_risulta_cancellazione_a_meta(self):
         b = self._pagata_in_ritardo()
         self.assertIs(self.r._cancellazione_ospite_a_meta(b["riferimento"]), False)

@@ -7347,14 +7347,22 @@ class RouterHTTP:
             # finché non paga; se l'hold scade viene rimosso). Senza pagamento online (conferma
             # immediata / su-richiesta approvata) -> 'maturato'. Fine dei "guadagni" fantasma.
             if corpo.get("payment_url"):
-                pd.registra_in_attesa(ref, host, netto, valuta)
+                self._riga_payout_scritta(pd.registra_in_attesa(ref, host, netto, valuta), ref)
             else:
-                pd.registra_maturato(ref, host, netto, valuta)
+                self._riga_payout_scritta(pd.registra_maturato(ref, host, netto, valuta), ref)
                 # conferma immediata (no Stripe): scala subito il credito referral dell'host
                 self._applica_credito_host(ref, host, self._commissione_regalabile(corpo))
                 self._forse_qualifica_referral(host, pd)
         except Exception:
             logger.warning("registra payout fallito (ignorato)", exc_info=True)
+
+    @staticmethod
+    def _riga_payout_scritta(esito, ref):
+        """VA6 e SF1 (8/11): senza la riga nel registro l'host non verra' mai pagato."""
+        if esito is False:
+            logger.error("BONIFICO SENZA RIGA | RIF: %s | codice: riga_payout_non_scritta | "
+                         "messaggio: quota dell'host non scritta nel registro dei bonifici: "
+                         "scriverla a mano o non verra' pagata", _rif_per_registro(ref))
 
     def _giornale(self, *, tipo, riferimento, soggetto, importo_cents, valuta,
                   causale, evento_id=None):
@@ -11182,8 +11190,9 @@ class RouterHTTP:
                 pd = getattr(self._sys, "payout", None)
                 _versare = self._da_versare_host(dj)      # netto host + tassa (2026-08-19)
                 if pd is not None and dj.get("host_id") and _versare > 0:
-                    pd.registra_maturato(rif, dj["host_id"], _versare,
-                                         dj.get("valuta", "EUR"))
+                    self._riga_payout_scritta(
+                        pd.registra_maturato(rif, dj["host_id"], _versare, dj.get("valuta", "EUR")),
+                        rif)
                 self._apri_garanzia(rif, dj,
                                     rec.get("alloggio_id", ""), rec.get("check_in", ""))
             # comune a 'in_attesa' e 'scaduto-ribloccato': 'pagato' è GIÀ scritto dal CAS
