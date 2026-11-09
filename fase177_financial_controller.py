@@ -504,7 +504,7 @@ class FinancialController:
             if not d["host"] or d["ts"] is None:
                 continue
             try:
-                dt = _dt.datetime.utcfromtimestamp(int(d["ts"]))
+                dt = _data_fiscale(int(d["ts"]))
             except Exception:
                 continue
             if dt.year != anno:
@@ -552,7 +552,7 @@ class FinancialController:
         for r in self.stream_giornale():
             if r["tipo"] != "ritenuta":
                 continue
-            dt = _dt.datetime.utcfromtimestamp(int(r["ts"]))
+            dt = _data_fiscale(int(r["ts"]))
             if dt.year != anno:
                 continue
             imp = int(r["importo_cents"])
@@ -1255,6 +1255,19 @@ class FinancialController:
         return {"nota_id": nid, "nc_id": nc.get("nota_id"),
                 "riscosso_cents": riscosso, "restituito_in_da_pagare": restituito,
                 "gia_stornata": False, "a_meta": restituito != riscosso}
+
+
+def _data_fiscale(ts: int) -> Any:
+    """PY6 (8/11): DAC7 e ritenute contano mese e anno italiani: con l'ora di Greenwich un
+    incasso a cavallo della mezzanotte finiva nel mese, o nell'anno, sbagliato."""
+    import datetime as _dt
+    from fase187_fuso_orario import _zi
+    fuso = _zi("Europe/Rome")
+    if fuso is None:
+        logger.error("DATA FISCALE | codice: fuso_assente | messaggio: archivio dei fusi orari "
+                     "mancante, mese calcolato con l'ora di Greenwich")
+        fuso = _dt.timezone.utc
+    return _dt.datetime.fromtimestamp(ts, fuso)
 
 
 def crea_financial_controller(percorso: str, *, orologio: Any = None

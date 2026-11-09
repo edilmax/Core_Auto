@@ -83,6 +83,23 @@ class TestStornoDellaPenale(unittest.TestCase):
         tipi = self._tipi("RC")
         self.assertEqual((tipi.count("debito_all_ospite"), tipi.count("storno_commissione")), (1, 1))
 
+    # 1 gennaio 2026, 00:30 in Italia: per l'ora di Greenwich e' ancora il 31 dicembre 2025
+    _CAPODANNO = 1767223800
+
+    def test_PY6_la_ritenuta_di_capodanno_sta_nell_anno_italiano(self):
+        self.fc._now = lambda: self._CAPODANNO
+        self.fc.movimento(tipo="ritenuta", riferimento="RT", soggetto="host:h1", importo_cents=100,
+                          valuta="EUR", causale="ritenuta base=500")
+        self.assertEqual(self.fc.ritenute_anno(2026)["mesi"], {"2026-01": {"EUR": 100}})
+        self.assertEqual(self.fc.ritenute_anno(2025)["mesi"], {})
+
+    def test_PY6_l_incasso_di_capodanno_sta_nell_anno_italiano_per_dac7(self):
+        self.fc._now = lambda: self._CAPODANNO
+        self.fc.movimento(tipo="incasso", riferimento="RI", soggetto="host:h1", importo_cents=100,
+                          valuta="EUR", causale="x")
+        self.assertIn("h1", self.fc.aggrega_dac7(2026))
+        self.assertNotIn("h1", self.fc.aggrega_dac7(2025))
+
     def test_PY1_ripetere_a_lavoro_completo_non_raddoppia(self):
         self._prenotazione_incassata("RD")
         self.assertIs(self.fc.storna_prenotazione(riferimento="RD")["gia_fatto"], False)
