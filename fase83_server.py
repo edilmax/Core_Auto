@@ -11128,6 +11128,13 @@ class RouterHTTP:
                 logger.warning("pagamento per riferimento sconosciuto '%s' (ignorato)",
                                _rif_per_registro(rif))
                 return
+            if rec.get("attendi_sweeper"):
+                # FB5 (10/11): pagamento tardivo arrivato mentre lo sweeper finisce la scadenza
+                logger.error("webhook | codice: sweeper_in_corso | riferimento: %s | messaggio: "
+                             "pagamento tardivo arrivato a scadenza non ancora finita: niente "
+                             "conferma, rispondo 503 perche' Stripe ritenti",
+                             _rif_per_registro(rif))
+                return False
             stato = rec.get("stato", "")
             try:
                 _segno = json.loads(rec.get("corpo_json") or "{}").get("pagamento_tardivo")

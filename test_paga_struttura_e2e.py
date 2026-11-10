@@ -451,6 +451,7 @@ class TestPagaStrutturaE2E(unittest.TestCase):
         pp = self.sys.pagamenti_pendenti
         rec = pp.info(rif)
         self.assertTrue(pp.scadi(rif))
+        pp.scadenza_finita(rif)    # FB5: lo sweeper vero finisce i passi nello stesso giro
         self.sys.inventario.rilascia(rec["alloggio_id"], rec["check_in"], rec["check_out"],
                                      idem_key=rec["idem_key"])
         self.r._conferma_pagamento(rif)

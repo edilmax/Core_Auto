@@ -223,6 +223,7 @@ class _BancoDelleStrade(unittest.TestCase):
         rec = pp.info(rif)
         self.assertIsNotNone(rec, "PREMESSA NON VALIDA: il pendente deve esistere")
         pp.scadi(rif)
+        pp.scadenza_finita(rif)    # FB5: lo sweeper vero finisce i passi nello stesso giro
         self.sis.inventario.rilascia("casa", ci, co,
                                      idem_key=(rec.get("idem_key") or ("hold_" + rif)))
         ladro = self.sis.inventario.blocca("casa", ci, co, idem_key=chi + rif)
