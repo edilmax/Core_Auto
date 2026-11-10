@@ -28,6 +28,7 @@ import datetime
 import hashlib
 import hmac
 import logging
+import re
 import secrets
 import sqlite3
 import time
@@ -56,6 +57,30 @@ def _email_valida(v: Any) -> bool:
     v = v.strip()
     return (3 <= len(v) <= 254 and v.count("@") == 1
             and "." in v.split("@")[-1] and " " not in v)
+
+
+# E.164: «+», prefisso del paese che non comincia con 0, al massimo 15 cifre in tutto.
+_E164 = re.compile(r"\+[1-9][0-9]{6,14}")
+
+
+def normalizza_telefono(v: Any) -> Optional[str]:
+    """ORDINE DEL FONDATORE (10/11): il telefono dell'host si salva in formato internazionale
+    E.164 (+393331234567). Toglie spazi, trattini, punti e parentesi; «00» davanti vale «+».
+    "" se non c'e' (resta facoltativo); None se non e' un numero internazionale valido.
+    Salvato sempre uguale, lo stesso numero scritto in due modi da' la stessa impronta
+    anti-riciclo: prima ripartivano i 90 giorni allo 0%."""
+    if v is None:
+        return ""
+    if not isinstance(v, str):
+        return None
+    t = v.strip()
+    for c in " -.()":
+        t = t.replace(c, "")
+    if t.startswith("00"):
+        t = "+" + t[2:]
+    if not t:
+        return ""
+    return t if _E164.fullmatch(t) else None
 
 
 def _hash_password(password: str, salt: bytes) -> str:
@@ -367,6 +392,9 @@ class RegistroHost:
             return EsitoHost(False, errore="email_non_valida")
         if not (isinstance(password, str) and len(password) >= 8):
             return EsitoHost(False, errore="password_troppo_corta")  # min 8
+        telefono = normalizza_telefono(telefono)
+        if telefono is None:
+            return EsitoHost(False, errore="telefono_non_valido")
         email_n = email.strip().lower()
         salt = secrets.token_bytes(16)
         pw_hash = _hash_password(password, salt)
