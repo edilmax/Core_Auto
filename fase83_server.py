@@ -6033,8 +6033,9 @@ class RouterHTTP:
         # una» (docs.stripe.com/disputes/how-disputes-work). Quando la banca l'ha chiusa (si
         # guarda sul pannello di Stripe) l'arbitro decide dicendolo apposta, cosi' i soldi
         # non restano fermi per sempre: `la_banca_ha_deciso`.
-        if (str(st.get("motivo") or "").startswith("chargeback:")
-                and dati.get("la_banca_ha_deciso") is not True):
+        _motivo = str(st.get("motivo") or "")
+        if (_motivo.startswith("chargeback:") and dati.get("la_banca_ha_deciso") is not True
+                and not self._banca_ha_chiuso(_motivo[len("chargeback:"):])):
             return 409, {"errore": "decide_la_banca"}
         importo = int(st.get("importo_host_cents", 0))
         # calcolo il rimborso: da percentuale (0-100) oppure importo esatto
@@ -10518,6 +10519,8 @@ class RouterHTTP:
                 esito_perso = "conferma_pagamento_fallita"
         elif tipo == "charge.dispute.created":
             esito_perso = self._contestazione_carta((dati or {}).get("object", {}) or {})
+        elif tipo == "charge.dispute.closed":
+            self._contestazione_chiusa((dati or {}).get("object", {}) or {})
         elif str(tipo).startswith("identity.verification_session."):
             # STRIPE IDENTITY (Incr.11): il webhook porta l'ESITO (mai il documento).
             # ISOLATO: qualunque errore qui non tocca il resto del webhook.
@@ -10613,6 +10616,42 @@ class RouterHTTP:
                          "contestazione: %s | niente scritto: Stripe ritentera'", dp,
                          exc_info=True)
             return "contestazione_esplosa"
+
+    def _contestazione_chiusa(self, obj):
+        """ST3/CP5 (campagna 8/11): la banca ha deciso la contestazione. L'evento resta
+        nell'archivio dei webhook (fase204), ed e' da li' che l'arbitro sa che puo' decidere
+        (`_banca_ha_chiuso`). Qui si dice a una persona cosa e' successo: con 'lost' Stripe
+        ha tenuto importo e commissione, e la riga di perdita nel giornale NON e' ancora
+        automatica (limite dichiarato: va scritta a mano finche' non si decide chi la paga)."""
+        esito = _rif_per_registro(obj.get("status") or "")
+        dp = _rif_per_registro(obj.get("id") or "")
+        try:
+            pp = getattr(self._sys, "pagamenti_pendenti", None)
+            rec = pp.per_payment_intent(obj.get("payment_intent")) if pp is not None else None
+        except Exception:
+            rec = None
+        logger.error("CHARGEBACK | codice: chargeback_chiuso | esito: %s | contestazione: %s | "
+                     "RIF: %s | importo: %s %s | messaggio: la banca ha deciso; «Risolvi» nel "
+                     "pannello ora decide la garanzia. %s", esito, dp,
+                     _rif_per_registro((rec or {}).get("riferimento") or "sconosciuto"),
+                     _rif_per_registro(obj.get("amount", "")),
+                     _rif_per_registro(obj.get("currency", "")),
+                     "PERSA: Stripe ha tenuto importo e commissione, la perdita va scritta a mano "
+                     "nel giornale" if obj.get("status") == "lost" else
+                     "Vinta o chiusa: i soldi tornano su Stripe")
+
+    def _banca_ha_chiuso(self, dp):
+        """True se Stripe ci ha detto che la contestazione `dp` e' chiusa (evento elaborato)."""
+        archivio = getattr(self._sys, "eventi_stripe", None)
+        if archivio is None or not dp:
+            return False
+        try:
+            return bool(archivio.fatto_gia_presente(tipo="charge.dispute.closed",
+                                                    oggetto_id=dp, evt_id="-"))
+        except Exception:
+            logger.warning("archivio dei webhook illeggibile: contestazione %s ancora aperta",
+                           dp, exc_info=True)
+            return False
 
     # ── SCATTO ③: carta host off-session (fase183) ──────────────────────────
     MANDATO_CARTA = ("Autorizzo BookinVIP ad addebitare su questa carta gli importi che "

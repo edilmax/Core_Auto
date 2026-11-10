@@ -4750,6 +4750,36 @@ class TestUnaControversiaApertaFermaISoldi(_BancoDeiSoldiDelServer):
                          % (c,))
         self.assertEqual("risolto", self.sis.garanzia.stato(rif)["stato"])
 
+    # ── ST3/CP5 (campagna 8/11): il pulsante «Risolvi» del pannello non manda mai
+    #    `la_banca_ha_deciso`, e nessuno ascoltava `charge.dispute.closed`: soldi fermi per sempre
+    def _chiusura(self, pi, dp, esito):
+        return self.evento("charge.dispute.closed",
+                           {"id": dp, "object": "dispute", "payment_intent": pi,
+                            "charge": "ch_banco", "amount": 20000, "currency": "eur",
+                            "status": esito}, evt_id="evt_chiusa_" + dp)
+
+    def test_ST3_chiusa_dalla_banca_l_arbitro_decide_senza_spunta_e_lo_si_dice(self):
+        b = self._pagata("casa-st3", 2, "pi_st3")
+        rif = b["riferimento"]
+        s, c = self.contestazione("pi_st3", dp="dp_st3")
+        _deve(s == 200, "PREMESSA: contestazione della banca registrata", s, c)
+        with self.ascolta() as righe:
+            s, c = self._chiusura("pi_st3", "dp_st3", "lost")
+        self.assertEqual(200, s, c)
+        self.assertTrue(self.errori_con(righe, "chargeback_chiuso", "dp_st3", "lost"),
+                        "la banca ha chiuso la contestazione e nessuno lo sa: %r" % (righe,))
+        s, c = self._arbitro(rif, 100)
+        self.assertEqual(200, s, "la banca ha deciso e l'arbitro resta bloccato: %r" % (c,))
+        self.assertEqual("risolto", self.sis.garanzia.stato(rif)["stato"])
+
+    def test_ST3_la_chiusura_di_UN_ALTRA_contestazione_non_sblocca(self):
+        b = self._pagata("casa-st3b", 2, "pi_st3b")
+        rif = b["riferimento"]
+        self.contestazione("pi_st3b", dp="dp_st3b")
+        self._chiusura("pi_altro", "dp_altra", "won")
+        s, c = self._arbitro(rif, 50)
+        self.assertEqual((409, "decide_la_banca"), (s, (c or {}).get("errore")), c)
+
     def _all_istante(self, b, secondi_dallo_sblocco, rotta):
         rif = b["riferimento"]
         sblocco = int(self.sis.garanzia.stato(rif)["sblocco_auto_ts"])
