@@ -132,6 +132,59 @@ class TestUsoCredito(unittest.TestCase):
         self.assertEqual(e.usa_credito("host1", -5)["scontato_cents"], 0)
 
 
+class TestRendiCredito(unittest.TestCase):
+    """Revisione 9/11 (DA3 a): il credito consumato su una prenotazione rimborsata tutta
+    torna all'host. Il 10/11 i due giudici esterni della mutazione (Cosmic Ray, Mutatest)
+    lo trovavano scoperto: nessuna prova lo chiamava direttamente."""
+
+    def test_rende_il_credito_e_si_puo_riusare(self):
+        e = _eng()
+        self.assertIs(e.rendi_credito("host1", 1500, "rimborso:R1"), True)
+        self.assertEqual(e.credito_disponibile("host1"), 1500)
+        self.assertEqual(e.usa_credito("host1", 4000)["scontato_cents"], 1500)
+
+    def test_una_volta_sola_per_motivo(self):
+        e = _eng()
+        self.assertIs(e.rendi_credito("host1", 1500, "rimborso:R1"), True)
+        self.assertIs(e.rendi_credito("host1", 1500, "rimborso:R1"), False,
+                      "un ritentativo ha reso il credito due volte")
+        self.assertEqual(e.credito_disponibile("host1"), 1500)
+        self.assertIs(e.rendi_credito("host1", 700, "rimborso:R2"), True)
+        self.assertEqual(e.credito_disponibile("host1"), 2200)
+
+    def test_importo_non_positivo_rifiutato_e_niente_scritto(self):
+        e = _eng()
+        for cattivo in (0, -1, True, 1.5, "100", None):
+            self.assertIs(e.rendi_credito("host1", cattivo, "rimborso:X"), False, cattivo)
+        self.assertEqual(e.credito_disponibile("host1"), 0)
+        # il confine: un centesimo vale, e il motivo non era stato consumato dai rifiuti
+        self.assertIs(e.rendi_credito("host1", 1, "rimborso:X"), True)
+        self.assertEqual(e.credito_disponibile("host1"), 1)
+
+    def test_il_credito_reso_scade_come_gli_altri(self):
+        t = {"v": 1000}
+        e = _eng(clock=lambda: t["v"])
+        e.rendi_credito("host1", 1500, "rimborso:R1")
+        t["v"] = 1000 + 364 * GIORNO
+        self.assertEqual(e.credito_disponibile("host1"), 1500)
+        t["v"] = 1000 + 366 * GIORNO
+        self.assertEqual(e.credito_disponibile("host1"), 0)
+
+    def test_un_guasto_a_meta_non_lascia_mezza_scrittura(self):
+        e = _eng()
+
+        def guasto(*a, **k):
+            raise RuntimeError("disco pieno")
+        vero = e._accredita
+        e._accredita = guasto
+        with self.assertRaises(RuntimeError):
+            e.rendi_credito("host1", 1500, "rimborso:R1")
+        e._accredita = vero
+        self.assertEqual(e.credito_disponibile("host1"), 0)
+        self.assertIs(e.rendi_credito("host1", 1500, "rimborso:R1"), True,
+                      "il guasto ha bruciato il motivo: il credito non torna piu'")
+
+
 class TestRobustezza(unittest.TestCase):
     def test_mai_solleva(self):
         e = _eng()
