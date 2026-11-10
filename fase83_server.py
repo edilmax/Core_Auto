@@ -11091,6 +11091,16 @@ class RouterHTTP:
                                _rif_per_registro(rif))
                 return
             stato = rec.get("stato", "")
+            try:
+                _segno = json.loads(rec.get("corpo_json") or "{}").get("pagamento_tardivo")
+            except Exception:
+                _segno = None
+            if stato == "pagato" and _segno in ("da_finire", "payout_scritto"):
+                # PR6 (8/11): il primo giro di un pagamento TARDIVO e' morto dopo il CAS (il
+                # segno nasce con 'pagato', fase162). Si rifa' il giro da 'scaduto': riblocco
+                # con la stessa chiave, credito e garanzia sono idempotenti, la riga del
+                # bonifico si salta se gia' scritta. Modello TLA+ PagamentoTardivo (10/11).
+                stato = "scaduto"
             if stato == "pagato":
                 # WEBHOOK DUPLICATO/RETRY. NON basta uscire: se il PRIMO handler e' morto
                 # DOPO il CAS 'pagato' ma PRIMA dei passi derivati (BUG #32 provato), la tassa
@@ -11152,6 +11162,8 @@ class RouterHTTP:
             # da maturare, nessun escrow. Se tardivo, ri-blocca come l'online (anti-gara).
             if self._rec_in_struttura(rec):
                 self._conferma_struttura(rec, rif, stato)
+                if stato == "scaduto":
+                    pp.segna_blocco(rif, pagamento_tardivo="finito")
                 return
             if stato == "scaduto":
                 # PAGAMENTO TARDIVO: la stanza era stata liberata. Ri-tento il blocco con
@@ -11217,12 +11229,16 @@ class RouterHTTP:
                     dj = {}
                 pd = getattr(self._sys, "payout", None)
                 _versare = self._da_versare_host(dj)      # netto host + tassa (2026-08-19)
-                if pd is not None and dj.get("host_id") and _versare > 0:
-                    self._riga_payout_scritta(
-                        pd.registra_maturato(rif, dj["host_id"], _versare, dj.get("valuta", "EUR")),
-                        rif)
+                if (_segno != "payout_scritto" and pd is not None and dj.get("host_id")
+                        and _versare > 0):
+                    _scritta = pd.registra_maturato(rif, dj["host_id"], _versare,
+                                                    dj.get("valuta", "EUR"))
+                    self._riga_payout_scritta(_scritta, rif)
+                    if _scritta:
+                        pp.segna_blocco(rif, pagamento_tardivo="payout_scritto")
                 self._apri_garanzia(rif, dj,
                                     rec.get("alloggio_id", ""), rec.get("check_in", ""))
+                pp.segna_blocco(rif, pagamento_tardivo="finito")
             # comune a 'in_attesa' e 'scaduto-ribloccato': 'pagato' è GIÀ scritto dal CAS
             # in cima (acquisizione atomica); qui restano tassa + payout maturato (idempotenti,
             # ri-asseriti anche sul retry per sanare un crash del primo handler - BUG #32).

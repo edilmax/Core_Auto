@@ -196,6 +196,148 @@ class TestGaraSweeperConferma(unittest.TestCase):
         sonda = self.sys.inventario.blocca("casa-race", CI, CO, idem_key="ladro2")
         self.assertFalse(sonda.ok, "il pagamento tardivo deve ri-bloccare le date")
 
+    def test_PR6_pagamento_tardivo_interrotto_si_finisce_al_ritentativo(self):
+        """Campagna 8/11, PR6: il processo muore fra il CAS 'pagato' e il riblocco. Stripe
+        ritenta, il record dice gia' 'pagato' e il ritentativo faceva solo i passi derivati:
+        stanza mai ribloccata (doppia prenotazione), niente bonifico ne' garanzia."""
+        class _Morte(BaseException):
+            pass
+
+        self._hold_scaduto("RACE6")
+        sweep_hold_una_passata(self.sys, self.r)
+        self.assertEqual(self.pp.info("RACE6")["stato"], "scaduto")       # premessa
+        vero = self.sys.inventario.blocca
+
+        def muore(*a, **k):
+            raise _Morte()
+        self.sys.inventario.blocca = muore
+        with self.assertRaises(_Morte):
+            self.r._conferma_pagamento("RACE6")
+        self.sys.inventario.blocca = vero
+        self.assertEqual(self.pp.info("RACE6")["stato"], "pagato")        # premessa: CAS fatto
+        self.r._conferma_pagamento("RACE6")                               # Stripe ritenta
+        sonda = self.sys.inventario.blocca("casa-race", CI, CO, idem_key="ladro6")
+        self.assertFalse(sonda.ok, "stanza pagata e mai ribloccata: doppia prenotazione")
+        self.r._conferma_pagamento("RACE6")                               # e ancora: niente di nuovo
+        self.assertFalse(self.sys.inventario.blocca("casa-race", CI, CO, idem_key="ladro7").ok)
+
+    def _scaduto_con_corpo(self, rif, corpo):
+        e = self.sys.inventario.blocca("casa-race", CI, CO, idem_key="hold_" + rif)
+        self.assertTrue(e.ok, getattr(e, "errore", ""))
+        self.pp.registra(rif, alloggio_id="casa-race", check_in=CI, check_out=CO,
+                         idem_key="hold_" + rif, scadenza_ts=int(time.time()) - 10,
+                         corpo_json=json.dumps(corpo))
+        sweep_hold_una_passata(self.sys, self.r)
+        self.assertEqual(self.pp.info(rif)["stato"], "scaduto")         # premessa
+
+    def _segno(self, rif):
+        return json.loads(self.pp.info(rif)["corpo_json"] or "{}").get("pagamento_tardivo")
+
+    def test_PR6_in_struttura_interrotto_al_riblocco_si_finisce_al_ritentativo(self):
+        """Stesso buco nel «paga in struttura»: anche li' il riblocco viene dopo il CAS."""
+        class _Morte(BaseException):
+            pass
+
+        self._scaduto_con_corpo("RACE8", {"modo_pagamento": "in_struttura"})
+        vero = self.sys.inventario.blocca
+
+        def muore(*a, **k):
+            raise _Morte()
+        self.sys.inventario.blocca = muore
+        with self.assertRaises(_Morte):
+            self.r._conferma_pagamento("RACE8")
+        self.sys.inventario.blocca = vero
+        self.assertEqual(self.pp.info("RACE8")["stato"], "pagato")        # premessa: CAS fatto
+        self.r._conferma_pagamento("RACE8")                               # Stripe ritenta
+        self.assertFalse(self.sys.inventario.blocca("casa-race", CI, CO, idem_key="ladro8").ok,
+                         "anticipo pagato e stanza mai ribloccata: doppia prenotazione")
+        self.assertEqual(self._segno("RACE8"), "finito")
+
+    def test_PR6_morto_dopo_il_bonifico_il_ritentativo_apre_la_garanzia(self):
+        """Il processo muore dopo la riga del bonifico e prima della garanzia: il ritentativo
+        apre la garanzia (l'host non va pagato senza la tutela dell'ospite) e non riscrive
+        il bonifico."""
+        class _Morte(BaseException):
+            pass
+
+        self._scaduto_con_corpo("RACE9", {"host_id": "h_race", "netto_host_cents": 8000,
+                                          "valuta": "EUR"})
+        vera = self.sys.garanzia.apri
+
+        def muore(*a, **k):
+            raise _Morte()
+        self.sys.garanzia.apri = muore
+        with self.assertRaises(_Morte):
+            self.r._conferma_pagamento("RACE9")
+        self.sys.garanzia.apri = vera
+        self.assertEqual(self.sys.payout.stato_di("RACE9"), "maturato")   # premessa
+        self.assertIsNone(self.sys.garanzia.stato("RACE9"))               # premessa
+        self.r._conferma_pagamento("RACE9")                               # Stripe ritenta
+        self.assertIsNotNone(self.sys.garanzia.stato("RACE9"),
+                             "bonifico all'host maturato senza garanzia per l'ospite")
+        self.assertEqual(self.sys.payout.info("RACE9")["minori"], 8000)
+        self.assertEqual(self._segno("RACE9"), "finito")
+
+    def test_PR6_il_ritentativo_non_riscrive_un_bonifico_gia_scritto(self):
+        """D19: la riga del bonifico cambia fra la morte e il ritentativo (qui sparisce; nella
+        vita una penale puo' averla consumata). Il segno 'payout_scritto' vieta di riscriverla:
+        l'host verrebbe pagato due volte."""
+        class _Morte(BaseException):
+            pass
+
+        self._scaduto_con_corpo("RACE11", {"host_id": "h_race", "netto_host_cents": 8000,
+                                           "valuta": "EUR"})
+        vera = self.sys.garanzia.apri
+
+        def muore(*a, **k):
+            raise _Morte()
+        self.sys.garanzia.apri = muore
+        with self.assertRaises(_Morte):
+            self.r._conferma_pagamento("RACE11")
+        self.sys.garanzia.apri = vera
+        self.assertEqual(self._segno("RACE11"), "payout_scritto")          # premessa
+        self.assertTrue(self.sys.payout.rimuovi("RACE11"))                 # stato costruito a mano
+        self.r._conferma_pagamento("RACE11")
+        self.assertIsNone(self.sys.payout.info("RACE11"), "bonifico riscritto dal ritentativo")
+        self.assertIsNotNone(self.sys.garanzia.stato("RACE11"))
+
+    def test_PR6_stanza_presa_prima_del_ritentativo_va_al_rimborso(self):
+        """Fra la morte e il ritentativo un altro ospite prende la stanza libera: chi ha pagato
+        finisce fra i rimborsi, l'host non riceve niente, nessuna garanzia."""
+        class _Morte(BaseException):
+            pass
+
+        self._scaduto_con_corpo("RACE12", {"host_id": "h_race", "netto_host_cents": 8000,
+                                           "valuta": "EUR"})
+        vero = self.sys.inventario.blocca
+
+        def muore(*a, **k):
+            raise _Morte()
+        self.sys.inventario.blocca = muore
+        with self.assertRaises(_Morte):
+            self.r._conferma_pagamento("RACE12")
+        self.sys.inventario.blocca = vero
+        self.assertTrue(self.sys.inventario.blocca("casa-race", CI, CO, idem_key="altro").ok)
+        self.r._conferma_pagamento("RACE12")                              # Stripe ritenta
+        self.assertEqual(self.pp.info("RACE12")["stato"], "rimborsato")
+        self.assertIsNone(self.sys.payout.info("RACE12"), "host pagato per una stanza non sua")
+        self.assertIsNone(self.sys.garanzia.stato("RACE12"))
+
+    def test_PR6_un_tardivo_finito_si_segna_finito(self):
+        self._hold_scaduto("RACE7")
+        sweep_hold_una_passata(self.sys, self.r)
+        self.r._conferma_pagamento("RACE7")
+        self.assertEqual(self._segno("RACE7"), "finito")
+
+    def test_PR6_un_pagamento_in_tempo_non_porta_il_segno(self):
+        e = self.sys.inventario.blocca("casa-race", CI, CO, idem_key="hold_RACE10")
+        self.assertTrue(e.ok, getattr(e, "errore", ""))
+        self.pp.registra("RACE10", alloggio_id="casa-race", check_in=CI, check_out=CO,
+                         idem_key="hold_RACE10", scadenza_ts=int(time.time()) + 600)
+        self.r._conferma_pagamento("RACE10")                              # pagato in tempo
+        self.assertEqual(self.pp.info("RACE10")["stato"], "pagato")
+        self.assertIsNone(self._segno("RACE10"), "segno su un pagamento in tempo")
+
     # ── EN1 (8/11): il credito si brucia alla prenotazione, PRIMA del pagamento ────
     def _hold_col_credito(self, rif, modo=""):
         """Hold scaduto di chi ha usato il credito: bruciato per questa prenotazione."""
