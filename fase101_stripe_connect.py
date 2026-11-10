@@ -336,6 +336,10 @@ class ProviderConnect:
 
     # Pagine da 100 lette al massimo per ritrovare un bonifico: oltre, la risposta e' «non so».
     PAGINE_MASSIME = 10
+    # PR5 (8/11): da quando cercare il bonifico di un riferimento (fase81 lo cabla col giorno
+    # della prenotazione). Senza, si cerca dall'inizio, e con oltre PAGINE_MASSIME pagine di
+    # bonifici all'host la risposta restava «non so» per sempre: soldi fermi.
+    da_quando: Optional[Callable[[str], int]] = None
 
     def bonifico_di(self, account_id: str, riferimento: str) -> Dict[str, Any]:
         """IL BONIFICO DI QUESTA PRENOTAZIONE C'E' GIA' SU STRIPE? Solo lettura: GET
@@ -353,8 +357,14 @@ class ProviderConnect:
         trovati: List[Dict[str, Any]] = []
         dopo = ""
         try:
+            dal = int(self.da_quando(riferimento) or 0) if self.da_quando else 0
+        except Exception:
+            dal = 0                                   # data non letta: si cerca dall'inizio
+        try:
             for _ in range(self.PAGINE_MASSIME):
                 q = {"destination": account_id, "limit": "100"}
+                if dal > 0:
+                    q["created[gte]"] = str(dal)
                 if dopo:
                     q["starting_after"] = dopo
                 r = self._fetch_get(self.TRANSFERS + "?" + urllib.parse.urlencode(q),

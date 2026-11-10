@@ -165,7 +165,8 @@ class PagamentiPendenti:
                 "idem_key": r["idem_key"], "tassa_cents": int(r["tassa_cents"]),
                 "comune": r["comune"], "stato": r["stato"], "scadenza_ts": int(r["scadenza_ts"]),
                 "host_id": g("host_id"), "email": g("email"),
-                "quote_token": g("quote_token"), "corpo_json": g("corpo_json")}
+                "quote_token": g("quote_token"), "corpo_json": g("corpo_json"),
+                "creato_ts": int(g("creato_ts", 0) or 0)}
 
     def registra(self, riferimento: Any, *, alloggio_id: str, check_in: str, check_out: str,
                  idem_key: str = "", tassa_cents: int = 0, comune: str = "",
