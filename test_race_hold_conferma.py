@@ -323,6 +323,19 @@ class TestGaraSweeperConferma(unittest.TestCase):
         self.assertIsNone(self.sys.payout.info("RACE12"), "host pagato per una stanza non sua")
         self.assertIsNone(self.sys.garanzia.stato("RACE12"))
 
+    def test_Va_tardivo_col_blocco_sulla_carta_il_bonifico_resta_in_attesa(self):
+        """Variant-analysis 10/11 (V-a): il ramo tardivo scriveva il bonifico 'maturato' anche
+        coi soldi solo AUTORIZZATI sulla carta (il ramo normale aspetta l'incasso): penali e
+        debiti potevano compensarsi su soldi mai entrati."""
+        self._scaduto_con_corpo("RACE13", {"host_id": "h_race", "netto_host_cents": 8000,
+                                           "valuta": "EUR", "blocco_pi": "pi_race13",
+                                           "blocco_incassa_dal_ts": int(time.time()) + 86400})
+        self.r._conferma_pagamento("RACE13")
+        self.assertEqual(self.pp.info("RACE13")["stato"], "pagato")       # premessa
+        self.assertEqual(self.sys.payout.stato_di("RACE13"), "in_attesa",
+                         "bonifico maturato su soldi solo autorizzati sulla carta")
+        self.assertEqual(self.sys.payout.info("RACE13")["minori"], 8000)
+
     def test_PR6_un_tardivo_finito_si_segna_finito(self):
         self._hold_scaduto("RACE7")
         sweep_hold_una_passata(self.sys, self.r)
@@ -384,6 +397,41 @@ class TestGaraSweeperConferma(unittest.TestCase):
         self.r._conferma_pagamento("EN1D")
         self.assertEqual(self.pp.info("EN1D")["stato"], "pagato")
         self.assertTrue(self.reg.usato("CRED-1"))
+
+    # ── V-e (variant-analysis 10/11): lo sweeper muore fra il CAS 'scaduto' e i passi ──────
+    def _sweep_che_muore(self):
+        class _Morte(BaseException):
+            pass
+        vero = self.sys.inventario.rilascia
+
+        def muore(*a, **k):
+            raise _Morte()
+        self.sys.inventario.rilascia = muore
+        with self.assertRaises(_Morte):
+            sweep_hold_una_passata(self.sys, self.r)
+        self.sys.inventario.rilascia = vero
+
+    def test_Ve_sweeper_morto_dopo_scadi_il_giro_dopo_finisce(self):
+        self._hold_col_credito("VE1")
+        self._sweep_che_muore()
+        self.assertEqual(self.pp.info("VE1")["stato"], "scaduto")         # premessa: CAS fatto
+        self.assertFalse(self._date_libere(), "premessa: date ancora bloccate")
+        sweep_hold_una_passata(self.sys, self.r)                           # il giro dopo
+        self.assertTrue(self._date_libere(), "stanza bloccata per una prenotazione mai pagata")
+        self.assertFalse(self.reg.usato("CRED-1"), "credito dell'ospite perso")
+        self.assertEqual(self.recuperi, ["VE1"])
+        sweep_hold_una_passata(self.sys, self.r)                           # e ancora: niente
+        self.assertEqual(self.recuperi, ["VE1"], "email «riprova» mandata due volte")
+
+    def test_Ve_un_tardivo_dopo_la_morte_dello_sweeper_non_viene_disfatto(self):
+        self._hold_col_credito("VE2")
+        self._sweep_che_muore()
+        self.r._conferma_pagamento("VE2")                                  # paga in ritardo
+        self.assertEqual(self.pp.info("VE2")["stato"], "pagato")          # premessa
+        sweep_hold_una_passata(self.sys, self.r)
+        self.assertFalse(self.sys.inventario.blocca("casa-race", CI, CO, idem_key="ladroVE").ok,
+                         "lo sweeper ha liberato la stanza di chi ha pagato")
+        self.assertTrue(self.reg.usato("CRED-1"), "credito restituito a chi ha pagato con lo sconto")
 
     def test_EN1_credito_speso_altrove_prima_del_tardivo_si_vede(self):
         """Ha gia' pagato col suo sconto: la prenotazione non si rifiuta, ma il doppio uso si

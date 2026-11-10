@@ -7429,6 +7429,11 @@ class RouterHTTP:
                                     _rif_per_registro(riferimento))
                     else:
                         self._rendi_credito_referral(str(riferimento), fc)
+                        # V-d (10/11): anche il credito dell'OSPITE torna, una volta sola
+                        _pp = getattr(self._sys, "pagamenti_pendenti", None)
+                        _rec = _pp.info(str(riferimento)) if _pp is not None else None
+                        if _rec:
+                            self._libera_credito(_rec)
                 except Exception:
                     # ISOLATO come tutto il giornale: la scatola nera non ferma i soldi veri.
                     logger.warning("storno prenotazione fallito (ISOLATO) su %s",
@@ -9230,7 +9235,9 @@ class RouterHTTP:
 
     def _libera_credito(self, rec):
         """EN1 (8/11): prenotazione scaduta senza pagamento: il credito bruciato per lei torna
-        all'ospite. Un guasto qui non deve fermare la liberazione della stanza, ma si deve vedere."""
+        all'ospite. Un guasto qui non deve fermare la liberazione della stanza, ma si deve vedere.
+        V-d (10/11): lo stesso su rimborso totale e su blocco della carta annullato. Ripetibile:
+        `libera` toglie solo il consumo di QUESTA prenotazione."""
         store = getattr(self._sys, "credito_usati", None)
         cid = self._corpo_del_pendente(rec).get("credito_id")
         if store is None or not (isinstance(cid, str) and cid):
@@ -9239,7 +9246,8 @@ class RouterHTTP:
             store.libera(cid, rec.get("riferimento"))
         except Exception:
             logger.error("CREDITO NON RESTITUITO | RIF: %s | codice: credito_non_liberato | "
-                         "messaggio: prenotazione scaduta, il credito dell'ospite resta bruciato: "
+                         "messaggio: prenotazione chiusa senza soldi trattenuti, il credito "
+                         "dell'ospite resta bruciato: "
                          "liberarlo a mano", _rif_per_registro(rec.get("riferimento")), exc_info=True)
 
     def _credito_tardivo(self, rec, rif):
@@ -10784,6 +10792,9 @@ class RouterHTTP:
             pp.segna_blocco(rif, blocco_incassato_ts=int(_t.time()))
             self._riasserisci_incasso(pp.info(rif), rif)
             self._credito_host_al_pagamento(rif, pp.info(rif))
+            # V-b (10/11): il bonifico e' appena diventato 'maturato': solo ora conta per il premio
+            self._forse_qualifica_referral((pp.info(rif) or {}).get("host_id"),
+                                           getattr(self._sys, "payout", None))
             logger.info("BLOCCO SULLA CARTA | INCASSATO | rif %s | pi %s",
                         _rif_per_registro(rif), pi)
             # DIFETTO A (macchina delle combinazioni dei soldi, 11/10): «tutto ok» o l'arbitro
@@ -10863,6 +10874,7 @@ class RouterHTTP:
         if b["stato"] in ("nessuno", "incassato"):
             return False
         if b["stato"] == "annullato":
+            self._libera_credito(rec)           # V-d (10/11): soldi mai entrati, credito suo
             return True
         if trattenuto > 0:
             esito = self._incassa_blocco(rif, b["pi"])
@@ -10880,7 +10892,10 @@ class RouterHTTP:
                              "Stripe prima del prossimo giro, o lasciarla",
                              _rif_per_registro(rif), b["pi"], trattenuto)
             return esito != "incassato"
-        return self._annulla_blocco(rif, b["pi"]) != "incassato"
+        mai_entrati = self._annulla_blocco(rif, b["pi"]) != "incassato"
+        if mai_entrati:
+            self._libera_credito(rec)           # V-d (10/11)
+        return mai_entrati
 
     def _incassa_blocchi(self, ora_ts=None):
         """IL GIRO ORARIO DEL BLOCCO SULLA CARTA (tick orario di `avvia_server`). Per ogni blocco
@@ -11117,6 +11132,11 @@ class RouterHTTP:
                 if not self._rec_in_struttura(rec):
                     if self._riasserisci_incasso(rec, rif) is False:
                         return False                  # C53-B1-5: bonifico ancora fermo
+                    # V-f (10/11): il premio al referente si ricontrolla anche qui (una volta
+                    # sola: lo garantisce qualifica_referee). Lo sconto referral dell'host NO:
+                    # `_applica_credito_host` non e' ripetibile (limite dichiarato, foglio V-f).
+                    self._forse_qualifica_referral(rec.get("host_id"),
+                                                   getattr(self._sys, "payout", None))
                 return
             # WHITELIST: si conferma SOLO 'in_attesa' (hold vivo) o 'scaduto' (re-block sotto).
             # Ogni altro stato (cancellata dal cliente/host, rimborsata, richiesta NON ancora
@@ -11172,12 +11192,7 @@ class RouterHTTP:
                 # 'ok' finto SENZA ribloccare davvero = doppia prenotazione possibile.
                 inv = getattr(self._sys, "inventario", None)
                 idem = "reblock:" + rif
-                esito = None
-                try:
-                    esito = inv.blocca(rec["alloggio_id"], rec["check_in"], rec["check_out"],
-                                       idem_key=idem, origine="pagamento_tardivo") if inv else None
-                except Exception:
-                    esito = None
+                esito = self._riblocca_tardivo(inv, rec, idem, "pagamento_tardivo")
                 if getattr(esito, "ok", False):
                     self._credito_tardivo(rec, rif)
                 if not getattr(esito, "ok", False):
@@ -11231,8 +11246,11 @@ class RouterHTTP:
                 _versare = self._da_versare_host(dj)      # netto host + tassa (2026-08-19)
                 if (_segno != "payout_scritto" and pd is not None and dj.get("host_id")
                         and _versare > 0):
-                    _scritta = pd.registra_maturato(rif, dj["host_id"], _versare,
-                                                    dj.get("valuta", "EUR"))
+                    # V-a (10/11): coi soldi solo AUTORIZZATI sulla carta il bonifico aspetta
+                    # l'incasso, come nel ramo normale (`_incassa_blocco` lo matura dopo)
+                    _registra = (pd.registra_in_attesa if _blocco(rec)["stato"] == "aperto"
+                                 else pd.registra_maturato)
+                    _scritta = _registra(rif, dj["host_id"], _versare, dj.get("valuta", "EUR"))
                     self._riga_payout_scritta(_scritta, rif)
                     if _scritta:
                         pp.segna_blocco(rif, pagamento_tardivo="payout_scritto")
@@ -11263,6 +11281,28 @@ class RouterHTTP:
                          exc_info=True)
             return False
 
+    @staticmethod
+    def _riblocca_tardivo(inv, rec, idem, origine):
+        """Riblocco della stanza per un pagamento TARDIVO, con una chiave fresca (`idem`).
+        V-e (10/11): se lo sweeper e' morto dopo il CAS 'scaduto' e prima di liberare, la stanza
+        e' ancora tenuta dal blocco di QUESTA prenotazione e il riblocco falliva: ospite
+        rimborsato e stanza ferma. Si libera quel blocco (e' suo) e si riprova. Nel caso peggiore
+        un altro la prende in quell'istante: rimborso, mai doppia prenotazione."""
+        if inv is None:
+            return None
+        # ⛔ PRIMA del riblocco, non dopo: un riblocco fallito resta scritto con la sua chiave e
+        # un secondo tentativo con la stessa chiave ripete il rifiuto (idempotenza di fase58).
+        vecchio = rec.get("idem_key") or ""
+        stato_blocco = getattr(inv, "stato_blocco", None)
+        if (vecchio and vecchio != idem and stato_blocco is not None
+                and stato_blocco(vecchio) == "occupato"):
+            inv.rilascia(rec["alloggio_id"], rec["check_in"], rec["check_out"], idem_key=vecchio)
+        try:
+            return inv.blocca(rec["alloggio_id"], rec["check_in"], rec["check_out"],
+                              idem_key=idem, origine=origine)
+        except Exception:
+            return None
+
     def _rec_in_struttura(self, rec):
         """True se la prenotazione pendente e' 'paga in struttura' (letto dal corpo_json che
         _registra_hold ha salvato). Isolato: dubbio -> False (percorso online standard)."""
@@ -11284,12 +11324,7 @@ class RouterHTTP:
         if stato == "scaduto":
             inv = getattr(self._sys, "inventario", None)
             idem = "reblock:" + rif
-            esito = None
-            try:
-                esito = inv.blocca(rec["alloggio_id"], rec["check_in"], rec["check_out"],
-                                   idem_key=idem, origine="anticipo_tardivo") if inv else None
-            except Exception:
-                esito = None
+            esito = self._riblocca_tardivo(inv, rec, idem, "anticipo_tardivo")
             if getattr(esito, "ok", False):
                 self._credito_tardivo(rec, rif)
             if not getattr(esito, "ok", False):
@@ -14047,10 +14082,18 @@ def sweep_hold_una_passata(sistema: Any, router: Any) -> None:
     if pp is None or inv is None:
         return
     try:
-        for rec in pp.scaduti():
+        # V-e (10/11): anche gli 'scaduto' col segno acceso -- lo sweeper di prima e' morto fra
+        # il CAS e i passi qui sotto (tutti ripetibili). Senza, stanza bloccata fino alla pulizia
+        # e credito dell'ospite perso. Il segno si spegne a passi finiti.
+        da_fare = [(r, True) for r in pp.scaduti()]
+        if hasattr(pp, "scaduti_da_finire"):
+            da_fare += [(r, False) for r in pp.scaduti_da_finire()]
+        for rec, nuovo in da_fare:
             try:
-                if not pp.scadi(rec["riferimento"]):
+                if nuovo and not pp.scadi(rec["riferimento"]):
                     continue          # pagata/cancellata nel frattempo: non è più roba nostra
+                if not nuovo and (pp.info(rec["riferimento"]) or {}).get("stato") != "scaduto":
+                    continue          # V-e: pagata in ritardo nel frattempo, non si tocca
                 inv.rilascia(rec["alloggio_id"], rec["check_in"], rec["check_out"],
                              idem_key=(rec.get("idem_key") or ("hold_" + rec["riferimento"])))
                 if gz is not None:
@@ -14065,6 +14108,8 @@ def sweep_hold_una_passata(sistema: Any, router: Any) -> None:
                 # RECUPERO ONESTO (errore dei colossi = spam; noi UNA email transazionale):
                 # pagamento non completato -> le date sono di nuovo libere, link per riprovare.
                 router._email_recupero_hold(rec)
+                if hasattr(pp, "scadenza_finita"):
+                    pp.scadenza_finita(rec["riferimento"])
             except Exception:
                 logger.warning("sweep hold singolo fallito (ignorato)", exc_info=True)
         try:

@@ -428,6 +428,48 @@ class TestAFineFinestraSiIncassa(_Base):
         self.r._credito_host_al_pagamento(rif, self.sis.pagamenti_pendenti.info(rif))
         self.assertEqual(self._credito_referral(), dopo)
 
+    def test_Vb_il_premio_al_referente_scatta_all_incasso_del_blocco(self):
+        """Variant-analysis 10/11 (V-b): col blocco il bonifico nasce 'in_attesa' e alla conferma
+        non conta; all'incasso diventa 'maturato' ma il premio non si ricontrollava: se l'host
+        invitato non ha altre prenotazioni, chi l'ha portato non lo riceve mai."""
+        viral = self.sis.viral
+        codice = viral.genera_codice("ref_vb")
+        self.assertTrue(viral.registra_referee(codice, "demo").ok, "premessa: host invitato")
+        import dataclasses
+        self.sis.config = dataclasses.replace(self.sis.config, referral_soglia_prenotazioni=1)
+        prima = viral.credito_disponibile("ref_vb")
+        self._bloccata()
+        self.assertEqual(viral.credito_disponibile("ref_vb"), prima,
+                         "premessa: premio dato su soldi solo autorizzati")
+        self.r._incassa_blocchi(ora_ts=int(time.time()) + SECONDI_RIPENSAMENTO + 60)
+        self.assertGreater(viral.credito_disponibile("ref_vb"), prima,
+                           "incassata la prima prenotazione dell'invitato e niente premio")
+
+    def test_Vf_morte_dopo_la_conferma_il_ritentativo_non_perde_il_premio(self):
+        """Variant-analysis 10/11 (V-f): pagamento in tempo, il processo muore dopo il CAS e
+        prima del premio; il ritentativo ('pagato') rifaceva solo incasso e bonifico."""
+        class _Morte(BaseException):
+            pass
+        import dataclasses
+        viral = self.sis.viral
+        self.assertTrue(viral.registra_referee(viral.genera_codice("ref_vf"), "demo").ok)
+        self.sis.config = dataclasses.replace(self.sis.config, referral_soglia_prenotazioni=1)
+        prima = viral.credito_disponibile("ref_vf")
+        rif, _vt, _tot = self.prenota("2027-04-10", "2027-04-12")
+        vera = self.r._email_pagamento_confermato
+
+        def muore(rec):
+            raise _Morte()
+        self.r._email_pagamento_confermato = muore
+        with self.assertRaises(_Morte):
+            self.r._conferma_pagamento(rif)
+        self.r._email_pagamento_confermato = vera
+        self.assertEqual(self.stato(rif), "pagato")                        # premessa
+        self.assertEqual(viral.credito_disponibile("ref_vf"), prima)       # premessa
+        self.r._conferma_pagamento(rif)                                     # Stripe ritenta
+        self.assertGreater(viral.credito_disponibile("ref_vf"), prima,
+                           "il ritentativo ha perso il premio del referente")
+
     def _incassata_con_credito(self):
         self._credito_referral(1000)
         rif, _vt, tot, _pi = self._bloccata()
@@ -453,6 +495,49 @@ class TestAFineFinestraSiIncassa(_Base):
         dopo = self._credito_referral()
         self._rimborso(rif, tot - 100)
         self.assertEqual(self._credito_referral(), dopo)
+
+    # ── V-d (variant-analysis 10/11): il credito dell'OSPITE (fase167) tornava solo se la
+    #    prenotazione scadeva non pagata; su rimborso totale o blocco annullato restava bruciato
+    def _con_credito_ospite(self, rif):
+        """Il credito dell'ospite bruciato per questa prenotazione, come fa /book con lo sconto."""
+        import sqlite3 as _sq
+        reg = getattr(self.sis, "credito_usati", None)
+        self.assertIsNotNone(reg, "premessa: registro dei crediti dell'ospite")
+        con = _sq.connect(f"{self.dir}/p.db")
+        try:
+            dj = json.loads(con.execute("SELECT corpo_json FROM pendenti WHERE riferimento=?",
+                                        (rif,)).fetchone()[0] or "{}")
+            dj.update(credito_id="CRED-VD", sconto_credito_cents=500)
+            con.execute("UPDATE pendenti SET corpo_json=? WHERE riferimento=?",
+                        (json.dumps(dj), rif))
+            con.commit()
+        finally:
+            con.close()
+        self.assertEqual(reg.consuma("CRED-VD", rif), "nuovo")
+        return reg
+
+    def test_Vd_rimborso_totale_il_credito_dell_ospite_torna(self):
+        rif, _vt, tot, _pi = self._bloccata()
+        self.r._incassa_blocchi(ora_ts=int(time.time()) + SECONDI_RIPENSAMENTO + 60)
+        reg = self._con_credito_ospite(rif)
+        self._rimborso(rif, tot)
+        self.assertFalse(reg.usato("CRED-VD"),
+                         "rimborso totale e credito dell'ospite ancora bruciato: l'ha perso")
+
+    def test_Vd_rimborso_parziale_il_credito_dell_ospite_resta_usato(self):
+        rif, _vt, tot, _pi = self._bloccata()
+        self.r._incassa_blocchi(ora_ts=int(time.time()) + SECONDI_RIPENSAMENTO + 60)
+        reg = self._con_credito_ospite(rif)
+        self._rimborso(rif, tot - 100)
+        self.assertTrue(reg.usato("CRED-VD"))
+
+    def test_Vd_blocco_annullato_il_credito_dell_ospite_torna(self):
+        rif, vt, _tot, _pi = self._bloccata()
+        reg = self._con_credito_ospite(rif)
+        self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
+        self.assertTrue(self.corpo(rif).get("blocco_annullato_ts"), "premessa: blocco annullato")
+        self.assertFalse(reg.usato("CRED-VD"),
+                         "blocco annullato, soldi mai entrati, e credito dell'ospite bruciato")
 
     def test_A_FINE_FINESTRA_SI_INCASSA_E_NASCONO_I_CONTI(self):
         rif, _vt, tot, pi = self._bloccata()

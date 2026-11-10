@@ -1093,7 +1093,9 @@ class TestContrattoPendentiFase162(BaseContratto, unittest.TestCase):
                      "creato_ts INTEGER NOT NULL",
                      "invito_recensione_ts INTEGER NOT NULL",
                      # voce 137 (26/10): quando l'host ha cancellato, l'ordine di `cancellate_host`
-                     "cancellata_ts INTEGER NOT NULL"),
+                     "cancellata_ts INTEGER NOT NULL",
+                     # V-e (10/11): 1 dal CAS 'scaduto' finche' lo sweeper non ha finito i passi
+                     "scadenza_da_finire INTEGER NOT NULL"),
     }
     INDICI = {}
     UNICI = {"pendenti": ("pk(riferimento)",)}

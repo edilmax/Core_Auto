@@ -151,7 +151,10 @@ class PagamentiPendenti:
                         pass
                 # colonne INTEGER separate (promemoria check-in / invito recensione inviati;
                 # `cancellata_ts`: quando l'host ha cancellato, l'ordine di `cancellate_host`)
-                for _c in ("promemoria_ts", "invito_recensione_ts", "cancellata_ts"):
+                # `scadenza_da_finire` (V-e, 10/11): 1 dal CAS 'scaduto' fino a quando lo
+                # sweeper ha finito i passi (date, garanzia, payout, credito, email)
+                for _c in ("promemoria_ts", "invito_recensione_ts", "cancellata_ts",
+                           "scadenza_da_finire"):
                     try:
                         con.execute("ALTER TABLE pendenti ADD COLUMN %s INTEGER NOT NULL DEFAULT 0" % _c)
                     except sqlite3.OperationalError:
@@ -580,9 +583,33 @@ class PagamentiPendenti:
                     # entra nel testo della query, i valori viaggiano come parametri nella
                     # riga dopo. `ruff.toml` prescrive di guardare gli S608 uno per uno
                     # invece di ignorarli in blocco: questo e' stato guardato.
-                    "UPDATE pendenti SET stato='scaduto' WHERE riferimento=? AND "  # nosec B608  # noqa: S608
+                    "UPDATE pendenti SET stato='scaduto', scadenza_da_finire=1 "  # nosec B608  # noqa: S608
+                    "WHERE riferimento=? AND "
                     "stato IN (%s)" % ",".join("?" * len(_AMMESSI["scaduto"])),
                     (riferimento,) + _AMMESSI["scaduto"])
+            return bool(cur.rowcount)
+        finally:
+            con.close()
+
+    def scaduti_da_finire(self) -> List[Dict[str, Any]]:
+        """V-e (10/11): 'scaduto' col segno ancora acceso = lo sweeper e' morto dopo il CAS e
+        prima dei passi. Il giro dopo li finisce."""
+        con = self._apri()
+        try:
+            righe = con.execute("SELECT * FROM pendenti WHERE stato='scaduto' AND "
+                                "scadenza_da_finire=1").fetchall()
+            return [self._riga(r) for r in righe]
+        finally:
+            con.close()
+
+    def scadenza_finita(self, riferimento: Any) -> bool:
+        if not (isinstance(riferimento, str) and riferimento):
+            return False
+        con = self._apri()
+        try:
+            with con:
+                cur = con.execute("UPDATE pendenti SET scadenza_da_finire=0 WHERE riferimento=?",
+                                  (riferimento,))
             return bool(cur.rowcount)
         finally:
             con.close()
