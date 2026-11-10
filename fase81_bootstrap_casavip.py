@@ -98,6 +98,7 @@ class ConfigCasaVIP:
     db_geocache: str = ":memory:"      # cache geocoding città->coordinate (mappa nella ricerca)
     db_checkin: str = ":memory:"       # check-in digitale (pre-registrazione ospiti + sblocco)
     db_credito_usati: str = ":memory:"  # registro SINGLE-USE crediti (fase167): un credito si spende UNA volta
+    db_coda_email: str = ":memory:"    # email fallite da ritentare (fase86): in RAM = nessuna coda
     con_geocoding: bool = False        # ON in prod: geocodifica alla pubblicazione (default OFF: test)
     bunker_totp_secret: str = ""       # 2FA super-admin (fase180): segreto TOTP base32 (env, mai in git)
     bunker_password: str = ""          # password super-admin (2° fattore "qualcosa che sai")
@@ -176,6 +177,24 @@ class SistemaCasaVIP:
     def money_path_pronto(self) -> bool:
         """Il prezzo puo' essere firmato e instradato? (concierge presente)."""
         return self.concierge is not None
+
+
+def collega_coda_email(prov: Any, percorso: str, *, avvia: bool = True) -> Any:
+    """ORDINE DEL FONDATORE (10/11): le email che falliscono si SALVANO su SQLite e si
+    RITENTANO, con la coda di fase86 (sola libreria standard) e un archivio tutto suo:
+    niente soldi, niente sito. `_invia_tracciato` (fase83) mette in coda tramite
+    `prov.coda_email`; il giro manda con `prov.invia` diretto, cosi' un nuovo fallimento
+    resta sulla stessa riga invece di crearne un'altra. Ritorna la coda (None se non
+    collegata). Le righe consegnate si cancellano subito (dati personali)."""
+    if prov is None or not percorso or percorso == ":memory:":
+        return None
+    from fase86_email import CodaEmail
+    coda = CodaEmail(percorso, prov.invia)
+    coda.inizializza_schema()
+    prov.coda_email = coda
+    if avvia:
+        coda.avvia()
+    return coda
 
 
 def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
@@ -590,6 +609,8 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
                                          cfg.smtp_password, cfg.email_mittente)
     if email_provider is not None:
         componenti.append("email(86)")
+        if collega_coda_email(email_provider, cfg.db_coda_email) is not None:
+            componenti.append("coda_email(86)")
     else:
         avvisi.append("SMTP non configurato -> nessuna email voucher (gated)")
 

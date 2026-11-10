@@ -148,14 +148,37 @@ def _invia_tracciato(prov: Any, destinatario: Any, oggetto: Any, corpo_html: Any
     except Exception:
         logger.error("EMAIL NON CONSEGNATA (eccezione ISOLATA): template=%s riferimento=%s",
                      _riga_registro(template), _riga_registro(riferimento), exc_info=True)
-        _conta_email_ko(template)
-        return False
+        esito = None
     if not esito:
-        logger.error("EMAIL NON CONSEGNATA: template=%s riferimento=%s -- il provider ha "
-                     "risposto NO dopo i suoi tentativi",
-                     _riga_registro(template), _riga_registro(riferimento))
+        if esito is False:
+            logger.error("EMAIL NON CONSEGNATA: template=%s riferimento=%s -- il provider ha "
+                         "risposto NO dopo i suoi tentativi",
+                         _riga_registro(template), _riga_registro(riferimento))
         _conta_email_ko(template)
-    return esito
+        _accoda_email(prov, destinatario, oggetto, corpo_html, template, riferimento)
+    return bool(esito)
+
+
+def _accoda_email(prov: Any, destinatario: Any, oggetto: Any, corpo_html: Any,
+                  template: str, riferimento: str) -> None:
+    """ORDINE DEL FONDATORE (10/11): l'email fallita si SALVA e si ritenta (coda di fase86,
+    collegata da fase81.collega_coda_email). Senza coda resta il comportamento di prima:
+    contata e gridata. Mai solleva: gira dentro il thread dell'invio."""
+    coda = getattr(prov, "coda_email", None)
+    if coda is None:
+        return
+    try:
+        if not coda.accoda(destinatario, oggetto, corpo_html, template, riferimento):
+            logger.error("EMAIL PERSA | codice: destinatario_non_valido | template=%s "
+                         "riferimento=%s | messaggio: indirizzo assente o senza @, non si "
+                         "ritenta", _riga_registro(template), _riga_registro(riferimento))
+            return
+        logger.warning("EMAIL IN CODA: template=%s riferimento=%s -- si ritenta da sola",
+                       _riga_registro(template), _riga_registro(riferimento))
+    except Exception:
+        logger.error("EMAIL PERSA | codice: coda_non_scrivibile | template=%s riferimento=%s "
+                     "| messaggio: l'email fallita non e' stata salvata per ritentarla",
+                     _riga_registro(template), _riga_registro(riferimento), exc_info=True)
 
 # La FORMA di un riferimento di prenotazione. MISURATA, non supposta: su 300 riferimenti
 # generati dal vero (`fase59:547`, `idem[:24]` della firma) l'esito e' sempre
