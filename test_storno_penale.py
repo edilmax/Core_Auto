@@ -753,5 +753,74 @@ class TestStornoPenaleControLaCarta(_BaseStorno):
                          "penale puo' passargli in mezzo")
 
 
+class TestFB4LoStornoRestituisceLaPenaleAddebitataSullaCarta(_BaseStorno):
+    """FB4 (revisione Fable, 10/11): penale incassata sulla carta dell'host (Scatto 3), poi
+    stornata dall'admin: il riscosso deve tornare in da_pagare come per le compensazioni
+    (`stornoND-<ND>`). Prima `storna_penale` leggeva solo `penale_offset`: «riscosso 0», ND
+    'stornata', e i soldi presi dalla carta non tornavano piu'."""
+
+    def test_FB4_penale_incassata_sulla_carta_poi_stornata_torna_in_da_pagare(self):
+        nd = self._nd_con_debito()
+        carta = _CartaCheConta()
+        esito = self.fc.riscuoti_da_carta(host_id=self.hid, provider_carta=carta,
+                                          customer="cus_x", payment_method="pm_x")
+        # premesse: la carta e' stata addebitata davvero e il giornale lo sa
+        self.assertEqual(esito["incassati_cents"], nd["importo_cents"], "PREMESSA: %r" % (esito,))
+        self.assertEqual(len(carta.addebiti), 1, "PREMESSA: un addebito sulla carta")
+        self.assertTrue(any(m.get("tipo") == "penale_incassata"
+                            for m in self.fc.movimenti(nd["riferimento"])),
+                        "PREMESSA: riga 'penale_incassata' nel giornale")
+        self.assertEqual(self._debito(nd["nota_id"])["stato"], "saldato", "PREMESSA: saldato")
+
+        out = self.fc.storna_penale(nota_id=nd["nota_id"], motivo="penale ingiusta",
+                                    payout=self.pd)
+        self.assertIsNotNone(out)
+        self.assertFalse(out["gia_stornata"])
+        self.assertEqual(out["riscosso_cents"], nd["importo_cents"],
+                         "PENALE PRESA DALLA CARTA E MAI RESTITUITA: lo storno dice riscosso %r "
+                         "mentre il giornale ha 'penale_incassata' di %d; la ND passa a 'stornata' "
+                         "e il secondo storno risponde gia_stornata"
+                         % (out["riscosso_cents"], nd["importo_cents"]))
+        self.assertEqual(out["restituito_in_da_pagare"], nd["importo_cents"], out)
+        riga = self.pd.info("stornoND-" + nd["nota_id"])
+        self.assertIsNotNone(riga, "nessuna riga 'stornoND-<ND>' in da_pagare: l'host non rivede "
+                                   "i soldi presi dalla sua carta")
+        self.assertEqual((riga["stato"], riga["minori"]), ("maturato", nd["importo_cents"]))
+        self.assertTrue(self.fc.verifica_catena()["ok"])
+
+    def test_FB4_variante_processa_penale_ripetuto_dopo_la_carta_non_fa_pagare_due_volte(self):
+        """VARIANTE di FB4 (variant-analysis 10/11): `processa_penale` si dichiara IDEMPOTENTE
+        per riferimento e ricalcola il residuo dal giornale. Contava solo le compensazioni: dopo
+        un addebito sulla carta, una ripetizione rivedeva il debito intero e lo compensava sul
+        bonifico successivo dell'host -> la stessa penale pagata due volte."""
+        nd = self._nd_con_debito()
+        self.fc.riscuoti_da_carta(host_id=self.hid, provider_carta=_CartaCheConta(),
+                                  customer="cus_x", payment_method="pm_x")
+        self.assertEqual(self._debito(nd["nota_id"])["stato"], "saldato", "PREMESSA")
+        self.pd.registra_maturato("ALTRA", self.hid, 50000, "EUR")
+        out = self.fc.processa_penale(riferimento=nd["riferimento"], host_id=self.hid,
+                                      penale_cents=nd["importo_cents"], valuta="EUR",
+                                      payout=self.pd)
+        self.assertIsNotNone(out)
+        self.assertEqual(self.pd.info("ALTRA")["minori"], 50000,
+                         "PENALE PAGATA DUE VOLTE: gia' presa dalla carta e ricompensata sul "
+                         "bonifico successivo dell'host (%r)" % (out,))
+        self.assertEqual(out["residuo_cents"], 0, out)
+        self.assertEqual(self._debito(nd["nota_id"])["stato"], "saldato")
+
+    def test_FB4_controllo_la_carta_di_UN_ALTRA_nota_non_si_restituisce(self):
+        """Prova di controllo: una penale presa dalla carta per un'altra nota (stesso
+        riferimento) non e' «riscosso» di questa."""
+        nd = self._nd_con_debito()
+        self.fc.registra(evento_id="carta:ND-altra:999", tipo="penale_incassata",
+                         riferimento=nd["riferimento"], soggetto="host:" + self.hid,
+                         conto_dare="cassa_piattaforma", conto_avere="crediti_vs_host",
+                         importo_cents=999, valuta="EUR", causale="altra nota",
+                         emittente="prova")
+        out = self.fc.storna_penale(nota_id=nd["nota_id"], motivo="ingiusta", payout=self.pd)
+        self.assertEqual(out["riscosso_cents"], 0, out)
+        self.assertIsNone(self.pd.info("stornoND-" + nd["nota_id"]))
+
+
 if __name__ == "__main__":
     unittest.main()
