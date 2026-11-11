@@ -2589,8 +2589,13 @@ class TestLaStanzaSiLiberaSoloAPaginaChiusa(_BancoDeiSoldiDelServer):
         self.chiusure = []
         self.risposta = {"id": "cs_1", "status": "expired"}
         self.riletta = {"id": "cs_1", "status": "complete"}     # dopo un rifiuto certo
+        self.stato_pi = "succeeded"      # F1: il pagamento dietro una pagina completa
 
         def fetch(url, body, headers):
+            if not body and "/payment_intents/" in url:
+                if isinstance(self.stato_pi, BaseException):
+                    raise self.stato_pi
+                return {"id": url.rsplit("/", 1)[-1], "status": self.stato_pi}
             if url.endswith("/cs_1/expire"):
                 # lo stato del pagamento in attesa NEL MOMENTO in cui si chiude la pagina
                 self.chiusure.append(self.sis.pagamenti_pendenti.info(self.rif)["stato"])
@@ -2659,17 +2664,70 @@ class TestLaStanzaSiLiberaSoloAPaginaChiusa(_BancoDeiSoldiDelServer):
                         log.output)
         self.assertEqual(self._stato(), "scaduto")
 
-    def test_gia_pagata_resta_tenuta_anche_dopo_un_giorno_senza_allarme(self):
-        """Prova mancante 1 (pr-test-analyzer, 11/11): 'complete' si guarda PRIMA del confine
-        del giorno. Al contrario, dopo un giorno la stanza di chi ha pagato si rivenderebbe."""
+    def _completa(self, stato_pi):
+        """Stripe rifiuta di chiudere (la pagina e' gia' completa) e dietro c'e' un pagamento."""
         self.risposta = self._Rifiuto400("Only Checkout Sessions with a status in [open] can "
                                          "be expired")
+        self.riletta = {"id": "cs_1", "status": "complete", "payment_intent": "pi_1"}
+        self.stato_pi = stato_pi
+
+    def test_gia_pagata_resta_tenuta_e_dopo_un_giorno_grida_senza_liberare(self):
+        """Prova mancante 1 (pr-test-analyzer) e rilievo D (11/11): 'complete' si guarda PRIMA
+        del confine del giorno, quindi la stanza di chi ha pagato non si rivende MAI; ma se il
+        webhook non arriva in un giorno qualcosa e' rotto: ERROR. Prima di un giorno tace."""
+        self._completa("succeeded")
+        with self.ascolta() as righe:
+            self._spazza(1800 + 60)
+        self.assertEqual(self._stato(), "in_attesa", "ha pagato: il blocco non si scade")
+        self.assertEqual(self.errori_con(righe, "SPAZZINO"), [], "prima di un giorno tace")
+        self.assertTrue(self.avvisi_con(righe, "pagina_gia_pagata"), righe)
         with self.ascolta() as righe:
             self._spazza(1800 + 86400 + 60)
         self.assertEqual(self._stato(), "in_attesa", "ha pagato: il blocco non si scade mai")
-        self.assertEqual(self.errori_con(righe, "SPAZZINO"), [], "nessun allarme: ha pagato")
-        self.assertTrue(self.avvisi_con(righe, "pagina_gia_pagata"), righe)
+        self.assertTrue(self.errori_con(righe, "pagina_gia_pagata", "un_giorno_senza_conferma"),
+                        righe)
         self.assertFalse(self._stanza_libera())
+
+    def test_F1_completa_ma_il_pagamento_differito_e_fallito_la_stanza_si_libera(self):
+        """F1 (11/11, 5 revisori su 6): con un metodo differito (Pix, acceso sul conto) la
+        pagina diventa 'complete' e il pagamento puo' FALLIRE dopo (un Pix scaduto non si paga
+        piu', docs.stripe.com/payments/pix). La pagina resta 'complete' per sempre: tenere la
+        stanza per 'complete' la bloccava per sempre; prima del pezzo 3 si liberava."""
+        for giorni, stato in ((20, "requires_payment_method"), (30, "canceled")):
+            with self.subTest(stato=stato):
+                self._completa(stato)
+                rif = self.prenota("casa-2m", giorni)["riferimento"]
+                self.rif = rif
+                with self.ascolta() as righe:
+                    self._spazza(1800 + 60)
+                self.assertEqual(self._stato(), "scaduto", "pagamento fallito: la stanza si libera")
+                self.assertTrue(self.avvisi_con(righe, "pagamento_fallito"), righe)
+
+    def test_F1_completa_e_soldi_presi_bloccati_o_in_arrivo_resta_tenuta(self):
+        for stato in ("succeeded", "requires_capture", "processing", "requires_action"):
+            with self.subTest(stato=stato):
+                self._completa(stato)
+                self._spazza(1800 + 60)
+                self.assertEqual(self._stato(), "in_attesa", stato)
+        self._completa(TimeoutError("Stripe non risponde"))      # NON LO SO: si tiene
+        self._spazza(1800 + 60)
+        self.assertEqual(self._stato(), "in_attesa")
+        self.assertFalse(self._stanza_libera())
+
+    def test_F5_un_gateway_senza_chiusura_della_pagina_fa_come_prima(self):
+        """F5 (11/11): un gateway che non sa chiudere la pagina non deve tenere la stanza per
+        sempre (eccezione a ogni giro, senza tetto ne' ERROR): si fa come prima del pezzo 3."""
+        vero = self.sis.stripe
+
+        class _SenzaChiusura:
+            def __getattr__(self, nome):
+                if nome == "chiudi_sessione":
+                    raise AttributeError(nome)
+                return getattr(vero, nome)
+        self.sis.stripe = _SenzaChiusura()
+        self._spazza(1800 + 60)
+        self.assertEqual(self._stato(), "scaduto")
+        self.assertTrue(self._stanza_libera())
 
     def test_il_confine_del_giorno(self):
         """Prova mancante 3: Stripe muto, la pagina si da' per morta solo DOPO un giorno intero
@@ -2723,6 +2781,24 @@ class TestLaStanzaSiLiberaSoloAPaginaChiusa(_BancoDeiSoldiDelServer):
         self.assertEqual(self._stato(), "scaduto")
         self.assertTrue(self._stanza_libera())
 
+    def test_numero_vuoto_o_corpo_illeggibile_come_prima_senza_chiamare_stripe(self):
+        """Prove mancanti 1 e 6 (pr-test-analyzer, 11/11): numero '' (gateway che da' solo
+        l'indirizzo), corpo che non si legge o che non e' un oggetto: niente pagina da chiudere
+        -> come prima del pezzo 3, e Stripe non si chiama."""
+        import sqlite3
+        for i, testo in enumerate(('{"stripe_cs": ""}', "{non json", "[1]")):
+            with self.subTest(corpo=testo):
+                if i:
+                    self.rif = self.prenota("casa-2m", 10 + 10 * i)["riferimento"]
+                con = sqlite3.connect(os.path.join(self.dir, "p.db"))
+                with con:
+                    con.execute("UPDATE pendenti SET corpo_json=? WHERE riferimento=?",
+                                (testo, self.rif))
+                con.close()
+                del self.chiusure[:]
+                self._spazza(1800 + 60)
+                self.assertEqual((self.chiusure, self._stato()), ([], "scaduto"))
+
     def test_senza_numero_della_pagina_si_fa_come_prima(self):
         import sqlite3
         corpo = json.loads(self.sis.pagamenti_pendenti.info(self.rif)["corpo_json"])
@@ -2756,6 +2832,7 @@ class TestLoSpazzinoChiudeLaPaginaCheLOspiteHaInMano(_BancoDeiSoldiDelServer):
         self.pubblica(self.SLUG)
         self.nate = []           # le pagine create da Stripe, in ordine
         self.chiuse = []         # le pagine che lo spazzino ha chiuso
+        self.stripe_giu = False  # F2: Stripe non crea pagine
 
         def fetch(url, body, headers):
             if url.endswith("/expire"):
@@ -2764,6 +2841,8 @@ class TestLoSpazzinoChiudeLaPaginaCheLOspiteHaInMano(_BancoDeiSoldiDelServer):
                 return {"id": cs, "status": "expired"}
             if not body:
                 return {"id": url.rsplit("/", 1)[-1], "status": "open"}
+            if self.stripe_giu:
+                return {}
             tipo = "anticipo" if b"anticipo_paga_struttura" in body else "totale"
             cs = "cs_%s_%d" % (tipo, len(self.nate) + 1)
             self.nate.append(cs)
@@ -2831,6 +2910,93 @@ class TestLoSpazzinoChiudeLaPaginaCheLOspiteHaInMano(_BancoDeiSoldiDelServer):
         self.assertEqual(self.chiuse, self._pagine(b1, b2),
                          "ogni pagina data all'ospite deve chiudersi prima che la stanza si "
                          "liberi (pagine nate: %s)" % self.nate)
+
+    def test_F2_doppio_clic_con_stripe_giu_la_stanza_resta_della_prima(self):
+        """F2 (11/11) sul sistema vero: al doppio clic Stripe non risponde -> 503, ma la stanza
+        resta della prima prenotazione, che e' ancora in attesa con la sua pagina pagabile."""
+        q = self._preventivo()
+        b1 = self._book(q)
+        self.stripe_giu = True
+        s, b2 = self.g("POST", "/api/concierge/book",
+                       {"quote_token": q["quote_token"], "email": "cli@banco.it"})
+        self.stripe_giu = False
+        self.assertEqual(s, 503, b2)
+        self.assertEqual(self.sis.pagamenti_pendenti.info(b1["riferimento"])["stato"],
+                         "in_attesa", "PREMESSA: la prima prenotazione aspetta ancora il pagamento")
+        s, q2 = self.g("POST", "/api/concierge/quote",
+                       {"alloggio_id": self.SLUG, "check_in": _fra(10), "check_out": _fra(13),
+                        "party": 2})
+        s2, b3 = self.g("POST", "/api/concierge/book",
+                        {"quote_token": q2.get("quote_token", ""), "email": "altro@banco.it"}) \
+            if s == 200 else (s, q2)
+        self.assertNotEqual(s2, 201, "un altro ospite ha preso la stanza della prima "
+                                     "prenotazione ancora pagabile: doppia prenotazione %s" % b3)
+
+    def test_A_gateway_dell_anticipo_che_da_solo_l_indirizzo(self):
+        """Prova mancante 3 (pr-test-analyzer, 11/11): un gateway dell'anticipo senza
+        `crea_sessione_anticipo` da' solo l'indirizzo: il numero resta '' (mai quello della
+        pagina del TOTALE, che l'ospite non ha) e lo spazzino non chiude nessuna pagina."""
+        vero = self.sis.stripe
+
+        class _SoloIndirizzo:
+            def __getattr__(self, nome):
+                if nome == "crea_sessione_anticipo":
+                    raise AttributeError(nome)
+                return getattr(vero, nome)
+        self.sis.stripe = _SoloIndirizzo()
+        b = self._book(self._preventivo(), modo_pagamento="in_struttura")
+        _deve(b.get("modo_pagamento") == "in_struttura", "PREMESSA: in struttura", b)
+        salvato = json.loads(self.sis.pagamenti_pendenti.info(b["riferimento"])["corpo_json"])
+        self.assertEqual(salvato.get("stripe_cs"), "", "pagine nate: %s" % self.nate)
+        self._spazza()
+        self.assertEqual(self.chiuse, [], "nessuna pagina sbagliata chiusa")
+
+    def _prenota_mcp(self, q):
+        s, risp = self.g("POST", "/api/mcp", {
+            "jsonrpc": "2.0", "id": 7, "method": "tools/call",
+            "params": {"name": "prenota", "arguments": {"quote_token": q["quote_token"],
+                                                         "email": "agente@banco.it"}}})
+        _deve(s == 200 and isinstance(risp.get("result"), dict), "PREMESSA: risposta MCP", s, risp)
+        return risp["result"]["structuredContent"]
+
+    def test_F15_l_agente_IA_che_prenota_passa_dal_server(self):
+        """F15 (11/11, sonda sul sistema vero): «prenota» via /api/mcp andava dritto a fase59 e
+        saltava il server: stanza bloccata, risposta «confermata», NESSUN pagamento in attesa;
+        se l'agente pagava, il webhook trovava un riferimento sconosciuto = soldi senza
+        prenotazione. Deve fare quello che fa il sito: blocco salvato e pagina da pagare."""
+        corpo = self._prenota_mcp(self._preventivo())
+        rif = corpo.get("riferimento")
+        _deve(rif, "PREMESSA: l'agente ha prenotato", corpo)
+        self.assertEqual(
+            (corpo.get("stato"), (self.sis.pagamenti_pendenti.info(rif) or {}).get("stato")),
+            ("in_attesa_pagamento", "in_attesa"),
+            "una prenotazione dell'agente deve avere il suo pagamento in attesa, come dal sito")
+
+    def test_F3_il_numero_della_pagina_non_esce_nelle_risposte(self):
+        """F3 (11/11, skill differential-review): il numero della pagina (`cs_...`) e' roba del
+        server: dove l'indirizzo e' tolto apposta (gia' pagata, in attesa dell'host) il numero
+        basta a raggiungere la pagina e pagare due volte. Non esce MAI: prima prenotazione,
+        doppio clic, paga in struttura, agente IA."""
+        q = self._preventivo()
+        risposte = [self._book(q), self._book(q),
+                    self._book(self._preventivo2(), modo_pagamento="in_struttura"),
+                    self._prenota_mcp(self._preventivo3())]
+        self.assertEqual([("stripe_cs" in r) for r in risposte], [False] * 4,
+                         [sorted(r) for r in risposte])
+
+    def _preventivo2(self):
+        s, q = self.g("POST", "/api/concierge/quote",
+                      {"alloggio_id": self.SLUG, "check_in": _fra(20), "check_out": _fra(22),
+                       "party": 2})
+        _deve(s == 200, s, q)
+        return q
+
+    def _preventivo3(self):
+        s, q = self.g("POST", "/api/concierge/quote",
+                      {"alloggio_id": self.SLUG, "check_in": _fra(30), "check_out": _fra(32),
+                       "party": 2})
+        _deve(s == 200, s, q)
+        return q
 
 
 class TestLaPenaleNonDiventaUnBonificoPieno(_BancoDeiSoldiDelServer):

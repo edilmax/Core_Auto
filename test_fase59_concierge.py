@@ -1003,6 +1003,20 @@ class TestGatewayInAvaria(unittest.TestCase):
         self.assertIsInstance(rec.exc_info, tuple,
                               "il log non porta la traccia dell'eccezione")
 
+    def test_al_DOPPIO_CLIC_il_guasto_del_gateway_NON_libera_la_stanza_della_prima(self):
+        """F2 (11/11, trovato dalla skill differential-review): al doppio clic il blocco e'
+        quello della PRIMA prenotazione (stessa idem-key, `idempotente`), che e' ancora in
+        attesa con la sua pagina pagabile. Liberarlo perche' Stripe non risponde rimetteva in
+        vendita la stanza: un secondo ospite la prende, il primo paga = doppia prenotazione.
+        Il 503 resta (l'ospite riprova), il rilascio no."""
+        inv = _InventarioFinto(esito=EsitoPrenotazione(True, "", idempotente=True))
+        proto = ProtocolloConcierge(inv, FirmaQuote(SEGRETO), link_pagamento=lambda d: None)
+        token = proto.quota({"alloggio_id": "casa", "check_in": "2026-09-01",
+                             "check_out": "2026-09-03"}).corpo["quote_token"]
+        r = proto.prenota({"quote_token": token, "email": "g@x.it"})
+        self.assertEqual((r.status, r.corpo.get("riprova")), (503, True), r.corpo)
+        self.assertEqual(inv.rilasci, 0, "la stanza della prima prenotazione non si libera")
+
 
 class TestDettaglioInAvaria(unittest.TestCase):
     def test_dettaglio_in_avaria_LASCIA_LA_TRACCIA(self):

@@ -831,6 +831,23 @@ class TestLaPaginaStripeNasceColSuoNumero(unittest.TestCase):
                                    fetch=FetchSpy(risposta={"url": "https://u", "id": numero}))
                 self.assertEqual(p.crea_sessione(DATI), {"url": "https://u", "id": ""})
 
+    def test_anticipo_il_numero_si_pulisce_come_per_il_totale(self):
+        """Prova mancante 2 (pr-test-analyzer, 11/11): la pagina dell'ANTICIPO porta il suo
+        numero (difetto A) con la stessa pulizia di `crea_sessione`; senza indirizzo, niente."""
+        ant = {"anticipo_cents": 4500, "saldo_cents": 19500, "riferimento": "ABC123"}
+        for numero in (None, "", "pi_1", 7, "cs_"):
+            with self.subTest(numero=numero):
+                p = ProviderStripe("sk", "o", "k",
+                                   fetch=FetchSpy(risposta={"url": "https://u", "id": numero}))
+                self.assertEqual(p.crea_sessione_anticipo(ant), {"url": "https://u", "id": ""})
+        p = ProviderStripe("sk", "o", "k", fetch=FetchSpy(risposta={"url": "https://u",
+                                                                     "id": "cs_a"}))
+        self.assertEqual((p.crea_sessione_anticipo(ant), p.crea_link_anticipo(ant)),
+                         ({"url": "https://u", "id": "cs_a"}, "https://u"))
+        p = ProviderStripe("sk", "o", "k", fetch=FetchSpy(risposta={"id": "cs_a"}))
+        self.assertEqual((p.crea_sessione_anticipo(ant), p.crea_link_anticipo(ant)),
+                         (None, None))
+
     def test_senza_indirizzo_niente_sessione_e_crea_link_resta_com_era(self):
         p = ProviderStripe("sk", "o", "k", fetch=FetchSpy(risposta={"id": "cs_1"}))
         self.assertIsNone(p.crea_sessione(DATI))
@@ -867,6 +884,18 @@ class TestChiudereLaPaginaStripe(unittest.TestCase):
                          {"ok": True, "stato": "complete", "motivo": ""})
         self.assertEqual([(u, b) for u, b in chiamate],
                          [(STRIPE_URL + "/cs_a/expire", chiamate[0][1]), (STRIPE_URL + "/cs_a", None)])
+
+    def test_F8_rifiuto_e_pagina_ancora_aperta_tiene_il_motivo_del_rifiuto(self):
+        """F8 (11/11, silent-failure-hunter): Stripe rifiuta di chiudere (403 chiave senza
+        permesso, 429 troppe richieste) e la rilettura dice 'open'. Prima il motivo si perdeva:
+        un giorno di «pagina_non_chiusa ... open» senza sapere che la chiave non puo' chiudere."""
+        def fetch(url, body, headers):
+            if url.endswith("/expire"):
+                raise _ErroreHttp(403)
+            return {"id": "cs_a", "status": "open"}
+        esito = _p(fetch).chiudi_sessione("cs_a")
+        self.assertEqual((esito["ok"], esito["stato"]), (True, "open"), esito)
+        self.assertIn("403", esito["motivo"], "il motivo del rifiuto deve restare")
 
     def test_le_intestazioni_della_chiusura_e_della_rilettura(self):
         """Prova mancante 2 (pr-test-analyzer, 11/11): senza la chiave Stripe risponde 401 (NON

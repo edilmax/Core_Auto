@@ -2394,7 +2394,7 @@ class RouterHTTP:
         if metodo == "POST" and path == "/api/concierge/quote":
             return self._concierge_quote(body)
         if metodo == "POST" and path == "/api/concierge/book":
-            return self._book(body, headers)
+            return self._risposta_ospite(*self._book(body, headers))
         if metodo == "POST" and path == "/api/concierge/cancella":
             return self._cancella_prenotazione(body)
         if metodo == "GET" and path == "/api/concierge/manifest":
@@ -2434,7 +2434,7 @@ class RouterHTTP:
         if metodo == "POST" and path == "/api/recensioni":
             return self._invia_recensione(body)
         if metodo == "POST" and path == "/api/mcp":
-            return self._mcp(body)
+            return self._mcp(body, headers)
         if metodo == "POST" and path == "/api/payments/webhook":
             return self._webhook_stripe_registrato(body, headers)
         if metodo == "POST" and path == "/api/marketing/campagna":
@@ -11686,9 +11686,36 @@ class RouterHTTP:
                          "non ha ricevuto il premio (si riprova al prossimo pagamento)",
                          host_id, exc_info=True)
 
-    def _mcp(self, body):
+    @staticmethod
+    def _risposta_ospite(status, corpo):
+        """F3 (11/11): il numero della pagina Stripe (`stripe_cs`) e' roba del server e non esce
+        MAI verso chi prenota: dove l'indirizzo e' tolto apposta (gia' pagata, in attesa
+        dell'host) il numero bastava a raggiungere la pagina e pagare due volte."""
+        if isinstance(corpo, dict) and "stripe_cs" in corpo:
+            corpo = {k: v for k, v in corpo.items() if k != "stripe_cs"}
+        return status, corpo
+
+    def _mcp(self, body, headers=None):
         if self._sys.mcp is None:
             return 503, {"errore": "mcp_disattivato"}
+        # F15 (11/11): «prenota» di un agente IA passa dalla STESSA strada del sito (_book):
+        # blocco salvato, spazzino, tetto anti-abuso, paga in struttura, doppio clic. Prima
+        # andava dritto a fase59: stanza bloccata senza pagamento in attesa, risposta
+        # «confermata», e un pagamento finiva su un riferimento sconosciuto.
+        try:
+            msg = json.loads(body or "")
+        except (ValueError, TypeError):
+            msg = None
+        par = msg.get("params") if isinstance(msg, dict) else None
+        if (isinstance(msg, dict) and msg.get("jsonrpc") == "2.0"
+                and msg.get("method") == "tools/call" and isinstance(par, dict)
+                and par.get("name") == "prenota"):
+            arg = par.get("arguments")
+            status, corpo = self._risposta_ospite(
+                *self._book(json.dumps(arg if isinstance(arg, dict) else {}), headers))
+            return 200, {"jsonrpc": "2.0", "id": msg.get("id"), "result": {
+                "content": [{"type": "text", "text": json.dumps(corpo, ensure_ascii=False)}],
+                "structuredContent": corpo, "isError": int(status) >= 400}}
         out = self._sys.mcp.gestisci_raw(body or "")
         if out is None:
             return 204, {}
@@ -14230,19 +14257,39 @@ def _pagina_stripe_chiusa(sistema: Any, rec: Dict[str, Any]) -> bool:
         cs = (json.loads(rec.get("corpo_json") or "{}") or {}).get("stripe_cs")
     except Exception:
         cs = None
-    stripe = getattr(sistema, "stripe", None)
-    if not (isinstance(cs, str) and cs.startswith("cs_")) or stripe is None:
+    # F5 (11/11): un gateway che non sa chiudere la pagina fa come prima del pezzo 3; senza,
+    # l'eccezione a ogni giro teneva la stanza per sempre, senza tetto e senza ERROR
+    chiudi = getattr(getattr(sistema, "stripe", None), "chiudi_sessione", None)
+    if not (isinstance(cs, str) and cs.startswith("cs_")) or chiudi is None:
         return True
-    esito = stripe.chiudi_sessione(cs)
+    esito = chiudi(cs)
     if esito.get("ok") and esito.get("stato") == "expired":
         return True
+    oltre_un_giorno = (int(_t.time()) > int(rec.get("scadenza_ts") or 0)
+                       + _VITA_MASSIMA_PAGINA_STRIPE_S)
     if esito.get("ok") and esito.get("stato") == "complete":
-        logger.warning("SPAZZINO | codice: pagina_gia_pagata | riferimento: %s | messaggio: blocco "
-                       "scaduto ma l'ospite ha pagato: la stanza NON si libera, arriva il webhook",
-                       _rif_per_registro(rec.get("riferimento")))
+        # F1 (11/11): 'complete' non vuol dire pagata. Con un metodo differito (Pix, acceso sul
+        # conto) il pagamento puo' FALLIRE dopo e la pagina resta 'complete' per sempre: si
+        # guarda il pagamento dietro. Fallito = la stanza si libera; pagato, bloccato sulla
+        # carta, in arrivo o NON LO SO = si tiene, e dopo un giorno senza webhook ERROR (MAI si
+        # libera la stanza di chi forse ha pagato: rilievo D).
+        leggi = getattr(getattr(sistema, "stripe", None), "pagamento_della_sessione", None)
+        pag = leggi(cs) if leggi is not None else {}
+        if pag.get("ok") and pag.get("stato") in ("requires_payment_method", "canceled"):
+            logger.warning("SPAZZINO | codice: pagamento_fallito | sottocodice: %s | riferimento: "
+                           "%s | messaggio: pagina completa ma il pagamento e' fallito: la stanza "
+                           "si libera", pag["stato"], _rif_per_registro(rec.get("riferimento")))
+            return True
+        (logger.error if oltre_un_giorno else logger.warning)(
+            "SPAZZINO | codice: pagina_gia_pagata | sottocodice: %s | riferimento: %s | "
+            "messaggio: blocco scaduto ma l'ospite ha pagato o sta pagando (%s): la stanza NON si "
+            "libera, arriva il webhook",
+            "un_giorno_senza_conferma" if oltre_un_giorno else "in_attesa_del_webhook",
+            _rif_per_registro(rec.get("riferimento")),
+            _testo_per_registro(pag.get("stato") or pag.get("motivo") or "-"))
         return False
     perche = _testo_per_registro(esito.get("motivo") or esito.get("stato") or "-")
-    if int(_t.time()) > int(rec.get("scadenza_ts") or 0) + _VITA_MASSIMA_PAGINA_STRIPE_S:
+    if oltre_un_giorno:
         logger.error("SPAZZINO | codice: pagina_non_chiusa | sottocodice: un_giorno_senza_conferma "
                      "| riferimento: %s | messaggio: Stripe non ha confermato la chiusura (%s); la "
                      "pagina non puo' piu' essere viva, la stanza si libera",

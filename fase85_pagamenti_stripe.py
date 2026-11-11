@@ -226,6 +226,7 @@ class ProviderStripe:
         if not (isinstance(sessione, str) and sessione.startswith("cs_") and len(sessione) > 3):
             return {"ok": False, "stato": "", "motivo": "sessione_assente"}
         intestazione = {"Authorization": "Bearer " + self._key}
+        rifiuto = ""
         try:
             try:
                 s = self._fetch(STRIPE_URL + "/" + sessione + "/expire",
@@ -235,11 +236,15 @@ class ProviderStripe:
             except Exception as exc:
                 if _esito_sconosciuto(exc):
                     raise
+                rifiuto = _motivo_errore(exc)
                 s = self._fetch(STRIPE_URL + "/" + sessione, None, intestazione)
             if not (isinstance(s, dict) and s.get("id") == sessione
                     and isinstance(s.get("status"), str) and s.get("status")):
                 return {"ok": False, "stato": "", "motivo": "risposta_inattesa: %r" % (s,)}
-            return {"ok": True, "stato": s["status"], "motivo": ""}
+            # F8 (11/11): rifiutata e ancora aperta (403 chiave senza permesso, 429): il motivo
+            # del rifiuto resta, o nel registro c'e' solo «open» per un giorno intero
+            return {"ok": True, "stato": s["status"],
+                    "motivo": rifiuto if s["status"] not in ("expired", "complete") else ""}
         except Exception as exc:
             motivo = _motivo_errore(exc)
             logger.warning("Stripe: pagina di pagamento non chiusa cs=%s -> %s", sessione, motivo)

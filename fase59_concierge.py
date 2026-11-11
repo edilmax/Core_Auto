@@ -631,10 +631,14 @@ class ProtocolloConcierge:
         # il ramo su-richiesta (fase83 approvazione host) ha gia'. Il modo diretto SENZA Stripe
         # configurato (self._link is None) resta legittimo e invariato.
         if self._link is not None and not payment_url:
-            try:
-                self._inv.rilascia(alloggio, ci, co, idem_key=idem)   # stanza subito vendibile
-            except Exception:
-                logger.error("prenota: rilascio dopo link fallito ISOLATO", exc_info=True)
+            # F2 (11/11): al DOPPIO CLIC il blocco e' quello della PRIMA prenotazione, ancora in
+            # attesa con la sua pagina pagabile: liberarlo rimetteva in vendita una stanza che
+            # l'ospite puo' ancora pagare (doppia prenotazione). Si libera solo un blocco NUOVO.
+            if not getattr(esito, "idempotente", False):
+                try:
+                    self._inv.rilascia(alloggio, ci, co, idem_key=idem)   # stanza subito vendibile
+                except Exception:
+                    logger.error("prenota: rilascio dopo link fallito ISOLATO", exc_info=True)
             logger.error("PRENOTAZIONE RIFIUTATA: gateway di pagamento irraggiungibile "
                          "(riferimento %s, alloggio %s): nessuna conferma senza pagamento",
                          riferimento, alloggio)
