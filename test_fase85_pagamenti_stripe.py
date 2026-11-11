@@ -811,5 +811,35 @@ class TestRimborsaDistingueRifiutoDaEsitoSconosciuto(unittest.TestCase):
                 self.assertIs(esito.get("sconosciuto"), False, esito)
 
 
+class TestLaPaginaStripeNasceColSuoNumero(unittest.TestCase):
+    """PIANO DEI 2 MINUTI, pezzo 1 (11/11): per chiudere la pagina di pagamento quando scade il
+    blocco della stanza serve il suo numero (`cs_...`) GIA' alla creazione. Prima `crea_link`
+    tornava solo l'indirizzo e il numero arrivava col webhook, a pagamento gia' fatto."""
+
+    def test_crea_sessione_porta_indirizzo_e_numero(self):
+        spy = FetchSpy(risposta={"url": "https://checkout.stripe.com/c/pay/cs_test_9",
+                                 "id": "cs_test_9"})
+        p = ProviderStripe("sk", "o", "k", fetch=spy)
+        self.assertEqual(p.crea_sessione(DATI), {"url": "https://checkout.stripe.com/c/pay/cs_test_9",
+                                                 "id": "cs_test_9"})
+        self.assertEqual(spy.url, STRIPE_URL)
+
+    def test_un_numero_che_non_e_di_una_sessione_resta_vuoto(self):
+        for numero in (None, "", "pi_1", 7, "cs_"):
+            with self.subTest(numero=numero):
+                p = ProviderStripe("sk", "o", "k",
+                                   fetch=FetchSpy(risposta={"url": "https://u", "id": numero}))
+                self.assertEqual(p.crea_sessione(DATI), {"url": "https://u", "id": ""})
+
+    def test_senza_indirizzo_niente_sessione_e_crea_link_resta_com_era(self):
+        p = ProviderStripe("sk", "o", "k", fetch=FetchSpy(risposta={"id": "cs_1"}))
+        self.assertIsNone(p.crea_sessione(DATI))
+        self.assertIsNone(ProviderStripe("sk", "o", "k",
+                                         fetch=FetchSpy(solleva=True)).crea_sessione(DATI))
+        p = ProviderStripe("sk", "o", "k", fetch=FetchSpy(risposta={"url": "https://u",
+                                                                     "id": "cs_1"}))
+        self.assertEqual(p.crea_link(DATI), "https://u")
+
+
 if __name__ == "__main__":
     unittest.main()

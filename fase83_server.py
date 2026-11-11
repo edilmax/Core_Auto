@@ -7213,7 +7213,9 @@ class RouterHTTP:
             if stripe is not None:
                 nuovo = None
                 try:
-                    nuovo = stripe.crea_link({
+                    # piano dei 2 minuti (11/11): anche il numero della pagina NUOVA, che e'
+                    # quella da chiudere (quella della richiesta e' un'altra)
+                    nuovo = (getattr(stripe, "crea_sessione", None) or stripe.crea_link)({
                         "totale_cents": corpo.get("totale_cents"),
                         "prezzo_guest_cents": corpo.get("prezzo_guest_cents"),
                         "valuta": corpo.get("valuta"),   # like-for-like anche sul su-richiesta approvato
@@ -7222,6 +7224,9 @@ class RouterHTTP:
                         "scade_secondi": HOLD_APPROVAZIONE_SEC})
                 except Exception:
                     nuovo = None
+                if isinstance(nuovo, dict):
+                    corpo["stripe_cs"] = nuovo.get("id") or ""
+                    nuovo = nuovo.get("url")
                 if not nuovo:
                     # FAIL-SAFE: niente conferma senza un link di pagamento valido. La
                     # richiesta RESTA in_attesa_host: l'host può ricliccare tra poco.
@@ -7310,6 +7315,9 @@ class RouterHTTP:
                                    "modo_pagamento": corpo.get("modo_pagamento", ""),
                                    "saldo_in_loco_cents": corpo.get("saldo_in_loco_cents", 0),
                                    "anticipo_online_cents": corpo.get("anticipo_online_cents", 0),
+                                   # piano dei 2 minuti (11/11): la pagina Stripe che lo
+                                   # spazzino chiude prima di liberare la stanza
+                                   "stripe_cs": corpo.get("stripe_cs", ""),
                                    "titolo": titolo})
             import time as _t83
             scad = (int(_t83.time()) + hold_sec) if isinstance(hold_sec, int) \

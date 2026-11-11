@@ -142,6 +142,13 @@ class ProviderStripe:
     def crea_link(self, dati: Dict[str, Any]) -> Optional[str]:
         """Da un dict prenotazione (prezzo_guest_cents, riferimento, email) -> URL di
         pagamento Stripe, o None (chiave/cents invalidi o Stripe non raggiungibile)."""
+        sessione = self.crea_sessione(dati)
+        return sessione["url"] if sessione else None
+
+    def crea_sessione(self, dati: Dict[str, Any]) -> Optional[Dict[str, str]]:
+        """Come `crea_link`, ma torna {'url', 'id'}: il NUMERO della pagina (`cs_...`) serve allo
+        spazzino per chiuderla quando scade il blocco della stanza (piano dei 2 minuti, 11/11).
+        Un numero che non e' di una sessione resta '' (chi lo legge non puo' chiuderla)."""
         try:
             if not isinstance(dati, dict):
                 return None
@@ -198,7 +205,12 @@ class ProviderStripe:
                        "Content-Type": "application/x-www-form-urlencoded"}
             resp = self._fetch(STRIPE_URL, body, headers)
             url = resp.get("url") if isinstance(resp, dict) else None
-            return url if isinstance(url, str) and url else None
+            if not (isinstance(url, str) and url):
+                return None
+            cs = resp.get("id")
+            return {"url": url,
+                    "id": cs if isinstance(cs, str) and cs.startswith("cs_") and len(cs) > 3
+                    else ""}
         except Exception:
             logger.warning("Stripe: creazione link fallita (ISOLATA -> None)",
                            exc_info=True)

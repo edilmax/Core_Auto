@@ -137,6 +137,17 @@ class TestSuRichiestaStripe(unittest.TestCase):
         self.assertGreater(delta, HOLD_APPROVAZIONE_SEC - 120)
         self.assertLessEqual(delta, 86400)           # dentro il massimo Stripe
 
+    def test_approva_salva_il_numero_della_pagina_NUOVA(self):
+        """Piano dei 2 minuti, pezzo 1 (11/11): lo spazzino chiude la pagina che l'ospite puo'
+        ancora pagare, cioe' quella creata all'approvazione, non quella della richiesta."""
+        ref = self._richiedi("2026-09-18", "2026-09-20")
+        s, esito = self.g("POST", "/api/host/richieste/approva", {"riferimento": ref},
+                          {"X-Host-Token": self.tok})
+        self.assertEqual(s, 200, esito)
+        self.assertEqual(len(self.sessioni), 2, "PREMESSA: una pagina alla richiesta, una dopo")
+        corpo = json.loads(self.sys.pagamenti_pendenti.info(ref)["corpo_json"] or "{}")
+        self.assertEqual(corpo.get("stripe_cs"), "cs_test_2")
+
     def test_hold_dura_24h_non_2_minuti(self):
         ref = self._richiedi("2026-09-14", "2026-09-16")
         s, _ = self.g("POST", "/api/host/richieste/approva", {"riferimento": ref},

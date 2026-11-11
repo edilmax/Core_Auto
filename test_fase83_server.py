@@ -2561,6 +2561,21 @@ class _BancoDeiSoldiDelServer(unittest.TestCase):
         return [r for r in righe if r.startswith("WARNING:") and all(p in r for p in parole)]
 
 
+class TestIlNumeroDellaPaginaStripeSiSalvaQuandoNasce(_BancoDeiSoldiDelServer):
+    """PIANO DEI 2 MINUTI, pezzo 1 (11/11): a blocco scaduto lo spazzino deve chiudere la pagina
+    di Stripe PRIMA di liberare la stanza, e per chiuderla serve il suo numero. Prima arrivava
+    solo col webhook (`salva_stripe_session`), cioe' a pagamento gia' fatto: quando non serve."""
+
+    def test_la_prenotazione_salva_il_numero_della_sua_pagina(self):
+        self.pubblica("casa-cs")
+        b = self.prenota("casa-cs", 10)
+        rec = self.sis.pagamenti_pendenti.info(b["riferimento"])
+        self.assertIsNotNone(rec, "PREMESSA: il pagamento in attesa c'e'")
+        self.assertEqual(json.loads(rec["corpo_json"] or "{}").get("stripe_cs"), "cs_1",
+                         "il numero della pagina Stripe (cs_1, dal finto Stripe) deve stare nel "
+                         "pagamento in attesa dal momento della prenotazione")
+
+
 class TestLaPenaleNonDiventaUnBonificoPieno(_BancoDeiSoldiDelServer):
     """C53-B1-9 (busta 8): nella cancellazione con penale il registro dei bonifici si
     riallinea alla quota dell'host (`imposta_importo`) e poi parte il bonifico, che per
