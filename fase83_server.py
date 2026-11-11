@@ -6737,9 +6737,10 @@ class RouterHTTP:
         prima; mai la pagina del totale, che l'ospite non ha (2 minuti, difetto A, 11/11)."""
         crea = getattr(stripe, "crea_sessione_anticipo", None)
         s = crea(dati) if crea is not None else stripe.crea_link_anticipo(dati)
-        if isinstance(s, dict):
-            return s.get("url"), s.get("id") or ""
-        return s, ""
+        url, numero = (s.get("url"), s.get("id") or "") if isinstance(s, dict) else (s, "")
+        # F13, variante (11/11): solo un indirizzo vero diventa la pagina da pagare
+        return (url if isinstance(url, str) and url else None,
+                numero if isinstance(numero, str) else "")
 
     def _rifai_link_anticipo(self, fuori, rec):
         """VA1 (8/11): al doppio clic fase59 rifa' il link del TOTALE; chi paga in struttura deve
@@ -7094,7 +7095,11 @@ class RouterHTTP:
                         check_out=corpo.get("check_out", ""), idem_key=idem,
                         tassa_cents=corpo.get("tassa_soggiorno_cents", 0), comune=comune,
                         host_id=host, email=str(dati.get("email", "")), quote_token=qt,
-                        corpo_json=_j.dumps(corpo), stato="in_attesa_host",
+                        # F11 (11/11): non il numero della pagina della RICHIESTA, che l'ospite
+                        # non ha: a richiesta scaduta lo spazzino non deve chiudere niente
+                        corpo_json=_j.dumps({k: v for k, v in corpo.items()
+                                             if k != "stripe_cs"}),
+                        stato="in_attesa_host",
                         scadenza_ts=int(_t.time()) + 86400)   # 24h per approvare
             # avvisa l'host SUBITO col link Approva/Rifiuta (un tocco, da qualsiasi messaggio)
             self._avvisa_host_richiesta(allog, ref, corpo.get("check_in", ""),
@@ -7251,7 +7256,7 @@ class RouterHTTP:
                 if isinstance(nuovo, dict):
                     corpo["stripe_cs"] = nuovo.get("id") or ""
                     nuovo = nuovo.get("url")
-                if not nuovo:
+                if not (isinstance(nuovo, str) and nuovo):    # F13: solo un indirizzo vero
                     # FAIL-SAFE: niente conferma senza un link di pagamento valido. La
                     # richiesta RESTA in_attesa_host: l'host può ricliccare tra poco.
                     logger.error("approvazione %s: link pagamento NON creato -> riprovare",
@@ -14243,6 +14248,10 @@ def corpo_richiesta_testo(grezzo: bytes) -> str:
 # sessions/create; fase85 la tiene dentro quel tetto): passato un giorno dalla fine del blocco la
 # pagina non puo' piu' essere viva, chiunque sia il motivo per cui Stripe non ha risposto.
 _VITA_MASSIMA_PAGINA_STRIPE_S = 86400
+# F10 (11/11): il giro dello spazzino chiama Stripe una pagina alla volta, e ogni chiamata puo'
+# aspettare il suo timeout. Oltre questo tempo i blocchi rimasti passano al giro dopo (lo spazzino
+# gira ogni due minuti): le penali e le stanze fantasma, che stanno nello stesso giro, non aspettano.
+_TETTO_GIRO_STRIPE_S = 60
 
 
 def _pagina_stripe_chiusa(sistema: Any, rec: Dict[str, Any]) -> bool:
@@ -14254,9 +14263,18 @@ def _pagina_stripe_chiusa(sistema: Any, rec: Dict[str, Any]) -> bool:
     essere viva. Liberare il credito dell'ospite viene DOPO questa risposta (FB3)."""
     import time as _t
     try:
-        cs = (json.loads(rec.get("corpo_json") or "{}") or {}).get("stripe_cs")
+        corpo = json.loads(rec.get("corpo_json") or "{}")
+        guasto = "" if isinstance(corpo, dict) else "non_oggetto"
     except Exception:
-        cs = None
+        corpo, guasto = {}, "json_non_valido"
+    if guasto:
+        # F7 (11/11): un dato rotto in un pagamento in attesa si dice (regola ferrea 9); la stanza
+        # si libera come prima, perche' non c'e' un numero di pagina da chiudere
+        logger.warning("SPAZZINO | codice: corpo_illeggibile | sottocodice: %s | riferimento: %s | "
+                       "messaggio: nessuna pagina da chiudere, si fa come prima", guasto,
+                       _rif_per_registro(rec.get("riferimento")))
+        corpo = {}
+    cs = corpo.get("stripe_cs")
     # F5 (11/11): un gateway che non sa chiudere la pagina fa come prima del pezzo 3; senza,
     # l'eccezione a ogni giro teneva la stanza per sempre, senza tetto e senza ERROR
     chiudi = getattr(getattr(sistema, "stripe", None), "chiudi_sessione", None)
@@ -14322,8 +14340,13 @@ def sweep_hold_una_passata(sistema: Any, router: Any) -> None:
         da_fare = [(r, True) for r in pp.scaduti()]
         if hasattr(pp, "scaduti_da_finire"):
             da_fare += [(r, False) for r in pp.scaduti_da_finire()]
+        import time as _t
+        inizio, rinviati = _t.monotonic(), 0
         for rec, nuovo in da_fare:
             try:
+                if nuovo and _t.monotonic() - inizio > _TETTO_GIRO_STRIPE_S:
+                    rinviati += 1     # F10: resta tenuto, si guarda al giro dopo
+                    continue
                 if nuovo and not _pagina_stripe_chiusa(sistema, rec):
                     continue          # 2 minuti: la stanza si libera solo a pagina Stripe chiusa
                 if nuovo and not pp.scadi(rec["riferimento"]):
@@ -14348,6 +14371,9 @@ def sweep_hold_una_passata(sistema: Any, router: Any) -> None:
                     pp.scadenza_finita(rec["riferimento"])
             except Exception:
                 logger.warning("sweep hold singolo fallito (ignorato)", exc_info=True)
+        if rinviati:
+            logger.warning("SPAZZINO | codice: giro_lungo | messaggio: Stripe lento, %d blocchi "
+                           "scaduti rinviati al giro dopo (le stanze restano tenute)", rinviati)
         try:
             pp.pulisci_vecchi()          # via gli scaduti piu' vecchi di una pagina Stripe (fase162)
         except Exception:

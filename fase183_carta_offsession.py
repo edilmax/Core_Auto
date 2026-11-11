@@ -32,6 +32,12 @@ logger = logging.getLogger("core_auto.carta_offsession")
 _BASE = "https://api.stripe.com/v1"
 
 
+def _e_una_pagina(numero: Any) -> bool:
+    """F16 (11/11): nell'indirizzo di Stripe va solo il numero di una pagina (`cs_...`), come in
+    fase85: un valore storto («../», un altro oggetto) leggerebbe un'altra cosa."""
+    return isinstance(numero, str) and numero.startswith("cs_") and len(numero) > 3
+
+
 def _intero_pos(v: Any) -> bool:
     return isinstance(v, int) and not isinstance(v, bool) and v > 0
 
@@ -80,6 +86,8 @@ class ProviderCarta:
     def dettagli_da_sessione(self, session_id: str) -> Optional[Dict[str, str]]:
         """Dopo il webhook mode=setup: dal checkout session id -> (customer, payment_method).
         Fa 2 GET: la sessione (per customer + setup_intent) e il setup_intent (per il pm)."""
+        if not _e_una_pagina(session_id):
+            return None
         try:
             s = self._fetch("GET", "%s/checkout/sessions/%s" % (_BASE, session_id),
                             None, self._headers())
@@ -103,6 +111,8 @@ class ProviderCarta:
         """PAGA IN STRUTTURA (penale no-show): da una Checkout Session mode=payment con
         setup_future_usage='off_session' -> (customer, payment_method) per addebiti futuri
         off-session. La carta l'ha salvata Stripe sul PaymentIntent. 2 GET, ISOLATO -> None."""
+        if not _e_una_pagina(session_id):
+            return None
         try:
             s = self._fetch("GET", "%s/checkout/sessions/%s" % (_BASE, session_id),
                             None, self._headers())

@@ -153,8 +153,19 @@ class TestSuRichiestaStripe(unittest.TestCase):
         e da' solo l'indirizzo. Il numero della pagina della RICHIESTA non deve restare: lo
         spazzino chiuderebbe quella e libererebbe la stanza con la pagina nuova pagabile."""
         ref = self._richiedi("2026-09-18", "2026-09-20")
+        # F11 (11/11): la richiesta non salva piu' il numero della sua pagina. Lo scrivo a mano,
+        # come in una richiesta salvata dal codice di prima: l'approvazione non deve tenerlo.
+        import sqlite3
         prima = json.loads(self.sys.pagamenti_pendenti.info(ref)["corpo_json"] or "{}")
-        self.assertTrue(prima.get("stripe_cs"), "PREMESSA: la richiesta ha il numero della sua pagina")
+        prima["stripe_cs"] = "cs_test_1"
+        con = sqlite3.connect(os.path.join(self.dir, "p.db"))
+        with con:
+            con.execute("UPDATE pendenti SET corpo_json=? WHERE riferimento=?",
+                        (json.dumps(prima), ref))
+        con.close()
+        self.assertEqual(json.loads(self.sys.pagamenti_pendenti.info(ref)["corpo_json"])
+                         .get("stripe_cs"), "cs_test_1",
+                         "PREMESSA: la richiesta ha il numero della sua pagina")
         vero = self.sys.stripe
 
         class _SoloIndirizzo:

@@ -1017,6 +1017,21 @@ class TestGatewayInAvaria(unittest.TestCase):
         self.assertEqual((r.status, r.corpo.get("riprova")), (503, True), r.corpo)
         self.assertEqual(inv.rilasci, 0, "la stanza della prima prenotazione non si libera")
 
+    def test_prova8_il_link_porta_l_indirizzo_e_il_numero_solo_se_veri(self):
+        """Prova mancante 8 (pr-test-analyzer, 11/11): `_link_isolato` legge {'url','id'}
+        (fase85 `crea_sessione`) o l'indirizzo da solo (gateway vecchi). Il numero vale solo se
+        e' un testo; senza un indirizzo vero non c'e' pagina, e quindi nemmeno numero."""
+        casi = (({"url": "https://pay/1", "id": "cs_1"}, ("https://pay/1", "cs_1")),
+                ("https://pay/2", ("https://pay/2", "")),
+                ({"url": "https://pay/3", "id": 5}, ("https://pay/3", "")),
+                ({"url": "", "id": "cs_4"}, (None, "")),
+                ({"id": "cs_5"}, (None, "")))
+        for risposta, atteso in casi:
+            with self.subTest(risposta=risposta):
+                proto = ProtocolloConcierge(_InventarioFinto(), FirmaQuote(SEGRETO),
+                                            link_pagamento=lambda d, r=risposta: r)
+                self.assertEqual(proto._link_isolato({}), atteso)
+
 
 class TestDettaglioInAvaria(unittest.TestCase):
     def test_dettaglio_in_avaria_LASCIA_LA_TRACCIA(self):

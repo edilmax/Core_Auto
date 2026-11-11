@@ -633,5 +633,29 @@ class TestNonSiChiedeUnaCartaCheNonSiPUOAddebitare(unittest.TestCase):
             "«Aggiungi carta» non aprirebbe niente")
 
 
+class TestIlNumeroDellaPaginaSiControllaPrimaDellIndirizzo(unittest.TestCase):
+    """F16 (11/11, Proton con variant-analysis): `dettagli_pagamento_da_sessione` (la carta per la
+    penale del paga in struttura) e `dettagli_da_sessione` mettevano il numero nell'indirizzo di
+    Stripe senza controllare che fosse una pagina (`cs_...`). Oggi il valore lo scrive solo il
+    server, ma un valore storto («../», un altro oggetto) andrebbe a leggere un'altra cosa:
+    difesa in profondita', come fa gia' fase85 per chiudere e rileggere le pagine."""
+
+    def test_un_numero_che_non_e_una_pagina_non_esce_verso_stripe(self):
+        for numero in ("", "pi_1", "cs_", "../customers/cus_1", None, 5):
+            for nome in ("dettagli_pagamento_da_sessione", "dettagli_da_sessione"):
+                with self.subTest(numero=numero, funzione=nome):
+                    f = _StripeFinto()
+                    self.assertIsNone(getattr(ProviderCarta("sk", fetch=f), nome)(numero))
+                    self.assertEqual(f.chiamate, [], "nessuna chiamata a Stripe")
+
+    def test_una_pagina_vera_si_legge(self):
+        for nome in ("dettagli_pagamento_da_sessione", "dettagli_da_sessione"):
+            with self.subTest(funzione=nome):
+                f = _StripeFinto()
+                getattr(ProviderCarta("sk", fetch=f), nome)("cs_test_1")
+                self.assertEqual(f.chiamate[:1], [("GET", "https://api.stripe.com/v1/checkout/"
+                                                          "sessions/cs_test_1")])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

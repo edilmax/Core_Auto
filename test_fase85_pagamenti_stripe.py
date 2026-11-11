@@ -9,6 +9,7 @@ e i ripieghi di crea_link/crea_link_anticipo, nate dai 49 mutanti sopravvissuti 
 test dedicato.
 """
 import json
+import logging
 import unittest
 
 import fase85_pagamenti_stripe as _f85
@@ -935,6 +936,46 @@ class TestChiudereLaPaginaStripe(unittest.TestCase):
                 f = FetchFinto({STRIPE_URL: {"id": numero, "status": "expired"}})
                 self.assertEqual(_p(f).chiudi_sessione(numero)["ok"], False)
                 self.assertEqual(f.chiamate, [])
+
+    def test_F9_chiave_senza_permesso_grida_subito_il_resto_tace(self):
+        """F9 (11/11, silent-failure-hunter): una chiave che non puo' chiudere le pagine (401,
+        403) non guarisce da sola, e ogni blocco scaduto resterebbe tenuto un giorno intero con
+        soli avvisi: ERROR subito, col codice. Un 429 (troppe richieste) o un 400 (pagina gia'
+        chiusa da sola) sono normali e non gridano (regola ferrea 10)."""
+        for codice, grida in ((403, True), (401, True), (429, False), (400, False)):
+            with self.subTest(codice=codice):
+                def fetch(url, body, headers, codice=codice):
+                    if url.endswith("/expire"):
+                        raise _ErroreHttp(codice)
+                    return {"id": "cs_a", "status": "open"}
+                with self.assertLogs("core_auto.pagamenti_stripe", level="DEBUG") as log:
+                    logging.getLogger("core_auto.pagamenti_stripe").debug("ascolto")
+                    _p(fetch).chiudi_sessione("cs_a")
+                errori = [r.getMessage() for r in log.records if r.levelname == "ERROR"]
+                self.assertEqual(bool(errori), grida, errori)
+                if grida:
+                    self.assertIn(str(codice), errori[0])
+
+    def test_F12_una_risposta_inattesa_non_porta_i_dati_dell_ospite_nel_registro(self):
+        """F12 (11/11, security-reviewer): `risposta_inattesa: %r` metteva nel motivo -- che
+        finisce nel registro -- l'oggetto intero di Stripe, coi dati dell'ospite (email, nome,
+        indirizzo). Restano solo id, tipo e stato: bastano a capire cosa e' arrivato."""
+        strana = {"id": "cs_altra", "object": "checkout.session", "status": "open",
+                  "customer_details": {"email": "ospite@privato.it", "name": "Mario Rossi"}}
+        esiti = [
+            _p(FetchFinto({STRIPE_URL: strana})).chiudi_sessione("cs_a"),
+            _p(FetchFinto({STRIPE_URL: strana})).pagamento_della_sessione("cs_a"),
+        ]
+        for esito in esiti:
+            with self.subTest(esito=esito):
+                self.assertIn("risposta_inattesa", esito["motivo"])
+                self.assertIn("cs_altra", esito["motivo"])
+                self.assertNotIn("ospite@privato.it", esito["motivo"])
+                self.assertNotIn("Mario Rossi", esito["motivo"])
+        # variant-analysis (11/11): lo stesso %r stava in altri sette punti di fase85 (rimborsi,
+        # bonifici, saldo): nessuno deve restare
+        with open(_f85.__file__, encoding="utf-8") as fh:
+            self.assertNotIn("risposta_inattesa: %r", fh.read())
 
 
 if __name__ == "__main__":
