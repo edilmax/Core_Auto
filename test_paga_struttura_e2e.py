@@ -161,21 +161,49 @@ class TestPagaStrutturaE2E(unittest.TestCase):
                       {"quote_token": q["quote_token"], "email": "cli@ps.it",
                        "modo_pagamento": "in_struttura"})
 
-    def test_VA1_doppio_clic_ridà_il_link_dell_anticipo_non_del_totale(self):
+    def test_VA1_doppio_clic_ridà_la_stessa_pagina_dell_anticipo_non_del_totale(self):
+        # 2 minuti, difetto B (11/11): la pagina e' UNA per prenotazione, quella salvata col
+        # blocco (lo spazzino chiude quella); prima se ne rifaceva una nuova a ogni clic.
         q, b = self._prenota("2026-09-05", "2026-09-08", modo="in_struttura")
         self.assertEqual(b.get("modo_pagamento"), "in_struttura", b)            # premessa
-        chieste = []
-        self.sys.stripe.crea_link_anticipo = lambda d: (chieste.append(d), "https://anticipo")[1]
+        anticipi = len([x for x in _BODIES if "in_struttura" in x])
+        self.assertEqual(anticipi, 1, "PREMESSA: una pagina dell'anticipo")
         s, b2 = self._ripeti_book(q)
         self.assertEqual(s, 201, b2)
-        self.assertEqual(b2.get("payment_url"), "https://anticipo", b2)
+        self.assertEqual(b2.get("payment_url"), b["payment_url"], b2)
+        self.assertEqual(len([x for x in _BODIES if "in_struttura" in x]), anticipi,
+                         "nessuna pagina dell'anticipo nuova al doppio clic")
+
+    def _togli_pagina_salvata(self, rif):
+        """Un blocco salvato PRIMA del difetto B (11/11) non ha la sua pagina."""
+        import sqlite3
+        corpo = json.loads(self.sys.pagamenti_pendenti.info(rif)["corpo_json"])
+        self.assertTrue(corpo.pop("payment_url", None), "PREMESSA: la pagina era salvata")
+        con = sqlite3.connect(os.path.join(self.dir, "p.db"))
+        with con:
+            con.execute("UPDATE pendenti SET corpo_json=? WHERE riferimento=?",
+                        (json.dumps(corpo), rif))
+        con.close()
+
+    def test_VA1_blocco_senza_pagina_salvata_doppio_clic_rifà_l_anticipo(self):
+        q, b = self._prenota("2026-09-05", "2026-09-08", modo="in_struttura")
+        self.assertEqual(b.get("modo_pagamento"), "in_struttura", b)            # premessa
+        self._togli_pagina_salvata(b["riferimento"])
+        chieste = []
+        self.sys.stripe.crea_sessione_anticipo = lambda d: (
+            chieste.append(d), {"url": "https://anticipo", "id": "cs_anticipo"})[1]
+        s, b2 = self._ripeti_book(q)
+        self.assertEqual(s, 201, b2)
+        self.assertEqual((b2.get("payment_url"), b2.get("stripe_cs")),
+                         ("https://anticipo", "cs_anticipo"), b2)
         self.assertEqual([d["anticipo_cents"] for d in chieste], [b["anticipo_online_cents"]])
         self.assertEqual(chieste[0]["saldo_cents"], b["saldo_in_loco_cents"])
         self.assertEqual(chieste[0]["riferimento"], b["riferimento"])
 
-    def test_VA1_doppio_clic_senza_link_anticipo_non_ridà_il_totale(self):
-        q, _ = self._prenota("2026-09-05", "2026-09-08", modo="in_struttura")
-        self.sys.stripe.crea_link_anticipo = lambda d: None
+    def test_VA1_blocco_senza_pagina_salvata_senza_link_anticipo_non_ridà_il_totale(self):
+        q, b = self._prenota("2026-09-05", "2026-09-08", modo="in_struttura")
+        self._togli_pagina_salvata(b["riferimento"])
+        self.sys.stripe.crea_sessione_anticipo = lambda d: None
         s, b2 = self._ripeti_book(q)
         self.assertEqual(s, 503, b2)
         self.assertNotIn("payment_url", b2)
@@ -186,6 +214,7 @@ class TestPagaStrutturaE2E(unittest.TestCase):
         def non_deve(d):
             raise AssertionError("link anticipo chiesto per una prenotazione online")
         self.sys.stripe.crea_link_anticipo = non_deve
+        self.sys.stripe.crea_sessione_anticipo = non_deve
         s, b2 = self.g("POST", "/api/concierge/book",
                        {"quote_token": q["quote_token"], "email": "cli@ps.it"})
         self.assertEqual(s, 201, b2)

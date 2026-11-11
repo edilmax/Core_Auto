@@ -46,7 +46,10 @@ class TestSplitPenalePayout(unittest.TestCase):
     def setUpClass(cls):
         cls._orig = _stripe.ProviderStripe._fetch_reale
         _stripe.ProviderStripe._fetch_reale = staticmethod(
-            lambda u, b, h: {"id": u.rsplit("/", 1)[-1], "payment_status": "paid"}
+            # 2 minuti (11/11): lo spazzino chiude la pagina prima di liberare la stanza
+            lambda u, b, h: {"id": u.rsplit("/", 2)[-2], "status": "expired"}
+            if u.endswith("/expire")
+            else {"id": u.rsplit("/", 1)[-1], "payment_status": "paid"}
             if not b and "/checkout/sessions/" in u
             else {"url": "https://checkout.stripe.test/cs", "id": "cs_1"})
 
