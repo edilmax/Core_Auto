@@ -715,8 +715,11 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
                       {"alloggio_id": "casa", "check_in": ci, "check_out": co, "party": 2})
         s, b = self.g("POST", "/api/concierge/book",
                       {"quote_token": q["quote_token"], "email": "cli@ld.it"})
+        # il numero della pagina c'e' sempre, anche senza `payment_intent`: con `pi_id=""` qui
+        # nasceva «cs_» da solo, che dal gruppo H (_e_una_pagina) non e' una pagina
+        cs = "cs_" + (pi_id or "nopi_" + b["riferimento"])
         pl = json.dumps({"type": "checkout.session.completed",
-                         "data": {"object": {"id": "cs_" + pi_id, "payment_intent": pi_id,
+                         "data": {"object": {"id": cs, "payment_intent": pi_id,
                                              "metadata": {"riferimento": b["riferimento"]}}}})
         self.r.gestisci("POST", "/api/payments/webhook", {}, pl,
                         {"Stripe-Signature": firma_di_test(pl, WH, int(time.time()))})

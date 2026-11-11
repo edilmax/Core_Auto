@@ -40,6 +40,7 @@ import threading
 from typing import Any, Dict, List, Optional, Tuple
 
 from fase61_localizzazione import Localizzatore, LINGUE_SUPPORTATE
+from fase85_pagamenti_stripe import _e_una_pagina   # il numero della pagina: un controllo solo
 
 logger = logging.getLogger("core_auto.server")
 
@@ -248,6 +249,33 @@ def _testo_per_registro(testo: Any, tetto: int = 200) -> str:
     s = str(testo)
     s = s.replace("\r\n", "\\n").replace("\n", "\\n").replace("\r", "\\r")
     return s[:tetto] or "testo_vuoto"
+
+
+def _leggi_corpo(rec: Any, punto: str) -> Any:
+    """Il corpo salvato con una prenotazione (`corpo_json`), letto per un punto dei SOLDI.
+
+    F17 (11/11, variante di F7): i punti dei soldi leggevano il corpo da soli e, se non si
+    leggeva, andavano avanti col loro ripiego IN SILENZIO -- un dato rotto dentro un pagamento
+    non lo vedeva nessuno (regola ferrea 9). Qui un corpo illeggibile si DICE (WARNING
+    `corpo_illeggibile`, col punto e il riferimento) e l'eccezione PROSEGUE com'era: ogni
+    chiamante tiene il SUO ripiego di prima ({}, `continue`, `return False`, l'errore che sale),
+    perche' su un dato rotto la scelta giusta cambia da punto a punto e qui non si decide.
+    Un JSON valido che non e' un oggetto si dice e torna com'e'. Vuoto = {} e tace.
+    Guardia: `test_fase83_server.TestF17IlCorpoIlleggibileSullaStradaDeiSoldiSiDice`."""
+    # `_rif`: gia' pulito, col nome che la guardia del registro riconosce (TestNessunRiferimento...)
+    _rif = _rif_per_registro(rec.get("riferimento")) if isinstance(rec, dict) else "-"
+    try:
+        corpo = json.loads(rec.get("corpo_json") or "{}")
+    except Exception as exc:
+        logger.warning("SOLDI | codice: corpo_illeggibile | sottocodice: %s | punto: %s | "
+                       "riferimento: %s | messaggio: il corpo salvato della prenotazione non si "
+                       "legge, si fa come prima", type(exc).__name__, punto, _rif)
+        raise
+    if not isinstance(corpo, dict):
+        logger.warning("SOLDI | codice: corpo_illeggibile | sottocodice: non_oggetto | punto: %s "
+                       "| riferimento: %s | messaggio: il corpo salvato della prenotazione non e' "
+                       "un oggetto", punto, _rif)
+    return corpo
 
 
 # Stringhe UI per il frontend (chrome), multilingua. Fallback -> 'en' -> chiave.
@@ -1669,9 +1697,8 @@ def pagina_ricevuta_html(sistema: Any, token: Any, lingua: Any = None) -> Option
     rec = pp.info(rif) if pp is not None else None
     if rec is None or rec.get("stato") != "pagato":
         return None
-    import json as _j
     try:
-        dj = _j.loads(rec.get("corpo_json") or "{}")
+        dj = _leggi_corpo(rec, "pagina_ricevuta")
     except Exception:
         dj = {}
     e = _h.escape
@@ -1780,7 +1807,7 @@ def pagina_recensione_html(sistema: Any, token: Any, lingua: Any = None) -> Opti
         pp = getattr(sistema, "pagamenti_pendenti", None)
         st = pp.info(rif) if pp is not None else None
         if st:
-            titolo = _jsv.loads(st.get("corpo_json") or "{}").get("titolo") or allog
+            titolo = _leggi_corpo(st, "pagina_recensione").get("titolo") or allog
             cancellata = st.get("stato") in ("rimborsato", "cancellata_host")
     except Exception:
         pass
@@ -3318,7 +3345,7 @@ class RouterHTTP:
         try:
             rif = idem[len("reblock:"):] if idem.startswith("reblock:") else idem[:24]
             rec = pp.info(rif) if (pp is not None and idem) else None
-            vt = (json.loads(rec.get("corpo_json") or "{}").get("voucher_token")
+            vt = (_leggi_corpo(rec, "voucher_per_admin").get("voucher_token")
                   if isinstance(rec, dict) and (rec.get("idem_key") or idem) == idem else "")
         except Exception:
             vt = ""
@@ -5407,9 +5434,8 @@ class RouterHTTP:
                                            causale="rimborso disposto da admin")
                     pp.marca_da_rimborsare(rif)        # blocca il transfer + nessuna conferma tardiva
                     # SCATOLA NERA del rimborso admin (importo = totale ospite dal record)
-                    import json as _jr
                     try:
-                        dj = _jr.loads(rec.get("corpo_json") or "{}")
+                        dj = _leggi_corpo(rec, "admin_rimborso")
                     except Exception:
                         dj = {}
                     tot = int(dj.get("totale_cents", 0) or dj.get("prezzo_guest_cents", 0) or 0)
@@ -5578,7 +5604,7 @@ class RouterHTTP:
                            _rif_per_registro(rif), exc_info=True)
         if rec is not None:
             try:
-                dj = json.loads(rec.get("corpo_json") or "{}")
+                dj = _leggi_corpo(rec, "rimborso_dovuto_scheda")
             except Exception:
                 dj = {}
             pagato = int(dj.get("totale_cents", 0) or dj.get("prezzo_guest_cents", 0) or 0)
@@ -5789,7 +5815,7 @@ class RouterHTTP:
             recenti = []
         for rec in recenti:
             try:
-                dj = json.loads(rec.get("corpo_json") or "{}")
+                dj = _leggi_corpo(rec, "admin_rimborsi_dovuti")
             except Exception:
                 continue
             pi_ = str(dj.get("stripe_pi") or "")
@@ -6105,8 +6131,8 @@ class RouterHTTP:
         # risponde 409 (la garanzia e' gia' 'risolto'). L'evento e' stabile: non si raddoppia.
         try:
             _pp = getattr(self._sys, "pagamenti_pendenti", None)
-            _dj = json.loads(((_pp.info(rif) if _pp is not None else None) or {})
-                             .get("corpo_json") or "{}")
+            _dj = _leggi_corpo((_pp.info(rif) if _pp is not None else None) or {},
+                               "controversia_risolta")
         except Exception:
             _dj = {}
         _valuta = _dj.get("valuta") or "EUR"
@@ -6696,8 +6722,7 @@ class RouterHTTP:
                                       "nuovo libere: rifai il preventivo."}
         fuori = dict(corpo)
         try:
-            import json as _jr
-            salvato = _jr.loads(rec.get("corpo_json") or "{}")
+            salvato = _leggi_corpo(rec, "replay_prenotazione")
         except Exception:
             salvato = {}
         if isinstance(salvato, dict):
@@ -7225,10 +7250,9 @@ class RouterHTTP:
         owner = owner or (rec.get("host_id") or None)
         if host_id_atteso and owner != host_id_atteso:
             return 403, {"errore": "non_tua"}
-        import json as _j
         if approva:
             try:
-                corpo = _j.loads(rec.get("corpo_json") or "{}")
+                corpo = _leggi_corpo(rec, "decidi_richiesta")
             except Exception:
                 corpo = {}
             # PAGAMENTO: il link Stripe creato alla RICHIESTA scade in 30 min, ma l'host ha
@@ -7658,9 +7682,8 @@ class RouterHTTP:
         """Dopo il webhook 'pagato': conferma con importo e link voucher (grazie.html
         prometteva un'email che prima non partiva mai)."""
         try:
-            import json as _j
             try:
-                dj = _j.loads(rec.get("corpo_json") or "{}")
+                dj = _leggi_corpo(rec, "email_pagamento_confermato")
             except Exception:
                 dj = {}
             vt = dj.get("voucher_token", "")
@@ -7693,9 +7716,8 @@ class RouterHTTP:
             rec = pp.info(rif) if pp is not None else None
             if not rec:
                 return
-            import json as _j
             try:
-                dj = _j.loads(rec.get("corpo_json") or "{}")
+                dj = _leggi_corpo(rec, "email_cancellazione")
             except Exception:
                 dj = {}
             from fase86_email import corpo_cancellazione_html, oggetto
@@ -7716,9 +7738,8 @@ class RouterHTTP:
             rec = pp.info(rif) if pp is not None else None
             if not rec:
                 return
-            import json as _j
             try:
-                dj = _j.loads(rec.get("corpo_json") or "{}")
+                dj = _leggi_corpo(rec, "email_esito_controversia")
             except Exception:
                 dj = {}
             from fase86_email import corpo_esito_controversia_html, oggetto
@@ -7755,7 +7776,6 @@ class RouterHTTP:
         if interruttore is None or not interruttore.attivo():
             return True
         try:
-            import json as _jr
             fc = getattr(self._sys, "finanza", None)
             pd = getattr(self._sys, "payout", None)
             if fc is None or pd is None:
@@ -7763,7 +7783,7 @@ class RouterHTTP:
             if fc.esiste_evento("ritenuta:" + str(rif)):
                 self._completa_ritenuta(fc, pd, str(rif))
                 return True                           # gia' operata: i ritentativi non la rifanno
-            corpo = _jr.loads(rec.get("corpo_json") or "{}")
+            corpo = _leggi_corpo(rec, "opera_ritenuta")
             if penale or corpo.get("modo_pagamento") == "in_struttura":
                 return True
             # D23: esenta SOLO una partita IVA che il VIES ha detto valida -- dichiararla (o
@@ -7893,9 +7913,8 @@ class RouterHTTP:
             acct = (info or {}).get("stripe_account_id", "")
             # r2-bis: la valuta si legge QUI (prima stava piu' sotto) perche' le righe di registro
             # dei bonifici fermi qui sotto scrivano l'importo nella sua valuta, non in centesimi.
-            import json as _jt
             try:
-                valuta = _jt.loads(rec.get("corpo_json") or "{}").get("valuta") or "EUR"
+                valuta = _leggi_corpo(rec, "trasferisci").get("valuta") or "EUR"
             except Exception:
                 valuta = "EUR"
             if not acct and not a_mano:
@@ -8210,7 +8229,7 @@ class RouterHTTP:
         if leggi is None:
             return ""
         try:
-            addebito = leggi(str(json.loads(rec.get("corpo_json") or "{}").get("stripe_pi")
+            addebito = leggi(str(_leggi_corpo(rec, "addebito_del_pagamento").get("stripe_pi")
                                  or ""))
         except Exception:
             logger.warning("addebito dell'ospite non letto (ISOLATO): il bonifico non si lega",
@@ -8328,9 +8347,8 @@ class RouterHTTP:
                            exc_info=True)
         if self._controversia_aperta(ref):
             return 409, {"errore": "controversia_aperta"}
-        import json as _j
         try:
-            dj = _j.loads(rec.get("corpo_json") or "{}")
+            dj = _leggi_corpo(rec, "host_cancella")
         except Exception:
             dj = {}
         guest = int(dj.get("totale_cents", 0)) or int(dj.get("prezzo_guest_cents", 0))
@@ -9229,11 +9247,10 @@ class RouterHTTP:
             if carta is None or pp is None:
                 return {"applicata": False, "motivo": "carta_non_attiva"}
             # customer + payment_method dalla sessione dell'anticipo (cs_ salvato dal webhook)
-            import json as _j
             cs = ""
             try:
                 rec = pp.info(rif)
-                dj = _j.loads(rec.get("corpo_json") or "{}") if isinstance(rec, dict) else {}
+                dj = _leggi_corpo(rec, "penale_struttura") if isinstance(rec, dict) else {}
                 cs = dj.get("stripe_cs", "") if isinstance(dj, dict) else ""
             except Exception:
                 cs = ""
@@ -9333,7 +9350,7 @@ class RouterHTTP:
     def _corpo_del_pendente(rec):
         """Il corpo salvato con la prenotazione in attesa; {} se manca o e' illeggibile."""
         try:
-            corpo = json.loads(rec.get("corpo_json") or "{}")
+            corpo = _leggi_corpo(rec, "corpo_del_pendente")
         except Exception:
             corpo = {}
         return corpo if isinstance(corpo, dict) else {}
@@ -9409,7 +9426,7 @@ class RouterHTTP:
         if not isinstance(rec, dict):
             return "fuori_perimetro"
         try:
-            corpo = json.loads(rec.get("corpo_json") or "{}")
+            corpo = _leggi_corpo(rec, "lock_carta_credito")
         except Exception:
             corpo = {}
         if not isinstance(corpo, dict):
@@ -10480,7 +10497,7 @@ class RouterHTTP:
             #    ritentare Stripe (e lascia l'evento allo sweeper).
             sessione = obj0.get("id", "")
             stato_api = self._stato_pagamento_da_stripe(sessione)
-            if stato_api == "" and not (isinstance(sessione, str) and sessione.startswith("cs_")):
+            if stato_api == "" and not _e_una_pagina(sessione):
                 # Evento senza la sessione: Stripe non lo manda mai, non c'e' niente da
                 # rileggere e quindi niente da confermare. Non si fa ritentare: malformato
                 # resta malformato (stessa scelta del «nessun 'cs_'» qui sotto, ferrea 10).
@@ -10540,7 +10557,7 @@ class RouterHTTP:
                     # quando non ha salvato niente: ignorarlo rendeva «non salvato»
                     # indistinguibile da «salvato». Due casi, con rimedi OPPOSTI.
                     if not pp_.salva_stripe_session(rif, cs_id, pi_id):
-                        if not (isinstance(cs_id, str) and cs_id.startswith("cs_")):
+                        if not _e_una_pagina(cs_id):
                             # (a) IL DATO NON C'ERA NELL'EVENTO. Un evento vero porta sempre
                             # l'id di sessione: questo e' malformato, non un nostro guasto.
                             # Si registra con codice e sottocodice (ferrea 9) e NON si fa
@@ -10895,7 +10912,7 @@ class RouterHTTP:
             return None
         fine = int(_t.time())
         try:
-            dj = json.loads(rec.get("corpo_json") or "{}")
+            dj = _leggi_corpo(rec, "segna_blocco_aperto")
             v = self._sys.firma.decodifica(dj.get("voucher_token") or "")
             ts = v.get("prenotato_ts") if isinstance(v, dict) else None
             if isinstance(ts, int) and not isinstance(ts, bool) and ts > 0:
@@ -11085,7 +11102,7 @@ class RouterHTTP:
                 # inventa, si grida (una riga gia' scritta, strada (i), tace).
                 if esito == "incassato" and stato == "rimborsato":
                     try:
-                        dj = json.loads(rec.get("corpo_json") or "{}")
+                        dj = _leggi_corpo(rec, "incassa_blocchi")
                     except Exception:
                         dj = {}
                     dovuto = dj.get("blocco_rimborso_dovuto_cents")
@@ -11173,9 +11190,8 @@ class RouterHTTP:
                 pd.aggiorna_stato(rif, "maturato")        # in_attesa -> maturato (guadagno vero)
             # SCATOLA NERA dell'INCASSO (idempotente su evento_id: il retry del webhook non
             # raddoppia). Importo = totale pagato dall'ospite; + riga tassa se dovuta.
-            import json as _jg
             try:
-                dj = _jg.loads(rec.get("corpo_json") or "{}") if isinstance(rec, dict) else {}
+                dj = _leggi_corpo(rec, "riasserisci_incasso") if isinstance(rec, dict) else {}
             except Exception:
                 dj = {}
             val = dj.get("valuta") or "EUR"
@@ -11257,7 +11273,7 @@ class RouterHTTP:
                 return False
             stato = rec.get("stato", "")
             try:
-                _segno = json.loads(rec.get("corpo_json") or "{}").get("pagamento_tardivo")
+                _segno = _leggi_corpo(rec, "conferma_segno").get("pagamento_tardivo")
             except Exception:
                 _segno = None
             if stato == "pagato" and _segno in ("da_finire", "payout_scritto"):
@@ -11315,7 +11331,7 @@ class RouterHTTP:
                 # sweeper lasciandole occupate per sempre. La riga compare lo stesso e
                 # dichiara da sé cosa manca perché il pulsante non ci sia.
                 try:
-                    _dj = json.loads(rec.get("corpo_json") or "{}")
+                    _dj = _leggi_corpo(rec, "conferma_rimborso")
                 except Exception:
                     _dj = {}
                 self._giornale(tipo="rimborso", riferimento=rif,
@@ -11368,7 +11384,7 @@ class RouterHTTP:
                     # registro non è una coda di lavoro. Non ha avuto NIENTE in cambio, quindi
                     # gli spetta tutto il pagato. Idempotente su `evento_id`.
                     try:
-                        _dj = json.loads(rec.get("corpo_json") or "{}")
+                        _dj = _leggi_corpo(rec, "conferma_rimborso_tardivo")
                     except Exception:
                         _dj = {}
                     self._giornale(tipo="rimborso", riferimento=rif,
@@ -11387,9 +11403,8 @@ class RouterHTTP:
                     logger.warning("aggiorna_idem post-reblock fallito (ignorato)",
                                    exc_info=True)
                 # ricreo payout maturato + garanzia dai dati salvati
-                import json as _j3
                 try:
-                    dj = _j3.loads(rec.get("corpo_json") or "{}")
+                    dj = _leggi_corpo(rec, "conferma_bonifico")
                 except Exception:
                     dj = {}
                 pd = getattr(self._sys, "payout", None)
@@ -11457,8 +11472,7 @@ class RouterHTTP:
         """True se la prenotazione pendente e' 'paga in struttura' (letto dal corpo_json che
         _registra_hold ha salvato). Isolato: dubbio -> False (percorso online standard)."""
         try:
-            import json as _j
-            dj = _j.loads(rec.get("corpo_json") or "{}") if isinstance(rec, dict) else {}
+            dj = _leggi_corpo(rec, "rec_in_struttura") if isinstance(rec, dict) else {}
             return dj.get("modo_pagamento") == "in_struttura"
         except Exception:
             return False
@@ -11493,7 +11507,7 @@ class RouterHTTP:
                 # Restituire il totale renderebbe denaro mai ricevuto — una perdita nostra su
                 # un disguido che non è colpa di nessuno. Idempotente su `evento_id`.
                 try:
-                    _dj = json.loads(rec.get("corpo_json") or "{}")
+                    _dj = _leggi_corpo(rec, "conferma_struttura")
                 except Exception:
                     _dj = {}
                 self._giornale(tipo="rimborso", riferimento=rif,
@@ -11553,7 +11567,7 @@ class RouterHTTP:
         if fc is not None and fc.esiste_evento(evento):
             return
         try:
-            dj = json.loads(rec.get("corpo_json") or "{}") if isinstance(rec, dict) else {}
+            dj = _leggi_corpo(rec, "credito_host_al_pagamento") if isinstance(rec, dict) else {}
         except Exception:
             dj = {}
         hid = rec.get("host_id") if isinstance(rec, dict) else None
@@ -11573,7 +11587,7 @@ class RouterHTTP:
             sconto = int(righe[0].get("importo_cents") or 0)
             pp = getattr(self._sys, "pagamenti_pendenti", None)
             rec = pp.info(rif) if pp is not None else None
-            dj = json.loads((rec or {}).get("corpo_json") or "{}")
+            dj = _leggi_corpo(rec or {}, "rendi_credito_referral")
             valore = self._valore_del_credito(dj)
             viral = getattr(self._sys, "viral", None)
             if valore is None or viral is None:
@@ -14025,9 +14039,8 @@ class RouterHTTP:
             pp = getattr(self._sys, "pagamenti_pendenti", None)
             rec = pp.info(rif) if (pp is not None and rif) else None
             if rec is not None and rec.get("stato") == "pagato":
-                import json as _j
                 try:
-                    cj = _j.loads(rec.get("corpo_json") or "{}")
+                    cj = _leggi_corpo(rec, "arricchisci_metrica")
                 except Exception:
                     cj = {}
                 p["prezzo_guest_cents"] = cj.get("prezzo_guest_cents", 0)
@@ -14278,7 +14291,7 @@ def _pagina_stripe_chiusa(sistema: Any, rec: Dict[str, Any]) -> bool:
     # F5 (11/11): un gateway che non sa chiudere la pagina fa come prima del pezzo 3; senza,
     # l'eccezione a ogni giro teneva la stanza per sempre, senza tetto e senza ERROR
     chiudi = getattr(getattr(sistema, "stripe", None), "chiudi_sessione", None)
-    if not (isinstance(cs, str) and cs.startswith("cs_")) or chiudi is None:
+    if not _e_una_pagina(cs) or chiudi is None:
         return True
     esito = chiudi(cs)
     if esito.get("ok") and esito.get("stato") == "expired":
@@ -14420,7 +14433,7 @@ def _riprendi_cancellazione_host(sistema: Any, router: Any, rec: Dict[str, Any])
     if not rif:
         return
     try:
-        dj = json.loads(rec.get("corpo_json") or "{}")
+        dj = _leggi_corpo(rec, "riprendi_cancellazione_host")
     except Exception:
         dj = {}
     pen = dj.get("penale_host_cents")
@@ -14582,7 +14595,6 @@ def promemoria_una_passata(sistema: Any, router: Any, *,
     if pp is None or ep is None:
         return esito
     import datetime as _dt
-    import json as _json
     import time as _t
     from fase160_escrow_garanzia import FINESTRA_ORE_DEFAULT
     ora = ora_ts if (isinstance(ora_ts, (int, float)) and not isinstance(ora_ts, bool)) else _t.time()
@@ -14614,7 +14626,7 @@ def promemoria_una_passata(sistema: Any, router: Any, *,
                 esito["persi"].append(rif)
                 continue
             try:
-                dj = _json.loads(rec.get("corpo_json") or "{}")
+                dj = _leggi_corpo(rec, "promemoria")
             except Exception:
                 dj = {}
             dj = dj if isinstance(dj, dict) else {}
@@ -15614,7 +15626,6 @@ def invito_recensione_una_passata(sistema: Any, router: Any, *,
     if pp is None or ep is None:
         return esito
     import datetime as _dt
-    import json as _json
     import time as _t
     ora = ora_ts if (isinstance(ora_ts, (int, float)) and not isinstance(ora_ts, bool)) else _t.time()
     oggi = _dt.datetime.fromtimestamp(ora, tz=_dt.timezone.utc).date().isoformat()
@@ -15628,7 +15639,7 @@ def invito_recensione_una_passata(sistema: Any, router: Any, *,
         rif = str(rec.get("riferimento") or "")
         try:
             try:
-                dj = _json.loads(rec.get("corpo_json") or "{}")
+                dj = _leggi_corpo(rec, "invito_recensione")
             except Exception:
                 dj = {}
             dj = dj if isinstance(dj, dict) else {}

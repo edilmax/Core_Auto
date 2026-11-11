@@ -13,15 +13,47 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sqlite3
 import time
 from typing import Any, Callable, Dict, List, Optional
 
 from fase199_invarianti import transizioni_prenotazione as _transizioni_prenotazione
+from fase85_pagamenti_stripe import _e_una_pagina
 
 # BUG trovato da ruff (F821) 2026-07-23: i gestori `except` usavano `logger` senza definirlo ->
 # in produzione un fail-safe che scatta andava in NameError invece di loggare-e-proseguire.
 logger = logging.getLogger("core_auto.pagamenti_pendenti")
+
+
+def _corpo_salvato(testo: Any, punto: str, riferimento: Any = "-", *,
+                   scrive: bool = False) -> Any:
+    """Il corpo salvato con una prenotazione in attesa (`corpo_json`), letto dall'archivio.
+
+    F17 nell'archivio (11/11, variant-analysis): come `fase83._leggi_corpo`. Un corpo
+    illeggibile si DICE (`corpo_illeggibile`, col punto e il riferimento) e l'eccezione
+    PROSEGUE: ogni punto tiene il suo ripiego di prima. Prima era muto. Chi SCRIVE (`scrive`)
+    col ripiego {} riscrive il record SENZA i suoi importi, e da li' sembra sano a tutti: per
+    lui e' un ERROR, non un avviso (silent-failure-hunter, 11/11; l'alternativa, rifiutare la
+    scrittura, la decide il fondatore). Un JSON valido che non e' un oggetto si dice e torna
+    com'e'. Vuoto = {} e tace. Il riferimento si pulisce come `fase83._rif_per_registro`.
+    Guardia: `test_fase162_hold_pagamento.TestF17IlCorpoIlleggibileNellArchivioSiDice`."""
+    rif = re.sub(r"[^A-Za-z0-9:_.-]", "", str(riferimento))[:64]
+    rif = rif.replace("\r", "").replace("\n", "")      # la barriera che CodeQL riconosce
+    grida = logger.error if scrive else logger.warning
+    dopo = ("il record si riscrive SENZA i suoi importi" if scrive else "si fa come prima")
+    try:
+        corpo = json.loads(testo or "{}")
+    except Exception as exc:
+        grida("ARCHIVIO | codice: corpo_illeggibile | sottocodice: %s | punto: %s | "
+              "riferimento: %s | messaggio: il corpo salvato della prenotazione non si legge, %s",
+              type(exc).__name__, punto, rif, dopo)
+        raise
+    if not isinstance(corpo, dict):
+        grida("ARCHIVIO | codice: corpo_illeggibile | sottocodice: non_oggetto | punto: %s | "
+              "riferimento: %s | messaggio: il corpo salvato della prenotazione non e' un "
+              "oggetto, %s", punto, rif, dopo)
+    return corpo
 
 # ⛔ L'hold della stanza dura ALMENO quanto la pagina di pagamento di Stripe resta aperta
 # (il minimo che Stripe accetta per `expires_at`: fase85_pagamenti_stripe.py). Prima era
@@ -71,7 +103,7 @@ def blocco_della_carta(corpo: Any) -> Dict[str, Any]:
       'annullato' autorizzazione annullata (cancellazione) o scaduta: soldi mai entrati."""
     if isinstance(corpo, str):
         try:
-            corpo = json.loads(corpo or "{}")
+            corpo = _corpo_salvato(corpo, "blocco_della_carta")
         except (TypeError, ValueError):
             corpo = {}
     if not isinstance(corpo, dict):
@@ -231,7 +263,7 @@ class PagamentiPendenti:
         nostra). Parametro OPZIONALE: i chiamanti vecchi continuano a funzionare, e una
         prenotazione senza `pi_` semplicemente non si rimborsa da sola (non si indovina)."""
         if not (isinstance(riferimento, str) and riferimento
-                and isinstance(cs_id, str) and cs_id.startswith("cs_")):
+                and _e_una_pagina(cs_id)):
             return False
         pi = payment_intent if (isinstance(payment_intent, str)
                                 and payment_intent.startswith("pi_")) else None
@@ -252,7 +284,8 @@ class PagamentiPendenti:
                 if r is None:
                     return False
                 try:
-                    dj = _j.loads(r["corpo_json"] or "{}")
+                    dj = _corpo_salvato(r["corpo_json"], "salva_stripe_session", riferimento,
+                                        scrive=True)
                     if not isinstance(dj, dict):
                         dj = {}
                 except Exception:
@@ -303,7 +336,8 @@ class PagamentiPendenti:
                 if r is None:
                     return False
                 try:
-                    dj = _j.loads(r["corpo_json"] or "{}")
+                    dj = _corpo_salvato(r["corpo_json"], "salva_costo_gateway", riferimento,
+                                        scrive=True)
                     if not isinstance(dj, dict):
                         dj = {}
                 except Exception:
@@ -340,7 +374,8 @@ class PagamentiPendenti:
                 if r is None:
                     return False
                 try:
-                    dj = json.loads(r["corpo_json"] or "{}")
+                    dj = _corpo_salvato(r["corpo_json"], "segna_blocco", riferimento,
+                                        scrive=True)
                     if not isinstance(dj, dict):
                         dj = {}
                 except Exception:
@@ -486,7 +521,7 @@ class PagamentiPendenti:
                     # Stripe lo legge e rifa' il giro (fase83). Il CAS confronta anche il corpo:
                     # un'altra scrittura nel mezzo fa rileggere, non si perde.
                     try:
-                        dj = json.loads(corpo or "{}")
+                        dj = _corpo_salvato(corpo, "conferma_tardivo", riferimento, scrive=True)
                         dj = dj if isinstance(dj, dict) else {}
                     except Exception:
                         dj = {}
@@ -669,8 +704,8 @@ class PagamentiPendenti:
                 cj = {}
                 if r and r["corpo_json"]:
                     try:
-                        import json as _j
-                        cj = _j.loads(r["corpo_json"])
+                        cj = _corpo_salvato(r["corpo_json"], "marca_cancellata_host",
+                                            riferimento, scrive=True)
                     except Exception:
                         cj = {}
                 cj["penale_host_cents"] = int(penale_cents) if isinstance(penale_cents, int) else 0
@@ -875,7 +910,6 @@ class PagamentiPendenti:
         Il netto (`coperto_cents`) e' quanto la tariffa tecnica ha davvero coperto.
         Raggruppa anche per valuta: non si sommano mai valute diverse.
         """
-        import json as _j
         lim = limit if isinstance(limit, int) and not isinstance(limit, bool) \
             and 0 < limit <= 100000 else 20000
         vuoto = {"conteggio": 0, "cents": 0}
@@ -900,7 +934,7 @@ class PagamentiPendenti:
         for r in righe:
             out["letti"] += 1
             try:
-                dj = _j.loads(r["corpo_json"] or "{}")
+                dj = _corpo_salvato(r["corpo_json"], "aggrega_costi_tecnici")
             except Exception:
                 continue
             costo = dj.get("costo_pagamento_cents", 0)
@@ -983,7 +1017,7 @@ class PagamentiPendenti:
             con.close()
         for r in righe:
             try:
-                dj = json.loads(r["corpo_json"] or "{}")
+                dj = _corpo_salvato(r["corpo_json"], "per_payment_intent", r["riferimento"])
             except ValueError:
                 continue
             if isinstance(dj, dict) and pi in (dj.get("stripe_pi"), dj.get("blocco_pi")):

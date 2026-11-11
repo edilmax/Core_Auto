@@ -770,5 +770,27 @@ class TestPilastroZero_IlBonificoAllHostNonSiPagaDueVolte(unittest.TestCase):
         self.assertIn("codice: api_error", r["motivo"])
 
 
+class TestF18UnaRispostaInattesaDeiBonificiNonPortaIDatiNelRegistro(unittest.TestCase):
+    """F18 (11/11, variante di F12 trovata con variant-analysis): `risposta_inattesa: %.200r` in
+    `bonifico_di` metteva nel motivo -- che finisce nel registro -- i primi 200 caratteri
+    dell'oggetto arrivato da Stripe, con quello che c'e' dentro (email, nomi, metadati). Resta
+    solo COSA e' arrivato: id, tipo, stato, come in fase85 (`_in_breve`)."""
+
+    def test_il_motivo_dice_cosa_e_arrivato_non_cosa_c_e_dentro(self):
+        strana = {"object": "list", "has_more": False,
+                  "data": [{"id": "cus_1", "object": "customer", "email": "ospite@privato.it",
+                            "name": "Mario Rossi"}]}
+        r = ProviderConnect("sk", fetch=_StripeLista(lettura=strana)).bonifico_di("acct_1", "R")
+        self.assertFalse(r["ok"])
+        self.assertTrue(r["motivo"].startswith("risposta_inattesa: "), r)
+        self.assertIn("list", r["motivo"], "il tipo dell'oggetto arrivato resta")
+        for privato in ("ospite@privato.it", "Mario Rossi"):
+            self.assertNotIn(privato, r["motivo"])
+        import fase101_stripe_connect as _f101
+        with open(_f101.__file__, encoding="utf-8") as fh:
+            self.assertNotIn('risposta_inattesa: %', fh.read(),
+                             "nessun motivo deve copiare l'oggetto intero")
+
+
 if __name__ == "__main__":
     unittest.main()

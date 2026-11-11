@@ -15,7 +15,7 @@ import time
 import urllib.parse
 from typing import Any, Callable, Dict, List, Optional
 
-from fase85_pagamenti_stripe import _esito_sconosciuto, _motivo_errore
+from fase85_pagamenti_stripe import _esito_sconosciuto, _in_breve, _motivo_errore
 
 logger = logging.getLogger("core_auto.stripe_connect")
 
@@ -373,7 +373,8 @@ class ProviderConnect:
                 if not (isinstance(dati, list) and all(
                         isinstance(t, dict) and str(t.get("id") or "").startswith("tr_")
                         for t in dati)):
-                    return {"ok": False, "motivo": "risposta_inattesa: %.200r" % (r,)}
+                    # F18 (11/11): solo cosa e' arrivato, mai l'oggetto (dati dell'ospite)
+                    return {"ok": False, "motivo": "risposta_inattesa: " + _in_breve(r)}
                 trovati += [t for t in dati if isinstance(t.get("metadata"), dict)
                             and t["metadata"].get("riferimento") == riferimento]
                 if r.get("has_more") is not True:

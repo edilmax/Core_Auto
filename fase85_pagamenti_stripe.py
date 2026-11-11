@@ -28,6 +28,7 @@ from __future__ import annotations
 import datetime
 import json
 import logging
+import re
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 logger = logging.getLogger("core_auto.pagamenti_stripe")
@@ -110,6 +111,19 @@ def _in_breve(x: Any) -> str:
     if isinstance(err, dict):
         return "{error code=%s message=%s}" % (_v(err.get("code")), _v(err.get("message"), 200))
     return "{id=%s object=%s status=%s}" % tuple(_v(x.get(k)) for k in ("id", "object", "status"))
+
+
+_NUMERO_DELLA_PAGINA = re.compile(r"cs_[A-Za-z0-9_]+")
+
+
+def _e_una_pagina(numero: Any) -> bool:
+    """Il numero di una pagina di pagamento (Checkout Session, `cs_...`): solo quello va
+    nell'indirizzo di Stripe e si salva col blocco. GRUPPO H (11/11): era scritto in quattro
+    copie come `len > 3` (`> 3` -> `!= 3` sopravviveva: S1, S2, S15), e in altri sei punti col
+    solo `startswith("cs_")`. Ora un controllo solo, con la forma dei numeri veri di Stripe
+    (`cs_test_...`, `cs_live_...`: lettere, cifre, `_`): nient'altro entra nell'indirizzo che
+    parte con la nostra chiave -- `cs_../../customers` passava (security-reviewer)."""
+    return isinstance(numero, str) and _NUMERO_DELLA_PAGINA.fullmatch(numero) is not None
 
 
 def _esito_sconosciuto(exc: BaseException) -> bool:
@@ -224,9 +238,7 @@ class ProviderStripe:
             if not (isinstance(url, str) and url):
                 return None
             cs = resp.get("id")
-            return {"url": url,
-                    "id": cs if isinstance(cs, str) and cs.startswith("cs_") and len(cs) > 3
-                    else ""}
+            return {"url": url, "id": cs if _e_una_pagina(cs) else ""}
         except Exception:
             logger.warning("Stripe: creazione link fallita (ISOLATA -> None)",
                            exc_info=True)
@@ -239,7 +251,7 @@ class ProviderStripe:
         SO (rete, 5xx, risposta illeggibile). Misurato su Stripe di prova (11/11): una sessione
         aperta risponde 200 'expired', una non aperta 400; dopo un rifiuto certo si rilegge la
         sessione per sapere com'e'. Il corpo non e' vuoto apposta: vuoto, `_fetch` fa una GET."""
-        if not (isinstance(sessione, str) and sessione.startswith("cs_") and len(sessione) > 3):
+        if not _e_una_pagina(sessione):
             return {"ok": False, "stato": "", "motivo": "sessione_assente"}
         intestazione = {"Authorization": "Bearer " + self._key}
         rifiuto = ""
@@ -284,7 +296,7 @@ class ProviderStripe:
         niente e' bloccato."""
         vuoto: Dict[str, Any] = {"ok": False, "pi": "", "stato": "", "incassabile_cents": 0,
                                  "motivo": ""}
-        if not (isinstance(sessione, str) and sessione.startswith("cs_") and len(sessione) > 3):
+        if not _e_una_pagina(sessione):
             return dict(vuoto, motivo="sessione_assente")
         intestazione = {"Authorization": "Bearer " + self._key}
         try:
@@ -513,7 +525,7 @@ class ProviderStripe:
         LETTURA SOLA. Ritorna uno di `STATI_SESSIONE`, o "" se la risposta non si puo'
         credere: input che non e' una sessione, rete, risposta di un altro oggetto, valore
         mai dichiarato da Stripe. Il chiamante tratta "" come «non so» e non conferma."""
-        if not (isinstance(sessione, str) and sessione.startswith("cs_")):
+        if not _e_una_pagina(sessione):
             return ""
         try:
             resp = self._fetch(STRIPE_URL + "/" + sessione, None,
@@ -624,7 +636,8 @@ class ProviderStripe:
             if not (isinstance(addebito, dict) and isinstance(addebito.get("disputed"), bool)):
                 # un addebito senza `disputed` leggibile non e' «non contestato»: non lo so
                 return {"ok": False, "contestato": False,
-                        "motivo": "addebito_senza_disputed: %r" % (addebito,)}
+                        # variante di F12 (11/11): solo cosa e' arrivato, mai l'addebito intero
+                        "motivo": "addebito_senza_disputed: " + _in_breve(addebito)}
             return {"ok": True, "contestato": addebito["disputed"], "motivo": ""}
         except Exception as exc:
             logger.error("Stripe: LETTURA CONTESTAZIONE FALLITA pi=%s -> %s: %s",
@@ -756,9 +769,7 @@ class ProviderStripe:
             if not (isinstance(url, str) and url):
                 return None
             cs = resp.get("id")
-            return {"url": url,
-                    "id": cs if isinstance(cs, str) and cs.startswith("cs_") and len(cs) > 3
-                    else ""}
+            return {"url": url, "id": cs if _e_una_pagina(cs) else ""}
         except Exception:
             logger.warning("Stripe: creazione link ANTICIPO fallita (ISOLATA -> None)",
                            exc_info=True)

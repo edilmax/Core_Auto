@@ -1032,6 +1032,37 @@ class TestGatewayInAvaria(unittest.TestCase):
                                             link_pagamento=lambda d, r=risposta: r)
                 self.assertEqual(proto._link_isolato({}), atteso)
 
+    def test_S44_S48_senza_pagina_il_link_e_None_e_il_corpo_non_ha_chiavi_finte(self):
+        """GRUPPO H (11/11), sopravvissuti di Mutatest su fase59 (039497e): nessuno dichiarato
+        equivalente (B6), il contratto si prova. Senza una pagina `_link_isolato` torna sempre
+        (None, "") -- senza gateway (S45, S46), gateway che solleva (S48), indirizzo non valido
+        (S47, gia' in prova8) -- e un True al posto di None finirebbe all'ospite come
+        `payment_url: True` (S46). Un gateway che da' solo l'indirizzo non scrive nel corpo un
+        numero vuoto (S44)."""
+        def boom(dati):
+            raise RuntimeError("psp giu'")
+        for caso, link in (("senza gateway", None), ("gateway che solleva", boom)):
+            with self.subTest(caso=caso):
+                proto = ProtocolloConcierge(_InventarioFinto(), FirmaQuote(SEGRETO),
+                                            link_pagamento=link)
+                with self.assertLogs(LOGGER, level="DEBUG") as log:
+                    fase59_concierge.logger.debug("ascolto")
+                    esito = proto._link_isolato({})
+                self.assertIs(esito[0], None, log.output)
+                self.assertEqual(esito, (None, ""))
+        inv, cat, _ = _setup(unita=1)
+        diretto = ProtocolloConcierge(inv, FirmaQuote(SEGRETO), catalogo=cat)
+        r = diretto.prenota({"quote_token": self._token(diretto), "email": "g@x.it"})
+        self.assertEqual(r.status, 201, r.corpo)
+        self.assertNotIn("payment_url", r.corpo, "senza gateway non c'e' una pagina da pagare")
+        self.assertNotIn("stripe_cs", r.corpo)
+        inv, cat, _ = _setup(unita=1)
+        vecchio = ProtocolloConcierge(inv, FirmaQuote(SEGRETO), catalogo=cat,
+                                      link_pagamento=lambda d: "https://pay/2")
+        r = vecchio.prenota({"quote_token": self._token(vecchio), "email": "g@x.it"})
+        self.assertEqual((r.status, r.corpo.get("payment_url")), (201, "https://pay/2"), r.corpo)
+        self.assertNotIn("stripe_cs", r.corpo, "un numero vuoto non si scrive nel corpo")
+
 
 class TestDettaglioInAvaria(unittest.TestCase):
     def test_dettaglio_in_avaria_LASCIA_LA_TRACCIA(self):

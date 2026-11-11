@@ -648,6 +648,14 @@ class TestIlNumeroDellaPaginaSiControllaPrimaDellIndirizzo(unittest.TestCase):
                     self.assertIsNone(getattr(ProviderCarta("sk", fetch=f), nome)(numero))
                     self.assertEqual(f.chiamate, [], "nessuna chiamata a Stripe")
 
+    def test_il_confine_del_numero(self):
+        """GRUPPO H (11/11): come in fase85, `len >= 4`, senza mutanti equivalenti: "cs_" no,
+        "cs_a" si', un numero lungo si'."""
+        from fase183_carta_offsession import _e_una_pagina
+        for numero, atteso in (("cs_", False), ("cs_a", True), ("cs_test_1", True)):
+            with self.subTest(numero=numero):
+                self.assertIs(_e_una_pagina(numero), atteso)
+
     def test_una_pagina_vera_si_legge(self):
         for nome in ("dettagli_pagamento_da_sessione", "dettagli_da_sessione"):
             with self.subTest(funzione=nome):

@@ -700,6 +700,19 @@ class TestLaContestazioneDellaBanca(unittest.TestCase):
                                                {"Authorization": "Bearer sk_test_k"})],
                                  "una LETTURA sola: GET del pagamento con l'addebito espanso")
 
+    def test_un_addebito_illeggibile_non_porta_i_dati_dell_ospite_nel_motivo(self):
+        """security-reviewer (11/11), variante di F12: `addebito_senza_disputed: %r` copiava
+        nel motivo l'addebito intero, che porta i dati di fatturazione dell'ospite."""
+        f = FetchFinto({PAGAMENTI_URL: {"id": "pi_ok", "latest_charge": {
+            "id": "ch_1", "object": "charge", "billing_details": {
+                "email": "ospite@privato.it", "name": "Mario Rossi"}}}})
+        esito = _p(f).contestazione_di("pi_ok")
+        self.assertEqual((esito["ok"], esito["contestato"]), (False, False), esito)
+        self.assertTrue(esito["motivo"].startswith("addebito_senza_disputed: "), esito)
+        self.assertIn("ch_1", esito["motivo"], "resta COSA e' arrivato")
+        for privato in ("ospite@privato.it", "Mario Rossi"):
+            self.assertNotIn(privato, esito["motivo"])
+
     def test_senza_addebito_non_c_e_niente_da_contestare(self):
         f = FetchFinto({PAGAMENTI_URL: {"id": "pi_ok", "latest_charge": None}})
         self.assertEqual(_p(f).contestazione_di("pi_ok"),
@@ -976,6 +989,80 @@ class TestChiudereLaPaginaStripe(unittest.TestCase):
         # bonifici, saldo): nessuno deve restare
         with open(_f85.__file__, encoding="utf-8") as fh:
             self.assertNotIn("risposta_inattesa: %r", fh.read())
+
+
+class TestIlNumeroDellaPaginaSiControllaInUnPostoSolo(unittest.TestCase):
+    """GRUPPO H (11/11), sopravvissuti S1 S2 S15 di Cosmic Ray e Mutatest: `len(x) > 3` -> `!= 3`
+    non si distingueva con una stringa vera, ma il controllo accetta ogni `str` (anche una
+    sottoclasse) e un ingresso che li distingue esiste: NON equivalenti (B6). Il controllo stava
+    in quattro copie; ora e' uno, scritto `len >= 4`: identico per ogni ingresso (len e' sempre
+    un intero) e senza mutanti equivalenti -- "cs_", "cs_a" e un numero lungo li distinguono."""
+
+    def test_cosa_e_una_pagina(self):
+        from fase85_pagamenti_stripe import _e_una_pagina
+        for numero, atteso in (("cs_a", True), ("cs_test_a1B2c3", True), ("cs_", False),
+                               ("cs", False), ("", False), ("pi_1", False), ("xcs_a", False),
+                               (None, False), (5, False), (b"cs_a", False), (["cs_a"], False),
+                               # security-reviewer (11/11): il numero va nell'indirizzo di
+                               # Stripe, con la nostra chiave: niente che cambi l'indirizzo
+                               ("cs_../../customers", False), ("cs_a/b", False),
+                               ("cs_a?x=1", False), ("cs_a#f", False), ("cs_a b", False),
+                               ("cs_a\n", False), ("cs_a%2F", False), ("cs_live_X9z", True)):
+            with self.subTest(numero=numero):
+                self.assertIs(_e_una_pagina(numero), atteso)
+
+    def test_il_numero_della_pagina_si_controlla_solo_qui(self):
+        """variant-analysis (11/11): sei punti controllavano il numero col solo
+        `startswith("cs_")` (fase83, fase85, fase162, fase181): ora passano tutti da qui."""
+        import ast
+        import glob
+        import os
+        radice = os.path.dirname(os.path.abspath(_f85.__file__))
+        sparsi = []
+        for percorso in sorted(glob.glob(os.path.join(radice, "fase*.py"))):
+            with open(percorso, encoding="utf-8") as fh:
+                albero = ast.parse(fh.read())
+            # le CHIAMATE `.startswith("cs_")` nel codice (un commento che lo nomina non conta)
+            for c in ast.walk(albero):
+                if (isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute)
+                        and c.func.attr == "startswith" and c.args
+                        and isinstance(c.args[0], ast.Constant) and c.args[0].value == "cs_"):
+                    sparsi.append("%s:%d" % (os.path.basename(percorso), c.lineno))
+        self.assertTrue(len(glob.glob(os.path.join(radice, "fase*.py"))) > 50,
+                        "PREMESSA: la guardia deve vedere i moduli di produzione")
+        self.assertEqual(sparsi, [], "il numero della pagina si controlla con `_e_una_pagina`")
+
+
+class TestUnaRispostaCheParlaDiUnAltroOggettoNonVale(unittest.TestCase):
+    """GRUPPO H (11/11), sopravvissuto S3 (`s.get("id") == sessione` -> `<=`) e le sue varianti
+    (variant-analysis: gli altri tre confronti dell'id in fase85): una risposta che porta l'id
+    di UN'ALTRA pagina o di un altro pagamento non vale, ne' minore ne' maggiore di quello
+    chiesto. La prova di prima aveva solo «cs_altra», maggiore di «cs_a»: `<=` passava. Il
+    motivo comincia sempre con «risposta_inattesa: » (un `+` mutato lo cambia in un TypeError)."""
+
+    def _guarda(self, esito, chiavi, attese):
+        self.assertEqual(tuple(esito[k] for k in chiavi), attese, esito)
+        self.assertTrue(esito["motivo"].startswith("risposta_inattesa: "), esito)
+
+    def test_id_minore_o_maggiore_di_quello_chiesto(self):
+        pi_buono = {"id": "pi_b", "status": "requires_capture", "amount_capturable": 100}
+        for altro in ("cs_a", "cs_c"):           # chiesta "cs_b": una minore e una maggiore
+            with self.subTest(funzione="chiudi_sessione", altro=altro):
+                f = FetchFinto({STRIPE_URL: {"id": altro, "status": "expired"}})
+                self._guarda(_p(f).chiudi_sessione("cs_b"), ("ok", "stato"), (False, ""))
+            with self.subTest(funzione="pagamento_della_sessione, pagina", altro=altro):
+                f = FetchFinto({STRIPE_URL: {"id": altro, "payment_intent": "pi_b"},
+                                PAGAMENTI_URL: pi_buono})
+                self._guarda(_p(f).pagamento_della_sessione("cs_b"), ("ok", "pi"), (False, ""))
+        for altro in ("pi_a", "pi_c"):           # chiesto "pi_b"
+            with self.subTest(funzione="pagamento_della_sessione, pagamento", altro=altro):
+                f = FetchFinto({STRIPE_URL: {"id": "cs_b", "payment_intent": "pi_b"},
+                                PAGAMENTI_URL: dict(pi_buono, id=altro)})
+                self._guarda(_p(f).pagamento_della_sessione("cs_b"),
+                             ("ok", "pi", "incassabile_cents"), (False, "", 0))
+            with self.subTest(funzione="stato_pagamento", altro=altro):
+                f = FetchFinto({PAGAMENTI_URL: {"id": altro, "status": "succeeded"}})
+                self._guarda(_p(f).stato_pagamento("pi_b"), ("ok", "stato"), (False, ""))
 
 
 if __name__ == "__main__":

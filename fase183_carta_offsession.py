@@ -27,15 +27,13 @@ import json
 import logging
 from typing import Any, Callable, Dict, Optional
 
+# F16 (11/11): nell'indirizzo di Stripe va solo il numero di una pagina; il controllo e' UNO,
+# in fase85 (gruppo H: forma dei numeri veri, `cs_../` non passa)
+from fase85_pagamenti_stripe import _e_una_pagina
+
 logger = logging.getLogger("core_auto.carta_offsession")
 
 _BASE = "https://api.stripe.com/v1"
-
-
-def _e_una_pagina(numero: Any) -> bool:
-    """F16 (11/11): nell'indirizzo di Stripe va solo il numero di una pagina (`cs_...`), come in
-    fase85: un valore storto («../», un altro oggetto) leggerebbe un'altra cosa."""
-    return isinstance(numero, str) and numero.startswith("cs_") and len(numero) > 3
 
 
 def _intero_pos(v: Any) -> bool:

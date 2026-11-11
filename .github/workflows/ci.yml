@@ -1072,32 +1072,37 @@ jobs:
         with:
           python-version: '3.11'
           cache: pip
-      # ⛔ QUESTO PASSO E' UNA RETE DI SICUREZZA, NON IL GIUDICE: serve solo se la wheel di
-      # Atheris manca e pip deve compilare. Percio' ha un'attesa LIMITATA e un secondo
-      # tentativo (un intoppo del mirror e' quasi sempre passeggero); se non riesce nemmeno
-      # il secondo, lo DICE e prosegue, perche' il giudice vero e' il passo dopo -- `pip
-      # install atheris` -- che se davvero non riesce a costruire diventa rosso da solo e
-      # per il motivo giusto.
+      # ⛔ F19 (11/11, letto nei registri della CI di 3cfa246 e 88fec64): prima c'erano DUE
+      # passi -- apt+clang con un tetto di 6 minuti ma tentativi fino a 660 secondi, poi `pip
+      # install atheris`. Con i mirror di Ubuntu appesi il primo passo veniva ucciso PRIMA del
+      # suo ripiego («proseguo, il giudice e' pip»), che non scattava mai, e il fuzzer non
+      # partiva. Misurato sul giro verde dell'11/11 10:52: pip installa atheris dalla WHEEL gia'
+      # pronta (atheris-3.0.0-cp311 manylinux), clang non serve. Quindi: prima la wheel; apt e
+      # clang SOLO se manca, con tentativi che stanno dentro il tetto del passo (guardia
+      # `test_F19_i_tentativi_dentro_un_passo_stanno_nel_suo_tetto`).
       # ⛔ NIENTE `continue-on-error` E NIENTE `|| true`, e la ragione non e' formale:
       #    `continue-on-error` fa risultare il job **success** anche quando e' fallito, e
       #    questo job e' BLOCCANTE (sta nei `needs` del gate) -- il cancello vedrebbe verde
       #    un giro che non ha fuzzato niente. Lo vieta `test_nessun_continue_on_error_nei_
       #    job_bloccanti`, che mi ha preso in flagrante il 2026-08-19. `|| true`
       #    nasconderebbe l'esito ancora meglio (regola ferrea 12).
-      #    Qui il fallimento e' GESTITO DENTRO il comando e SCRITTO nel registro: il passo
-      #    resta onesto (esce 0 perche' non ha fallito il suo compito, che e' «prova a
-      #    installare clang»), e chi legge trova la riga che dice cosa non e' riuscito.
-      - name: Dipendenze di build (rete di sicurezza se manca la wheel)
-        timeout-minutes: 6
+      #    I ripieghi di apt sono GESTITI DENTRO il comando e SCRITTI nel registro; l'ultimo
+      #    `pip install` del ramo senza wheel NON e' protetto: se pip non costruisce, il passo
+      #    e' rosso da solo e per il motivo giusto.
+      - name: Installa Atheris (prima la wheel pronta; apt e clang solo se manca)
+        timeout-minutes: 12
         run: |
           set -x
-          timeout 150 sudo apt-get update || timeout 150 sudo apt-get update \
-            || echo "ATTENZIONE: apt-get update non riuscito due volte; proseguo, il giudice e' pip"
-          timeout 180 sudo apt-get install -y clang || timeout 180 sudo apt-get install -y clang \
-            || echo "ATTENZIONE: clang NON installato dopo due tentativi; se la wheel di Atheris c'e' non serve, se non c'e' il passo dopo diventa rosso"
-      - name: Installa Atheris
-        timeout-minutes: 8
-        run: pip install atheris
+          if timeout 120 pip install --only-binary=:all: atheris; then
+            echo "wheel di Atheris installata: clang non serve, apt non si tocca"
+          else
+            echo "ATTENZIONE: wheel di Atheris non disponibile: la costruisco (serve clang)"
+            timeout 120 sudo apt-get update \
+              || echo "ATTENZIONE: apt-get update non riuscito; proseguo, il giudice e' pip"
+            timeout 180 sudo apt-get install -y clang \
+              || echo "ATTENZIONE: clang NON installato; se pip non costruisce, il passo e' rosso"
+            timeout 240 pip install atheris
+          fi
       - name: Fuzz motori-soldi (max 2 min; crash o invariante rotto = STOP)
         run: python collaudi/fuzz_soldi.py -max_total_time=120 -atheris_runs=500000
 
