@@ -349,5 +349,57 @@ class TestIBuchiDelGiudice(unittest.TestCase):
         self.assertEqual(p.stato_di("p1"), "maturato")
 
 
+class TestFB1LaRitenutaTrattenutaSiSegnaColBonifico(unittest.TestCase):
+    """FB1 (11/11): `trattieni_ritenuta` riduce il bonifico e segna la ritenuta in UNA scrittura,
+    una volta sola e mai fino a zero; un archivio di prima riceve la colonna senza perdere righe."""
+
+    def test_una_volta_sola_e_la_penale_dopo_non_la_disfa(self):
+        p = pd()
+        p.registra_maturato("p1", "h1", 18000, "EUR")
+        self.assertEqual(p.ritenuta_trattenuta("p1"), 0)
+        self.assertTrue(p.trattieni_ritenuta("p1", 4200))
+        self.assertEqual((p.info("p1")["minori"], p.ritenuta_trattenuta("p1")), (13800, 4200))
+        self.assertFalse(p.trattieni_ritenuta("p1", 4200), "una seconda volta NON si toglie")
+        self.assertTrue(p.imposta_importo("p1", 13100))          # una penale dopo
+        self.assertEqual((p.info("p1")["minori"], p.ritenuta_trattenuta("p1")), (13100, 4200))
+
+    def test_al_confine_non_si_azzera_il_bonifico(self):
+        for minori, esito, resta in ((4200, False, 4200), (4201, True, 1)):
+            with self.subTest(minori=minori):
+                p = pd()
+                p.registra_maturato("p1", "h1", minori, "EUR")
+                self.assertIs(p.trattieni_ritenuta("p1", 4200), esito)
+                self.assertEqual(p.info("p1")["minori"], resta)
+
+    def test_importi_assurdi_e_bonifico_assente(self):
+        p = pd()
+        p.registra_maturato("p1", "h1", 18000, "EUR")
+        for r in (0, -5, True, "4200", None):
+            with self.subTest(r=r):
+                self.assertFalse(p.trattieni_ritenuta("p1", r))
+        self.assertFalse(p.trattieni_ritenuta("nessuno", 100))
+        self.assertEqual(p.ritenuta_trattenuta("nessuno"), 0)
+        self.assertEqual(p.info("p1")["minori"], 18000)
+
+    def test_un_archivio_di_prima_riceve_la_colonna_e_tiene_le_righe(self):
+        import os
+        import tempfile
+        d = tempfile.mkdtemp()
+        f = os.path.join(d, "payout.db")
+        con = sqlite3.connect(f)
+        with con:
+            con.execute("CREATE TABLE payout (prenotazione_id TEXT PRIMARY KEY, host_id TEXT NOT "
+                        "NULL, minori INTEGER NOT NULL, valuta TEXT NOT NULL, stato TEXT NOT "
+                        "NULL, ts INTEGER NOT NULL)")
+            con.execute("INSERT INTO payout VALUES ('p1','h1',9700,'EUR','maturato',1)")
+        con.close()
+        p = crea_payout_dashboard(f)
+        p.inizializza_schema()
+        p.inizializza_schema()                                   # ogni avvio: niente errori
+        self.assertEqual((p.info("p1")["minori"], p.ritenuta_trattenuta("p1")), (9700, 0))
+        self.assertTrue(p.trattieni_ritenuta("p1", 2000))
+        self.assertEqual(p.info("p1")["minori"], 7700)
+
+
 if __name__ == "__main__":
     unittest.main()

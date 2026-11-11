@@ -573,10 +573,10 @@ class TestSeNonSiPuoOperareIlBonificoNonParte(_Base):
         rif, _q = self._prenota_paga()
         pieno = self._maturato(rif)
         pd = self.sis.payout
-        morto = self._muore_su(pd, "imposta_importo", lambda a, kw: True)
+        morto = self._muore_su(pd, "trattieni_ritenuta", lambda a, kw: True)
         with self.assertRaises(morto):
             self._opera(rif)
-        del pd.imposta_importo
+        del pd.trattieni_ritenuta
         self.assertIs(self._opera(rif), True)
         self._ritenuta_una_volta(rif, pieno)
 
@@ -588,6 +588,36 @@ class TestSeNonSiPuoOperareIlBonificoNonParte(_Base):
         self.assertTrue(self.sis.payout.imposta_importo(rif, ridotto))
         self.assertIs(self._opera(rif), True)
         self.assertEqual(self._maturato(rif), ridotto)
+
+    def test_FB1_morto_prima_di_ridurre_e_penale_nel_mezzo_la_ritenuta_si_trattiene(self):
+        """FB1 (revisione Fable, 10/11): morto fra la riga di giornale e la riduzione del
+        bonifico, e una penale compensata nel mezzo (fase177 `imposta_importo(..., disp - quota,
+        solo_se_stato="maturato")`). `_completa_ritenuta` riduceva solo un bonifico ancora PIENO:
+        qui non lo e' piu', non riduceva, e il bonifico partiva intero mentre il giornale (F24, CU)
+        diceva la ritenuta trattenuta. Lo Stato la vuole da noi; all'host era gia' pagata."""
+        self._accendi()
+        rif, _q = self._prenota_paga()
+        pieno = self._maturato(rif)
+        pd = self.sis.payout
+        morto = self._muore_su(pd, "trattieni_ritenuta", lambda a, kw: True)
+        with self.assertRaises(morto):
+            self._opera(rif)
+        del pd.trattieni_ritenuta                               # il processo riparte
+        righe = self._righe(rif, "ritenuta")
+        self.assertEqual(len(righe), 1, "PREMESSA: la riga della ritenuta c'e'")
+        ritenuta = int(righe[0]["importo_cents"])
+        self.assertEqual(self._maturato(rif), pieno, "PREMESSA: bonifico ancora PIENO")
+        ridotto = pieno - 700                                   # la penale compensata nel mezzo
+        self.assertTrue(pd.imposta_importo(rif, ridotto, solo_se_stato="maturato"))
+        self.r._trasferisci_all_host(rif, ridotto)
+        pagato = sum(c[1] for c in self.connect.chiamate)
+        self.assertEqual(
+            pagato, ridotto - ritenuta,
+            "FB1: l'host ha ricevuto %d cents ma il giornale dice ritenuta %d su un bonifico di "
+            "%d: gli spettavano %d (la ritenuta scritta nel giornale non e' stata trattenuta)"
+            % (pagato, ritenuta, ridotto, ridotto - ritenuta))
+        self.assertEqual(len(self._righe(rif, "ritenuta")), 1, "la ritenuta resta UNA")
+        self.assertEqual(self._maturato(rif), ridotto - ritenuta)
 
     def test_ritenuta_oltre_il_bonifico_ferma_e_grida(self):
         """Anche al CONFINE (ritenuta uguale al bonifico: all'host resterebbe zero) -- e il

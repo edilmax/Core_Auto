@@ -7745,7 +7745,8 @@ class RouterHTTP:
                                  % (base, notti, minori - ritenuta))
             if not fatto:
                 raise RuntimeError("giornale non scritto")
-            if not pd.imposta_importo(str(rif), minori - ritenuta):
+            # FB1 (11/11): riduzione e segno nella STESSA scrittura del registro dei bonifici
+            if not pd.trattieni_ritenuta(str(rif), ritenuta):
                 raise RuntimeError("registro dei bonifici non aggiornato")
             logger.warning("RITENUTA OPERATA | RIF: %s | HOST_ID: %s | BASE: %d | RITENUTA: %d "
                            "| BONIFICO: %d -> %d", _rif_per_registro(rif), host_id, base,
@@ -7760,16 +7761,15 @@ class RouterHTTP:
     @staticmethod
     def _completa_ritenuta(fc, pd, rif):
         """VA4 (8/11): riga di giornale scritta e bonifico non ancora ridotto (processo morto
-        in mezzo): si riduce. Solo se il bonifico e' ancora quello PIENO: una penale compensata
-        dopo l'ha cambiato legittimamente, e non va restituita."""
+        in mezzo): si riduce. FB1 (11/11): se e' gia' stata tolta lo dice il registro dei
+        bonifici (`ritenuta_trattenuta`), non l'importo: una penale compensata nel mezzo
+        cambiava l'importo e la ritenuta non si toglieva piu'. Una penale compensata DOPO la
+        riduzione resta presa: la ritenuta e' gia' segnata e non si tocca."""
         riga = next((m for m in fc.movimenti(rif) if m.get("tipo") == "ritenuta"), None)
-        obiettivo = str((riga or {}).get("causale") or "").rpartition("bonifico=")[2]
-        attuale = pd.info(rif)
-        if not obiettivo.isdigit() or attuale is None:
+        if riga is None or pd.info(rif) is None or pd.ritenuta_trattenuta(rif) > 0:
             return
-        if int(attuale["minori"]) == int(obiettivo) + int(riga["importo_cents"]):
-            if not pd.imposta_importo(rif, int(obiettivo)):
-                raise RuntimeError("registro dei bonifici non aggiornato")
+        if not pd.trattieni_ritenuta(rif, int(riga["importo_cents"])):
+            raise RuntimeError("registro dei bonifici non aggiornato")
 
     def _trasferisci_all_host(self, rif, importo_cents, penale=False, a_mano=False):
         """SOLDI ALL'HOST IN AUTOMATICO (strategia fondatore): allo sblocco dell'escrow
