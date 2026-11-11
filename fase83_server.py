@@ -3267,8 +3267,25 @@ class RouterHTTP:
         if st is None:
             gz = getattr(self._sys, "garanzia", None)
             st = gz.stato(str(rif)) if gz is not None else None
+        prefisso = "cancellazione:" + str(rif)
+        motivo = str((st or {}).get("motivo") or "") if isinstance(st, dict) else ""
         return (isinstance(st, dict) and st.get("stato") == "risolto"
-                and st.get("motivo") == "cancellazione:" + str(rif))
+                and (motivo == prefisso or motivo.startswith(prefisso + "|")))
+
+    def _decisione_della_cancellazione(self, rif):
+        """FB2b (11/11): (rimborso, trattenuto) decisi dal primo clic di una cancellazione morta
+        dopo la divisione della garanzia, letti dal motivo `cancellazione:<rif>|rimborso=N|
+        trattenuto=M`. None se la garanzia non e' stata divisa da questa cancellazione o il motivo
+        non porta i numeri (allora vale il calcolo di oggi). Una garanzia illeggibile SOLLEVA."""
+        gz = getattr(self._sys, "garanzia", None)
+        st = gz.stato(str(rif)) if gz is not None else None
+        if not self._divisa_dalla_cancellazione(rif, st):
+            return None
+        campi = dict(p.split("=", 1) for p in str(st.get("motivo")).split("|")[1:] if "=" in p)
+        rimb, tratt = campi.get("rimborso", ""), campi.get("trattenuto", "")
+        if not (rimb.isdigit() and tratt.isdigit()):
+            return None
+        return int(rimb), int(tratt)
 
     def _garanzia_aperta(self, rif):
         """La garanzia di questa prenotazione NON e' ancora chiusa a favore dell'host
@@ -8838,6 +8855,11 @@ class RouterHTTP:
             from fase111_cancellazione import calcola_rimborso
             r = calcola_rimborso(pagato, giorni, politica=politica,
                                  entro_ripensamento=ripensamento)
+            # FB2b (11/11): una cancellazione ripresa tiene la decisione del PRIMO clic, scritta
+            # nella garanzia: ricalcolata coi giorni di oggi l'ospite perdeva la sua parte.
+            _decisa = self._decisione_della_cancellazione(rif)
+            if _decisa is not None:
+                r = dict(r, rimborso_cents=_decisa[0], trattenuto_cents=_decisa[1])
             idem = v.get("idem_key") or ("cancel_" + (rif or token[-16:]))
             e = self._sys.inventario.rilascia(allog, ci, co, idem_key=idem)
         except Exception:
@@ -8928,8 +8950,9 @@ class RouterHTTP:
                 if _divisa_qui:
                     host_tiene = int(st.get("host_riceve_cents", 0) or 0)
                 elif host_tiene > 0:
-                    esito_gz = gz.chiudi_proporzionale(rif, host_tiene,
-                                                       motivo="cancellazione:" + str(rif))
+                    esito_gz = gz.chiudi_proporzionale(
+                        rif, host_tiene, motivo="cancellazione:%s|rimborso=%d|trattenuto=%d" % (
+                            rif, int(r.get("rimborso_cents", 0)), int(tratt)))
                     if not (isinstance(esito_gz, dict) and esito_gz.get("ok")):
                         host_tiene = 0     # escrow gia' deciso altrove: non pagare due volte
                 else:
@@ -14500,12 +14523,20 @@ def _subentro_per_disaccordo(sistema: Any, *, ora_ts: Any = None) -> List[str]:
             if not gz.contesta(rif, "disaccordo_in_chat").get("ok"):
                 continue
             subentrate.append(rif)
+            # CodeGraphContext (11/11): il ritorno si guarda, come nel pulsante dell'ospite (Busta
+            # A3, 28/10). `aggiorna_stato` su un errore del database torna False senza sollevare.
+            fermo = False
             try:
                 pd = getattr(sistema, "payout", None)
-                if pd is not None:
-                    pd.aggiorna_stato(rif, "trattenuto")
+                fermo = pd is None or (pd.aggiorna_stato(rif, "trattenuto") is True
+                                       or pd.stato_di(rif) == "trattenuto")
             except Exception:
-                logger.warning("subentro: blocco payout fallito (ignorato)", exc_info=True)
+                logger.warning("subentro: blocco payout esploso", exc_info=True)
+            if not fermo:
+                logger.error("SUBENTRO | codice: bonifico_non_fermato | riferimento: %s | "
+                             "messaggio: garanzia contestata da noi ma il bonifico all'host NON "
+                             "risulta trattenuto: non pagarlo a mano, decide l'arbitro",
+                             _rif_per_registro(rif))
             logger.warning("SUBENTRO | riferimento %s | host e ospite hanno scritto dopo il "
                            "check-in e nessun «tutto ok»: garanzia contestata, decide l'arbitro",
                            _rif_per_registro(rif))

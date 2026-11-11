@@ -765,6 +765,34 @@ class TestLaCodaEmailIConfini(unittest.TestCase):
         giro.join(2)
         self.assertFalse(giro.is_alive(), "ferma() non ferma il giro")
 
+    def test_una_email_presa_adesso_da_un_altro_processo_non_ruba_il_posto(self):
+        """Cosmic Ray, terzo giro (11/11, solo CodaEmail: 6 sopravvissuti su 189): la SELECT del
+        giro esclude le email prese ADESSO da un altro processo. Se le includesse (riga
+        `ora - PRESA_SCADE_S` sbagliata), con il limite pieno il giro le prenderebbe, il CAS le
+        scarterebbe e quella da mandare resterebbe ferma. L'ora e' multipla di 1024, cosi' anche
+        gli errori `|` e `^` spostano davvero la soglia."""
+        import sqlite3
+        self.t = 1_799_999_488.0
+        self.prov = _ProviderFinto(esito=True)
+        c = self._coda()
+        c.accoda("presa@x.it", "o", "<p>x</p>")
+        c.accoda("attesa@x.it", "o", "<p>x</p>")
+        con = sqlite3.connect(self.db)
+        with con:
+            con.execute("UPDATE coda_email SET stato='presa', presa_ts=? WHERE a='presa@x.it'",
+                        (int(self.t),))
+        con.close()
+        self.assertEqual(c.un_giro(limite=1), 1, "con un posto solo va l'email in attesa")
+        self.assertEqual([r[1] for r in self._righe()], ["presa"],
+                         "resta solo quella presa dall'altro processo")
+
+    def test_tentativi_e_orologio_si_passano_solo_per_nome(self):
+        """Cosmic Ray (11/11): `*` nella firma. Con `/` un numero passato per posizione
+        diventerebbe in silenzio il numero dei tentativi."""
+        from fase86_email import CodaEmail
+        with self.assertRaises(TypeError):
+            CodaEmail(self.db, self.prov.invia, 3)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

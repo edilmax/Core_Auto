@@ -4340,6 +4340,132 @@ class TestFB2CancellazioneConPenaleMortaDopoLaGaranzia(_OraVeraPerIlPreventivo, 
             s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
         self.assertEqual(self._conti(rif), atteso, "un terzo clic non cambia piu' niente: %r" % (c,))
 
+    def test_FB2_la_garanzia_divisa_per_UN_ALTRA_prenotazione_resta_chiusa(self):
+        """pr-test-analyzer (11/11): il motivo deve essere di QUESTA prenotazione. Con un
+        `startswith("cancellazione:")` qualunque garanzia divisa da una cancellazione riaprirebbe
+        la porta, e il clic rimborserebbe di nuovo."""
+        rif, vt, _tot = self.prenota("2027-04-10", "2027-04-12")
+        self._paga(rif, 3)
+        quota = int((self.sis.garanzia.stato(rif) or {}).get("importo_host_cents") or 0) // 2
+        esito = self.sis.garanzia.chiudi_proporzionale(
+            rif, quota, motivo="cancellazione:ALTRA|rimborso=1|trattenuto=1")
+        self.assertTrue(esito.get("ok"), "PREMESSA: garanzia divisa: %r" % (esito,))
+        dopo = time.time() + fase83_server.SECONDI_RIPENSAMENTO + 3600
+        with mock.patch("time.time", return_value=dopo):
+            s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
+        self.assertEqual((s, c.get("errore")), (409, "escrow_gia_liquidato"), c)
+        self.assertEqual(self.movimenti(rif, "rimborso"), [], "nessun rimborso scritto")
+
+
+class TestFB2bLaRipresaTieneLaDecisioneDelPrimoClic(_OraVeraPerIlPreventivo, _BancoDelBlocco):
+    """FB2b (silent-failure-hunter, 11/11): la cancellazione ripresa ricalcolava il rimborso con
+    i giorni del SECONDO clic, ma teneva la quota dell'host decisa al PRIMO. Politica «moderata»:
+    a 2 giorni dall'arrivo il 50% torna all'ospite, il giorno dell'arrivo niente. Morta a 2 giorni,
+    ripresa il giorno dell'arrivo: l'ospite riceveva solo la tassa e la differenza restava a noi
+    (vista ROSSA: rimborsi [800] invece di [10800]). ORACOLO: una gemella sullo stesso alloggio e
+    le stesse date, cancellata al primo clic senza morte."""
+
+    def _ts(self, giorno):
+        return datetime.datetime(giorno.year, giorno.month, giorno.day, 11, 0,
+                                 tzinfo=datetime.timezone.utc).timestamp()
+
+    def _il_giorno(self, giorno):
+        """Sposta orologio E calendario: `_cancella_prenotazione` conta i giorni all'arrivo con
+        `date.today()` / `datetime.now(fuso)` del modulo `datetime`, che `time.time` non muove."""
+        import contextlib
+        import sys as _sys
+        import types
+
+        class _D(datetime.date):
+            @classmethod
+            def today(cls):
+                return cls(giorno.year, giorno.month, giorno.day)
+
+        class _DT(datetime.datetime):
+            @classmethod
+            def now(cls, tz=None):
+                t = cls(giorno.year, giorno.month, giorno.day, 11, 0, tzinfo=datetime.timezone.utc)
+                return t.astimezone(tz) if tz is not None else t.replace(tzinfo=None)
+
+        finto = types.ModuleType("datetime")
+        finto.__dict__.update(datetime.__dict__)
+        finto.date, finto.datetime = _D, _DT
+        pila = contextlib.ExitStack()
+        pila.enter_context(mock.patch.dict(_sys.modules, {"datetime": finto}))
+        pila.enter_context(mock.patch("time.time", return_value=self._ts(giorno)))
+        return pila
+
+    def _prenota_m(self, ci, co, email):
+        s, q = self.g("POST", "/api/concierge/quote", {"alloggio_id": "casam", "check_in": ci,
+                                                       "check_out": co, "party": 2})
+        self.assertEqual(s, 200, q)
+        s, b = self.g("POST", "/api/concierge/book", {"quote_token": q["quote_token"],
+                                                      "email": email})
+        self.assertIn(s, (200, 201), b)
+        return b["riferimento"], b.get("voucher_token", "")
+
+    def _paga(self, rif, n):
+        cs, pi = "cs_fb2b_%d" % n, "pi_fb2b_%d" % n
+        self.stripe.sessioni[cs] = ("paid", pi)
+        self.stripe.pagamenti[pi] = "succeeded"
+        s, c = self.evento("evt_fb2b_%d" % n, "checkout.session.completed", rif, cs, pi)
+        self.assertEqual(s, 200, "PREMESSA: %r" % (c,))
+
+    def _conti(self, rif):
+        gz = self.sis.garanzia.stato(rif) or {}
+        po = self.sis.payout.info(rif) or {}
+        return {"pendente": self.stato(rif), "garanzia": gz.get("stato"),
+                "host_riceve": gz.get("host_riceve_cents"),
+                "bonifico": po.get("stato"), "bonifico_importo": po.get("minori"),
+                "rimborsi": [int(m["importo_cents"]) for m in self.movimenti(rif, "rimborso")]}
+
+    def test_FB2b_ripresa_il_giorno_dell_arrivo_rende_quanto_deciso_due_giorni_prima(self):
+        class _Morte(BaseException):
+            pass
+
+        oggi = datetime.date.today()
+        arrivo = oggi + datetime.timedelta(days=6)
+        ci, co = arrivo.isoformat(), (arrivo + datetime.timedelta(days=2)).isoformat()
+        self.g("POST", "/api/host/pubblica", {"host_id": "demo", "slug": "casam", "titolo": "M",
+               "citta": "Roma", "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
+               "servizi": [], "immagini": [], "tassa_pp_notte_cents": 200,
+               "politica_cancellazione": "moderata"}, _HK_BLOCCO)
+        self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": "casam",
+               "da": oggi.isoformat(), "a": (oggi + datetime.timedelta(days=40)).isoformat(),
+               "unita_totali": 2, "prezzo_netto_cents": 10000}, _HK_BLOCCO)
+        rif, vt = self._prenota_m(ci, co, "a@x.it")
+        rif_o, vt_o = self._prenota_m(ci, co, "b@x.it")
+        self._paga(rif, 1)
+        self._paga(rif_o, 2)
+        primo = arrivo - datetime.timedelta(days=2)               # 2 giorni prima: 50%
+
+        with self._il_giorno(primo):
+            s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": vt_o})
+        self.assertEqual(s, 200, "ORACOLO: %r" % (c,))
+        atteso = self._conti(rif_o)
+        self.assertGreater(atteso["host_riceve"] or 0, 0, "ORACOLO: c'e' una penale per l'host")
+
+        vero = self.r._trasferisci_all_host
+
+        def muore(*a, **k):
+            raise _Morte()
+        self.r._trasferisci_all_host = muore
+        try:
+            with self._il_giorno(primo):
+                with self.assertRaises(_Morte):
+                    self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
+        finally:
+            self.r._trasferisci_all_host = vero
+        self.assertEqual((self.sis.garanzia.stato(rif) or {}).get("stato"), "risolto",
+                         "PREMESSA: garanzia divisa al primo clic")
+
+        with self._il_giorno(arrivo):                             # il giorno dell'arrivo: 0%
+            s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
+        self.assertEqual(s, 200, "il clic del giorno dell'arrivo finisce la cancellazione: %r" % (c,))
+        self.assertEqual(self._conti(rif), atteso,
+                         "FB2b: ripresa il giorno dell'arrivo, l'ospite deve riavere quanto deciso "
+                         "al primo clic (2 giorni prima), non il rimborso di oggi")
+
 
 class TestIlRimborsoDellAdminColBloccoIncassatoDopo(_OraVeraPerIlPreventivo, _SpieDelBlocco):
     """Limite 8a della voce 143 (voce 179, PROTON 26/10), SPOSTATA qui da test_blocco_carta

@@ -619,6 +619,26 @@ class TestSeNonSiPuoOperareIlBonificoNonParte(_Base):
         self.assertEqual(len(self._righe(rif, "ritenuta")), 1, "la ritenuta resta UNA")
         self.assertEqual(self._maturato(rif), ridotto - ritenuta)
 
+    def test_FB1_se_la_ripresa_non_riesce_a_togliere_la_ritenuta_il_bonifico_si_ferma(self):
+        """pr-test-analyzer (11/11, valore 9): riga di giornale scritta, bonifico non ridotto, e
+        nel frattempo il bonifico e' sceso sotto la ritenuta. `trattieni_ritenuta` non scrive:
+        il completamento deve FERMARE il bonifico (ERROR), non lasciarlo partire intero."""
+        self._accendi()
+        rif, _q = self._prenota_paga()
+        pd = self.sis.payout
+        morto = self._muore_su(pd, "trattieni_ritenuta", lambda a, kw: True)
+        with self.assertRaises(morto):
+            self._opera(rif)
+        del pd.trattieni_ritenuta
+        ritenuta = int(self._righe(rif, "ritenuta")[0]["importo_cents"])
+        self.assertTrue(pd.imposta_importo(rif, ritenuta, solo_se_stato="maturato"))
+        with self.assertLogs("core_auto.server", level="ERROR") as log:
+            self.r._trasferisci_all_host(rif, ritenuta)
+        self.assertEqual(self.connect.chiamate, [], "il bonifico NON parte")
+        self.assertEqual(self._maturato(rif), ritenuta, "il registro non cambia")
+        self.assertTrue(any("RITENUTA NON OPERATA" in r.getMessage() for r in log.records),
+                        log.output)
+
     def test_ritenuta_oltre_il_bonifico_ferma_e_grida(self):
         """Anche al CONFINE (ritenuta uguale al bonifico: all'host resterebbe zero) -- e il
         motivo e' quello giusto (sopravvissuto del giro sul diff, fase83:6691)."""
