@@ -3259,6 +3259,17 @@ class RouterHTTP:
                            exc_info=True)
             return False
 
+    def _divisa_dalla_cancellazione(self, rif, st=None):
+        """FB2 (11/11): la garanzia e' 'risolto' perche' l'ha divisa la cancellazione di QUESTA
+        prenotazione (`chiudi_proporzionale` con motivo `cancellazione:<rif>`), non l'arbitro.
+        Vuol dire una cancellazione morta dopo la divisione: si puo' finire. Una garanzia
+        illeggibile SOLLEVA, come in `_garanzia_gia_divisa`: nel dubbio decide chi chiama."""
+        if st is None:
+            gz = getattr(self._sys, "garanzia", None)
+            st = gz.stato(str(rif)) if gz is not None else None
+        return (isinstance(st, dict) and st.get("stato") == "risolto"
+                and st.get("motivo") == "cancellazione:" + str(rif))
+
     def _garanzia_aperta(self, rif):
         """La garanzia di questa prenotazione NON e' ancora chiusa a favore dell'host
         ('rilasciato' o 'risolto')? Allora i soldi non sono suoi: il bonifico parte allo
@@ -8795,7 +8806,9 @@ class RouterHTTP:
         # passato non si cancella» stanno in un posto solo. Dopo l'arrivo c'e' «segnala un
         # problema». Guardie: `test_fase83_server.TestUnSoggiornoGiaIniziatoNonSiCancellaDalVoucher`.
         if _rec is not None and _rec.get("stato") == "pagato":
-            if self._garanzia_gia_divisa(rif):
+            # FB2 (11/11): una garanzia divisa da QUESTA cancellazione (morta dopo la divisione)
+            # non chiude la porta: il clic dopo la finisce, con la quota gia' decisa.
+            if self._garanzia_gia_divisa(rif) and not self._divisa_dalla_cancellazione(rif):
                 return 409, {"errore": "escrow_gia_liquidato"}
             _conc = self._sys.concierge
             if _conc._now() >= _conc._fine_giorno_arrivo(allog, ci):
@@ -8898,10 +8911,13 @@ class RouterHTTP:
             if gz is not None:
                 st = gz.stato(rif)
                 imp = st.get("importo_host_cents", 0) if isinstance(st, dict) else 0
+                _divisa_qui = self._divisa_dalla_cancellazione(rif, st)
                 # ESCROW GIA' DECISO: 'rilasciato' (l'ospite ha premuto "tutto ok" -> bonifico
                 # Connect gia' partito) o 'risolto' (arbitrato: quota host + quota rimborsata).
-                # Quei soldi NON sono piu' in cassa nostra.
-                if isinstance(st, dict) and st.get("stato") in ("rilasciato", "risolto"):
+                # Quei soldi NON sono piu' in cassa nostra. FB2: non se a dividerla e' stata
+                # questa stessa cancellazione, morta a meta': la quota decisa allora vale ancora.
+                if (isinstance(st, dict) and st.get("stato") in ("rilasciato", "risolto")
+                        and not _divisa_qui):
                     gia_uscito = (int(st.get("host_riceve_cents", 0) or 0)
                                   + int(st.get("ospite_rimborso_cents", 0) or 0))
                 tratt = r.get("trattenuto_cents", 0)
@@ -8909,8 +8925,11 @@ class RouterHTTP:
                 # dell'host si calcola sul solo soggiorno, o quei soldi uscirebbero due volte
                 _base_g = max(0, imp - _intero_positivo(v.get("tassa_soggiorno_cents", 0)))
                 host_tiene = (_base_g * tratt // pagato) if pagato else 0
-                if host_tiene > 0:
-                    esito_gz = gz.chiudi_proporzionale(rif, host_tiene)
+                if _divisa_qui:
+                    host_tiene = int(st.get("host_riceve_cents", 0) or 0)
+                elif host_tiene > 0:
+                    esito_gz = gz.chiudi_proporzionale(rif, host_tiene,
+                                                       motivo="cancellazione:" + str(rif))
                     if not (isinstance(esito_gz, dict) and esito_gz.get("ok")):
                         host_tiene = 0     # escrow gia' deciso altrove: non pagare due volte
                 else:
