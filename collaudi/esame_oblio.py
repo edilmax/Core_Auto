@@ -102,8 +102,12 @@ def condizione():
 # scambia una sequenza lunga di numeri per un telefono e la sostituisce, il dato non
 # arriverebbe mai nell'archivio dei messaggi e la premessa cadrebbe senza dirlo. Misurato
 # il 2026-09-12: e' cosi' che un test stava per passare a vuoto.
+# Il TELEFONO e' un'eccezione dichiarata: dal 10/11 il sito accetta solo numeri internazionali
+# (E.164, fase88) e li SALVA senza spazi. Va scritto gia' nella forma salvata, altrimenti l'ago
+# cercato negli archivi non sarebbe quello registrato e la cancellazione sembrerebbe riuscita
+# per il motivo sbagliato. Non entra nella chat, quindi il filtro dei numeri non lo tocca.
 EMAIL = "oblio.prova@esempio-oblio.test"
-TELEFONO = "+39 OBLIOPROVA"
+TELEFONO = "+390699990177"
 RAGIONE = "OBLIOPROVA SRL"
 
 

@@ -92,15 +92,21 @@ def stripe_sessioni_pagate(chiave: str, da_ts: int, *, fetch: Any = None,
 
 
 def stripe_somme_balance(chiave: str, da_ts: int, *, fetch: Any = None,
-                         tronchi: Optional[List[str]] = None
+                         tronchi: Optional[List[str]] = None,
+                         conversioni: Optional[Dict[str, int]] = None
                          ) -> Dict[str, Dict[str, int]]:
     """Somme delle balance transaction per categoria e valuta:
     {'charge': {'EUR': cents}, 'refund': {...}, 'transfer': {...}, 'dispute': {...}}.
-    refund/transfer/dispute arrivano NEGATIVI da Stripe: qui in valore assoluto."""
+    refund/transfer/dispute arrivano NEGATIVI da Stripe: qui in valore assoluto.
+    DA5 (8/11): una riga con `exchange_rate` e' un importo convertito, non confrontabile con
+    la moneta del giornale: non si somma, si conta in `conversioni` per categoria."""
     f = fetch or _fetch_reale
     out: Dict[str, Dict[str, int]] = {}
     for t in _pagina("balance_transactions", chiave, da_ts, f, tronchi=tronchi):
         cat = str(t.get("reporting_category") or t.get("type") or "")
+        if t.get("exchange_rate") is not None and conversioni is not None:
+            conversioni[cat] = conversioni.get(cat, 0) + 1
+            continue
         val = str(t.get("currency") or "").upper()
         out.setdefault(cat, {})
         out[cat][val] = out[cat].get(val, 0) + abs(int(t.get("amount") or 0))
@@ -118,7 +124,9 @@ def riconcilia(fc: Any, chiave: str, *, giorni: int = 30, fetch: Any = None,
     da_ts = adesso - g * 86400
     tronchi: List[str] = []
     sessioni = stripe_sessioni_pagate(chiave, da_ts, fetch=fetch, tronchi=tronchi)
-    balance = stripe_somme_balance(chiave, da_ts, fetch=fetch, tronchi=tronchi)
+    conversioni: Dict[str, int] = {}
+    balance = stripe_somme_balance(chiave, da_ts, fetch=fetch, tronchi=tronchi,
+                                   conversioni=conversioni)
     incassi = fc.incassi_periodo(da_ts) if fc is not None else {}
     somme = fc.somme_periodo(da_ts) if fc is not None else {}
     # ── match per riferimento (al centesimo) ─────────────────────────────────
@@ -148,6 +156,10 @@ def riconcilia(fc: Any, chiave: str, *, giorni: int = 30, fetch: Any = None,
         g_tot: Dict[str, int] = {}
         for t in tipi_giornale:
             for val, c in (somme.get(t) or {}).items():
+                # DA5: moneta straniera che Stripe ha convertito: ogni prenotazione resta
+                # confrontata al centesimo qui sopra, i totali non si possono confrontare
+                if conversioni.get(cat_stripe) and val.upper() != "EUR" and val.upper() not in s_tot:
+                    continue
                 g_tot[val.upper()] = g_tot.get(val.upper(), 0) + int(c)
         valute = sorted(set(s_tot) | set(g_tot))
         return {"stripe": s_tot, "giornale": g_tot,
@@ -168,6 +180,7 @@ def riconcilia(fc: Any, chiave: str, *, giorni: int = 30, fetch: Any = None,
             # report, non dai log: un allarme falso si impara a ignorare (ferrea 10).
             "parziale": bool(tronchi),
             "troncati": sorted(set(tronchi)),
+            "conversioni": conversioni,
             # il totale VERO dei fantasmi: gli elenchi qui sotto escono TAGLIATI, e chi
             # conta le righe rimaste (il registro del server, l'email del Guardiano)
             # sottostima il guaio senza avere modo di accorgersene (ferrea 9).

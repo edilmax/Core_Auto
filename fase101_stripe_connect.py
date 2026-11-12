@@ -11,10 +11,11 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 import urllib.parse
 from typing import Any, Callable, Dict, List, Optional
 
-from fase85_pagamenti_stripe import _esito_sconosciuto, _motivo_errore
+from fase85_pagamenti_stripe import _esito_sconosciuto, _in_breve, _motivo_errore
 
 logger = logging.getLogger("core_auto.stripe_connect")
 
@@ -289,7 +290,13 @@ class ProviderConnect:
             if gia is not None:                       # gia' partito ('tr_...'), o non si sa ("")
                 return gia
         esito: Dict[str, Any] = {}
-        r = self._post(self.TRANSFERS, params, idem_key="transfer_" + (rif or account_id),
+        # ST4 (9/11): con una chiave fissa Stripe ripete il vecchio rifiuto anche a soldi arrivati
+        # (docs.stripe.com/api/idempotent_requests). Cambia ogni giorno: col riferimento, qui sopra
+        # si e' appena riletto che il bonifico non c'e'. Senza riferimento quella rilettura non
+        # c'e', e la chiave resta fissa.
+        giorno = time.strftime("%Y%m%d", time.gmtime(time.time()))
+        r = self._post(self.TRANSFERS, params,
+                       idem_key="transfer_%s_%s" % (rif, giorno) if rif else "transfer_" + account_id,
                        esito=esito)
         tid = r.get("id") if r else None
         if isinstance(tid, str) and tid.startswith("tr_"):
@@ -329,6 +336,10 @@ class ProviderConnect:
 
     # Pagine da 100 lette al massimo per ritrovare un bonifico: oltre, la risposta e' «non so».
     PAGINE_MASSIME = 10
+    # PR5 (8/11): da quando cercare il bonifico di un riferimento (fase81 lo cabla col giorno
+    # della prenotazione). Senza, si cerca dall'inizio, e con oltre PAGINE_MASSIME pagine di
+    # bonifici all'host la risposta restava «non so» per sempre: soldi fermi.
+    da_quando: Optional[Callable[[str], int]] = None
 
     def bonifico_di(self, account_id: str, riferimento: str) -> Dict[str, Any]:
         """IL BONIFICO DI QUESTA PRENOTAZIONE C'E' GIA' SU STRIPE? Solo lettura: GET
@@ -346,8 +357,14 @@ class ProviderConnect:
         trovati: List[Dict[str, Any]] = []
         dopo = ""
         try:
+            dal = int(self.da_quando(riferimento) or 0) if self.da_quando else 0
+        except Exception:
+            dal = 0                                   # data non letta: si cerca dall'inizio
+        try:
             for _ in range(self.PAGINE_MASSIME):
                 q = {"destination": account_id, "limit": "100"}
+                if dal > 0:
+                    q["created[gte]"] = str(dal)
                 if dopo:
                     q["starting_after"] = dopo
                 r = self._fetch_get(self.TRANSFERS + "?" + urllib.parse.urlencode(q),
@@ -356,7 +373,8 @@ class ProviderConnect:
                 if not (isinstance(dati, list) and all(
                         isinstance(t, dict) and str(t.get("id") or "").startswith("tr_")
                         for t in dati)):
-                    return {"ok": False, "motivo": "risposta_inattesa: %.200r" % (r,)}
+                    # F18 (11/11): solo cosa e' arrivato, mai l'oggetto (dati dell'ospite)
+                    return {"ok": False, "motivo": "risposta_inattesa: " + _in_breve(r)}
                 trovati += [t for t in dati if isinstance(t.get("metadata"), dict)
                             and t["metadata"].get("riferimento") == riferimento]
                 if r.get("has_more") is not True:

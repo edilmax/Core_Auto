@@ -116,7 +116,9 @@ if [ -s "$TMP/scelti.txt" ]; then
     sed 's/^/     /' "$TMP/scelti.txt" >&2
     strappi=$((strappi+1))
   else
-    verde "   tutti dallo stesso istante: $istanti"
+    # PR7 (8/11): lo stesso GIRO, non lo stesso istante: gli archivi si fotografano uno dopo
+    # l'altro, a secondi di distanza. La persona che ripristina confronta comunque con Stripe.
+    verde "   tutti dallo stesso giro di backup ($istanti), fotografati uno dopo l'altro"
   fi
 else
   rosso "   nessun archivio ricostruito: il pacchetto non conteneva nessun .db.gz"
@@ -198,8 +200,12 @@ fi
 
 echo
 if [ "$prob" -eq 0 ] && [ "$strappi" -eq 0 ]; then
+  # PR2 (8/11): i dati tornano indietro, Stripe no: bonifici e rimborsi ripartono fermi
+  printf '{"attivo": true, "motivo": "ripristino da backup: confrontare con Stripe", "chi": "restore_offsite", "ts": %s}\n' \
+    "$(date +%s)" > "$DEST/blocco_globale.flag"
   verde "RESTORE OK — dati integri in:  $DEST"
-  echo  "Passo finale (vedi RIPRENDI_QUI.md): copia questi .db nel volume /data del nuovo server e riavvia."
+  giallo "BLOCCO GLOBALE ACCESO: nessun bonifico, rimborso o prenotazione finche' una persona, dopo il confronto con Stripe, non lo toglie dal Bunker."
+  echo  "Passo finale (vedi DEPLOY.md): copia TUTTA questa cartella nel volume /data del nuovo server e riavvia."
 else
   rosso "RESTORE con $((prob+strappi)) problemi: NON usare questi dati, prova un pacchetto piu' vecchio."
   echo  "(se la copia mista/incompleta e' l'unica rimasta: BV_RESTORE_PARZIALE=1 bash $0 ...)" >&2

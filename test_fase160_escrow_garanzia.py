@@ -612,6 +612,31 @@ class TestSeNonSiMettonoDAccordoSubentriamoNoi(unittest.TestCase):
         self.assertEqual([], S._subentro_per_disaccordo(self.sis, ora_ts=self.CHECKIN + 10_000))
         self.assertEqual("in_garanzia", self.g.stato("R1")["stato"])
 
+    def test_SE_IL_BONIFICO_NON_SI_FERMA_LO_DICE_UN_ERROR(self):
+        """CodeGraphContext (11/11): il subentro non guardava il ritorno del fermo del bonifico
+        (`aggiorna_stato` su un errore del database torna False senza sollevare) e scriveva solo
+        un WARNING: garanzia contestata da noi, bonifico forse pagabile, e il Guardiano (che legge
+        gli ERROR) non lo sapeva. E' la Busta A3 del 28/10, riparata allora nel pulsante
+        dell'ospite e rimasta qui."""
+        self._scrive("ospite", self.CHECKIN + 3600, "la doccia non funziona")
+        self._scrive("demo", self.CHECKIN + 7200, "non e' vero")
+        self.sis.payout.aggiorna_stato = lambda *a, **k: False
+        with self.assertLogs("core_auto.server", level="ERROR") as log:
+            self.assertEqual(["R1"], self._subentro())
+        righe = [r.getMessage() for r in log.records if r.levelname == "ERROR"]
+        self.assertTrue(any("bonifico_non_fermato" in m and "R1" in m for m in righe), log.output)
+
+    def test_A_BONIFICO_FERMATO_L_ALLARME_TACE(self):
+        """Regola ferrea 10: lo stesso allarme TACE quando il fermo riesce."""
+        import fase83_server as S
+        self._scrive("ospite", self.CHECKIN + 3600, "la doccia non funziona")
+        self._scrive("demo", self.CHECKIN + 7200, "non e' vero")
+        with mock.patch.object(S.logger, "error") as errore:
+            self.assertEqual(["R1"], self._subentro())
+        self.assertEqual("trattenuto", self.sis.payout.stato_di("R1"))
+        self.assertFalse([c for c in errore.call_args_list if "bonifico_non_fermato" in str(c)],
+                         errore.call_args_list)
+
     def test_SENZA_CHAT_NEL_SISTEMA_non_solleva_e_non_blocca(self):
         import fase83_server as S
         self.sis.messaggistica = None

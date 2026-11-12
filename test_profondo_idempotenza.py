@@ -119,6 +119,8 @@ VERSATO_HOST = NETTO_HOST + TASSA                 # 35964: quello che gli si bon
 
 def _fake_stripe_fetch(url, body, headers):
     """Checkout Session finta: nessuna rete."""
+    if url.endswith("/expire"):        # 2 minuti (11/11): lo spazzino chiude la pagina
+        return {"id": url.rsplit("/", 2)[-2], "status": "expired"}
     if not body and "/checkout/sessions/" in url:     # rilettura dello stato (casella 10)
         return {"id": url.rsplit("/", 1)[-1], "payment_status": "paid"}
     import secrets

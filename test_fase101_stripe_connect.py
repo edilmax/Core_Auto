@@ -2,17 +2,20 @@
 E le guardie di `TestIBuchiDelGiudice` (2026-09-04): trasferisci, stato_account, link_onboarding,
 crea_account, `_intero_pos` e i ripieghi dei params, nate dai 37 mutanti sopravvissuti al giro
 col solo test dedicato."""
+import calendar
 import http.client
 import io
 import json
 import unittest
 import urllib.error
 import urllib.parse
+from unittest import mock
 
 from fase101_stripe_connect import (STRIPE_URL, ProviderConnect, ProviderStripeConnect,
                                     _esito_sconosciuto, _intero_pos, costruisci_params,
                                     crea_provider_stripe_connect)
 
+CHIAVE_FINTA = "sk_test_x"   # nessuna rete: la chiave non arriva mai a Stripe
 DATI = {"prezzo_guest_cents": 11200, "commissione_cents": 1500,
         "host_account": "acct_123", "riferimento": "REF1", "valuta": "usd"}
 
@@ -351,7 +354,7 @@ class TestIBuchiDelGiudice(unittest.TestCase):
         self.assertEqual(d["currency"], "usd")                                                  # 237
         self.assertEqual(d["transfer_group"], "R1")                                              # 239
         self.assertEqual(d["metadata[riferimento]"], "R1")                                       # 240
-        self.assertEqual(headers["Idempotency-Key"], "transfer_R1")                              # 241
+        self.assertRegex(headers["Idempotency-Key"], r"^transfer_R1_\d{8}$")                     # 241
         spy2 = PostFinto({ProviderConnect.TRANSFERS: {"id": "tr_2"}})
         ProviderConnect("sk", fetch=spy2).trasferisci("acct_1", 100, "", "")
         d2 = _decodifica(spy2.chiamate[0][1])
@@ -476,7 +479,7 @@ class TestIlBonificoSiLegaAlPagamentoDellOspite(unittest.TestCase):
                 self.assertEqual(_decodifica(body), {
                     "amount": "8700", "currency": "eur", "destination": "acct_1",
                     "source_transaction": addebito, "metadata[riferimento]": "R1"})
-                self.assertEqual(headers["Idempotency-Key"], "transfer_R1")
+                self.assertRegex(headers["Idempotency-Key"], r"^transfer_R1_\d{8}$")
 
     def test_senza_un_addebito_vero_il_bonifico_e_quello_di_prima(self):
         for addebito in ("", None, "pi_1", "cs_1", "re_1", "tr_1", 123, b"ch_1", ["ch_1"]):
@@ -550,6 +553,69 @@ def _http(codice, corpo=b"{}"):
     return urllib.error.HTTPError(ProviderConnect.TRANSFERS, codice, "x", {}, io.BytesIO(corpo))
 
 
+class _StripeCheRicorda:
+    """Come Stripe: un rifiuto gia' dato su una chiave si ripete identico, anche se nel frattempo
+    i soldi sono arrivati (docs.stripe.com/api/idempotent_requests, letta il 9/11/2026)."""
+
+    def __init__(self):
+        self.soldi = False
+        self.chiavi = []
+        self.salvate = set()
+
+    def __call__(self, url, body, headers):
+        if body is None:
+            return {"object": "list", "data": [], "has_more": False}
+        chiave = headers["Idempotency-Key"]
+        self.chiavi.append(chiave)
+        if chiave in self.salvate or not self.soldi:
+            self.salvate.add(chiave)
+            raise _http(400, b'{"error": {"code": "balance_insufficient", "message": "no"}}')
+        return {"id": "tr_nuovo"}
+
+
+class TestST4_UnRifiutoVecchioNonFermaIlBonificoPerSempre(unittest.TestCase):
+    """ST4 (campagna soldi 8/11). La chiave fissa `transfer_<rif>` faceva ripetere a Stripe il
+    vecchio rifiuto. Misurato il 9/11 sul bonifico da 0,11: 16 cent disponibili e rifiutato lo
+    stesso, cinque giorni dopo l'arrivo dei soldi. Causa da confermare al primo giro vero."""
+
+    GIORNO = calendar.timegm((2026, 11, 9, 12, 0, 0))
+    UN_GIORNO = 86400
+
+    def _trasferisci(self, stripe, ora):
+        with mock.patch("time.time", return_value=ora):
+            return ProviderConnect("sk_x", fetch=stripe).trasferisci("acct_1", 11, "eur", "R")
+
+    def test_soldi_arrivati_il_giorno_dopo_il_bonifico_parte(self):
+        stripe = _StripeCheRicorda()
+        self.assertIsNone(self._trasferisci(stripe, self.GIORNO))
+        stripe.soldi = True
+        self.assertEqual(self._trasferisci(stripe, self.GIORNO + self.UN_GIORNO), "tr_nuovo")
+        self.assertEqual(stripe.chiavi, ["transfer_R_20261109", "transfer_R_20261110"])
+
+    def test_nello_stesso_giorno_la_chiave_non_cambia(self):
+        stripe = _StripeCheRicorda()
+        self._trasferisci(stripe, self.GIORNO)
+        self._trasferisci(stripe, self.GIORNO + 3600)
+        self.assertEqual(stripe.chiavi, ["transfer_R_20261109"] * 2)
+
+    def test_senza_riferimento_la_chiave_resta_fissa(self):
+        """Senza riferimento non si puo' rileggere Stripe: una chiave nuova rischierebbe il doppio."""
+        stripe = _StripeCheRicorda()
+        ProviderConnect("sk_x", fetch=stripe).trasferisci("acct_1", 11, "eur", "")
+        self.assertEqual(stripe.chiavi, ["transfer_acct_1"])
+
+    def test_il_giorno_dopo_un_bonifico_gia_partito_non_si_rifa(self):
+        """La chiave cambia, ma prima si rilegge Stripe: un timeout non diventa un doppio."""
+        stripe = _StripeLista(post=TimeoutError("t"), esegue=True)
+        ore = (self.GIORNO, self.GIORNO + self.UN_GIORNO)
+        with mock.patch("time.time", return_value=ore[0]):
+            ProviderConnect("sk_x", fetch=stripe).trasferisci("acct_1", 100, "eur", "R")
+        with mock.patch("time.time", return_value=ore[1]):
+            esito = ProviderConnect("sk_x", fetch=stripe).trasferisci("acct_1", 100, "eur", "R")
+        self.assertEqual(esito, "tr_eseguito")
+        self.assertEqual(len(stripe.post), 1)
+
+
 class TestPilastroZero_IlBonificoAllHostNonSiPagaDueVolte(unittest.TestCase):
     """PILASTRO ZERO (ricerca del fondatore 19/10, voce 19; «autorizzato» lo stesso giorno). Una
     risposta di Stripe che non arriva non dice se il bonifico e' partito, e la chiave anti-doppio
@@ -616,6 +682,36 @@ class TestPilastroZero_IlBonificoAllHostNonSiPagaDueVolte(unittest.TestCase):
         self.assertEqual(ProviderConnect("sk", fetch=stripe).trasferisci("acct_1", 100, "eur", ""),
                          "")
 
+    def test_PR5_il_bonifico_si_cerca_dal_giorno_della_prenotazione(self):
+        """Campagna 8/11: oltre 1000 bonifici a un host la ricerca dall'inizio dice «non so» per
+        sempre, e i soldi restano fermi. Un bonifico non e' piu' vecchio della sua prenotazione."""
+        s = _StripeLista()
+        p = ProviderConnect("sk", fetch=s)
+        p.da_quando = lambda rif: 1700000000 if rif == "R" else 0
+        self.assertEqual(p.bonifico_di("acct_1", "R"), {"ok": True, "bonifico": None})
+        q = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(s.letture[0]).query))
+        self.assertEqual(q.get("created[gte]"), "1700000000")
+        for nome, da_quando in (("data assente", lambda rif: 0),
+                                ("lettura esplosa", lambda rif: 1 // 0)):
+            with self.subTest(nome):
+                s = _StripeLista()
+                p = ProviderConnect("sk", fetch=s)
+                p.da_quando = da_quando
+                self.assertTrue(p.bonifico_di("acct_1", "R")["ok"])
+                self.assertNotIn("created", s.letture[0], "senza data si cerca dall'inizio")
+
+    def test_PR5_il_sistema_cabla_la_data_della_prenotazione(self):
+        import tempfile
+
+        from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
+        d = tempfile.mkdtemp()
+        sis = crea_sistema(ConfigCasaVIP(abilitato=True, segreto_hmac=b"S" * 32,
+                                         db_pendenti=d + "/p.db", stripe_secret_key=CHIAVE_FINTA))
+        self.assertTrue(sis.pagamenti_pendenti.registra(
+            "R-PR5", alloggio_id="casa", check_in="2027-01-01", check_out="2027-01-03"))
+        creato = sis.pagamenti_pendenti.info("R-PR5")["creato_ts"]
+        self.assertEqual(sis.connect.da_quando("R-PR5"), creato - 86400)
+
     def test_bonifico_di_chiede_il_conto_giusto_e_dice_non_so_quando_non_e_sicuro(self):
         for chiave, acct, rif in (("", "acct_1", "R"), ("sk", "cus_1", "R"), ("sk", None, "R"),
                                   ("sk", "acct_1", ""), ("sk", "acct_1", None)):
@@ -672,6 +768,28 @@ class TestPilastroZero_IlBonificoAllHostNonSiPagaDueVolte(unittest.TestCase):
             "acct_1", "R")
         self.assertFalse(r["ok"])
         self.assertIn("codice: api_error", r["motivo"])
+
+
+class TestF18UnaRispostaInattesaDeiBonificiNonPortaIDatiNelRegistro(unittest.TestCase):
+    """F18 (11/11, variante di F12 trovata con variant-analysis): `risposta_inattesa: %.200r` in
+    `bonifico_di` metteva nel motivo -- che finisce nel registro -- i primi 200 caratteri
+    dell'oggetto arrivato da Stripe, con quello che c'e' dentro (email, nomi, metadati). Resta
+    solo COSA e' arrivato: id, tipo, stato, come in fase85 (`_in_breve`)."""
+
+    def test_il_motivo_dice_cosa_e_arrivato_non_cosa_c_e_dentro(self):
+        strana = {"object": "list", "has_more": False,
+                  "data": [{"id": "cus_1", "object": "customer", "email": "ospite@privato.it",
+                            "name": "Mario Rossi"}]}
+        r = ProviderConnect("sk", fetch=_StripeLista(lettura=strana)).bonifico_di("acct_1", "R")
+        self.assertFalse(r["ok"])
+        self.assertTrue(r["motivo"].startswith("risposta_inattesa: "), r)
+        self.assertIn("list", r["motivo"], "il tipo dell'oggetto arrivato resta")
+        for privato in ("ospite@privato.it", "Mario Rossi"):
+            self.assertNotIn(privato, r["motivo"])
+        import fase101_stripe_connect as _f101
+        with open(_f101.__file__, encoding="utf-8") as fh:
+            self.assertNotIn('risposta_inattesa: %', fh.read(),
+                             "nessun motivo deve copiare l'oggetto intero")
 
 
 if __name__ == "__main__":

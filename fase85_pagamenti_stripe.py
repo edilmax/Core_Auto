@@ -28,6 +28,7 @@ from __future__ import annotations
 import datetime
 import json
 import logging
+import re
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 logger = logging.getLogger("core_auto.pagamenti_stripe")
@@ -96,6 +97,47 @@ def _motivo_errore(exc: BaseException) -> str:
     return testo
 
 
+def _in_breve(x: Any) -> str:
+    """F12 (11/11, security-reviewer): di una risposta inattesa di Stripe, nel motivo (che finisce
+    nel registro) va solo COSA e' arrivato -- id, tipo, stato -- mai l'oggetto intero, che porta i
+    dati dell'ospite (email, nome, indirizzo). Un errore di Stripe tiene codice e messaggio
+    (regola ferrea 9)."""
+    if not isinstance(x, dict):
+        return type(x).__name__
+
+    def _v(v: Any, n: int = 80) -> str:
+        return str(v)[:n] if isinstance(v, (str, int, float)) else type(v).__name__
+    err = x.get("error")
+    if isinstance(err, dict):
+        return "{error code=%s message=%s}" % (_v(err.get("code")), _v(err.get("message"), 200))
+    return "{id=%s object=%s status=%s}" % tuple(_v(x.get(k)) for k in ("id", "object", "status"))
+
+
+_NUMERO_DELLA_PAGINA = re.compile(r"cs_[A-Za-z0-9_]+")
+
+
+def _e_una_pagina(numero: Any) -> bool:
+    """Il numero di una pagina di pagamento (Checkout Session, `cs_...`): solo quello va
+    nell'indirizzo di Stripe e si salva col blocco. GRUPPO H (11/11): era scritto in quattro
+    copie come `len > 3` (`> 3` -> `!= 3` sopravviveva: S1, S2, S15), e in altri sei punti col
+    solo `startswith("cs_")`. Ora un controllo solo, con la forma dei numeri veri di Stripe
+    (`cs_test_...`, `cs_live_...`: lettere, cifre, `_`): nient'altro entra nell'indirizzo che
+    parte con la nostra chiave -- `cs_../../customers` passava (security-reviewer)."""
+    return isinstance(numero, str) and _NUMERO_DELLA_PAGINA.fullmatch(numero) is not None
+
+
+_NUMERO_DI_STRIPE = re.compile(r"[a-z]+_[A-Za-z0-9_]+")
+
+
+def _e_un_numero_di_stripe(numero: Any, prefisso: str = "") -> bool:
+    """I4 (12/11): ogni altro numero che entra in un indirizzo di Stripe (`pi_`, `ch_`, `txn_`,
+    `seti_`, anche quelli letti da una risposta) ha la forma dei numeri veri -- lettere
+    minuscole, `_`, poi solo lettere, cifre e `_` -- e il prefisso atteso. Il solo
+    `startswith("pi_")` lasciava entrare `pi_x/../../customers`, come `_e_una_pagina` per i `cs_`."""
+    return (isinstance(numero, str) and numero.startswith(prefisso)
+            and _NUMERO_DI_STRIPE.fullmatch(numero) is not None)
+
+
 def _esito_sconosciuto(exc: BaseException) -> bool:
     """⛔ PILASTRO ZERO (19/10/2026). Una chiamata a Stripe finita in errore ha l'esito SCONOSCIUTO
     -- puo' essere stata ESEGUITA -- salvo un rifiuto certo: una risposta 4xx, tranne 409 (la
@@ -142,6 +184,13 @@ class ProviderStripe:
     def crea_link(self, dati: Dict[str, Any]) -> Optional[str]:
         """Da un dict prenotazione (prezzo_guest_cents, riferimento, email) -> URL di
         pagamento Stripe, o None (chiave/cents invalidi o Stripe non raggiungibile)."""
+        sessione = self.crea_sessione(dati)
+        return sessione["url"] if sessione else None
+
+    def crea_sessione(self, dati: Dict[str, Any]) -> Optional[Dict[str, str]]:
+        """Come `crea_link`, ma torna {'url', 'id'}: il NUMERO della pagina (`cs_...`) serve allo
+        spazzino per chiuderla quando scade il blocco della stanza (piano dei 2 minuti, 11/11).
+        Un numero che non e' di una sessione resta '' (chi lo legge non puo' chiuderla)."""
         try:
             if not isinstance(dati, dict):
                 return None
@@ -198,11 +247,54 @@ class ProviderStripe:
                        "Content-Type": "application/x-www-form-urlencoded"}
             resp = self._fetch(STRIPE_URL, body, headers)
             url = resp.get("url") if isinstance(resp, dict) else None
-            return url if isinstance(url, str) and url else None
+            if not (isinstance(url, str) and url):
+                return None
+            cs = resp.get("id")
+            return {"url": url, "id": cs if _e_una_pagina(cs) else ""}
         except Exception:
             logger.warning("Stripe: creazione link fallita (ISOLATA -> None)",
                            exc_info=True)
             return None
+
+    def chiudi_sessione(self, sessione: Any) -> Dict[str, Any]:
+        """PIANO DEI 2 MINUTI, pezzo 3 (11/11): chiude la pagina di pagamento (POST .../expire)
+        prima che la stanza si liberi. {'ok', 'stato', 'motivo'}: 'expired' = chiusa, da li' non
+        puo' piu' arrivare un pagamento; 'complete' = l'ospite ha GIA' pagato; ok=False = NON LO
+        SO (rete, 5xx, risposta illeggibile). Misurato su Stripe di prova (11/11): una sessione
+        aperta risponde 200 'expired', una non aperta 400; dopo un rifiuto certo si rilegge la
+        sessione per sapere com'e'. Il corpo non e' vuoto apposta: vuoto, `_fetch` fa una GET."""
+        if not _e_una_pagina(sessione):
+            return {"ok": False, "stato": "", "motivo": "sessione_assente"}
+        intestazione = {"Authorization": "Bearer " + self._key}
+        rifiuto = ""
+        try:
+            try:
+                s = self._fetch(STRIPE_URL + "/" + sessione + "/expire",
+                                b"expand[]=payment_intent",
+                                dict(intestazione,
+                                     **{"Content-Type": "application/x-www-form-urlencoded"}))
+            except Exception as exc:
+                if _esito_sconosciuto(exc):
+                    raise
+                rifiuto = _motivo_errore(exc)
+                if getattr(exc, "code", None) in (401, 403):
+                    # F9 (11/11): una chiave che non puo' chiudere le pagine non guarisce da sola
+                    logger.error("Stripe | codice: chiusura_pagina_negata | sottocodice: %s | "
+                                 "messaggio: la chiave non puo' chiudere le pagine di pagamento, le "
+                                 "stanze scadute restano tenute fino a un giorno -> %s",
+                                 exc.code, rifiuto)
+                s = self._fetch(STRIPE_URL + "/" + sessione, None, intestazione)
+            if not (isinstance(s, dict) and s.get("id") == sessione
+                    and isinstance(s.get("status"), str) and s.get("status")):
+                return {"ok": False, "stato": "", "motivo": "risposta_inattesa: " + _in_breve(s)}
+            # F8 (11/11): rifiutata e ancora aperta (403 chiave senza permesso, 429): il motivo
+            # del rifiuto resta, o nel registro c'e' solo «open» per un giorno intero
+            return {"ok": True, "stato": s["status"],
+                    "motivo": rifiuto if s["status"] not in ("expired", "complete") else ""}
+        except Exception as exc:
+            motivo = _motivo_errore(exc)
+            logger.warning("Stripe: pagina di pagamento non chiusa cs=%s -> %s", sessione, motivo)
+            return {"ok": False, "stato": "", "motivo": motivo}
 
     def pagamento_della_sessione(self, sessione: Any) -> Dict[str, Any]:
         """IL PAGAMENTO DIETRO UNA SESSIONE CHIUSA SENZA SOLDI DISPONIBILI (`unpaid`): e' BLOCCATO
@@ -216,20 +308,22 @@ class ProviderStripe:
         niente e' bloccato."""
         vuoto: Dict[str, Any] = {"ok": False, "pi": "", "stato": "", "incassabile_cents": 0,
                                  "motivo": ""}
-        if not (isinstance(sessione, str) and sessione.startswith("cs_") and len(sessione) > 3):
+        if not _e_una_pagina(sessione):
             return dict(vuoto, motivo="sessione_assente")
         intestazione = {"Authorization": "Bearer " + self._key}
         try:
             s = self._fetch(STRIPE_URL + "/" + sessione, None, intestazione)
             if not isinstance(s, dict) or s.get("id") != sessione:
-                return dict(vuoto, motivo="risposta_inattesa: %r" % (s,))
+                return dict(vuoto, motivo="risposta_inattesa: " + _in_breve(s))
             pi = s.get("payment_intent")
-            if not (isinstance(pi, str) and pi.startswith("pi_")):
+            if not pi:
                 return dict(vuoto, ok=True)
+            if not _e_un_numero_di_stripe(pi, "pi_"):
+                return dict(vuoto, motivo="risposta_inattesa: " + _in_breve(s))
             p = self._fetch(PAGAMENTI_URL + "/" + pi, None, intestazione)
             if not (isinstance(p, dict) and p.get("id") == pi
                     and isinstance(p.get("status"), str) and p.get("status")):
-                return dict(vuoto, motivo="risposta_inattesa: %r" % (p,))
+                return dict(vuoto, motivo="risposta_inattesa: " + _in_breve(p))
             importo = p.get("amount_capturable")
             return {"ok": True, "pi": pi, "stato": p["status"],
                     "incassabile_cents": importo if _intero_pos(importo) else 0, "motivo": ""}
@@ -244,14 +338,14 @@ class ProviderStripe:
         rifiutato. «Gia' incassato» (`succeeded`) e «scaduto o annullato» (`canceled`) sono due
         fatti opposti, e la risposta d'errore non basta a distinguerli con certezza.
         Ritorna {'ok', 'stato', 'motivo'}; `ok=False` = NON LO SO."""
-        if not (isinstance(payment_intent, str) and payment_intent.startswith("pi_")):
+        if not _e_un_numero_di_stripe(payment_intent, "pi_"):
             return {"ok": False, "stato": "", "motivo": "payment_intent_assente"}
         try:
             p = self._fetch(PAGAMENTI_URL + "/" + payment_intent, None,
                             {"Authorization": "Bearer " + self._key})
             if not (isinstance(p, dict) and p.get("id") == payment_intent
                     and isinstance(p.get("status"), str) and p.get("status")):
-                return {"ok": False, "stato": "", "motivo": "risposta_inattesa: %r" % (p,)}
+                return {"ok": False, "stato": "", "motivo": "risposta_inattesa: " + _in_breve(p)}
             return {"ok": True, "stato": p["status"], "motivo": ""}
         except Exception as exc:
             motivo = _motivo_errore(exc)
@@ -280,7 +374,7 @@ class ProviderStripe:
 
     def _gesto(self, payment_intent: Any, chiave_idem: Any, suffisso: str,
                params: List[Tuple[str, str]], stato_atteso: str, nome: str) -> Dict[str, Any]:
-        if not (isinstance(payment_intent, str) and payment_intent.startswith("pi_")):
+        if not _e_un_numero_di_stripe(payment_intent, "pi_"):
             return {"ok": False, "id": "", "motivo": "payment_intent_assente"}
         if not (isinstance(chiave_idem, str) and chiave_idem.strip()):
             return {"ok": False, "id": "", "motivo": "chiave_idempotenza_assente"}
@@ -297,7 +391,7 @@ class ProviderStripe:
             if (isinstance(resp, dict) and resp.get("id") == payment_intent
                     and resp.get("status") == stato_atteso):
                 return {"ok": True, "id": payment_intent, "motivo": stato_atteso}
-            return {"ok": False, "id": "", "motivo": "risposta_inattesa: %r" % (resp,)}
+            return {"ok": False, "id": "", "motivo": "risposta_inattesa: " + _in_breve(resp)}
         except Exception as exc:
             motivo = _motivo_errore(exc)
             logger.error("Stripe: %s FALLITO pi=%s -> %s", nome, payment_intent, motivo,
@@ -335,7 +429,7 @@ class ProviderStripe:
                         si rifa' a mano (l'id `re_` resta nella risposta per ritrovarlo);
           `sconosciuto` True = timeout, 5xx, 409: la richiesta puo' essere stata ESEGUITA
                         (`_esito_sconosciuto`, la stessa regola del bonifico)."""
-        if not (isinstance(payment_intent, str) and payment_intent.startswith("pi_")):
+        if not _e_un_numero_di_stripe(payment_intent, "pi_"):
             return {"ok": False, "id": "", "motivo": "payment_intent_assente"}
         if not _intero_pos(importo_cents):
             return {"ok": False, "id": "", "motivo": "importo_non_valido"}
@@ -364,7 +458,7 @@ class ProviderStripe:
             # Va detto per intero, non ridotto a un booleano. E una risposta che non so leggere
             # NON prova che il rimborso non sia partito (Kimi K12 sulla #279): e' sconosciuto,
             # salvo l'oggetto `error` di Stripe, che e' un rifiuto certo (come fase101).
-            return {"ok": False, "id": "", "motivo": "risposta_inattesa: %r" % (resp,),
+            return {"ok": False, "id": "", "motivo": "risposta_inattesa: " + _in_breve(resp),
                     "sconosciuto": not (isinstance(resp, dict)
                                         and isinstance(resp.get("error"), dict))}
         except Exception as exc:
@@ -387,7 +481,7 @@ class ProviderStripe:
         risposta inattesa, errore di rete): il chiamante dichiara il fail-open e lo
         scrive nel registro; qui niente ERROR perche' in un'interruzione di Stripe
         diventerebbe posta quotidiana che nessuno legge piu' (ferrea 10)."""
-        if not (isinstance(payment_intent, str) and payment_intent.startswith("pi_")):
+        if not _e_un_numero_di_stripe(payment_intent, "pi_"):
             return ""
         try:
             from urllib.parse import urlencode
@@ -416,7 +510,7 @@ class ProviderStripe:
         bonifico allora parte come prima, dal saldo disponibile, e fase83 lo dice. Un AVVISO e
         non un ERROR, come `impronta_carta`: a ogni interruzione di Stripe sarebbe posta del
         Guardiano che nessuno legge piu' (ferrea 10)."""
-        if not (isinstance(payment_intent, str) and payment_intent.startswith("pi_")):
+        if not _e_un_numero_di_stripe(payment_intent, "pi_"):
             return ""
         try:
             resp = self._fetch(PAGAMENTI_URL + "/" + payment_intent, None,
@@ -445,7 +539,7 @@ class ProviderStripe:
         LETTURA SOLA. Ritorna uno di `STATI_SESSIONE`, o "" se la risposta non si puo'
         credere: input che non e' una sessione, rete, risposta di un altro oggetto, valore
         mai dichiarato da Stripe. Il chiamante tratta "" come «non so» e non conferma."""
-        if not (isinstance(sessione, str) and sessione.startswith("cs_")):
+        if not _e_una_pagina(sessione):
             return ""
         try:
             resp = self._fetch(STRIPE_URL + "/" + sessione, None,
@@ -486,7 +580,7 @@ class ProviderStripe:
 
         Ritorna sempre un dict: {'ok', 'rimborsi', 'rimborsato_cents', 'motivo'}, e con ok=True
         anche 'in_corso_cents' (rimborsi 'pending'/'requires_action': non ancora restituiti)."""
-        if not (isinstance(payment_intent, str) and payment_intent.startswith("pi_")):
+        if not _e_un_numero_di_stripe(payment_intent, "pi_"):
             return {"ok": False, "rimborsi": [], "rimborsato_cents": 0,
                     "motivo": "payment_intent_assente"}
         try:
@@ -496,9 +590,10 @@ class ProviderStripe:
             resp = self._fetch(url, None, {"Authorization": "Bearer " + self._key})
             if not (isinstance(resp, dict) and isinstance(resp.get("data"), list)):
                 # Stripe ha risposto qualcosa che non e' un elenco: non e' «nessun rimborso»,
-                # e' una risposta che non so leggere. Va detta per intero (regola ferrea 9).
+                # e' una risposta che non so leggere. Si dice cosa e' (regola ferrea 9), senza
+                # l'oggetto intero coi dati dell'ospite (F12, 11/11).
                 return {"ok": False, "rimborsi": [], "rimborsato_cents": 0,
-                        "motivo": "risposta_inattesa: %r" % (resp,)}
+                        "motivo": "risposta_inattesa: " + _in_breve(resp)}
             vivi = [r for r in resp["data"] if isinstance(r, dict)
                     and str(r.get("status") or "") in self.STATI_RIMBORSO_VIVO]
             # ⛔ PACCO 1 (25/10, «autorizzato»): RESTITUITO e' solo 'succeeded'. Un 'pending'
@@ -534,7 +629,7 @@ class ProviderStripe:
         chiama deve tenere i soldi fermi.
 
         Ritorna sempre un dict: {'ok', 'contestato', 'motivo'}."""
-        if not (isinstance(payment_intent, str) and payment_intent.startswith("pi_")):
+        if not _e_un_numero_di_stripe(payment_intent, "pi_"):
             return {"ok": False, "contestato": False, "motivo": "payment_intent_assente"}
         try:
             from urllib.parse import urlencode
@@ -543,7 +638,7 @@ class ProviderStripe:
             resp = self._fetch(url, None, {"Authorization": "Bearer " + self._key})
             if not (isinstance(resp, dict) and resp.get("id") == payment_intent):
                 return {"ok": False, "contestato": False,
-                        "motivo": "risposta_inattesa: %r" % (resp,)}
+                        "motivo": "risposta_inattesa: " + _in_breve(resp)}
             if "latest_charge" not in resp:
                 # le versioni API precedenti al 2022-11-15 non hanno il campo: ASSENTE non e'
                 # «nessun addebito», e' una forma che non so leggere (il codice non fissa la
@@ -555,7 +650,8 @@ class ProviderStripe:
             if not (isinstance(addebito, dict) and isinstance(addebito.get("disputed"), bool)):
                 # un addebito senza `disputed` leggibile non e' «non contestato»: non lo so
                 return {"ok": False, "contestato": False,
-                        "motivo": "addebito_senza_disputed: %r" % (addebito,)}
+                        # variante di F12 (11/11): solo cosa e' arrivato, mai l'addebito intero
+                        "motivo": "addebito_senza_disputed: " + _in_breve(addebito)}
             return {"ok": True, "contestato": addebito["disputed"], "motivo": ""}
         except Exception as exc:
             logger.error("Stripe: LETTURA CONTESTAZIONE FALLITA pi=%s -> %s: %s",
@@ -590,7 +686,7 @@ class ProviderStripe:
         Ritorna sempre un dict: {'ok', 'fee_cents', 'netto_cents', 'valuta', 'motivo'}.
         """
         vuoto = {"ok": False, "fee_cents": 0, "netto_cents": 0, "valuta": "", "motivo": ""}
-        if not (isinstance(payment_intent, str) and payment_intent.startswith("pi_")):
+        if not _e_un_numero_di_stripe(payment_intent, "pi_"):
             return dict(vuoto, motivo="payment_intent_assente")
         intestazione = {"Authorization": "Bearer " + self._key}
         try:
@@ -601,14 +697,18 @@ class ProviderStripe:
                 # fallito, o gia' annullato). Dirlo e' l'unica risposta onesta.
                 return dict(vuoto, motivo="nessun addebito sul pagamento (stato %r)"
                             % ((pi or {}).get("status"),))
-            ch = self._fetch(ADDEBITI_URL + "/" + str(addebito), None, intestazione)
+            if not _e_un_numero_di_stripe(addebito):
+                return dict(vuoto, motivo="risposta_inattesa: " + _in_breve(pi))
+            ch = self._fetch(ADDEBITI_URL + "/" + addebito, None, intestazione)
             movimento = (ch or {}).get("balance_transaction")
             if not movimento:
                 return dict(vuoto, motivo="addebito senza balance_transaction: la commissione "
                                           "non e' ancora stata calcolata da Stripe")
-            bt = self._fetch(MOVIMENTI_URL + "/" + str(movimento), None, intestazione)
+            if not _e_un_numero_di_stripe(movimento):
+                return dict(vuoto, motivo="risposta_inattesa: " + _in_breve(ch))
+            bt = self._fetch(MOVIMENTI_URL + "/" + movimento, None, intestazione)
             if not isinstance(bt, dict) or "fee" not in bt:
-                return dict(vuoto, motivo="risposta_inattesa: %r" % (bt,))
+                return dict(vuoto, motivo="risposta_inattesa: " + _in_breve(bt))
             return {"ok": True, "fee_cents": int(bt.get("fee") or 0),
                     "netto_cents": int(bt.get("net") or 0),
                     "valuta": str(bt.get("currency") or "").upper(), "motivo": ""}
@@ -618,12 +718,20 @@ class ProviderStripe:
             return dict(vuoto, motivo="%s: %s" % (exc.__class__.__name__, exc))
 
     def crea_link_anticipo(self, dati: Dict[str, Any]) -> Optional[str]:
+        """Come `crea_sessione_anticipo`, ma torna solo l'URL (o None)."""
+        sessione = self.crea_sessione_anticipo(dati)
+        return sessione["url"] if sessione else None
+
+    def crea_sessione_anticipo(self, dati: Dict[str, Any]) -> Optional[Dict[str, str]]:
         """PAGA IN STRUTTURA: Checkout Session che addebita SUBITO solo l'ANTICIPO
         (commissione + fee + copertura carta = tutto NOSTRO, fase188) E salva la carta per la
         penale no-show/tardiva (FASE 3). La carta va dall'ospite a Stripe, MAI da noi (hosted).
         Il SALDO **non** si incassa qui: lo paga l'ospite all'host DI PERSONA -> nessun escrow,
         nessun payout, nessun auto-rilascio. Il webhook riconosce la prenotazione dai metadata
-        (`modo=in_struttura`, `anticipo_cents`, `saldo_cents`). Ritorna l'URL hosted o None.
+        (`modo=in_struttura`, `anticipo_cents`, `saldo_cents`). Ritorna {'url', 'id'} o None:
+        il NUMERO e' quello della pagina che l'ospite ha in mano, ed e' questa che lo spazzino
+        chiude (piano dei 2 minuti, difetto A, 11/11); un numero che non e' di una sessione
+        resta '' come in `crea_sessione`.
 
         Deliberatamente SEPARATO da `crea_link` (flusso online LIVE): lo lasciamo intatto."""
         try:
@@ -676,7 +784,10 @@ class ProviderStripe:
                        "Content-Type": "application/x-www-form-urlencoded"}
             resp = self._fetch(STRIPE_URL, body, headers)
             url = resp.get("url") if isinstance(resp, dict) else None
-            return url if isinstance(url, str) and url else None
+            if not (isinstance(url, str) and url):
+                return None
+            cs = resp.get("id")
+            return {"url": url, "id": cs if _e_una_pagina(cs) else ""}
         except Exception:
             logger.warning("Stripe: creazione link ANTICIPO fallita (ISOLATA -> None)",
                            exc_info=True)

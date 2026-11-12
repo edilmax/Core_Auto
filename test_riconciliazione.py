@@ -73,6 +73,33 @@ class TestRiconciliazione(unittest.TestCase):
         return riconcilia(self.fc, "sk_test", giorni=giorni, fetch=stripe,
                           ora=lambda: ORA)
 
+    # DA5 (campagna soldi 8/11): Stripe scrive il saldo in euro anche per un pagamento in yen,
+    # il giornale in yen: il confronto dei totali gridava per sempre su prenotazioni sane.
+    def _convertita(self, sid, euro):
+        return {"id": sid, "reporting_category": "charge", "currency": "eur", "amount": euro,
+                "exchange_rate": 0.0059}
+
+    def test_DA5_una_prenotazione_in_yen_non_fa_gridare_i_totali(self):
+        self._incasso("RJ", 170000, "JPY")
+        rep = self._ric(_StripeFinto(sessioni=[_sessione("RJ", 170000, "jpy")],
+                                     balance=[self._convertita("t1", 100000)]))
+        self.assertIs(rep["ok"], True, rep)
+        self.assertEqual(rep["conversioni"], {"charge": 1}, "cio' che non confronta va dichiarato")
+
+    def test_DA5_gli_euro_si_confrontano_lo_stesso(self):
+        self._incasso("RJ", 170000, "JPY")
+        self._incasso("RE", 500)
+        rep = self._ric(_StripeFinto(
+            sessioni=[_sessione("RJ", 170000, "jpy"), _sessione("RE", 500)],
+            balance=[self._convertita("t1", 100000),
+                     {"id": "t2", "reporting_category": "charge", "currency": "eur", "amount": 400}]))
+        self.assertIs(rep["ok"], False, "100 cent di euro mancano: deve gridare")
+
+    def test_DA5_yen_a_giornale_senza_nessuna_conversione_grida_ancora(self):
+        self._incasso("RJ", 170000, "JPY")
+        rep = self._ric(_StripeFinto(sessioni=[_sessione("RJ", 170000, "jpy")], balance=[]))
+        self.assertIs(rep["ok"], False, "su Stripe non c'e' niente: non e' una conversione")
+
     def test_mondo_perfetto(self):
         self._incasso("R1", 25000)
         self._incasso("R2", 18000)

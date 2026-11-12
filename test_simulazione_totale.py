@@ -248,6 +248,7 @@ class TestSimulazioneTotale(unittest.TestCase):
                                          idem_key=rec.get("idem_key") or ("hold_" + rec["riferimento"]))
             self.sis.payout.rimuovi(rec["riferimento"])
             pp.scadi(rec["riferimento"])
+            pp.scadenza_finita(rec["riferimento"])   # FB5: lo sweeper vero finisce i passi
         # la stanza è di nuovo prenotabile e il payout non conta più
         s, q2 = self._quote(h["slug"], ci="2026-09-20", co="2026-09-22")
         self.assertEqual(s, 200)
@@ -273,6 +274,7 @@ class TestSimulazioneTotale(unittest.TestCase):
             self.sis.inventario.rilascia(rec["alloggio_id"], rec["check_in"], rec["check_out"],
                                          idem_key=rec.get("idem_key") or ("hold_" + rec["riferimento"]))
             self.sis.payout.rimuovi(rec["riferimento"]); pp.scadi(rec["riferimento"])
+            pp.scadenza_finita(rec["riferimento"])   # FB5: lo sweeper vero finisce i passi
         # pagamento TARDIVO: stanza libera -> ancora sua (conferma + payout ricreato)
         s, _ = self._webhook_pagato(rif)
         self.assertEqual(s, 200)

@@ -384,9 +384,10 @@ git clone https://github.com/edilmax/Core_Auto.git /var/www/bookinvip && cd /var
 # 4. crea il volume dati e COPIA DENTRO i .db restaurati
 docker volume create bookinvip_casavip_data
 VOL=$(docker volume inspect --format '{{.Mountpoint}}' bookinvip_casavip_data)
-scp ~/RESTORE/*.db root@<nuovo-vps>:$VOL/      # dal PC; oppure cp se già sul server
+scp ~/RESTORE/* root@<nuovo-vps>:$VOL/      # dal PC; oppure cp se già sul server. Copia anche blocco_globale.flag: bonifici fermi finché una persona non confronta con Stripe (Bunker, riconciliazione) e toglie il blocco
 # 5. avvia (HTTPS: serve /etc/letsencrypt — rigenera con certbot se il dominio punta qui)
 docker compose -f docker-compose.casavip.yml build app
+docker compose -f docker-compose.casavip.yml run --rm --no-deps --user root --entrypoint chown app -R app:app /data   # i file li ha copiati root: senza, l'app non scrive e il blocco non si toglie
 docker compose -f docker-compose.casavip.yml up -d
 # 6. verifica: curl -sS -o /dev/null -w "%{http_code}\n" https://bookinvip.com/api/health  -> 200
 ```
@@ -442,10 +443,11 @@ git clone https://github.com/edilmax/Core_Auto.git /var/www/bookinvip && cd /var
 # [~1 min]  4. volume + dati restaurati (dal punto b, dal PC):
 docker volume create bookinvip_casavip_data
 VOL=$(docker volume inspect --format '{{.Mountpoint}}' bookinvip_casavip_data)
-scp ~/RESTORE/*.db root@<NUOVO-VPS>:$VOL/            # copia i .db nel volume
+scp ~/RESTORE/* root@<NUOVO-VPS>:$VOL/            # i .db e blocco_globale.flag: i soldi ripartono fermi, lo toglie una persona dal Bunker dopo il confronto con Stripe
 # [~15 min] 5. HTTPS: punta il DNS di bookinvip.com al nuovo IP, poi certbot
 # [~5 min]  6. avvia
 docker compose -f docker-compose.casavip.yml build app
+docker compose -f docker-compose.casavip.yml run --rm --no-deps --user root --entrypoint chown app -R app:app /data   # i file li ha copiati root: senza, l'app non scrive e il blocco non si toglie
 docker compose -f docker-compose.casavip.yml up -d
 # 7. VERIFICA: curl -sS -o /dev/null -w "%{http_code}\n" https://bookinvip.com/api/health   # -> 200
 #    e la catena del giornale: python3 fase178_watchdog.py --dati $VOL --backup $VOL/backup --uptime skip

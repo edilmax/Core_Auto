@@ -923,14 +923,16 @@ class TestContrattoPayoutFase131(BaseContratto, unittest.TestCase):
     COLONNE = {
         "payout": ("prenotazione_id TEXT PK1", "host_id TEXT NOT NULL",
                    "minori INTEGER NOT NULL", "valuta TEXT NOT NULL",
-                   "stato TEXT NOT NULL", "ts INTEGER NOT NULL"),
+                   "stato TEXT NOT NULL", "ts INTEGER NOT NULL",
+                   # FB1 (11/11): la ritenuta gia' tolta da questo bonifico
+                   "ritenuta_cents INTEGER NOT NULL"),
     }
     INDICI = {"ix_payout_host": "CREATE INDEX ix_payout_host ON payout(host_id)"}
     UNICI = {"payout": ("pk(prenotazione_id)",)}
     CHECK = {"payout": ()}
     FK = {"payout": ()}
     TRIGGER = {}
-    DENARO = ("payout.minori",)
+    DENARO = ("payout.minori", "payout.ritenuta_cents")
 
     def costruisci(self, percorso):
         from fase131_payout_dashboard import crea_payout_dashboard
@@ -1093,7 +1095,9 @@ class TestContrattoPendentiFase162(BaseContratto, unittest.TestCase):
                      "creato_ts INTEGER NOT NULL",
                      "invito_recensione_ts INTEGER NOT NULL",
                      # voce 137 (26/10): quando l'host ha cancellato, l'ordine di `cancellate_host`
-                     "cancellata_ts INTEGER NOT NULL"),
+                     "cancellata_ts INTEGER NOT NULL",
+                     # V-e (10/11): 1 dal CAS 'scaduto' finche' lo sweeper non ha finito i passi
+                     "scadenza_da_finire INTEGER NOT NULL"),
     }
     INDICI = {}
     UNICI = {"pendenti": ("pk(riferimento)",)}
@@ -1594,6 +1598,57 @@ class TestContrattoEventiStripeFase204(BaseContratto, unittest.TestCase):
                 "pendenti": ["evt_da_fare"]}
 
 
+class TestContrattoCodaEmailFase86(BaseContratto, unittest.TestCase):
+    """Le email fallite da ritentare (ordine del fondatore 10/11): se l'archivio si perde,
+    si perdono il voucher, il PIN di check-in e i link che non erano ancora arrivati."""
+    ETICHETTA = "fase86 coda delle email fallite (si ritentano)"
+    COLONNE = {
+        "coda_email": ("id INTEGER PK1", "a TEXT NOT NULL", "oggetto TEXT NOT NULL",
+                       "html TEXT NOT NULL", "template TEXT NOT NULL",
+                       "riferimento TEXT NOT NULL", "stato TEXT NOT NULL",
+                       "tentativi INTEGER NOT NULL", "prossimo_ts INTEGER NOT NULL",
+                       "presa_ts INTEGER NOT NULL", "creato_ts INTEGER NOT NULL"),
+    }
+    INDICI = {}
+    UNICI = {"coda_email": ()}     # id INTEGER PRIMARY KEY = il rowid: nessun indice a parte
+    CHECK = {"coda_email": ()}
+    FK = {"coda_email": ()}
+    TRIGGER = {}
+    DENARO = ()
+
+    def costruisci(self, percorso):
+        from fase86_email import CodaEmail
+        self._esiti = [False, True]
+        return CodaEmail(percorso, lambda a, o, h: self._esiti.pop(0), ora=lambda: ORA)
+
+    def esercita(self, archivio):
+        import sqlite3
+        primo = archivio.accoda("ospite@example.com", "Il tuo voucher", "<p>v</p>",
+                                "voucher", "BV-2026-000117")
+        rifiutato = archivio.accoda("senza-chiocciola", "o", "<p>x</p>")
+        fallito = archivio.un_giro()
+
+        def _leggi():
+            con = sqlite3.connect(archivio.percorso, timeout=30)   # la spia vede anche lei
+            try:
+                return con.execute("SELECT a, riferimento, stato, tentativi, prossimo_ts "
+                                   "FROM coda_email").fetchall()
+            finally:
+                con.close()
+        dopo_il_fallimento = _leggi()
+        archivio._ora = lambda: ORA + 30
+        consegnate = archivio.un_giro()
+        return {"primo": primo, "rifiutato": rifiutato, "fallito": fallito,
+                "dopo_il_fallimento": dopo_il_fallimento, "consegnate": consegnate,
+                "dopo_la_consegna": _leggi()}
+
+    def atteso_esercizio(self):
+        return {"primo": True, "rifiutato": False, "fallito": 0,
+                "dopo_il_fallimento": [("ospite@example.com", "BV-2026-000117", "attesa", 1,
+                                        ORA + 30)],
+                "consegnate": 1, "dopo_la_consegna": []}
+
+
 # ===========================================================================
 # 17. DEPOSITO CAUZIONALE (fase149) — la pre-autorizzazione sulla carta
 # ===========================================================================
@@ -1883,6 +1938,7 @@ class TestOgniArchivioHaIlSuoContratto(unittest.TestCase):
         "db_messaggi": "TestContrattoMessaggisticaFase113",
         "db_kyc": "TestContrattoKycFase143",
         "db_eventi_stripe": "TestContrattoEventiStripeFase204",
+        "db_coda_email": "TestContrattoCodaEmailFase86",
     }
     # ancora SCOPERTI, per iscritto (onda 2 del contratto di persistenza): recensioni,
     # viral loop, marche temporali RFC 3161, check-in digitale, crediti single-use e le
@@ -1926,20 +1982,21 @@ class TestOgniArchivioHaIlSuoContratto(unittest.TestCase):
             self.assertGreater(len(classe.COLONNE), 0,
                                "%s non congela nessuna tabella" % nome)
 
-    def test_i_diciotto_archivi_sono_tutti_esercitati(self):
+    def test_gli_archivi_sono_tutti_esercitati(self):
         """Nessuna classe puo' congelare uno schema senza provare che ci si scrive.
 
         ⛔ IL NUMERO E' CABLATO APPOSTA e va alzato a mano quando ne nasce uno: e' cio' che
-        obbliga chi aggiunge un archivio a passare di qui. Da 17 a 18 il 2026-09-08 con
+        obbliga chi aggiunge un archivio a passare di qui. Alzato il 2026-09-08 con
         `fase204_eventi_stripe` (gli eventi del webhook), che protegge la PROVA di aver
         ricevuto un pagamento: se quell'archivio si perde, nessuno riporta gli eventi,
-        perche' a Stripe abbiamo gia' risposto 2xx.
+        perche' a Stripe abbiamo gia' risposto 2xx. Alzato il 2026-11-10 con la coda delle
+        email fallite di `fase86` (ordine del fondatore).
         """
         contratti = sorted(n for n, o in globals().items()
                            if isinstance(o, type) and issubclass(o, BaseContratto)
                            and o is not BaseContratto)
-        self.assertEqual(len(contratti), 18,
-                         "attesi 18 contratti di persistenza, trovati %d: %r"
+        self.assertEqual(len(contratti), 19,
+                         "attesi 19 contratti di persistenza, trovati %d: %r"
                          % (len(contratti), contratti))
         for nome in contratti:
             classe = globals()[nome]

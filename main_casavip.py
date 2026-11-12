@@ -87,9 +87,10 @@ def _configura_logging() -> None:  # pragma: no cover
                                                exc_info=True)
 
 
-def main() -> None:  # pragma: no cover
-    _configura_logging()
-    config = ConfigCasaVIP(
+def config_da_ambiente() -> ConfigCasaVIP:
+    """La configurazione di produzione, una sola (PR3, 8/11): la usa anche il giro di recupero
+    degli eventi Stripe, che se ne costruiva una sua senza email e con archivi in RAM."""
+    return ConfigCasaVIP(
         abilitato=True,
         segreto_hmac=_segreto(),
         db_catalogo=os.environ.get("DB_CATALOGO", "data/catalogo.db"),
@@ -115,6 +116,7 @@ def main() -> None:  # pragma: no cover
         # deploy, cioe' denaro vero). Guardia: test_db_persistenti.py.
         db_recensioni=os.environ.get("DB_RECENSIONI", "data/recensioni.db"),
         db_credito_usati=os.environ.get("DB_CREDITO_USATI", "data/credito_usati.db"),
+        db_coda_email=os.environ.get("DB_CODA_EMAIL", "data/coda_email.db"),
         db_marche=os.environ.get("DB_MARCHE", "data/marche.db"),
         db_geocache=os.environ.get("DB_GEOCACHE", "data/geocache.db"),
         db_checkin=os.environ.get("DB_CHECKIN", "data/checkin.db"),
@@ -177,6 +179,11 @@ def main() -> None:  # pragma: no cover
         con_sentinel=os.environ.get("SENTINEL", "").lower() in ("1", "true", "yes"),
         cartella_sentinel=os.environ.get("SENTINEL_DIR") or ".",
     )
+
+
+def main() -> None:  # pragma: no cover
+    _configura_logging()
+    config = config_da_ambiente()
     # ── FAIL-CLOSED sugli archivi IN RAM (difetto chiuso 2026-07-29, revisione ostile) ──
     # Il gemello travestito del percorso vuoto: `DB_FINANZA=:memory:` (il valore che i
     # test usano ovunque, quindi il primo candidato a finire in un `.env` per

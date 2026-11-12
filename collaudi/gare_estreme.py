@@ -52,6 +52,11 @@ def esito(nome, ok, dett=""):
 
 
 def _fake_fetch(url, body, headers):
+    # PIANO DEI 2 MINUTI, pezzo 3 (11/11): a hold scaduto lo spazzino chiude la pagina con
+    # POST .../expire e libera la stanza solo se Stripe risponde 'expired'. Senza questa risposta
+    # il finto diceva «non lo so» e la stanza restava tenuta (esame_prenotazioni rosso, 12/11).
+    if url.endswith("/expire"):
+        return {"id": url.rsplit("/", 2)[-2], "object": "checkout.session", "status": "expired"}
     if not body and "/checkout/sessions/" in url:     # rilettura dello stato (casella 10)
         return {"id": url.rsplit("/", 1)[-1], "payment_status": "paid"}
     import secrets

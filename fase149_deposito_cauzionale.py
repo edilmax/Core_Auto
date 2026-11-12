@@ -111,8 +111,9 @@ class DepositoCauzionale:
                     return False
             else:
                 # nessun danno -> rilascio totale
-                if self._release is not None:
-                    self._safe(self._release, psp_ref)
+                if self._release is not None and not self._safe(self._release, psp_ref):
+                    con.execute("ROLLBACK")          # EN6: il PSP non ha liberato la carta
+                    return False
             con.execute("UPDATE cauzione SET catturato=?, stato=?, ts=? "
                         "WHERE prenotazione_id=?",
                         (danno, "catturato_parziale" if danno > 0 else "rilasciato",
@@ -138,8 +139,9 @@ class DepositoCauzionale:
             if not r or r[3] not in ("autorizzato", "catturato_parziale"):
                 con.execute("ROLLBACK")
                 return False
-            if self._release is not None:
-                self._safe(self._release, r[0])
+            if self._release is not None and not self._safe(self._release, r[0]):
+                con.execute("ROLLBACK")              # EN6: il PSP non ha liberato la carta
+                return False
             con.execute("UPDATE cauzione SET stato='rilasciato', ts=? "
                         "WHERE prenotazione_id=?", (self._now(), str(prenotazione_id)))
             con.execute("COMMIT")

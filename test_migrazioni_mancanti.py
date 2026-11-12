@@ -802,6 +802,8 @@ class TestPayoutFase131DatiVecchi(BaseMigrazione, unittest.TestCase):
     )
     TABELLE = (("payout", ("prenotazione_id", "host_id", "minori", "stato", "ts"),
                 "prenotazione_id"),)
+    # FB1 (11/11): la ritenuta gia' tolta dal bonifico, aggiunta agli archivi di prima
+    COLONNE_AGGIUNTE = {"payout": ("ritenuta_cents",)}
 
     def apri(self, percorso):
         from fase131_payout_dashboard import crea_payout_dashboard

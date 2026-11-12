@@ -1029,10 +1029,246 @@ class TestLaPrenotazioneSiTrovaDalPagamento(unittest.TestCase):
         self._reg("R-SOLO-LISTA", '["pi_SOLO"]')
         self.assertIsNone(self.pp.per_payment_intent("pi_SOLO"))
 
+    def test_I9_solo_una_riga_rotta_DI_QUEL_pagamento_ferma_la_ricerca(self):
+        """I9 (decisione A) senza rompere la regola qui sopra (PROTON e python-reviewer, 12/11):
+        `instr` cerca un pezzo di testo, e una riga rotta di pi_ABC fermava la contestazione di
+        pi_AB. Si ferma (errore + ERROR) solo se la riga rotta contiene QUEL pagamento a parola
+        intera e nessuna riga buona combacia."""
+        import logging
+        self._reg("R-ALTRO", '{"stripe_pi": "pi_ABC"')
+        self.assertIsNone(self.pp.per_payment_intent("pi_AB"),
+                          "una riga rotta di un ALTRO pagamento ha fermato la ricerca")
+        self._reg("R-SUO", '{"stripe_pi": "pi_SUO"')
+        with self.assertLogs("core_auto.pagamenti_pendenti", level="ERROR") as log:
+            with self.assertRaises(ValueError):
+                self.pp.per_payment_intent("pi_SUO")
+        self.assertTrue(any("R-SUO" in r.getMessage() and "corpo_illeggibile" in r.getMessage()
+                            for r in log.records if r.levelname == "ERROR"), log.output)
+        logging.getLogger("core_auto.pagamenti_pendenti").debug("fine")
+
     def test_quello_che_non_e_un_pagamento_non_trova_niente_e_non_esplode(self):
         self._reg("R-X", json.dumps({"stripe_pi": "pi_X", "carica": "ch_1"}))
         for cattivo in (None, 7, b"pi_X", "ch_1", ""):
             self.assertIsNone(self.pp.per_payment_intent(cattivo), repr(cattivo))
+
+
+class TestF17IlCorpoIlleggibileNellArchivioSiDice(unittest.TestCase):
+    """F17 nell'archivio (11/11, variant-analysis dopo F17 in fase83). Sei punti di fase162
+    leggono il corpo salvato e, se non si legge, vanno avanti IN SILENZIO. Misurato sul codice di
+    88fec64: i quattro che SCRIVONO (pagina Stripe, costo del gestore, blocco sulla carta,
+    cancellazione dell'host) riscrivono il record col SOLO dato nuovo -- senza nessun importo --
+    e da li' il record sembra sano a tutti; `per_payment_intent` (il webhook che cerca la
+    prenotazione di un pagamento) lo salta, e il pagamento non trova la sua prenotazione. Ora
+    lo dicono nel registro; il ripiego resta quello di prima (qui sotto, misurato)."""
+
+    ROTTO = "{rotto pi_9"
+
+    def setUp(self):
+        self.p = crea_pagamenti_pendenti(":memory:", orologio=lambda: 1000)
+        self.p.inizializza_schema()
+        for rif in ("R1", "R2", "R3", "R4", "R5"):
+            self.assertTrue(self.p.registra(rif, alloggio_id="casa", check_in="2027-01-10",
+                                            check_out="2027-01-12", corpo_json=self.ROTTO,
+                                            scadenza_ts=2000))
+        # `aggrega_costi_tecnici` legge solo 'pagato', 'rimborsato', 'cancellata_host'; `registra`
+        # nasce sempre 'in_attesa' (misurato), quindi si paga con la strada vera
+        self.assertTrue(self.p.registra("R6", alloggio_id="casa", check_in="2027-04-10",
+                                        check_out="2027-04-12", corpo_json=self.ROTTO,
+                                        scadenza_ts=2000))
+        self.p.conferma("R6")
+        self.assertEqual(self.p.info("R6")["stato"], "pagato", "PREMESSA: un record rotto pagato")
+
+    def _ascolta(self, fai):
+        import logging
+        nome = "core_auto.pagamenti_pendenti"
+        with self.assertLogs(nome, level="DEBUG") as log:
+            logging.getLogger(nome).debug("ascolto")
+            esito = fai()
+        return esito, [(r.levelname, r.getMessage()) for r in log.records
+                       if r.levelname in ("WARNING", "ERROR")]
+
+    @staticmethod
+    def _con(avvisi, livello, *parole):
+        return [m for lv, m in avvisi if lv == livello and all(p in m for p in parole)]
+
+    def test_I7_il_blocco_della_carta_illeggibile_dice_di_quale_prenotazione(self):
+        """I7 (R2 dei revisori, 11/11): `blocco_della_carta` riceveva il corpo senza la
+        prenotazione, e il suo avviso diceva «riferimento: -»: un corpo rotto sui soldi senza
+        sapere di chi. I tre lettori che hanno la prenotazione in mano ora la passano."""
+        import fase83_server
+        from fase181_audit_console import _semaforo_coerenza
+        self.assertTrue(self.p.registra("R7", alloggio_id="casa", check_in="2027-05-10",
+                                        check_out="2027-05-12", corpo_json='{"blocco_pi": "pi_7"',
+                                        scadenza_ts=2000))
+        # (dal 12/11 `blocchi_aperti` legge il corpo da se', col suo punto: I9 parte F4)
+        casi = (("blocchi_aperti", "R7", lambda: self.p.blocchi_aperti(), "blocchi_aperti"),
+                ("fase83._blocco", "R6", lambda: fase83_server._blocco(self.p.info("R6")),
+                 "blocco_della_carta"),
+                ("fase181 coerenza", "R6",
+                 lambda: _semaforo_coerenza(self.p.info("R6"), None, []), "blocco_della_carta"))
+        for nome, rif, fai, punto in casi:
+            with self.subTest(nome):
+                _, avvisi = self._ascolta(fai)
+                self.assertTrue(self._con(avvisi, "WARNING", "corpo_illeggibile",
+                                          "punto: " + punto, "riferimento: " + rif),
+                                avvisi)
+
+    def test_I9_il_giro_dei_blocchi_grida_il_blocco_che_non_sa_leggere(self):
+        """I9 parte 3 (decisione A, 12/11): un blocco sulla carta col corpo rotto usciva dal
+        giro orario con un semplice avviso: nessuno lo incassava ne' lo annullava, e alla
+        scadenza dell'autorizzazione i soldi sparivano. Si salta lo stesso, ma con un ERROR
+        (lo legge il Guardiano). E a corpo sano il blocco resta nel giro, e si tace."""
+        self.assertTrue(self.p.registra("R9", alloggio_id="casa", check_in="2027-06-10",
+                                        check_out="2027-06-12", corpo_json='{"blocco_pi": "pi_9"',
+                                        scadenza_ts=2000))
+        self.assertTrue(self.p.registra("R10", alloggio_id="casa", check_in="2027-06-20",
+                                        check_out="2027-06-22",
+                                        corpo_json='{"blocco_pi": "pi_10"}', scadenza_ts=2000))
+        # pr-test-analyzer T6 (12/11): un corpo SANO che ha la parola nel testo (un campo scritto
+        # dall'ospite) non e' un blocco e non deve gridare ogni ora (regola ferrea 10)
+        self.assertTrue(self.p.registra("R11", alloggio_id="casa", check_in="2027-06-24",
+                                        check_out="2027-06-26",
+                                        corpo_json='{"nota": "blocco_pi"}', scadenza_ts=2000))
+        esito, avvisi = self._ascolta(lambda: self.p.blocchi_aperti())
+        nel_giro = [r["riferimento"] for r in esito]
+        self.assertEqual(nel_giro, ["R10"], "premessa: solo il blocco sano e' nel giro")
+        # revisore Stripe R8: il numero del pagamento, per trovarlo su Stripe a mano
+        self.assertTrue(self._con(avvisi, "ERROR", "blocco_illeggibile", "riferimento: R9",
+                                  "pi_9"), avvisi)
+        self.assertEqual(self._con(avvisi, "ERROR", "R10"), [], avvisi)
+        self.assertEqual(self._con(avvisi, "ERROR", "R11"), [], avvisi)
+
+    def test_ogni_punto_dice_il_corpo_rotto_e_tiene_il_suo_ripiego(self):
+        casi = (("salva_stripe_session", "R1", lambda: self.p.salva_stripe_session("R1", "cs_a"),
+                 {"stripe_cs": "cs_a"}),
+                ("salva_costo_gateway", "R2", lambda: self.p.salva_costo_gateway("R2", 30),
+                 {"costo_stripe_reale_cents": 30}),
+                ("segna_blocco", "R3", lambda: self.p.segna_blocco("R3", blocco_pi="pi_1"),
+                 {"blocco_pi": "pi_1"}),
+                ("marca_cancellata_host", "R4", lambda: self.p.marca_cancellata_host("R4", 500),
+                 {"penale_host_cents": 500}))
+        for punto, rif, fai, _corpo_di_prima in casi:
+            with self.subTest(punto=punto):
+                esito, avvisi = self._ascolta(fai)
+                # I9 (decisione A del fondatore, 12/11): prima si riscriveva il record col SOLO
+                # dato nuovo -- senza nessun importo -- e da li' sembrava sano a tutti. Ora non
+                # si scrive niente: il corpo rotto resta com'e' (lo si vede ancora) e si grida.
+                self.assertIs(esito, False, "su un corpo rotto non si scrive")
+                self.assertEqual(self.p.info(rif)["corpo_json"], self.ROTTO,
+                                 "il corpo rotto e' stato riscritto")
+                self.assertTrue(self._con(avvisi, "ERROR", "corpo_illeggibile",
+                                          "punto: " + punto, "riferimento: " + rif,
+                                          "NON si riscrive"), avvisi)
+        with self.subTest(punto="per_payment_intent"):
+            # I9 (decisione A): «nessuna prenotazione» faceva passare la contestazione della
+            # banca senza fermare i soldi; ora l'errore sale e il webhook fa ritentare Stripe
+            import logging
+            with self.assertLogs("core_auto.pagamenti_pendenti", level="WARNING") as log:
+                with self.assertRaises(ValueError):
+                    self.p.per_payment_intent("pi_9")
+            avvisi = [(r.levelname, r.getMessage()) for r in log.records]
+            self.assertTrue(self._con(avvisi, "WARNING", "corpo_illeggibile",
+                                      "punto: per_payment_intent", "riferimento: R1"), avvisi)
+            logging.getLogger("core_auto.pagamenti_pendenti").debug("fine")
+        with self.subTest(punto="aggrega_costi_tecnici"):
+            esito, avvisi = self._ascolta(self.p.aggrega_costi_tecnici)
+            self.assertEqual(esito["coperto_cents"], 0, "il ripiego di prima: si salta")
+            self.assertTrue(self._con(avvisi, "WARNING", "corpo_illeggibile",
+                                      "punto: aggrega_costi_tecnici"), avvisi)
+        with self.subTest(punto="conferma_tardivo"):
+            # silent-failure-hunter (11/11): il pagamento TARDIVO riscriveva il corpo col solo
+            # segno, muto, e la guardia di prima non lo vedeva (la variabile si chiama `corpo`)
+            self.assertTrue(self.p.registra("R7", alloggio_id="casa", check_in="2027-05-10",
+                                            check_out="2027-05-12", corpo_json=self.ROTTO,
+                                            scadenza_ts=2000))
+            self.assertTrue(self.p.scadi("R7"), "PREMESSA: blocco scaduto")
+            self.p.scadenza_finita("R7")      # lo spazzino ha finito i suoi passi (misurato:
+            #                                   prima `conferma` risponde «attendi_sweeper»)
+            esito, avvisi = self._ascolta(lambda: self.p.conferma("R7"))
+            # I9 (decisione A): prima diventava 'pagato' col solo segno, senza importi
+            self.assertIs((esito or {}).get("corpo_illeggibile"), True, esito)
+            self.assertEqual((self.p.info("R7")["stato"], self.p.info("R7")["corpo_json"]),
+                             ("scaduto", self.ROTTO), "il CAS ha scritto su un corpo rotto")
+            self.assertTrue(self._con(avvisi, "ERROR", "corpo_illeggibile",
+                                      "punto: conferma_tardivo", "riferimento: R7"), avvisi)
+        with self.subTest(punto="blocco_della_carta"):
+            from fase162_pagamenti_pendenti import blocco_della_carta
+            esito, avvisi = self._ascolta(lambda: blocco_della_carta(self.ROTTO))
+            self.assertEqual(esito["stato"], "nessuno", "il ripiego di prima")
+            self.assertTrue(self._con(avvisi, "WARNING", "corpo_illeggibile",
+                                      "punto: blocco_della_carta"), avvisi)
+
+    def test_un_json_che_non_e_un_oggetto_e_un_riferimento_sporco(self):
+        """pr-test-analyzer e python-reviewer (11/11): il ramo `non_oggetto` non aveva prova, e
+        il riferimento nel registro si puliva solo dagli a-capo: ora come `_rif_per_registro`."""
+        from fase162_pagamenti_pendenti import _corpo_salvato
+        with self.assertRaises(ValueError, msg="I8: un non-oggetto vale come illeggibile"):
+            self._ascolta(lambda: _corpo_salvato("[1]", "p", "R\x1b|x: falso\n"))
+        import logging
+        with self.assertLogs("core_auto.pagamenti_pendenti", level="WARNING") as log:
+            with self.assertRaises(ValueError):
+                _corpo_salvato("[1]", "p", "R\x1b|x: falso\n")
+        avvisi = [(r.levelname, r.getMessage()) for r in log.records]
+        self.assertTrue(self._con(avvisi, "WARNING", "non_oggetto", "riferimento: Rx:falso"),
+                        avvisi)
+        # I8 anche per chi scrive: un record con un JSON non oggetto non si riscrive
+        self.assertTrue(self.p.registra("R8", alloggio_id="casa", check_in="2027-06-10",
+                                        check_out="2027-06-12", corpo_json="[1]",
+                                        scadenza_ts=2000))
+        with self.assertLogs("core_auto.pagamenti_pendenti", level="ERROR"):
+            self.assertIs(self.p.salva_stripe_session("R8", "cs_a"), False)
+        self.assertEqual(self.p.info("R8")["corpo_json"], "[1]")
+        logging.getLogger("core_auto.pagamenti_pendenti").debug("fine")
+
+    def test_un_corpo_buono_o_vuoto_tace(self):
+        self.assertTrue(self.p.registra("B1", alloggio_id="casa", check_in="2027-02-10",
+                                        check_out="2027-02-12",
+                                        corpo_json=json.dumps({"totale_cents": 100}),
+                                        scadenza_ts=2000))
+        self.assertTrue(self.p.registra("B2", alloggio_id="casa", check_in="2027-03-10",
+                                        check_out="2027-03-12", corpo_json="",
+                                        scadenza_ts=2000))
+        for rif in ("B1", "B2"):
+            with self.subTest(rif=rif):
+                esito, avvisi = self._ascolta(lambda r=rif: self.p.salva_stripe_session(r, "cs_b"))
+                self.assertIs(esito, True)
+                self.assertEqual(avvisi, [])
+        self.assertEqual(json.loads(self.p.info("B1")["corpo_json"]),
+                         {"totale_cents": 100, "stripe_cs": "cs_b"}, "il buono non si tocca")
+
+    def test_guardia_nell_archivio_il_corpo_si_legge_solo_dall_aiutante(self):
+        import ast
+        import fase162_pagamenti_pendenti as _f162
+        with open(_f162.__file__, encoding="utf-8") as fh:
+            sorgente = fh.read()
+        letture = []      # ogni `*.loads(...)` del modulo: (riga, funzione, argomenti)
+
+        def giro(nodo, funzione):
+            for figlio in ast.iter_child_nodes(nodo):
+                dentro = (figlio.name if isinstance(figlio, (ast.FunctionDef,
+                                                             ast.AsyncFunctionDef))
+                          else funzione)
+                if (isinstance(figlio, ast.Call) and isinstance(figlio.func, ast.Attribute)
+                        and figlio.func.attr == "loads"):
+                    letture.append((figlio.lineno, funzione, " ".join(
+                        ast.get_source_segment(sorgente, a) or "" for a in figlio.args)))
+                giro(figlio, dentro)
+        giro(ast.parse(sorgente), "<modulo>")
+        # D18: la guardia deve vedere la lettura dell'aiutante, o non sta misurando niente
+        self.assertIn("_corpo_salvato", {f for _n, f, _a in letture},
+                      "l'aiutante che legge il corpo non c'e': la guardia non misura niente")
+        # OGNI lettura JSON del modulo, non solo quelle col testo «corpo_json»: in `conferma`
+        # la variabile si chiamava `corpo` e la guardia di prima non la vedeva (11/11)
+        fuori = [(n, f) for n, f, _a in letture if f != "_corpo_salvato"]
+        self.assertEqual(fuori, [], "nell'archivio il corpo salvato si legge solo da "
+                                    "`_corpo_salvato`, che dice quando non si legge")
+        punti = [c.args[1].value if len(c.args) > 1 and isinstance(c.args[1], ast.Constant)
+                 else None for c in ast.walk(ast.parse(sorgente))
+                 if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)
+                 and c.func.id == "_corpo_salvato"]
+        self.assertTrue(punti, "PREMESSA: l'aiutante si usa")
+        self.assertNotIn(None, punti, "ogni chiamata dice il suo punto con un testo scritto")
+        self.assertEqual(len(punti), len(set(punti)), "un punto per chiamata: %r" % (punti,))
 
 
 if __name__ == "__main__":

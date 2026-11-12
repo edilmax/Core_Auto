@@ -13,17 +13,20 @@ Invarianti:
 """
 import datetime
 import json
+import logging
 import shutil
 import tempfile
 import time
 import unittest
+import urllib.error
+from unittest import mock
 
 import fase85_pagamenti_stripe as _stripe
 from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import crea_router
 from fase87_stripe_webhook import firma_di_test
 from fase163_accettazioni import doc_sha256, CONTRATTO_HOST_VERSIONE
-from fase181_audit_console import componi, risolvi_id
+from fase181_audit_console import componi, risolvi_id, stripe_session_fetch
 
 AK = {"X-Admin-Key": "ak"}
 
@@ -41,7 +44,16 @@ class TestAuditConsole(unittest.TestCase):
     def tearDownClass(cls):
         _stripe.ProviderStripe._fetch_reale = cls._orig
 
+    def _rete_vietata(self, req, timeout=None):
+        """I3: la scheda chiama Stripe con la chiave finta: MAI la rete vera nelle prove."""
+        self.rete.append(req.full_url)
+        raise urllib.error.URLError("rete vietata nelle prove")
+
     def setUp(self):
+        self.rete = []
+        spia = mock.patch("urllib.request.urlopen", side_effect=self._rete_vietata)
+        spia.start()
+        self.addCleanup(spia.stop)
         d = self.dir = tempfile.mkdtemp()
         self.sis = crea_sistema(ConfigCasaVIP(
             abilitato=True, segreto_hmac=b"A" * 32, con_registrazione_host=True,
@@ -173,6 +185,8 @@ class TestAuditConsole(unittest.TestCase):
         self.assertEqual(s, 401)
         s, d = self.g("GET", "/api/admin/audit", None, AK, {"id": rif})
         self.assertEqual(s, 200, d)
+        self.assertEqual(self.rete, ["https://api.stripe.com/v1/checkout/sessions/cs_test_777"],
+                         "la scheda non e' passata dalla spia: e' andata sulla rete vera")
         blob = json.dumps(d)
         for vietato in ("corpo_json", "idem_key", "iban", "codice_fiscale",
                         "partita_iva", "stripe_cs"):
@@ -181,6 +195,84 @@ class TestAuditConsole(unittest.TestCase):
         s, d = self.g("GET", "/api/admin/audit", None, AK, {"id": self.hid})
         self.assertEqual(d["tipo"], "host")
         self.assertIn("EUR", json.dumps(d["payout"]))
+
+
+class TestIlCorpoRottoNonSembraStoricoPreAudit(unittest.TestCase):
+    """I7 (R1 dei revisori, 11/11): il semaforo Stripe della scheda leggeva il corpo in
+    silenzio e, se non si leggeva, diceva GRIGIO «storico pre-audit»: un record dei soldi
+    rotto passava per un record vecchio. Ora e' ROSSO e lo dice nel registro, con chi."""
+
+    def test_corpo_rotto_rosso_e_detto(self):
+        from fase181_audit_console import _semaforo_stripe
+        pren = {"riferimento": "BVIP-R1", "stato": "pagato", "corpo_json": "{rotto cs_test_1"}
+        controllati = []
+        with self.assertLogs("core_auto.pagamenti_pendenti", level="WARNING") as log:
+            esito = _semaforo_stripe(pren, lambda cs: controllati.append(cs) or {"ok": True})
+        self.assertEqual(esito.get("colore"), "rosso", esito)
+        self.assertIn("illeggibile", esito.get("nota", ""))
+        self.assertEqual(controllati, [], "con un corpo rotto non si chiede niente a Stripe")
+        self.assertTrue(any("corpo_illeggibile" in r.getMessage()
+                            and "riferimento: BVIP-R1" in r.getMessage()
+                            for r in log.records), log.output)
+
+    def test_senza_corpo_resta_grigio_e_tace(self):
+        # «E TACE» davvero (buco I7-R1c di PROTON, 12/11: un falso WARNING sul corpo vuoto la
+        # lasciava verde). Python 3.9 non ha assertNoLogs: si ascolta il registro radice e
+        # l'unica riga ammessa e' quella d'ascolto scritta qui sotto.
+        from fase181_audit_console import _semaforo_stripe
+        with self.assertLogs(level="WARNING") as log:
+            esito = _semaforo_stripe({"riferimento": "BVIP-R2", "corpo_json": ""},
+                                     lambda cs: {"ok": True})
+            logging.getLogger("core_auto.prova_ascolto").warning("ASCOLTO")
+        self.assertEqual(esito["colore"], "grigio")
+        self.assertEqual([r.getMessage() for r in log.records], ["ASCOLTO"], log.output)
+
+
+class _RispostaFinta:
+    def __init__(self, corpo):
+        self._corpo = corpo
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_a):
+        return False
+
+    def read(self):
+        return self._corpo
+
+
+class TestLaLetturaDellaPaginaSuStripe(unittest.TestCase):
+    """I3 (R7 + 3 mutanti sopravvissuti su fase181:47): `stripe_session_fetch` non l'aveva
+    mai chiamata una prova. Qui la si chiama DIRETTA, con `urlopen` sostituito da una spia:
+    mai la rete vera."""
+
+    def test_senza_chiave_o_senza_un_numero_di_pagina_non_chiama_stripe(self):
+        for chiave, numero in (("", "cs_test_1"), ("sk_test_x", ""), ("sk_test_x", "cs_"),
+                               ("sk_test_x", "pi_123"), ("sk_test_x", "cs_../../customers")):
+            with self.subTest(chiave=chiave, numero=numero), \
+                    mock.patch("urllib.request.urlopen") as spia:
+                self.assertEqual(stripe_session_fetch(chiave, numero),
+                                 {"ok": False, "motivo": "non_configurato"})
+                spia.assert_not_called()
+
+    def test_legge_la_pagina_con_la_chiave_e_il_tempo_corto(self):
+        corpo = b'{"payment_status": "paid", "status": "complete"}'
+        with mock.patch("urllib.request.urlopen",
+                        return_value=_RispostaFinta(corpo)) as spia:
+            esito = stripe_session_fetch("sk_test_x", "cs_test_1")
+        self.assertEqual(esito, {"ok": True, "payment_status": "paid", "status": "complete"})
+        richiesta = spia.call_args[0][0]
+        self.assertEqual(richiesta.full_url,
+                         "https://api.stripe.com/v1/checkout/sessions/cs_test_1")
+        self.assertEqual(richiesta.get_header("Authorization"), "Bearer sk_test_x")
+        self.assertEqual(spia.call_args[1], {"timeout": 2.0})
+
+    def test_stripe_che_non_risponde_lascia_la_scheda_gialla(self):
+        with mock.patch("urllib.request.urlopen",
+                        side_effect=urllib.error.URLError("giu'")):
+            self.assertEqual(stripe_session_fetch("sk_test_x", "cs_test_1"),
+                             {"ok": False, "motivo": "URLError"})
 
 
 if __name__ == "__main__":

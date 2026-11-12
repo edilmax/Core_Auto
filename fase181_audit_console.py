@@ -29,7 +29,8 @@ import logging
 import re
 from typing import Any, Callable, Dict, List, Optional
 
-from fase162_pagamenti_pendenti import blocco_della_carta
+from fase162_pagamenti_pendenti import _corpo_salvato, blocco_della_carta
+from fase85_pagamenti_stripe import _e_una_pagina
 
 logger = logging.getLogger("core_auto.audit_console")
 
@@ -43,7 +44,7 @@ def stripe_session_fetch(secret_key: str, cs_id: str, *, timeout: float = 2.0
     """SHADOW-CHECK reale: legge la sessione checkout da Stripe (GET, read-only).
     Ritorna {'ok': True, 'payment_status': ...} o {'ok': False, 'motivo': ...}.
     Timeout CORTO (2s): la scheda non deve mai restare appesa per Stripe."""
-    if not (secret_key and isinstance(cs_id, str) and cs_id.startswith("cs_")):
+    if not (secret_key and _e_una_pagina(cs_id)):
         return {"ok": False, "motivo": "non_configurato"}
     try:
         from urllib.request import Request, urlopen
@@ -103,7 +104,8 @@ def _semaforo_coerenza(pren: Optional[Dict[str, Any]], payout: Optional[Dict[str
     # arriva a fine finestra, e una cancellazione ANNULLA senza riga di rimborso. Non sono
     # buchi: sono i soldi che Stripe non ha mai preso. Un blocco SCADUTO su una prenotazione
     # pagata, invece, resta un rosso.
-    blocco = blocco_della_carta((pren or {}).get("corpo_json"))["stato"]
+    blocco = blocco_della_carta((pren or {}).get("corpo_json"),
+                                (pren or {}).get("riferimento", "-"))["stato"]
     if stato == "pagato" and "incasso" not in tipi_giornale and blocco != "aperto":
         problemi.append("stato 'pagato' ma NESSUN 'incasso' nel giornale")
     if stato == "rimborsato" and "rimborso" not in tipi_giornale \
@@ -127,10 +129,13 @@ def _semaforo_stripe(pren: Optional[Dict[str, Any]],
     """Verde = Stripe conferma; giallo = non verificabile ORA; grigio = n/a (onesto)."""
     cs = ""
     try:
-        dj = json.loads((pren or {}).get("corpo_json") or "{}")
+        dj = _corpo_salvato((pren or {}).get("corpo_json"), "audit_semaforo_stripe",
+                            (pren or {}).get("riferimento", "-"))
         cs = dj.get("stripe_cs", "") if isinstance(dj, dict) else ""
     except Exception:
-        cs = ""
+        # I7 (R1): un corpo rotto NON e' «storico pre-audit»: e' un record dei soldi guasto
+        return {"colore": "rosso", "nota": "corpo della prenotazione illeggibile: verificare "
+                                           "a mano (vedi registro corpo_illeggibile)"}
     if not cs or stripe_check is None:
         return {"colore": "grigio",
                 "nota": "cs_ non disponibile (storico pre-audit o pagamento non online)"}

@@ -539,7 +539,7 @@ class TestJobImmagine(unittest.TestCase):
                           "un `if` a livello di job creerebbe eventi in cui non gira, "
                           "e il gate lo vedrebbe 'skipped'")
         self.assertIsNone(self.job.get("continue-on-error"))
-        self.assertEqual(self.job.get("runs-on"), "ubuntu-latest")
+        self.assertEqual(self.job.get("runs-on"), "ubuntu-24.04")
         self.assertIn("needs.immagine.result",
                       "\n".join(comandi(self.doc["jobs"][GATE])),
                       "il riepilogo del gate non mostra l'esito del job immagine")

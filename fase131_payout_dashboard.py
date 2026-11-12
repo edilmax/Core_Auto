@@ -81,6 +81,15 @@ class PayoutDashboard:
                     stato TEXT NOT NULL, ts INTEGER NOT NULL)""")
                 con.execute("CREATE INDEX IF NOT EXISTS ix_payout_host "
                             "ON payout(host_id)")
+                # FB1 (11/11): la ritenuta TRATTENUTA da questo bonifico, scritta nella STESSA
+                # scrittura che lo riduce (`trattieni_ritenuta`). Prima la ripresa di un giro
+                # interrotto indovinava dall'importo, e una penale compensata nel mezzo la
+                # ingannava. Aggiunta agli archivi esistenti; misurato l'11/11 che in produzione
+                # la ritenuta e' spenta: nessuna riga gia' ridotta senza questo numero.
+                colonne = {r[1] for r in con.execute("PRAGMA table_info(payout)")}
+                if "ritenuta_cents" not in colonne:
+                    con.execute("ALTER TABLE payout ADD COLUMN ritenuta_cents "
+                                "INTEGER NOT NULL DEFAULT 0")
                 # MIGRAZIONE DEI DATI (2026-07-29). Il fix di `_norm_valuta` ha corretto
                 # solo le scritture NUOVE: le righe gia' in archivio, scritte con
                 # `valuta.upper()` senza strip, restano con ' EUR '. `riepilogo` raggruppa
@@ -164,8 +173,13 @@ class PayoutDashboard:
                                 (str(prenotazione_id),)).fetchone()
                 if not r or nuovo not in _TRANSIZIONI.get(r[0], set()):
                     return False
-                con.execute("UPDATE payout SET stato=?, ts=? WHERE prenotazione_id=?",
-                            (nuovo, self._now(), str(prenotazione_id)))
+                # PY4 (8/11): solo se lo stato e' ancora quello letto, o si scavalcava chi
+                # lo aveva cambiato fra la lettura e questa scrittura
+                cur = con.execute("UPDATE payout SET stato=?, ts=? WHERE prenotazione_id=? "
+                                  "AND stato=?",
+                                  (nuovo, self._now(), str(prenotazione_id), r[0]))
+                if cur.rowcount != 1:
+                    return False
             return True
         except Exception:
             logger.warning("aggiorna_stato: errore DB (ISOLATO)", exc_info=True)
@@ -339,6 +353,36 @@ class PayoutDashboard:
         except Exception:
             logger.warning("imposta_importo fallita (ISOLATA)", exc_info=True)
             return False
+        finally:
+            con.close()
+
+    def trattieni_ritenuta(self, prenotazione_id: str, ritenuta: int) -> bool:
+        """FB1 (11/11): toglie la ritenuta dal bonifico e la segna, in UNA scrittura e UNA volta
+        sola (`ritenuta_cents=0` nel WHERE). Mai sotto zero: se non ci sta, non scrive (False)."""
+        r = _pos(ritenuta)
+        if r <= 0 or not (isinstance(prenotazione_id, str) and prenotazione_id):
+            return False
+        con = self._apri()
+        try:
+            with con:
+                cur = con.execute(
+                    "UPDATE payout SET minori=minori-?, ritenuta_cents=?, ts=? "
+                    "WHERE prenotazione_id=? AND ritenuta_cents=0 AND minori>?",
+                    (r, r, self._now(), prenotazione_id, r))
+            return cur.rowcount == 1
+        finally:
+            con.close()
+
+    def ritenuta_trattenuta(self, prenotazione_id: Any) -> int:
+        """Quanto di ritenuta e' gia' stato tolto da questo bonifico (0 se niente o se manca).
+        Un archivio illeggibile SOLLEVA: chi chiama nel dubbio ferma il bonifico."""
+        if not (isinstance(prenotazione_id, str) and prenotazione_id):
+            return 0
+        con = self._apri()
+        try:
+            r = con.execute("SELECT ritenuta_cents FROM payout WHERE prenotazione_id=?",
+                            (prenotazione_id,)).fetchone()
+            return int(r[0]) if r is not None else 0
         finally:
             con.close()
 

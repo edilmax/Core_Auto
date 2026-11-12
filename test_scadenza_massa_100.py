@@ -218,8 +218,16 @@ class TestScadenzaMassa(unittest.TestCase):
         for t in ths:
             t.join(timeout=180)
         self.assertEqual(errori, [])
-        self.assertEqual({s for s in esiti_webhook.values()}, {200},
-                         "il webhook risponde SEMPRE 200 (Stripe non deve ritentare)")
+        # FB5 (10/11): un pagamento che arriva mentre uno spazzino ha scaduto l'hold ma non ha
+        # ancora finito i passi riceve 503, e Stripe RITENTA. Qui il ritento si fa davvero, a
+        # spazzini finiti, una volta sola: dopo, ogni webhook deve aver avuto 200.
+        self.assertTrue({s for s in esiti_webhook.values()} <= {200, 503},
+                        "il webhook risponde solo 200, o 503 perche' Stripe ritenti: "
+                        f"{sorted(set(esiti_webhook.values()))}")
+        sweep_hold_una_passata(self.sis, self.r)
+        ritentati = {r: self._paga(r) for r, s in esiti_webhook.items() if s == 503}
+        self.assertEqual({r: s for r, s in ritentati.items() if s != 200}, {},
+                         "al ritento di Stripe, a spazzini finiti, il webhook risponde 200")
         stati = self._stati(rifs)
         illegali = {r: s for r, s in stati.items()
                     if s not in ("pagato", "scaduto", "rimborsato")}

@@ -490,8 +490,10 @@ class TestIgieneDelFile(unittest.TestCase):
                       "fondatore seleziona nella branch protection di GitHub, e "
                       "rinominarlo scollega silenziosamente la protezione del ramo")
         for nome, job in doc["jobs"].items():
-            self.assertEqual(job.get("runs-on"), "ubuntu-latest",
-                             "il job %r non dichiara il runner" % nome)
+            # 9/11: su 'ubuntu-latest' GitHub e' passato a una versione dove la nostra Python non
+            # si installa piu', e la CI e' diventata rossa senza che il codice fosse cambiato
+            self.assertEqual(job.get("runs-on"), "ubuntu-24.04",
+                             "il job %r non dichiara il runner fissato" % nome)
             self.assertTrue(_passi(job), "il job %r non ha passi" % nome)
 
 
@@ -9557,6 +9559,53 @@ class TestOgniJobDellaCIHaUnTETTO(unittest.TestCase):
             "cioe' un intoppo di rete blocca l'unione per una giornata. Il tetto si sceglie "
             "sul tempo misurato del job, con abbondanza. Job scoperti: %r" % (senza,))
 
+    @staticmethod
+    def _impianto():
+        import io
+        import os
+        import yaml
+        percorso = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                ".github", "workflows", "ci.yml")
+        with io.open(percorso, encoding="utf-8") as f:
+            return yaml.safe_load(f)
+
+    def test_F19_i_tentativi_dentro_un_passo_stanno_nel_suo_tetto(self):
+        """F19 (11/11, letto nei registri della CI di 3cfa246 e 88fec64): il passo «Dipendenze
+        di build» di atheris aveva un tetto di 6 minuti ma dentro tentativi fino a 660 secondi
+        (`timeout 150` x2 + `timeout 180` x2). Con apt appeso il passo veniva ucciso PRIMA del
+        ripiego «proseguo, il giudice e' pip», che quindi non scattava mai, e il fuzzer non
+        partiva. Un ripiego che arriva dopo il tetto non esiste: la somma dei `timeout N` di un
+        passo sta sotto il tetto del passo, o del job se il passo non ne ha uno suo."""
+        controllati, oltre = 0, []
+        for nome_job, job in (self._impianto().get("jobs") or {}).items():
+            for passo in (job or {}).get("steps") or []:
+                attese = [int(n) for n in re.findall(r"\btimeout\s+(\d+)\b", passo.get("run") or "")]
+                if not attese:
+                    continue
+                controllati += 1
+                tetto = passo.get("timeout-minutes", (job or {}).get("timeout-minutes"))
+                if tetto is None or sum(attese) >= int(tetto) * 60:
+                    oltre.append((nome_job, passo.get("name"), sum(attese), tetto))
+        self.assertGreater(controllati, 0, "nessun passo con tentativi a tempo: la guardia non "
+                                           "sta misurando niente (S1)")
+        self.assertEqual(oltre, [], "passi i cui tentativi (secondi, sommati) superano il tetto "
+                                    "(minuti): il ripiego dopo l'ultimo non arriva mai")
+
+    def test_F19_atheris_prova_prima_la_wheel_e_apt_solo_se_manca(self):
+        """F19, seconda meta': misurato sul giro verde dell'11/11 10:52 -- pip installa atheris
+        dalla wheel gia' pronta (`atheris-3.0.0-cp311-...manylinux...whl`), clang non serve. apt
+        verso i mirror di Ubuntu e' l'unico passo che si e' impiantato: si tocca solo se la
+        wheel manca."""
+        passi = [p.get("run") or "" for p in self._impianto()["jobs"]["atheris"]["steps"]]
+        installa = [r for r in passi if "atheris" in r and "pip install" in r]
+        self.assertEqual(len(installa), 1, passi)
+        testo = installa[0]
+        self.assertIn("--only-binary=:all:", testo)
+        self.assertLess(testo.index("--only-binary=:all:"), testo.index("apt-get"),
+                        "prima la wheel, apt solo se manca")
+        self.assertEqual([r for r in passi if "apt-get" in r], [testo],
+                         "nessun passo di apt fuori dal ramo «manca la wheel»")
+
 
 class TestNessunCollaudoPuoPRETENDERE_LaTariffaVECCHIA(unittest.TestCase):
     """⛔ UNA GUARDIA CHE CHIEDE IL DIFETTO E' PEGGIO DI NESSUNA GUARDIA.
@@ -15165,8 +15214,12 @@ class TestOgniCancellazioneDichiaraSeAzzeraIByte(unittest.TestCase):
                    "vecchio, ma passa dallo stesso archivio astratto di fase16"),
         "fase58_channel_manager.py": (False, "disponibilita' e blocchi di calendario: date, "
                                              "non persone"),
+        "fase167_credito_single_use.py": (False, "identificativo di un credito e riferimento "
+                                                 "di una prenotazione: nessun contatto"),
         "fase131_payout_dashboard.py": (False, "identificativo dell'host e un importo, senza "
                                                "nessun contatto: pseudonimo, non anagrafica"),
+        "fase86_email.py": (True, "la coda delle email fallite: indirizzo, oggetto e testo "
+                                  "dell'email (voucher, PIN di check-in, link)"),
     }
 
     def _censimento(self):

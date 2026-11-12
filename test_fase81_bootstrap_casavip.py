@@ -47,6 +47,10 @@ class TestDefaultOff(unittest.TestCase):
 
 
 class TestAccensione(unittest.TestCase):
+    # in una costante: passata come stringa a un argomento `*_key` conta per bandit come segreto
+    # cablato (B106). La rete e' finta, la chiave non conta.
+    CHIAVE_FINTA = "sk_test_xyz"
+
     def setUp(self):
         self.s = crea_sistema(ConfigCasaVIP(abilitato=True, segreto_hmac=SEG))
 
@@ -74,6 +78,18 @@ class TestAccensione(unittest.TestCase):
                                        stripe_secret_key="sk_test_xyz"))
         self.assertIn("stripe(85)", s.report["componenti"])
         self.assertIsNotNone(s.concierge._link)
+
+    def test_prova12_il_concierge_riceve_anche_il_numero_della_pagina(self):
+        """Prova mancante 12 (pr-test-analyzer, 11/11): l'avvio deve passare al concierge
+        `crea_sessione` (indirizzo E numero della pagina), non `crea_link` (solo indirizzo):
+        senza il numero lo spazzino non sa quale pagina chiudere prima di liberare la stanza."""
+        s = crea_sistema(ConfigCasaVIP(abilitato=True, segreto_hmac=SEG,
+                                       stripe_secret_key=self.CHIAVE_FINTA))
+        s.stripe._fetch = lambda u, b, h: {"url": "https://checkout.stripe.test/cs_z",
+                                           "id": "cs_z"}
+        url, numero = s.concierge._link_isolato({"totale_cents": 10000, "valuta": "EUR",
+                                                 "riferimento": "r1", "email": "g@x.it"})
+        self.assertEqual((url, numero), ("https://checkout.stripe.test/cs_z", "cs_z"))
 
     def test_mcp_opzionale(self):
         s = crea_sistema(ConfigCasaVIP(abilitato=True, segreto_hmac=SEG, con_mcp=False))

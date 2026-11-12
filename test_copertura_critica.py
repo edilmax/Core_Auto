@@ -791,19 +791,16 @@ class TestPagamentiPendentiRamiDErrore(unittest.TestCase):
         self.assertIs(self.pp.salva_stripe_session(None, "cs_1"), False)
         self.assertIs(self.pp.salva_stripe_session("MAI", "cs_1"), False)  # record assente
 
-    def test_salva_stripe_session_ripara_un_corpo_json_non_utilizzabile(self):
-        """corpo_json che non e' un oggetto (lista) o non e' nemmeno JSON: si riparte da
-        un dizionario vuoto e l'id sessione viene salvato lo stesso — mai perdere il
-        riferimento Stripe per colpa di un campo sporco."""
-        self._reg("R1", corpo_json="[1, 2, 3]")
-        self.assertIs(self.pp.salva_stripe_session("R1", "cs_A"), True)
-        self.assertEqual(json.loads(self.pp.info("R1")["corpo_json"]),
-                         {"stripe_cs": "cs_A"})
-        self._reg("R2", corpo_json="{non json")
-        self.assertIs(self.pp.salva_stripe_session("R2", "cs_B"), True)
-        self.assertEqual(json.loads(self.pp.info("R2")["corpo_json"]),
-                         {"stripe_cs": "cs_B"})
-        self.assertIs(self.pp.salva_stripe_session("R2", "cs_B"), True)   # replay: no-op
+    def test_salva_stripe_session_non_riscrive_un_corpo_json_non_utilizzabile(self):
+        """corpo_json che non e' un oggetto (lista) o non e' nemmeno JSON. Fino all'11/11 si
+        ripartiva da un dizionario vuoto e il record sembrava sano a tutti SENZA i suoi
+        importi. Decisione A del fondatore (12/11): il record rotto NON si riscrive, si
+        risponde False (il webhook fa ritentare Stripe) e lo sistema una persona."""
+        for rif, corpo, cs in (("R1", "[1, 2, 3]", "cs_A"), ("R2", "{non json", "cs_B")):
+            with self.subTest(corpo=corpo):
+                self._reg(rif, corpo_json=corpo)
+                self.assertIs(self.pp.salva_stripe_session(rif, cs), False)
+                self.assertEqual(self.pp.info(rif)["corpo_json"], corpo, "riscritto")
 
     def test_salva_stripe_session_con_db_rotto_e_ISOLATO(self):
         self._reg("R1", corpo_json=json.dumps({"valuta": "EUR"}))
@@ -877,19 +874,21 @@ class TestPagamentiPendentiRamiDErrore(unittest.TestCase):
         self.fab.rompi("SELECT idem_key FROM pendenti")
         self.assertEqual(self.pp.idem_keys(), set())
 
-    def test_cancellata_host_ripara_un_corpo_json_illeggibile(self):
-        """corpo_json corrotto: la penale va registrata lo stesso (e' un debito vero),
-        ripartendo da un dizionario vuoto."""
+    def test_cancellata_host_non_riscrive_un_corpo_json_illeggibile(self):
+        """corpo_json corrotto. Fino all'11/11 la penale si registrava ripartendo da un
+        dizionario vuoto: il record perdeva tutti i suoi importi e sembrava sano. Decisione A
+        del fondatore (12/11): niente si scrive, il record resta com'era e lo stato non cambia
+        (la rotta dell'host si ferma prima con 503: questa e' la difesa dell'archivio)."""
         self._reg("R1", corpo_json="{rotto")
-        self.assertIs(self.pp.marca_cancellata_host("R1", 1500), True)
-        self.assertEqual(json.loads(self.pp.info("R1")["corpo_json"]),
-                         {"penale_host_cents": 1500})
-        self.assertEqual(self.pp.info("R1")["stato"], "cancellata_host")
-        self.assertIs(self.pp.marca_cancellata_host("R1", 9999), False)   # CAS: una sola
-        self.assertEqual(json.loads(self.pp.info("R1")["corpo_json"])["penale_host_cents"],
-                         1500)
-        self.assertEqual([r["riferimento"] for r in self.pp.cancellate_host()], ["R1"])
-        self.assertEqual(self.pp.cancellate_host(limit=0)[0]["riferimento"], "R1")
+        stato_prima = self.pp.info("R1")["stato"]
+        self.assertIs(self.pp.marca_cancellata_host("R1", 1500), False)
+        self.assertEqual(self.pp.info("R1")["corpo_json"], "{rotto", "riscritto")
+        self.assertEqual(self.pp.info("R1")["stato"], stato_prima, "stato cambiato")
+        # l'elenco delle cancellate dall'host resta coperto, su un record SANO: R1 non c'e'
+        self._reg("R2", corpo_json=json.dumps({"totale_cents": 100}))
+        self.assertIs(self.pp.marca_cancellata_host("R2", 1500), True)
+        self.assertEqual([r["riferimento"] for r in self.pp.cancellate_host()], ["R2"])
+        self.assertEqual(self.pp.cancellate_host(limit=0)[0]["riferimento"], "R2")
 
     def test_calendario_hold_vivi_singolo_e_batch(self):
         for cattivo in (None, "", 0, b"casa"):
@@ -963,9 +962,11 @@ class TestPagamentiPendentiRamiDErrore(unittest.TestCase):
         self.assertEqual(out["letti"], 7)
         self.assertEqual(out["incassate"]["conteggio"], 1)
         self.assertEqual(out["incassate"]["cents"], 300)
-        self.assertEqual(out["perdite"]["conteggio"], 2)
-        self.assertEqual(out["perdite"]["cents"], 200)
-        self.assertEqual(out["coperto_cents"], 100)
+        # DA4 (8/11): qui prima si pretendeva 200, cioe' 120 EUR + 80 USD sommati. In testa solo
+        # gli euro: le altre monete stanno in `per_valuta`.
+        self.assertEqual(out["perdite"]["conteggio"], 1)
+        self.assertEqual(out["perdite"]["cents"], 120)
+        self.assertEqual(out["coperto_cents"], 180)
         self.assertEqual(out["per_valuta"], {
             "EUR": {"incassate_cents": 300, "perdite_cents": 120, "conteggio": 2},
             "USD": {"incassate_cents": 0, "perdite_cents": 80, "conteggio": 1}})
@@ -2754,7 +2755,11 @@ class TestCartaEStornoRamiDErrore(_BaseFC):
         st = self.fc.storna_penale(nota_id="ND-2027-000001", payout=_LedgerCheDiceNo())
         self.assertEqual(st["riscosso_cents"], 1000)
         self.assertEqual(st["restituito_in_da_pagare"], 0)       # onesto: non e' passato
-        self.assertEqual(self.fc.nota("ND-2027-000001")["stato"], "stornata")
+        # DB2 (8/11): qui si pretendeva 'stornata', ed era il DIFETTO -- con la ND stornata il
+        # secondo «Storna» esce con gia_stornata e i 1000 riscossi non tornano mai. Ora la ND
+        # resta aperta (si ritenta) e il debito e' chiuso (nessuno lo riscuote nel frattempo).
+        self.assertEqual(self.fc.nota("ND-2027-000001")["stato"], "saldata")   # NON stornata
+        self.assertEqual([d["stato"] for d in self.fc.debiti_host("h1")], ["stornato"])
 
     def test_storno_penale_rifiuta_note_inesistenti_o_di_credito(self):
         self.assertIsNone(self.fc.storna_penale(nota_id="ND-2027-999999"))
@@ -2778,8 +2783,10 @@ class TestCartaEStornoRamiDErrore(_BaseFC):
         st = self.fc.storna_penale(nota_id="ND-2027-000001",
                                    payout=_LedgerCheEsplode(su=("registra_maturato",)))
         self.assertEqual(st["riscosso_cents"], 1000)
-        self.assertEqual(st["restituito_in_da_pagare"], 0)   # da rifare a mano
-        self.assertEqual(self.fc.nota("ND-2027-000001")["stato"], "stornata")
+        self.assertEqual(st["restituito_in_da_pagare"], 0)   # da rifare: si ritenta lo storno
+        # DB2 (8/11): vedi la prova sopra -- 'stornata' qui era il difetto, non la regola
+        self.assertEqual(self.fc.nota("ND-2027-000001")["stato"], "saldata")   # NON stornata
+        self.assertEqual([d["stato"] for d in self.fc.debiti_host("h1")], ["stornato"])
 
     def test_storno_penale_senza_payout_non_accredita_nulla(self):
         self.pd.registra_maturato("P0", "h1", 5000, "EUR")

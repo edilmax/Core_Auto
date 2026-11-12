@@ -202,8 +202,8 @@ class TestConnectEscrow(unittest.TestCase):
         self.assertIn("amount=%d" % netto, corpo)             # il NETTO esatto dell'host
         self.assertIn("destination=acct_TEST123", corpo)
         self.assertIn("currency=eur", corpo)
-        self.assertEqual(headers.get("Idempotency-Key"),
-                         "transfer_" + b["riferimento"])       # idempotente su Stripe
+        self.assertRegex(headers.get("Idempotency-Key"),
+                         "^transfer_" + b["riferimento"] + r"_\d{8}$")  # idempotente su Stripe
         # payout: maturato -> in_transito (soldi partiti)
         rie = self.sys.payout.riepilogo(self.hid)["EUR"]
         self.assertEqual(rie.get("maturato", 0), 0)

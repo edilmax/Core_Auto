@@ -27,6 +27,10 @@ import json
 import logging
 from typing import Any, Callable, Dict, Optional
 
+# F16 (11/11): nell'indirizzo di Stripe va solo il numero di una pagina; il controllo e' UNO,
+# in fase85 (gruppo H: forma dei numeri veri, `cs_../` non passa)
+from fase85_pagamenti_stripe import _e_un_numero_di_stripe, _e_una_pagina
+
 logger = logging.getLogger("core_auto.carta_offsession")
 
 _BASE = "https://api.stripe.com/v1"
@@ -80,6 +84,8 @@ class ProviderCarta:
     def dettagli_da_sessione(self, session_id: str) -> Optional[Dict[str, str]]:
         """Dopo il webhook mode=setup: dal checkout session id -> (customer, payment_method).
         Fa 2 GET: la sessione (per customer + setup_intent) e il setup_intent (per il pm)."""
+        if not _e_una_pagina(session_id):
+            return None
         try:
             s = self._fetch("GET", "%s/checkout/sessions/%s" % (_BASE, session_id),
                             None, self._headers())
@@ -88,6 +94,8 @@ class ProviderCarta:
             customer = s.get("customer") or ""
             si = s.get("setup_intent") or ""
             pm = ""
+            if si and not _e_un_numero_di_stripe(si, "seti_"):
+                return None
             if si:
                 sio = self._fetch("GET", "%s/setup_intents/%s" % (_BASE, si), None,
                                   self._headers())
@@ -103,6 +111,8 @@ class ProviderCarta:
         """PAGA IN STRUTTURA (penale no-show): da una Checkout Session mode=payment con
         setup_future_usage='off_session' -> (customer, payment_method) per addebiti futuri
         off-session. La carta l'ha salvata Stripe sul PaymentIntent. 2 GET, ISOLATO -> None."""
+        if not _e_una_pagina(session_id):
+            return None
         try:
             s = self._fetch("GET", "%s/checkout/sessions/%s" % (_BASE, session_id),
                             None, self._headers())
@@ -111,6 +121,8 @@ class ProviderCarta:
             customer = s.get("customer") or ""
             pi = s.get("payment_intent") or ""
             pm = ""
+            if pi and not _e_un_numero_di_stripe(pi, "pi_"):
+                return None
             if pi:
                 pio = self._fetch("GET", "%s/payment_intents/%s" % (_BASE, pi), None,
                                   self._headers())

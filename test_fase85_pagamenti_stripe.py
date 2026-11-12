@@ -9,6 +9,7 @@ e i ripieghi di crea_link/crea_link_anticipo, nate dai 49 mutanti sopravvissuti 
 test dedicato.
 """
 import json
+import logging
 import unittest
 
 import fase85_pagamenti_stripe as _f85
@@ -699,6 +700,19 @@ class TestLaContestazioneDellaBanca(unittest.TestCase):
                                                {"Authorization": "Bearer sk_test_k"})],
                                  "una LETTURA sola: GET del pagamento con l'addebito espanso")
 
+    def test_un_addebito_illeggibile_non_porta_i_dati_dell_ospite_nel_motivo(self):
+        """security-reviewer (11/11), variante di F12: `addebito_senza_disputed: %r` copiava
+        nel motivo l'addebito intero, che porta i dati di fatturazione dell'ospite."""
+        f = FetchFinto({PAGAMENTI_URL: {"id": "pi_ok", "latest_charge": {
+            "id": "ch_1", "object": "charge", "billing_details": {
+                "email": "ospite@privato.it", "name": "Mario Rossi"}}}})
+        esito = _p(f).contestazione_di("pi_ok")
+        self.assertEqual((esito["ok"], esito["contestato"]), (False, False), esito)
+        self.assertTrue(esito["motivo"].startswith("addebito_senza_disputed: "), esito)
+        self.assertIn("ch_1", esito["motivo"], "resta COSA e' arrivato")
+        for privato in ("ospite@privato.it", "Mario Rossi"):
+            self.assertNotIn(privato, esito["motivo"])
+
     def test_senza_addebito_non_c_e_niente_da_contestare(self):
         f = FetchFinto({PAGAMENTI_URL: {"id": "pi_ok", "latest_charge": None}})
         self.assertEqual(_p(f).contestazione_di("pi_ok"),
@@ -809,6 +823,348 @@ class TestRimborsaDistingueRifiutoDaEsitoSconosciuto(unittest.TestCase):
                     esito = _p(FetchFinto(solleva=_ErroreHttp(code))).rimborsa("pi_1", 2500, "k")
                 self.assertIs(esito["ok"], False)
                 self.assertIs(esito.get("sconosciuto"), False, esito)
+
+
+class TestLaPaginaStripeNasceColSuoNumero(unittest.TestCase):
+    """PIANO DEI 2 MINUTI, pezzo 1 (11/11): per chiudere la pagina di pagamento quando scade il
+    blocco della stanza serve il suo numero (`cs_...`) GIA' alla creazione. Prima `crea_link`
+    tornava solo l'indirizzo e il numero arrivava col webhook, a pagamento gia' fatto."""
+
+    def test_crea_sessione_porta_indirizzo_e_numero(self):
+        spy = FetchSpy(risposta={"url": "https://checkout.stripe.com/c/pay/cs_test_9",
+                                 "id": "cs_test_9"})
+        p = ProviderStripe("sk", "o", "k", fetch=spy)
+        self.assertEqual(p.crea_sessione(DATI), {"url": "https://checkout.stripe.com/c/pay/cs_test_9",
+                                                 "id": "cs_test_9"})
+        self.assertEqual(spy.url, STRIPE_URL)
+
+    def test_un_numero_che_non_e_di_una_sessione_resta_vuoto(self):
+        for numero in (None, "", "pi_1", 7, "cs_"):
+            with self.subTest(numero=numero):
+                p = ProviderStripe("sk", "o", "k",
+                                   fetch=FetchSpy(risposta={"url": "https://u", "id": numero}))
+                self.assertEqual(p.crea_sessione(DATI), {"url": "https://u", "id": ""})
+
+    def test_anticipo_il_numero_si_pulisce_come_per_il_totale(self):
+        """Prova mancante 2 (pr-test-analyzer, 11/11): la pagina dell'ANTICIPO porta il suo
+        numero (difetto A) con la stessa pulizia di `crea_sessione`; senza indirizzo, niente."""
+        ant = {"anticipo_cents": 4500, "saldo_cents": 19500, "riferimento": "ABC123"}
+        for numero in (None, "", "pi_1", 7, "cs_"):
+            with self.subTest(numero=numero):
+                p = ProviderStripe("sk", "o", "k",
+                                   fetch=FetchSpy(risposta={"url": "https://u", "id": numero}))
+                self.assertEqual(p.crea_sessione_anticipo(ant), {"url": "https://u", "id": ""})
+        p = ProviderStripe("sk", "o", "k", fetch=FetchSpy(risposta={"url": "https://u",
+                                                                     "id": "cs_a"}))
+        self.assertEqual((p.crea_sessione_anticipo(ant), p.crea_link_anticipo(ant)),
+                         ({"url": "https://u", "id": "cs_a"}, "https://u"))
+        p = ProviderStripe("sk", "o", "k", fetch=FetchSpy(risposta={"id": "cs_a"}))
+        self.assertEqual((p.crea_sessione_anticipo(ant), p.crea_link_anticipo(ant)),
+                         (None, None))
+
+    def test_senza_indirizzo_niente_sessione_e_crea_link_resta_com_era(self):
+        p = ProviderStripe("sk", "o", "k", fetch=FetchSpy(risposta={"id": "cs_1"}))
+        self.assertIsNone(p.crea_sessione(DATI))
+        self.assertIsNone(ProviderStripe("sk", "o", "k",
+                                         fetch=FetchSpy(solleva=True)).crea_sessione(DATI))
+        p = ProviderStripe("sk", "o", "k", fetch=FetchSpy(risposta={"url": "https://u",
+                                                                     "id": "cs_1"}))
+        self.assertEqual(p.crea_link(DATI), "https://u")
+
+
+class TestChiudereLaPaginaStripe(unittest.TestCase):
+    """PIANO DEI 2 MINUTI, pezzo 3 (11/11): la stanza si libera solo a pagina di pagamento CHIUSA.
+    Misurato su Stripe di prova (11/11): expire su una sessione aperta -> 200 status=expired; su
+    una non aperta -> 400. Dopo un rifiuto certo si rilegge la sessione: 'complete' vuol dire che
+    l'ospite ha GIA' pagato. Rete o 5xx: NON LO SO, e chi chiama tiene la stanza."""
+
+    def test_pagina_aperta_si_chiude_con_una_scrittura(self):
+        f = FetchFinto({STRIPE_URL + "/cs_a/expire": {"id": "cs_a", "status": "expired"}})
+        self.assertEqual(_p(f).chiudi_sessione("cs_a"), {"ok": True, "stato": "expired", "motivo": ""})
+        self.assertEqual(len(f.chiamate), 1)
+        url, corpo, _h = f.chiamate[0]
+        self.assertEqual(url, STRIPE_URL + "/cs_a/expire")
+        self.assertTrue(corpo, "un corpo vuoto farebbe una LETTURA (GET), non la chiusura")
+
+    def test_rifiuto_certo_si_rilegge_e_complete_vuol_dire_gia_pagata(self):
+        chiamate = []
+
+        def fetch(url, body, headers):
+            chiamate.append((url, body))
+            if url.endswith("/expire"):
+                raise _ErroreHttp(400)
+            return {"id": "cs_a", "status": "complete"}
+        self.assertEqual(_p(fetch).chiudi_sessione("cs_a"),
+                         {"ok": True, "stato": "complete", "motivo": ""})
+        self.assertEqual([(u, b) for u, b in chiamate],
+                         [(STRIPE_URL + "/cs_a/expire", chiamate[0][1]), (STRIPE_URL + "/cs_a", None)])
+
+    def test_F8_rifiuto_e_pagina_ancora_aperta_tiene_il_motivo_del_rifiuto(self):
+        """F8 (11/11, silent-failure-hunter): Stripe rifiuta di chiudere (403 chiave senza
+        permesso, 429 troppe richieste) e la rilettura dice 'open'. Prima il motivo si perdeva:
+        un giorno di «pagina_non_chiusa ... open» senza sapere che la chiave non puo' chiudere."""
+        def fetch(url, body, headers):
+            if url.endswith("/expire"):
+                raise _ErroreHttp(403)
+            return {"id": "cs_a", "status": "open"}
+        esito = _p(fetch).chiudi_sessione("cs_a")
+        self.assertEqual((esito["ok"], esito["stato"]), (True, "open"), esito)
+        self.assertIn("403", esito["motivo"], "il motivo del rifiuto deve restare")
+
+    def test_le_intestazioni_della_chiusura_e_della_rilettura(self):
+        """Prova mancante 2 (pr-test-analyzer, 11/11): senza la chiave Stripe risponde 401 (NON
+        LO SO, la stanza resta tenuta per un giorno); senza il tipo del corpo la chiusura non
+        si legge come modulo."""
+        chiamate = []
+
+        def fetch(url, body, headers):
+            chiamate.append((url, body, headers))
+            if url.endswith("/expire"):
+                raise _ErroreHttp(400)
+            return {"id": "cs_a", "status": "expired"}
+        self.assertEqual(_p(fetch).chiudi_sessione("cs_a")["stato"], "expired")
+        self.assertEqual([(u, b, h) for u, b, h in chiamate], [
+            (STRIPE_URL + "/cs_a/expire", b"expand[]=payment_intent",
+             {"Authorization": "Bearer sk_test_k",
+              "Content-Type": "application/x-www-form-urlencoded"}),
+            (STRIPE_URL + "/cs_a", None, {"Authorization": "Bearer sk_test_k"})])
+
+    def test_rete_o_5xx_e_NON_LO_SO_e_non_si_rilegge(self):
+        for errore in (_ErroreHttp(500), _ErroreHttp(409), TimeoutError("lento")):
+            with self.subTest(errore=errore):
+                f = FetchFinto(solleva=errore)
+                esito = _p(f).chiudi_sessione("cs_a")
+                self.assertIs(esito["ok"], False, esito)
+                self.assertTrue(esito["motivo"], esito)
+                self.assertEqual(len(f.chiamate), 1)
+
+    def test_risposte_assurde_e_numeri_che_non_sono_sessioni(self):
+        for risposta in ({}, {"id": "cs_altra", "status": "expired"}, {"id": "cs_a"},
+                         {"id": "cs_a", "status": ""}, None):
+            with self.subTest(risposta=risposta):
+                f = FetchFinto({STRIPE_URL: risposta})
+                self.assertIs(_p(f).chiudi_sessione("cs_a")["ok"], False)
+        for numero in (None, "", "cs_", "pi_1", 5):
+            with self.subTest(numero=numero):
+                f = FetchFinto({STRIPE_URL: {"id": numero, "status": "expired"}})
+                self.assertEqual(_p(f).chiudi_sessione(numero)["ok"], False)
+                self.assertEqual(f.chiamate, [])
+
+    def test_F9_chiave_senza_permesso_grida_subito_il_resto_tace(self):
+        """F9 (11/11, silent-failure-hunter): una chiave che non puo' chiudere le pagine (401,
+        403) non guarisce da sola, e ogni blocco scaduto resterebbe tenuto un giorno intero con
+        soli avvisi: ERROR subito, col codice. Un 429 (troppe richieste) o un 400 (pagina gia'
+        chiusa da sola) sono normali e non gridano (regola ferrea 10)."""
+        for codice, grida in ((403, True), (401, True), (429, False), (400, False)):
+            with self.subTest(codice=codice):
+                def fetch(url, body, headers, codice=codice):
+                    if url.endswith("/expire"):
+                        raise _ErroreHttp(codice)
+                    return {"id": "cs_a", "status": "open"}
+                with self.assertLogs("core_auto.pagamenti_stripe", level="DEBUG") as log:
+                    logging.getLogger("core_auto.pagamenti_stripe").debug("ascolto")
+                    _p(fetch).chiudi_sessione("cs_a")
+                errori = [r.getMessage() for r in log.records if r.levelname == "ERROR"]
+                self.assertEqual(bool(errori), grida, errori)
+                if grida:
+                    self.assertIn(str(codice), errori[0])
+
+    def test_F12_una_risposta_inattesa_non_porta_i_dati_dell_ospite_nel_registro(self):
+        """F12 (11/11, security-reviewer): `risposta_inattesa: %r` metteva nel motivo -- che
+        finisce nel registro -- l'oggetto intero di Stripe, coi dati dell'ospite (email, nome,
+        indirizzo). Restano solo id, tipo e stato: bastano a capire cosa e' arrivato."""
+        strana = {"id": "cs_altra", "object": "checkout.session", "status": "open",
+                  "customer_details": {"email": "ospite@privato.it", "name": "Mario Rossi"}}
+        esiti = [
+            _p(FetchFinto({STRIPE_URL: strana})).chiudi_sessione("cs_a"),
+            _p(FetchFinto({STRIPE_URL: strana})).pagamento_della_sessione("cs_a"),
+        ]
+        for esito in esiti:
+            with self.subTest(esito=esito):
+                self.assertIn("risposta_inattesa", esito["motivo"])
+                self.assertIn("cs_altra", esito["motivo"])
+                self.assertNotIn("ospite@privato.it", esito["motivo"])
+                self.assertNotIn("Mario Rossi", esito["motivo"])
+        # variant-analysis (11/11): lo stesso %r stava in altri sette punti di fase85 (rimborsi,
+        # bonifici, saldo): nessuno deve restare
+        with open(_f85.__file__, encoding="utf-8") as fh:
+            self.assertNotIn("risposta_inattesa: %r", fh.read())
+
+
+class TestIlNumeroDellaPaginaSiControllaInUnPostoSolo(unittest.TestCase):
+    """GRUPPO H (11/11), sopravvissuti S1 S2 S15 di Cosmic Ray e Mutatest: `len(x) > 3` -> `!= 3`
+    non si distingueva con una stringa vera, ma il controllo accetta ogni `str` (anche una
+    sottoclasse) e un ingresso che li distingue esiste: NON equivalenti (B6). Il controllo stava
+    in quattro copie; ora e' uno, scritto `len >= 4`: identico per ogni ingresso (len e' sempre
+    un intero) e senza mutanti equivalenti -- "cs_", "cs_a" e un numero lungo li distinguono."""
+
+    def test_cosa_e_una_pagina(self):
+        from fase85_pagamenti_stripe import _e_una_pagina
+        for numero, atteso in (("cs_a", True), ("cs_test_a1B2c3", True), ("cs_", False),
+                               ("cs", False), ("", False), ("pi_1", False), ("xcs_a", False),
+                               (None, False), (5, False), (b"cs_a", False), (["cs_a"], False),
+                               # security-reviewer (11/11): il numero va nell'indirizzo di
+                               # Stripe, con la nostra chiave: niente che cambi l'indirizzo
+                               ("cs_../../customers", False), ("cs_a/b", False),
+                               ("cs_a?x=1", False), ("cs_a#f", False), ("cs_a b", False),
+                               ("cs_a\n", False), ("cs_a%2F", False), ("cs_live_X9z", True)):
+            with self.subTest(numero=numero):
+                self.assertIs(_e_una_pagina(numero), atteso)
+
+    def test_il_numero_della_pagina_si_controlla_solo_qui(self):
+        """variant-analysis (11/11): sei punti controllavano il numero col solo
+        `startswith("cs_")` (fase83, fase85, fase162, fase181): ora passano tutti da qui."""
+        import ast
+        import glob
+        import os
+        radice = os.path.dirname(os.path.abspath(_f85.__file__))
+        sparsi = []
+        for percorso in sorted(glob.glob(os.path.join(radice, "fase*.py"))):
+            with open(percorso, encoding="utf-8") as fh:
+                albero = ast.parse(fh.read())
+            # le CHIAMATE `.startswith("cs_")` nel codice (un commento che lo nomina non conta)
+            for c in ast.walk(albero):
+                if (isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute)
+                        and c.func.attr == "startswith" and c.args
+                        and isinstance(c.args[0], ast.Constant) and c.args[0].value == "cs_"):
+                    sparsi.append("%s:%d" % (os.path.basename(percorso), c.lineno))
+        self.assertTrue(len(glob.glob(os.path.join(radice, "fase*.py"))) > 50,
+                        "PREMESSA: la guardia deve vedere i moduli di produzione")
+        self.assertEqual(sparsi, [], "il numero della pagina si controlla con `_e_una_pagina`")
+
+
+class TestUnaRispostaCheParlaDiUnAltroOggettoNonVale(unittest.TestCase):
+    """GRUPPO H (11/11), sopravvissuto S3 (`s.get("id") == sessione` -> `<=`) e le sue varianti
+    (variant-analysis: gli altri tre confronti dell'id in fase85): una risposta che porta l'id
+    di UN'ALTRA pagina o di un altro pagamento non vale, ne' minore ne' maggiore di quello
+    chiesto. La prova di prima aveva solo «cs_altra», maggiore di «cs_a»: `<=` passava. Il
+    motivo comincia sempre con «risposta_inattesa: » (un `+` mutato lo cambia in un TypeError)."""
+
+    def _guarda(self, esito, chiavi, attese):
+        self.assertEqual(tuple(esito[k] for k in chiavi), attese, esito)
+        self.assertTrue(esito["motivo"].startswith("risposta_inattesa: "), esito)
+
+    def test_id_minore_o_maggiore_di_quello_chiesto(self):
+        pi_buono = {"id": "pi_b", "status": "requires_capture", "amount_capturable": 100}
+        for altro in ("cs_a", "cs_c"):           # chiesta "cs_b": una minore e una maggiore
+            with self.subTest(funzione="chiudi_sessione", altro=altro):
+                f = FetchFinto({STRIPE_URL: {"id": altro, "status": "expired"}})
+                self._guarda(_p(f).chiudi_sessione("cs_b"), ("ok", "stato"), (False, ""))
+            with self.subTest(funzione="pagamento_della_sessione, pagina", altro=altro):
+                f = FetchFinto({STRIPE_URL: {"id": altro, "payment_intent": "pi_b"},
+                                PAGAMENTI_URL: pi_buono})
+                self._guarda(_p(f).pagamento_della_sessione("cs_b"), ("ok", "pi"), (False, ""))
+        for altro in ("pi_a", "pi_c"):           # chiesto "pi_b"
+            with self.subTest(funzione="pagamento_della_sessione, pagamento", altro=altro):
+                f = FetchFinto({STRIPE_URL: {"id": "cs_b", "payment_intent": "pi_b"},
+                                PAGAMENTI_URL: dict(pi_buono, id=altro)})
+                self._guarda(_p(f).pagamento_della_sessione("cs_b"),
+                             ("ok", "pi", "incassabile_cents"), (False, "", 0))
+            with self.subTest(funzione="stato_pagamento", altro=altro):
+                f = FetchFinto({PAGAMENTI_URL: {"id": altro, "status": "succeeded"}})
+                self._guarda(_p(f).stato_pagamento("pi_b"), ("ok", "stato"), (False, ""))
+
+
+class _SpiaDegliIndirizzi:
+    """Segna ogni indirizzo chiesto a Stripe e risponde col primo copione che combacia."""
+
+    def __init__(self, copioni=()):
+        self.indirizzi = []
+        self._copioni = list(copioni)
+
+    def __call__(self, *argomenti):
+        url = next(a for a in argomenti if isinstance(a, str) and a.startswith("https://"))
+        self.indirizzi.append(url)
+        for inizio, risposta in self._copioni:
+            if url.startswith(inizio):
+                return risposta
+        return {}
+
+
+class TestUnNumeroStortoNonEntraNellIndirizzoDiStripe(unittest.TestCase):
+    """I4: un numero che comincia con `pi_` ma ha dentro `/`, `?`, a-capo o niente dopo il
+    prefisso entrava lo stesso nell'indirizzo che parte con la NOSTRA chiave (bastava
+    `startswith("pi_")`); e i numeri letti dalle risposte di Stripe ci entravano senza
+    nessun controllo. Come `_e_una_pagina` per i `cs_` (gruppo H)."""
+
+    # «pi_x/cancel»: la barra DA SOLA, senza punti ne' «?» (PROTON compito 15, 12/11: con la
+    # barra ammessa nella forma le prove restavano verdi, e «/cancel» e' una sotto-risorsa vera)
+    STORTI = ("pi_x/../../customers", "pi_x?expand[]=customer", "pi_", "pi_x\n", "pi_x y",
+              "pi_x/cancel")
+    VERO = "pi_3MtwBwLkdIwHu7ix28a3tqPa"
+
+    def _gesti(self, p, numero):
+        return {"stato_pagamento": lambda: p.stato_pagamento(numero),
+                "incassa": lambda: p.incassa(numero, "k1"),
+                "annulla": lambda: p.annulla(numero, "k1"),
+                "rimborsa": lambda: p.rimborsa(numero, 100, "k1"),
+                "impronta_carta": lambda: p.impronta_carta(numero),
+                "addebito_di": lambda: p.addebito_di(numero),
+                "rimborsi_di": lambda: p.rimborsi_di(numero),
+                "contestazione_di": lambda: p.contestazione_di(numero),
+                "commissione_effettiva": lambda: p.commissione_effettiva(numero)}
+
+    def test_le_porte_col_numero_del_pagamento_rifiutano_il_numero_storto(self):
+        for storto in self.STORTI:
+            for nome in self._gesti(None, storto):
+                spia = _SpiaDegliIndirizzi()
+                p = ProviderStripe("sk_test_x", "o", "k", fetch=spia)
+                with self.subTest(gesto=nome, numero=storto):
+                    self._gesti(p, storto)[nome]()
+                    self.assertEqual(spia.indirizzi, [], "numero storto mandato a Stripe")
+
+    def test_il_numero_vero_passa_ancora(self):
+        for nome in self._gesti(None, self.VERO):
+            spia = _SpiaDegliIndirizzi()
+            p = ProviderStripe("sk_test_x", "o", "k", fetch=spia)
+            with self.subTest(gesto=nome):
+                self._gesti(p, self.VERO)[nome]()
+                self.assertTrue(spia.indirizzi, "il numero vero non arriva piu' a Stripe")
+
+    def test_il_numero_storto_dentro_una_risposta_non_diventa_un_indirizzo(self):
+        for storto in ("ch_x/../../customers", "pi_x/../../customers", "", None, {"id": "ch_1"},
+                       "ch_x/refunds"):
+            with self.subTest(addebito=storto):
+                spia = _SpiaDegliIndirizzi([(PAGAMENTI_URL, {"latest_charge": storto})])
+                ProviderStripe("sk_test_x", "o", "k", fetch=spia).commissione_effettiva(
+                    self.VERO)
+                self.assertEqual([u for u in spia.indirizzi if u.startswith(ADDEBITI_URL)],
+                                 [])
+            with self.subTest(movimento=storto):
+                spia = _SpiaDegliIndirizzi([(PAGAMENTI_URL, {"latest_charge": "ch_1"}),
+                                            (ADDEBITI_URL, {"balance_transaction": storto})])
+                ProviderStripe("sk_test_x", "o", "k", fetch=spia).commissione_effettiva(
+                    self.VERO)
+                self.assertEqual([u for u in spia.indirizzi if u.startswith(MOVIMENTI_URL)],
+                                 [])
+            with self.subTest(pagamento_della_sessione=storto):
+                spia = _SpiaDegliIndirizzi([(STRIPE_URL, {"id": "cs_test_1",
+                                                          "payment_intent": storto})])
+                esito = ProviderStripe("sk_test_x", "o", "k",
+                                       fetch=spia).pagamento_della_sessione("cs_test_1")
+                self.assertEqual([u for u in spia.indirizzi if u.startswith(PAGAMENTI_URL)],
+                                 [])
+                self.assertEqual(esito["ok"], not storto,
+                                 "senza pagamento = niente bloccato; numero storto = NON LO SO")
+
+    def test_la_carta_dell_host_non_segue_un_numero_storto(self):
+        from fase183_carta_offsession import ProviderCarta
+        base = "https://api.stripe.com/v1/checkout/sessions/"
+        # buco I4-e2 di PROTON (12/11): ogni metodo riceve anche il numero di FORMA giusta col
+        # prefisso dell'altro («pi_abc» per l'impostazione, «seti_abc» per il pagamento), se no
+        # il controllo del prefisso si poteva togliere senza che niente diventasse rosso.
+        for storto in ("seti_x/../../customers", "pi_x/../../customers", "pi_",
+                       "pi_abc", "seti_abc"):
+            for metodo, campo in (("dettagli_da_sessione", "setup_intent"),
+                                  ("dettagli_pagamento_da_sessione", "payment_intent")):
+                if storto == ("seti_abc" if campo == "setup_intent" else "pi_abc"):
+                    continue                       # quello e' il numero GIUSTO per quel metodo
+                spia = _SpiaDegliIndirizzi([(base, {"customer": "cus_1", campo: storto})])
+                with self.subTest(metodo=metodo, numero=storto):
+                    esito = getattr(ProviderCarta("sk_test_x", fetch=spia), metodo)("cs_test_1")
+                    self.assertIsNone(esito)
+                    self.assertEqual(spia.indirizzi, [base + "cs_test_1"],
+                                     "numero storto della risposta mandato a Stripe")
 
 
 if __name__ == "__main__":

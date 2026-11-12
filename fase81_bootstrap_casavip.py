@@ -98,6 +98,7 @@ class ConfigCasaVIP:
     db_geocache: str = ":memory:"      # cache geocoding città->coordinate (mappa nella ricerca)
     db_checkin: str = ":memory:"       # check-in digitale (pre-registrazione ospiti + sblocco)
     db_credito_usati: str = ":memory:"  # registro SINGLE-USE crediti (fase167): un credito si spende UNA volta
+    db_coda_email: str = ":memory:"    # email fallite da ritentare (fase86): in RAM = nessuna coda
     con_geocoding: bool = False        # ON in prod: geocodifica alla pubblicazione (default OFF: test)
     bunker_totp_secret: str = ""       # 2FA super-admin (fase180): segreto TOTP base32 (env, mai in git)
     bunker_password: str = ""          # password super-admin (2° fattore "qualcosa che sai")
@@ -178,6 +179,24 @@ class SistemaCasaVIP:
         return self.concierge is not None
 
 
+def collega_coda_email(prov: Any, percorso: str, *, avvia: bool = True) -> Any:
+    """ORDINE DEL FONDATORE (10/11): le email che falliscono si SALVANO su SQLite e si
+    RITENTANO, con la coda di fase86 (sola libreria standard) e un archivio tutto suo:
+    niente soldi, niente sito. `_invia_tracciato` (fase83) mette in coda tramite
+    `prov.coda_email`; il giro manda con `prov.invia` diretto, cosi' un nuovo fallimento
+    resta sulla stessa riga invece di crearne un'altra. Ritorna la coda (None se non
+    collegata). Le righe consegnate si cancellano subito (dati personali)."""
+    if prov is None or not percorso or percorso == ":memory:":
+        return None
+    from fase86_email import CodaEmail
+    coda = CodaEmail(percorso, prov.invia)
+    coda.inizializza_schema()
+    prov.coda_email = coda
+    if avvia:
+        coda.avvia()
+    return coda
+
+
 def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
     """Composition root. Default-OFF: a config spenta non costruisce nulla."""
     cfg = config or ConfigCasaVIP()
@@ -228,7 +247,7 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
     provider = crea_provider_stripe(cfg.stripe_secret_key, cfg.stripe_success_url,
                                     cfg.stripe_cancel_url, valuta=cfg.valuta.lower())
     if provider is not None:
-        link_pagamento = provider.crea_link
+        link_pagamento = provider.crea_sessione     # url + numero della pagina (fase59)
         componenti.append("stripe(85)")
     else:
         avvisi.append("Stripe non configurato -> nessun link di pagamento (gated)")
@@ -407,6 +426,10 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
     pagamenti_pendenti = crea_pagamenti_pendenti(cfg.db_pendenti)
     pagamenti_pendenti.inizializza_schema()
     componenti.append("pagamenti_pendenti(162)")
+    if _connect is not None:
+        # PR5 (8/11): il bonifico di una prenotazione non e' piu' vecchio di lei (un giorno di margine)
+        _connect.da_quando = lambda rif: int(
+            (pagamenti_pendenti.info(rif) or {}).get("creato_ts") or 0) - 86400
 
     # L'archivio degli eventi del webhook (fase204): si scrive PRIMA di rispondere, perche'
     # un 2xx e' il punto di non ritorno -- Stripe non riprova mai piu'. Lo schema nasce qui,
@@ -586,6 +609,8 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
                                          cfg.smtp_password, cfg.email_mittente)
     if email_provider is not None:
         componenti.append("email(86)")
+        if collega_coda_email(email_provider, cfg.db_coda_email) is not None:
+            componenti.append("coda_email(86)")
     else:
         avvisi.append("SMTP non configurato -> nessuna email voucher (gated)")
 

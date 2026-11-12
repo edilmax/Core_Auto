@@ -19,6 +19,7 @@ PURO/deterministico: il tasso è iniettato (test senza rete). `ProviderTassi` ga
 """
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from dataclasses import dataclass
@@ -26,6 +27,8 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any, Callable, Dict, Optional
 
 import fase98_policy_commissione as policy
+
+_logger = logging.getLogger("core_auto.cambi")
 
 # Valute con esponente diverso da 2 (unità minori). Default = 2.
 # ⛔ ISK e UGX NON stanno qui, e non è una dimenticanza: Stripe le dichiara «transitioned to
@@ -210,7 +213,8 @@ class ProviderTassi:
                     self._ts = self._orologio()
                 return True
         except Exception:
-            pass
+            _logger.warning("CAMBI | codice: tassi_non_aggiornati | messaggio: scarico fallito, "
+                            "restano i tassi vecchi", exc_info=True)
         return False
 
     def stato(self, ora: Optional[float] = None) -> Dict[str, Any]:

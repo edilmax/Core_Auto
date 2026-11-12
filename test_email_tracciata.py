@@ -22,9 +22,10 @@ non e' una preferenza di stile, e' l'unico livello che il sorvegliante legge.
 ⛔ COSA QUESTE GUARDIE NON ESAMINANO (D18 punto 3), dichiarato:
   · non provano che una email ARRIVI: provano che un fallimento **si veda**. La
     consegna dipende da SMTP, dominio, DKIM e dalla casella di chi riceve;
-  · non c'e' nessuna coda durevole ne' un secondo tentativo piu' tardi: e' la
-    scelta 1 del fondatore (solo `logger.error` + contatore). Un'email persa resta
-    persa -- ma da adesso **qualcuno lo sa entro 24 ore**;
+  · fino al 10/11 non c'era una coda durevole (scelta 1 di allora: solo `logger.error`
+    + contatore). Dal 10/11, ordine del fondatore, l'email fallita si salva su SQLite e
+    si ritenta (classe TestLEmailFallitaSiSalvaESiRitenta): l'allarme e il contatore
+    restano, perche' la coda dice che si ritenta, non che e' arrivata;
   · il contatore vive nel processo: un riavvio lo azzera. Dice «da quando sono in
     piedi», non «da sempre»;
   · il terzo dei tre cancelli (il voucher all'ospite) e' verificato **sul sorgente**
@@ -399,6 +400,398 @@ class TestLaSaluteEspone(unittest.TestCase):
         stato, corpo = self.r.gestisci("GET", "/api/health")
         self.assertEqual(stato, 200)
         self.assertEqual(corpo["status"], "ok")
+
+
+# ---------------------------------------------------------------------------
+#  5. ORDINE DEL FONDATORE 10/11: l'email fallita si salva e si ritenta
+# ---------------------------------------------------------------------------
+class TestLEmailFallitaSiSalvaESiRitenta(unittest.TestCase):
+    """Fino al 10/11 un'email fallita era contata e gridata, ma PERSA (scelta 1 di allora).
+    Il fondatore il 10/11: salvata su SQLite e ritentata, senza toccare soldi e sito.
+    ⛔ Prima si era riusata la vecchia coda fase16_outbox: portava in produzione fase13 (che
+    importa flask, psutil e requests) e altri tre moduli fuori da ogni misura -- le guardie
+    di test_parita_ambiente e test_copertura_onesta sono diventate ROSSE. La coda e' ora
+    `fase86_email.CodaEmail`, sola libreria standard, con un archivio suo."""
+
+    def setUp(self):
+        import shutil
+        import tempfile
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
+        self.db = os.path.join(self.dir, "coda_email.db")
+
+    def _righe(self):
+        import sqlite3
+        if not os.path.exists(self.db):
+            return []
+        con = sqlite3.connect(self.db)
+        try:
+            return con.execute("SELECT a, oggetto, html, template, riferimento, stato, "
+                               "tentativi FROM coda_email ORDER BY id").fetchall()
+        finally:
+            con.close()
+
+    def _collega(self, prov):
+        """Il cablaggio di fase81, rifatto su un provider di prova."""
+        from fase81_bootstrap_casavip import collega_coda_email
+        coda = collega_coda_email(prov, self.db, avvia=False)
+        self.assertIsNotNone(coda, "coda email non collegata")
+        return coda
+
+    def test_un_invio_FALLITO_finisce_in_coda(self):
+        from fase83_server import _invia_tracciato
+        prov = _ProviderFinto(esito=False)
+        self._collega(prov)
+        with self.assertLogs(LOGGER, level="ERROR"):
+            _invia_tracciato(prov, "ospite@example.com", "Il tuo voucher", "<p>v</p>",
+                             "voucher", "REF-9")
+        righe = self._righe()
+        self.assertEqual(len(righe), 1, "email fallita e non salvata: persa")
+        self.assertEqual(righe[0], ("ospite@example.com", "Il tuo voucher", "<p>v</p>",
+                                    "voucher", "REF-9", "attesa", 0))
+
+    def test_anche_un_ECCEZIONE_finisce_in_coda(self):
+        from fase83_server import _invia_tracciato
+        prov = _ProviderFinto(solleva=True)
+        self._collega(prov)
+        with self.assertLogs(LOGGER, level="ERROR"):
+            _invia_tracciato(prov, "ospite@example.com", "o", "<p>x</p>", "voucher", "R")
+        self.assertEqual(len(self._righe()), 1)
+
+    def test_un_invio_RIUSCITO_non_lascia_niente_in_coda(self):
+        from fase83_server import _invia_tracciato
+        prov = _ProviderFinto(esito=True)
+        self._collega(prov)
+        _invia_tracciato(prov, "ospite@example.com", "o", "<p>x</p>", "voucher", "R")
+        self.assertEqual(self._righe(), [])
+
+    def test_il_giro_della_coda_la_RIMANDA_e_la_CANCELLA(self):
+        """Consegnata = riga cancellata subito: e' un'email con dati personali."""
+        from fase83_server import _invia_tracciato
+        prov = _ProviderFinto(esito=False)
+        coda = self._collega(prov)
+        with self.assertLogs(LOGGER, level="ERROR"):
+            _invia_tracciato(prov, "ospite@example.com", "Voucher", "<p>v</p>", "voucher", "R")
+        prov.esito = True                                    # l'SMTP torna su
+        self.assertEqual(coda.un_giro(), 1)
+        self.assertEqual(prov.chiamate[-1], ("ospite@example.com", "Voucher"))
+        self.assertEqual(self._righe(), [])
+
+    def test_un_nuovo_fallimento_nel_giro_NON_raddoppia_la_coda(self):
+        from fase83_server import _invia_tracciato
+        prov = _ProviderFinto(esito=False)
+        coda = self._collega(prov)
+        with self.assertLogs(LOGGER, level="ERROR"):
+            _invia_tracciato(prov, "ospite@example.com", "V", "<p>v</p>", "voucher", "R")
+        self.assertEqual(coda.un_giro(), 0)
+        righe = self._righe()
+        self.assertEqual(len(righe), 1, "il ritentativo fallito ha creato una riga nuova")
+        self.assertEqual(righe[0][5:], ("attesa", 1), "deve restare in coda per il giro dopo")
+
+    def test_senza_coda_si_comporta_come_prima(self):
+        """Provider senza coda (test, o processo senza archivio): nessun guasto."""
+        from fase83_server import _invia_tracciato
+        with self.assertLogs(LOGGER, level="ERROR"):
+            self.assertFalse(_invia_tracciato(_ProviderFinto(esito=False), "a@b.com", "o",
+                                              "<p>x</p>", "t"))
+
+    def test_crea_sistema_collega_la_coda_quando_c_e_l_SMTP(self):
+        s = crea_sistema(ConfigCasaVIP(abilitato=True, segreto_hmac=SEG,
+                                       smtp_host="smtp.invalid", db_coda_email=self.db))
+        coda = getattr(s.email_provider, "coda_email", None)
+        try:
+            self.assertIsNotNone(coda,
+                                 "SMTP acceso e coda non collegata: le email fallite si perdono")
+            self.assertEqual(os.path.abspath(coda.percorso), os.path.abspath(self.db))
+        finally:
+            if coda is not None:
+                coda.ferma()
+
+    def test_la_produzione_salva_la_coda_su_FILE(self):
+        """Modo di rompersi 1 (dati effimeri): in RAM la coda morirebbe a ogni riavvio."""
+        import main_casavip
+        os.environ.pop("DB_CODA_EMAIL", None)
+        self.assertEqual(main_casavip.config_da_ambiente().db_coda_email,
+                         "data/coda_email.db")
+
+
+class TestLaCodaEmailDaSola(unittest.TestCase):
+    """Il meccanismo della coda (fase86.CodaEmail), con l'orologio in mano alla prova."""
+
+    def setUp(self):
+        import shutil
+        import tempfile
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
+        self.db = os.path.join(self.dir, "coda.db")
+        self.t = 1_000_000.0
+        self.prov = _ProviderFinto(esito=False)
+
+    def _coda(self, **kw):
+        from fase86_email import CodaEmail
+        return CodaEmail(self.db, self.prov.invia, ora=lambda: self.t, **kw)
+
+    def _riga(self):
+        import sqlite3
+        con = sqlite3.connect(self.db)
+        try:
+            return con.execute("SELECT stato, tentativi, prossimo_ts FROM coda_email").fetchall()
+        finally:
+            con.close()
+
+    def test_si_ritenta_SUBITO_la_prima_volta(self):
+        c = self._coda()
+        self.assertTrue(c.accoda("a@b.it", "o", "<p>x</p>"))
+        c.un_giro()
+        self.assertEqual(len(self.prov.chiamate), 1, "appena accodata va gia' tentata")
+
+    def test_l_attesa_RADDOPPIA_e_si_ferma_a_5_minuti(self):
+        from fase86_email import ATTESA_MASSIMA_S, ATTESA_PRIMA_S
+        self.assertEqual((ATTESA_PRIMA_S, ATTESA_MASSIMA_S), (30, 300))
+        c = self._coda()
+        c.accoda("a@b.it", "o", "<p>x</p>")
+        visti = []
+        for _ in range(6):
+            c.un_giro()
+            stato, tent, prossimo = self._riga()[0]
+            visti.append(int(prossimo - self.t))
+            self.t = prossimo
+        self.assertEqual(visti, [30, 60, 120, 240, 300, 300])
+        self.assertEqual(len(self.prov.chiamate), 6)
+
+    def test_PRIMA_del_tempo_non_si_ritenta(self):
+        c = self._coda()
+        c.accoda("a@b.it", "o", "<p>x</p>")
+        c.un_giro()
+        self.t += 29
+        c.un_giro()
+        self.assertEqual(len(self.prov.chiamate), 1, "ritentata prima dell'attesa")
+        self.t += 1
+        c.un_giro()
+        self.assertEqual(len(self.prov.chiamate), 2, "allo scadere dell'attesa si ritenta")
+
+    def test_all_ultimo_tentativo_NON_CONSEGNABILE_e_grida(self):
+        c = self._coda(tentativi=2)
+        c.accoda("a@b.it", "o", "<p>x</p>", "voucher", "R-1")
+        c.un_giro()
+        self.assertEqual(self._riga()[0][:2], ("attesa", 1))
+        self.t += 30
+        with self.assertLogs("core_auto.email", level="CRITICAL") as log:
+            c.un_giro()
+        self.assertIn("R-1", "\n".join(log.output))
+        self.assertEqual(self._riga()[0][:2], ("non_consegnabile", 2))
+        self.t += 10_000
+        c.un_giro()
+        self.assertEqual(len(self.prov.chiamate), 2, "una non consegnabile non si rimanda")
+
+    def test_un_ECCEZIONE_del_provider_e_un_fallimento(self):
+        self.prov.solleva = True
+        c = self._coda()
+        c.accoda("a@b.it", "o", "<p>x</p>")
+        self.assertEqual(c.un_giro(), 0)
+        self.assertEqual(self._riga()[0][:2], ("attesa", 1))
+
+    def test_DUE_processi_non_mandano_due_volte_la_stessa_email(self):
+        """Il sito e il giro di recupero (cron_sweep_eventi) aprono lo stesso archivio."""
+        from fase86_email import PRESA_SCADE_S
+        a, b = self._coda(), self._coda()
+        a.accoda("a@b.it", "o", "<p>x</p>")
+        self.assertTrue(a._prendi(1), "il primo processo prende la riga")
+        self.assertEqual(b.un_giro(), 0)
+        self.assertEqual(self.prov.chiamate, [], "riga presa da un altro processo e rimandata")
+        self.t += PRESA_SCADE_S                 # il primo processo e' morto con la riga in mano
+        self.prov.esito = True
+        self.assertEqual(b.un_giro(), 1, "riga orfana mai ripresa: email persa")
+        self.assertEqual(self._riga(), [])
+
+    def test_si_rifiuta_un_destinatario_che_non_e_un_indirizzo(self):
+        c = self._coda()
+        for cattivo in (None, "", "senza-chiocciola", 5):
+            with self.subTest(cattivo=cattivo):
+                self.assertFalse(c.accoda(cattivo, "o", "<p>x</p>"))
+        self.assertFalse(os.path.exists(self.db) and self._riga())
+
+
+class TestLaCodaEmailIConfini(unittest.TestCase):
+    """I sopravvissuti di Cosmic Ray sulla coda (10/11, 52 su 197 nella classe CodaEmail):
+    numeri, confini e il giro in sottofondo che nessuna prova fermava."""
+
+    def setUp(self):
+        import shutil
+        import tempfile
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
+        self.db = os.path.join(self.dir, "coda.db")
+        self.t = 1_000_000.0
+        self.prov = _ProviderFinto(esito=False)
+
+    def _coda(self, **kw):
+        from fase86_email import CodaEmail
+        return CodaEmail(self.db, self.prov.invia, ora=lambda: self.t, **kw)
+
+    def _righe(self):
+        import sqlite3
+        con = sqlite3.connect(self.db)
+        try:
+            return con.execute("SELECT id, stato, tentativi FROM coda_email ORDER BY id").fetchall()
+        finally:
+            con.close()
+
+    def test_i_numeri_della_coda_sono_quelli_dichiarati(self):
+        import inspect
+        from fase86_email import CodaEmail, PRESA_SCADE_S, TENTATIVI_EMAIL
+        self.assertEqual((TENTATIVI_EMAIL, PRESA_SCADE_S), (288, 600))
+        self.assertEqual(inspect.signature(CodaEmail.avvia).parameters["ogni_s"].default, 30.0)
+        self.assertEqual(inspect.signature(CodaEmail.un_giro).parameters["limite"].default, 20)
+
+    def test_di_serie_si_ritenta_288_volte_poi_si_grida(self):
+        c = self._coda()
+        c.accoda("a@b.it", "o", "<p>x</p>")
+        with self.assertLogs("core_auto.email", level="WARNING") as log:
+            for _ in range(400):
+                c.un_giro()
+                riga = self._righe()[0]
+                if riga[1] != "attesa":
+                    break
+                self.t += 300
+        self.assertEqual(self._righe()[0][1:], ("non_consegnabile", 288))
+        self.assertEqual(len(self.prov.chiamate), 288)
+        critici = [r for r in log.records if r.levelname == "CRITICAL"]
+        self.assertEqual(len(critici), 1, "un CRITICAL solo, all'ultimo tentativo")
+        self.assertIn("tentativi: 288", critici[0].getMessage())
+
+    def test_con_un_solo_tentativo_ammesso_il_primo_fallimento_e_l_ultimo(self):
+        c = self._coda(tentativi=1)
+        c.accoda("a@b.it", "o", "<p>x</p>", "voucher", "R-9")
+        with self.assertLogs("core_auto.email", level="CRITICAL") as log:
+            c.un_giro()
+        self.assertEqual(self._righe()[0][1:], ("non_consegnabile", 1))
+        self.assertIn("tentativi: 1", log.records[0].getMessage())
+
+    def test_un_fallimento_normale_non_grida_CRITICAL(self):
+        c = self._coda(tentativi=5)
+        c.accoda("a@b.it", "o", "<p>x</p>")
+        with self.assertLogs("core_auto.email", level="DEBUG") as log:
+            logging.getLogger("core_auto.email").warning("segnaposto per assertLogs")
+            c.un_giro()
+        self.assertEqual([r for r in log.records if r.levelname == "CRITICAL"], [])
+        self.assertEqual(self._righe()[0][1:], ("attesa", 1))
+
+    def test_una_riga_che_ha_gia_superato_il_tetto_si_chiude_subito(self):
+        """Archivio scritto con un tetto piu' alto (es. riavvio con meno tentativi): la riga con
+        piu' tentativi del tetto nuovo non si ritenta all'infinito."""
+        c10 = self._coda(tentativi=10)
+        c10.accoda("a@b.it", "o", "<p>x</p>")
+        for _ in range(3):
+            c10.un_giro()
+            self.t += 300
+        self.assertEqual(self._righe()[0][1:], ("attesa", 3))
+        with self.assertLogs("core_auto.email", level="CRITICAL"):
+            self._coda(tentativi=2).un_giro()
+        self.assertEqual(self._righe()[0][1:], ("non_consegnabile", 4))
+
+    def test_la_presa_scade_ESATTAMENTE_a_600_secondi(self):
+        a, b = self._coda(), self._coda()
+        a.accoda("a@b.it", "o", "<p>x</p>")
+        self.assertTrue(a._prendi(1))
+        self.assertFalse(b._prendi(1), "riga gia' presa da un processo vivo: non si ruba")
+        self.prov.esito = True
+        self.t += 599
+        self.assertEqual(b.un_giro(), 0, "presa di 599 secondi: il processo e' ancora vivo")
+        self.assertFalse(b._prendi(1))
+        self.t += 1
+        self.assertEqual(b.un_giro(), 1, "presa di 600 secondi: processo morto, si riprende")
+
+    def test_un_giro_manda_al_massimo_20_email(self):
+        self.prov.esito = True
+        c = self._coda()
+        for i in range(21):
+            c.accoda("a%d@b.it" % i, "o", "<p>x</p>")
+        self.assertEqual(c.un_giro(), 20)
+        self.assertEqual(len(self._righe()), 1)
+        self.assertEqual(c.un_giro(), 1)
+
+    def test_una_riga_che_non_si_prende_non_ferma_le_altre(self):
+        from fase86_email import CodaEmail
+
+        class _UnaPresaDaAltri(CodaEmail):
+            def _prendi(self, id_riga):
+                return id_riga != 1 and CodaEmail._prendi(self, id_riga)
+
+        self.prov.esito = True
+        c = _UnaPresaDaAltri(self.db, self.prov.invia, ora=lambda: self.t)
+        c.accoda("primo@b.it", "o", "<p>x</p>")
+        c.accoda("secondo@b.it", "o", "<p>x</p>")
+        self.assertEqual(c.un_giro(), 1)
+        self.assertEqual(self.prov.chiamate, [("secondo@b.it", "o")])
+
+    def test_l_eccezione_del_provider_si_registra_con_la_traccia(self):
+        self.prov.solleva = True
+        c = self._coda()
+        c.accoda("a@b.it", "o", "<p>x</p>")
+        with self.assertLogs("core_auto.email", level="WARNING") as log:
+            c.un_giro()
+        self.assertTrue(any(r.exc_info for r in log.records), "eccezione senza traccia")
+
+    def test_il_giro_in_sottofondo_consegna_regge_un_errore_e_si_ferma(self):
+        import time as _t
+        self.prov.esito = True
+        from fase86_email import CodaEmail
+        scoppi = []
+
+        class _ScoppiaUnaVolta(CodaEmail):
+            def un_giro(self, limite=20):
+                if not scoppi:
+                    scoppi.append(1)
+                    raise RuntimeError("giro esploso")
+                return CodaEmail.un_giro(self, limite)
+
+        c = _ScoppiaUnaVolta(self.db, self.prov.invia)
+        c.ferma()                                  # prima dell'avvio: non deve esplodere
+        c.accoda("a@b.it", "o", "<p>x</p>")
+        with self.assertLogs("core_auto.email", level="ERROR") as log:
+            c.avvia(ogni_s=0.01)
+            giro = c._giro
+            self.assertTrue(giro.daemon, "il giro deve essere un thread demone")
+            c.avvia(ogni_s=0.01)
+            self.assertIs(c._giro, giro, "avviato due volte: due giri sulla stessa coda")
+            fine = _t.time() + 5
+            while self._righe() and _t.time() < fine:
+                _t.sleep(0.02)
+        self.assertEqual(self._righe(), [], "il giro in sottofondo non ha consegnato")
+        self.assertTrue(any("giro_fallito" in r.getMessage() and r.exc_info
+                            for r in log.records), "errore del giro senza traccia")
+        c.ferma()
+        giro.join(2)
+        self.assertFalse(giro.is_alive(), "ferma() non ferma il giro")
+
+    def test_una_email_presa_adesso_da_un_altro_processo_non_ruba_il_posto(self):
+        """Cosmic Ray, terzo giro (11/11, solo CodaEmail: 6 sopravvissuti su 189): la SELECT del
+        giro esclude le email prese ADESSO da un altro processo. Se le includesse (riga
+        `ora - PRESA_SCADE_S` sbagliata), con il limite pieno il giro le prenderebbe, il CAS le
+        scarterebbe e quella da mandare resterebbe ferma. L'ora e' multipla di 1024, cosi' anche
+        gli errori `|` e `^` spostano davvero la soglia."""
+        import sqlite3
+        self.t = 1_799_999_488.0
+        self.prov = _ProviderFinto(esito=True)
+        c = self._coda()
+        c.accoda("presa@x.it", "o", "<p>x</p>")
+        c.accoda("attesa@x.it", "o", "<p>x</p>")
+        con = sqlite3.connect(self.db)
+        with con:
+            con.execute("UPDATE coda_email SET stato='presa', presa_ts=? WHERE a='presa@x.it'",
+                        (int(self.t),))
+        con.close()
+        self.assertEqual(c.un_giro(limite=1), 1, "con un posto solo va l'email in attesa")
+        self.assertEqual([r[1] for r in self._righe()], ["presa"],
+                         "resta solo quella presa dall'altro processo")
+
+    def test_tentativi_e_orologio_si_passano_solo_per_nome(self):
+        """Cosmic Ray (11/11): `*` nella firma. Con `/` un numero passato per posizione
+        diventerebbe in silenzio il numero dei tentativi."""
+        from fase86_email import CodaEmail
+        with self.assertRaises(TypeError):
+            CodaEmail(self.db, self.prov.invia, 3)
 
 
 if __name__ == "__main__":

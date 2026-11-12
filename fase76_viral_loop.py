@@ -248,6 +248,30 @@ class ViralLoopEngine:
         finally:
             con.close()
 
+    def rendi_credito(self, utente_id: str, importo_cents: int, motivo: str) -> bool:
+        """Rende un credito gia' consumato su una prenotazione poi rimborsata tutta. Una volta
+        sola per `motivo`: un retry non raddoppia. True = accreditato adesso."""
+        if not _intero_pos(importo_cents):
+            return False
+        ora = self._now()
+        con = self._apri()
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            if con.execute("SELECT 1 FROM crediti WHERE motivo=?", (motivo,)).fetchone() is not None:
+                con.execute("ROLLBACK")
+                return False
+            self._accredita(con, str(utente_id), importo_cents, ora + self._validita, ora, motivo)
+            con.execute("COMMIT")
+            return True
+        except Exception:
+            try:
+                con.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
+            raise
+        finally:
+            con.close()
+
     def usa_credito(self, utente_id: str, dovuto_cents: int) -> Dict[str, int]:
         """Applica i crediti NON SCADUTI (prima quelli che scadono prima) per ridurre il
         dovuto. Mai sotto zero, mai oltre il dovuto. Ritorna {scontato, da_pagare}."""

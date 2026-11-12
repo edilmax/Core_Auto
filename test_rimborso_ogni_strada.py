@@ -50,6 +50,9 @@ SERVER = os.path.join(RADICE, "fase83_server.py")
 # col codice e grida se divergono, cosi' nessuna delle due puo' invecchiare in silenzio.
 STRADE_CENSITE = {
     "rimborso disposto da admin": None,
+    # VA3 (8/11): la riga si scrive prima di marcare 'rimborsato'; se il blocco sulla carta era
+    # aperto si scrive dopo averlo chiuso. Stessa chiave: una sola delle due resta nel giornale.
+    "rimborso disposto da admin (blocco chiuso dopo)": None,
     "rimborso deciso dall'arbitro (controversia risolta)": "rimborso_controversia:",
     "rimborso 100% per cancellazione host": None,
     "rimborso dovuto per cancellazione ospite": None,
@@ -83,6 +86,7 @@ STRADE_CENSITE = {
 # dichiara lo stato, non lo si assolve: vedi il limite dichiarato in cima al file.
 CHIAVE_CONDIVISA_DICHIARATA = {
     "rimborso disposto da admin",
+    "rimborso disposto da admin (blocco chiuso dopo)",
     "rimborso 100% per cancellazione host",
     "rimborso dovuto per cancellazione ospite",
     # Voci 143 e 179 (pacco 3, 27/10): la quarta. Non porta un importo suo: scrive DOPO la

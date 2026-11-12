@@ -205,6 +205,50 @@ class TestProvaFormale(unittest.TestCase):
 class TestAuditorDB(unittest.TestCase):
     """L'auditor `scansiona_db` legge i DB reali (schema-tollerante) e conta le violazioni."""
 
+    def _cartella_con_db_rotto(self):
+        import os
+        import shutil
+        import tempfile
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        with open(os.path.join(d, "rotto.db"), "wb") as f:
+            f.write(b"questo non e' un database, solo byte a caso" * 40)
+        return d
+
+    def test_EN4_un_db_illeggibile_si_dichiara(self):
+        from fase199_invarianti import scansiona_db
+        self.assertEqual(scansiona_db(self._cartella_con_db_rotto())["db_illeggibili"], ["rotto.db"])
+
+    def test_EN4_il_bunker_non_dice_ok_se_non_ha_potuto_leggere(self):
+        import types
+        from fase83_server import RouterHTTP
+        d = self._cartella_con_db_rotto()
+        finto = types.SimpleNamespace(_bunker_auth=lambda h, azione: True, _data_dir=lambda: d,
+                                      _client_ip=lambda h: "x")
+        s, c = RouterHTTP._bunker_invarianti(finto, {}, {})
+        self.assertEqual(s, 200, c)
+        self.assertIs(c["ok"], False, c)
+        self.assertEqual(c["db_illeggibili"], ["rotto.db"], c)
+
+    def test_EN4_cartella_sana_dice_ok_e_nessun_illeggibile(self):
+        import shutil
+        import sqlite3
+        import tempfile
+        import os
+        import types
+        from fase83_server import RouterHTTP
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        con = sqlite3.connect(os.path.join(d, "sano.db"))
+        con.execute("CREATE TABLE x (a INTEGER)")
+        con.commit()
+        con.close()
+        finto = types.SimpleNamespace(_bunker_auth=lambda h, azione: True, _data_dir=lambda: d,
+                                      _client_ip=lambda h: "x")
+        s, c = RouterHTTP._bunker_invarianti(finto, {}, {})
+        self.assertIs(c["ok"], True, c)
+        self.assertEqual(c["db_illeggibili"], [], c)
+
     def test_scan_pulito_e_doppia_conferma(self):
         import os
         import shutil

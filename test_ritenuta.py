@@ -533,6 +533,112 @@ class TestSeNonSiPuoOperareIlBonificoNonParte(_Base):
         self.assertEqual(len(rec), 1, log.output)
         self.assertIsInstance(rec[0].exc_info, tuple)
 
+    def _muore_su(self, oggetto, nome, quando):
+        """Il processo muore nel passo `nome` di `oggetto`; poi lo stesso giro riparte."""
+        class _Morto(BaseException):
+            pass
+
+        vero = getattr(oggetto, nome)
+
+        def muore(*a, **kw):
+            if quando(a, kw):
+                raise _Morto()
+            return vero(*a, **kw)
+
+        setattr(oggetto, nome, muore)
+        return _Morto
+
+    def _opera(self, rif):
+        return self.r._opera_ritenuta(rif, self.sis.pagamenti_pendenti.info(rif), self.hid, {}, False)
+
+    def _ritenuta_una_volta(self, rif, pieno):
+        righe = self._righe(rif, "ritenuta")
+        self.assertEqual(len(righe), 1, righe)
+        self.assertEqual(self._maturato(rif), pieno - int(righe[0]["importo_cents"]))
+
+    def test_VA4_morto_alla_riga_di_giornale_la_ritenuta_si_toglie_una_volta(self):
+        self._accendi()
+        rif, _q = self._prenota_paga()
+        pieno = self._maturato(rif)
+        fc = self.sis.finanza
+        morto = self._muore_su(fc, "movimento", lambda a, kw: kw.get("tipo") == "ritenuta")
+        with self.assertRaises(morto):
+            self._opera(rif)
+        del fc.movimento
+        self.assertIs(self._opera(rif), True)
+        self._ritenuta_una_volta(rif, pieno)
+
+    def test_VA4_morto_prima_di_ridurre_il_bonifico_si_riduce_al_giro_dopo(self):
+        self._accendi()
+        rif, _q = self._prenota_paga()
+        pieno = self._maturato(rif)
+        pd = self.sis.payout
+        morto = self._muore_su(pd, "trattieni_ritenuta", lambda a, kw: True)
+        with self.assertRaises(morto):
+            self._opera(rif)
+        del pd.trattieni_ritenuta
+        self.assertIs(self._opera(rif), True)
+        self._ritenuta_una_volta(rif, pieno)
+
+    def test_VA4_una_penale_compensata_dopo_non_viene_restituita(self):
+        self._accendi()
+        rif, _q = self._prenota_paga()
+        self.assertIs(self._opera(rif), True)
+        ridotto = self._maturato(rif) - 700                     # una penale presa dopo
+        self.assertTrue(self.sis.payout.imposta_importo(rif, ridotto))
+        self.assertIs(self._opera(rif), True)
+        self.assertEqual(self._maturato(rif), ridotto)
+
+    def test_FB1_morto_prima_di_ridurre_e_penale_nel_mezzo_la_ritenuta_si_trattiene(self):
+        """FB1 (revisione Fable, 10/11): morto fra la riga di giornale e la riduzione del
+        bonifico, e una penale compensata nel mezzo (fase177 `imposta_importo(..., disp - quota,
+        solo_se_stato="maturato")`). `_completa_ritenuta` riduceva solo un bonifico ancora PIENO:
+        qui non lo e' piu', non riduceva, e il bonifico partiva intero mentre il giornale (F24, CU)
+        diceva la ritenuta trattenuta. Lo Stato la vuole da noi; all'host era gia' pagata."""
+        self._accendi()
+        rif, _q = self._prenota_paga()
+        pieno = self._maturato(rif)
+        pd = self.sis.payout
+        morto = self._muore_su(pd, "trattieni_ritenuta", lambda a, kw: True)
+        with self.assertRaises(morto):
+            self._opera(rif)
+        del pd.trattieni_ritenuta                               # il processo riparte
+        righe = self._righe(rif, "ritenuta")
+        self.assertEqual(len(righe), 1, "PREMESSA: la riga della ritenuta c'e'")
+        ritenuta = int(righe[0]["importo_cents"])
+        self.assertEqual(self._maturato(rif), pieno, "PREMESSA: bonifico ancora PIENO")
+        ridotto = pieno - 700                                   # la penale compensata nel mezzo
+        self.assertTrue(pd.imposta_importo(rif, ridotto, solo_se_stato="maturato"))
+        self.r._trasferisci_all_host(rif, ridotto)
+        pagato = sum(c[1] for c in self.connect.chiamate)
+        self.assertEqual(
+            pagato, ridotto - ritenuta,
+            "FB1: l'host ha ricevuto %d cents ma il giornale dice ritenuta %d su un bonifico di "
+            "%d: gli spettavano %d (la ritenuta scritta nel giornale non e' stata trattenuta)"
+            % (pagato, ritenuta, ridotto, ridotto - ritenuta))
+        self.assertEqual(len(self._righe(rif, "ritenuta")), 1, "la ritenuta resta UNA")
+        self.assertEqual(self._maturato(rif), ridotto - ritenuta)
+
+    def test_FB1_se_la_ripresa_non_riesce_a_togliere_la_ritenuta_il_bonifico_si_ferma(self):
+        """pr-test-analyzer (11/11, valore 9): riga di giornale scritta, bonifico non ridotto, e
+        nel frattempo il bonifico e' sceso sotto la ritenuta. `trattieni_ritenuta` non scrive:
+        il completamento deve FERMARE il bonifico (ERROR), non lasciarlo partire intero."""
+        self._accendi()
+        rif, _q = self._prenota_paga()
+        pd = self.sis.payout
+        morto = self._muore_su(pd, "trattieni_ritenuta", lambda a, kw: True)
+        with self.assertRaises(morto):
+            self._opera(rif)
+        del pd.trattieni_ritenuta
+        ritenuta = int(self._righe(rif, "ritenuta")[0]["importo_cents"])
+        self.assertTrue(pd.imposta_importo(rif, ritenuta, solo_se_stato="maturato"))
+        with self.assertLogs("core_auto.server", level="ERROR") as log:
+            self.r._trasferisci_all_host(rif, ritenuta)
+        self.assertEqual(self.connect.chiamate, [], "il bonifico NON parte")
+        self.assertEqual(self._maturato(rif), ritenuta, "il registro non cambia")
+        self.assertTrue(any("RITENUTA NON OPERATA" in r.getMessage() for r in log.records),
+                        log.output)
+
     def test_ritenuta_oltre_il_bonifico_ferma_e_grida(self):
         """Anche al CONFINE (ritenuta uguale al bonifico: all'host resterebbe zero) -- e il
         motivo e' quello giusto (sopravvissuto del giro sul diff, fase83:6691)."""
