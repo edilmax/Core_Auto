@@ -10,6 +10,7 @@ import datetime
 import http.client
 import io
 import json
+import logging
 import os
 import re
 import shutil
@@ -2801,7 +2802,9 @@ class TestLaStanzaSiLiberaSoloAPaginaChiusa(_BancoDeiSoldiDelServer):
     def test_numero_vuoto_o_corpo_illeggibile_come_prima_senza_chiamare_stripe(self):
         """Prove mancanti 1 e 6 (pr-test-analyzer, 11/11): numero '' (gateway che da' solo
         l'indirizzo), corpo che non si legge o che non e' un oggetto: niente pagina da chiudere
-        -> come prima del pezzo 3, e Stripe non si chiama."""
+        -> Stripe non si chiama. Numero vuoto: come prima del pezzo 3, la stanza si libera.
+        Corpo rotto (I9, decisione A, 12/11): la stanza si TIENE fino a che la pagina non puo'
+        piu' essere viva (la regola intera sta in `test_F7_il_corpo_illeggibile_si_dice...`)."""
         import sqlite3
         for i, testo in enumerate(('{"stripe_cs": ""}', "{non json", "[1]")):
             with self.subTest(corpo=testo):
@@ -2814,7 +2817,8 @@ class TestLaStanzaSiLiberaSoloAPaginaChiusa(_BancoDeiSoldiDelServer):
                 con.close()
                 del self.chiusure[:]
                 self._spazza(1800 + 60)
-                self.assertEqual((self.chiusure, self._stato()), ([], "scaduto"))
+                self.assertEqual((self.chiusure, self._stato()),
+                                 ([], "scaduto" if i == 0 else "in_attesa"))
 
     def test_senza_numero_della_pagina_si_fa_come_prima(self):
         import sqlite3
@@ -2833,11 +2837,13 @@ class TestLaStanzaSiLiberaSoloAPaginaChiusa(_BancoDeiSoldiDelServer):
 
     def test_F7_il_corpo_illeggibile_si_dice_nel_registro(self):
         """F7 (11/11, python-reviewer e pr-test-analyzer): un corpo che non si legge, o che non
-        e' un oggetto, fa come prima (nessuna pagina da chiudere) ma NON in silenzio: e' un dato
-        rotto dentro un pagamento in attesa (regola ferrea 9). Un numero vuoto invece e' normale
-        (gateway che da' solo l'indirizzo) e tace (regola ferrea 10)."""
+        e' un oggetto, NON in silenzio: e' un dato rotto dentro un pagamento in attesa (regola
+        ferrea 9). Un numero vuoto invece e' normale (gateway che da' solo l'indirizzo) e tace
+        (regola ferrea 10). I9 (decisione A, 12/11, revisore Stripe R2): la stanza di chi forse
+        sta pagando NON si libera piu' subito -- non si sa quale pagina chiudere -- si tiene e
+        si riprova; dopo un giorno la pagina non puo' piu' essere viva: si libera, con ERROR."""
         import sqlite3
-        for i, (testo, grida) in enumerate((("{non json", True), ("[1]", True),
+        for i, (testo, rotto) in enumerate((("{non json", True), ("[1]", True),
                                             ('{"stripe_cs": ""}', False))):
             with self.subTest(corpo=testo):
                 if i:
@@ -2849,8 +2855,20 @@ class TestLaStanzaSiLiberaSoloAPaginaChiusa(_BancoDeiSoldiDelServer):
                 con.close()
                 with self.ascolta() as righe:
                     self._spazza(1800 + 60)
-                self.assertEqual(self._stato(), "scaduto")
-                self.assertEqual(bool(self.avvisi_con(righe, "corpo_illeggibile")), grida, righe)
+                if not rotto:
+                    self.assertEqual(self._stato(), "scaduto")
+                    self.assertEqual(self.avvisi_con(righe, "corpo_illeggibile")
+                                     + self.errori_con(righe, "corpo_illeggibile"), [], righe)
+                    continue
+                self.assertEqual(self._stato(), "in_attesa", "stanza liberata su un corpo rotto")
+                # F3c di PROTON (12/11): «corpo_illeggibile» da solo lo dice anche l'ERROR del
+                # CREDITO dopo la liberazione: si pretende la riga dello SPAZZINO
+                self.assertTrue(self.avvisi_con(righe, "SPAZZINO", "corpo_illeggibile"), righe)
+                self.assertEqual(self.errori_con(righe, "corpo_illeggibile"), [], righe)
+                with self.ascolta() as righe:
+                    self._spazza(1800 + 86400 + 600)
+                self.assertEqual(self._stato(), "scaduto", "dopo un giorno la stanza si libera")
+                self.assertTrue(self.errori_con(righe, "SPAZZINO", "corpo_illeggibile"), righe)
 
     def test_prova7_un_esito_che_non_e_ok_non_libera_mai(self):
         """Prova mancante 7 (pr-test-analyzer, 11/11): 'expired' o 'complete' valgono SOLO con
@@ -9270,9 +9288,11 @@ class TestF17IlCorpoIlleggibileSullaStradaDeiSoldiSiDice(unittest.TestCase):
                 _leggi_corpo(rec, "rimborso_admin")
         for parola in ("corpo_illeggibile", "rimborso_admin", "BVIP-F17"):
             self.assertIn(parola, log.output[0])
+        # I8 (12/11): un JSON che non e' un oggetto si dice e vale come illeggibile (prima
+        # tornava com'era e il primo `.get` del chiamante cadeva in 500)
         with self.assertLogs("core_auto.server", level="WARNING") as log:
-            self.assertEqual(_leggi_corpo({"corpo_json": "[1]"}, "p"), [1],
-                             "un JSON che non e' un oggetto si dice ma torna com'era")
+            with self.assertRaises(ValueError):
+                _leggi_corpo({"corpo_json": "[1]"}, "p")
         self.assertIn("non_oggetto", log.output[0])
         # regola ferrea 10: tace sul buono e sul vuoto
         for corpo, atteso in (('{"totale_cents": 100}', {"totale_cents": 100}), ("", {}),
@@ -9295,6 +9315,274 @@ class TestF17IlCorpoIlleggibileSullaStradaDeiSoldiSiDice(unittest.TestCase):
         avvisi = [r.getMessage() for r in log.records if r.levelname == "WARNING"]
         self.assertTrue(any("corpo_illeggibile" in a and "BVIP-F17" in a for a in avvisi),
                         log.output)
+
+
+class TestI9IlBonificoAspettaSeIlCorpoERotto(_BancoDeiBonifici):
+    """I9 parte 3 (decisione A del fondatore, 12/11): col corpo rotto il bonifico all'host
+    partiva lo stesso, staccato dall'addebito dell'ospite (dal nostro saldo disponibile: i
+    soldi li anticipava la piattaforma). Ora resta 'maturato' e lo si grida."""
+
+    def test_corpo_rotto_nessun_bonifico(self):
+        stripe = _StripeDeiBonifici(None, ricorda_chiavi=True)
+        rif, netto = self._bonifico_con(stripe)
+        con = sqlite3.connect(self.dir + "/p.db")
+        with con:
+            con.execute("UPDATE pendenti SET corpo_json=? WHERE riferimento=?", ("{rotto", rif))
+        con.close()
+        with self.assertLogs("core_auto.server", level="ERROR") as log:
+            self.r._trasferisci_all_host(rif, netto)
+        self.assertEqual(stripe.bonifici, [], "bonifico partito su un corpo rotto")
+        self.assertEqual(self.sis.payout.stato_di(rif), "maturato")
+        self.assertTrue(any("corpo_illeggibile" in r.getMessage() for r in log.records
+                            if r.levelname == "ERROR"), log.output)
+
+    def test_a_corpo_sano_il_bonifico_parte(self):
+        stripe = _StripeDeiBonifici(None, ricorda_chiavi=True)
+        rif, netto = self._bonifico_con(stripe)
+        self.r._trasferisci_all_host(rif, netto)
+        self.assertEqual(len(stripe.bonifici), 1, "premessa del banco: il bonifico parte")
+
+    def test_corpo_rotto_l_incasso_non_matura_il_bonifico(self):
+        """I9 parte 3: col corpo rotto il blocco sulla carta risulta «nessuno» (= incassato
+        come sempre) e `_riasserisci_incasso` maturava il bonifico dell'host anche su soldi
+        forse solo AUTORIZZATI. Ora si ferma prima di ogni passo, grida e risponde False (il
+        webhook -> 503, Stripe ritenta). D19: lo stato si costruisce a mano, la porta del
+        webhook davanti (`_corpo_rotto`) qui non c'e'."""
+        rif = self._prenota_paga()
+        con = sqlite3.connect(self.dir + "/p.db")
+        with con:
+            con.execute("UPDATE pendenti SET corpo_json=? WHERE riferimento=?", ("{rotto", rif))
+        con.close()
+        rec = self.sis.pagamenti_pendenti.info(rif)
+        with mock.patch.object(self.sis.payout, "aggiorna_stato") as matura, \
+                self.assertLogs("core_auto.server", level="ERROR") as log:
+            esito = self.r._riasserisci_incasso(rec, rif)
+        self.assertIs(esito, False)
+        matura.assert_not_called()
+        self.assertTrue(any("corpo_illeggibile" in r.getMessage()
+                            and "riasserisci_incasso" in r.getMessage()
+                            for r in log.records if r.levelname == "ERROR"), log.output)
+
+    def _penale_struttura(self, corpo):
+        """La penale della disdetta tardiva (PAGA IN STRUTTURA) con un corpo dato: la carta e'
+        finta e conta le chiamate, l'ora e' forzata a 2 ore dal check-in."""
+        carta = mock.Mock()
+        carta.dettagli_pagamento_da_sessione.return_value = {"customer": "cus_1",
+                                                             "payment_method": "pm_1"}
+        carta.addebita.return_value = {"stato": "riuscito"}
+        pp = mock.Mock()
+        pp.info.return_value = {"riferimento": "BVIP-PS", "corpo_json": corpo}
+        router = fase83_server.RouterHTTP.__new__(fase83_server.RouterHTTP)
+        router._sys = mock.Mock(carta=carta, pagamenti_pendenti=pp)
+        router._fuso_alloggio = lambda a: "UTC"
+        router._transazioni_bloccate = lambda: False
+        v = {"alloggio_id": "x", "check_in": "2026-09-10", "check_out": "2026-09-11",
+             "prezzo_guest_cents": 12000, "valuta": "EUR"}
+        with mock.patch.dict(os.environ, {"PAGA_STRUTTURA_ATTIVO": "1"}), \
+                mock.patch.object(fase83_server, "_istante_checkin",
+                                  lambda ci, fuso="": 1_000_000 + 7200), \
+                mock.patch("time.time", lambda: 1_000_000.0):
+            return router._forse_penale_struttura("BVIP-PS", v, 0), carta
+
+    def test_corpo_rotto_la_penale_in_struttura_si_ferma_e_lo_dice(self):
+        """I9 parte 3: col corpo rotto la pagina dell'anticipo non si trovava e il motivo era
+        «carta_non_recuperata», senza ERROR: sembrava una carta scaduta, non un record guasto."""
+        with self.assertLogs("core_auto.server", level="ERROR") as log:
+            esito, carta = self._penale_struttura("{rotto")
+        self.assertEqual(esito.get("motivo"), "corpo_illeggibile", esito)
+        self.assertIs(esito.get("applicata"), False, esito)          # T2: non «None»
+        self.assertEqual(esito.get("importo_cents"), 12000, esito)   # la prima notte, detta
+        carta.dettagli_pagamento_da_sessione.assert_not_called()
+        carta.addebita.assert_not_called()
+        self.assertTrue(any("corpo_illeggibile" in r.getMessage() and "BVIP-PS" in r.getMessage()
+                            for r in log.records if r.levelname == "ERROR"), log.output)
+
+    def test_corpo_sano_la_penale_in_struttura_si_addebita(self):
+        esito, carta = self._penale_struttura('{"stripe_cs": "cs_test_1"}')
+        self.assertTrue(esito.get("applicata"), esito)
+        carta.dettagli_pagamento_da_sessione.assert_called_once_with("cs_test_1")
+
+    def test_seconda_difesa_se_l_archivio_dice_corpo_illeggibile_non_si_paga(self):
+        """(l) di PROTON (12/11, D19): il controllo dopo `pp.conferma` non lo vedeva nessuna
+        prova, perche' il fermo davanti scatta prima. Lo stato si costruisce a mano: il primo
+        controllo passa, poi l'archivio risponde che il corpo si e' rotto e NON ha scritto."""
+        from test_movimenti_giornale import CI, CO
+        _, q = self.g("POST", "/api/concierge/quote", {"alloggio_id": "casa",
+                      "check_in": CI, "check_out": CO, "party": 2})
+        _, b = self.g("POST", "/api/concierge/book",
+                      {"quote_token": q["quote_token"], "email": "o@collaudo.invalid"})
+        rif = b["riferimento"]
+        pp = self.sis.pagamenti_pendenti
+        vero = pp.info(rif)
+        self.assertEqual(vero["stato"], "in_attesa", "premessa: non ancora pagata")
+        with mock.patch.object(self.r, "_corpo_rotto", return_value=False), \
+                mock.patch.object(pp, "conferma", return_value=dict(vero, corpo_illeggibile=True)), \
+                mock.patch.object(self.r, "_riasserisci_incasso") as riasserisci, \
+                mock.patch.object(self.r, "_email_pagamento_confermato") as email:
+            esito = self.r._conferma_pagamento(rif)
+        self.assertIs(esito, False, "il webhook deve rispondere 503 perche' Stripe ritenti")
+        riasserisci.assert_not_called()
+        email.assert_not_called()
+
+    def test_a_corpo_sano_l_incasso_si_riasserisce(self):
+        rif = self._prenota_paga()
+        rec = self.sis.pagamenti_pendenti.info(rif)
+        with mock.patch.object(self.sis.payout, "aggiorna_stato") as matura:
+            esito = self.r._riasserisci_incasso(rec, rif)
+        self.assertIs(esito, True)
+        matura.assert_called_once_with(rif, "maturato")
+
+
+class TestI9IlCreditoSulCorpoRottoSiGrida(unittest.TestCase):
+    """I9 parte 3 (decisione A, 12/11): il credito dell'ospite letto da un corpo rotto valeva
+    «nessun credito» in silenzio. Alla scadenza il credito restava bruciato, al pagamento
+    tardivo lo sconto non si riprendeva, e il controllo «una carta un solo sconto» non
+    guardava. Il credito non si muove lo stesso (non si decide su un dato rotto), ma si grida.
+    Il controllo della carta lascia pagare: e' l'ECCEZIONE scelta dal fondatore."""
+
+    def _router(self, corpo):
+        router = fase83_server.RouterHTTP.__new__(fase83_server.RouterHTTP)
+        pp = mock.Mock()
+        pp.info.return_value = {"riferimento": "BVIP-CR", "corpo_json": corpo}
+        router._sys = mock.Mock(pagamenti_pendenti=pp)
+        return router
+
+    def _errori(self, fai):
+        with self.assertLogs("core_auto.server", level="DEBUG") as log:
+            logging.getLogger("core_auto.server").debug("ascolto")
+            esito = fai()
+        return esito, [r.getMessage() for r in log.records if r.levelname == "ERROR"]
+
+    def test_corpo_rotto_ogni_punto_del_credito_grida(self):
+        rec = {"riferimento": "BVIP-CR", "corpo_json": "{rotto"}
+        # T11 (pr-test-analyzer, 12/11): ogni punto col SUO messaggio, non «un ERROR qualunque»
+        casi = (("libera_credito", lambda r: r._libera_credito(rec), "punto: credito"),
+                ("credito_tardivo", lambda r: r._credito_tardivo(rec, "BVIP-CR"), "punto: credito"),
+                ("lock_carta_credito", lambda r: r._lock_carta_credito("BVIP-CR", "pi_1"),
+                 "LOCK CARTA"))
+        for nome, fai, firma in casi:
+            with self.subTest(nome):
+                r = self._router("{rotto")
+                esito, errori = self._errori(lambda: fai(r))
+                self.assertTrue([m for m in errori if "corpo_illeggibile" in m
+                                 and "BVIP-CR" in m and firma in m], errori)
+                r._sys.credito_usati.libera.assert_not_called()
+                r._sys.credito_usati.consuma.assert_not_called()
+                if nome == "lock_carta_credito":
+                    self.assertEqual(esito, "fuori_perimetro", "l'eccezione: si lascia pagare")
+
+    def test_corpo_rotto_il_credito_referral_dell_host_si_ferma_e_lo_dice(self):
+        rec = {"riferimento": "BVIP-CR", "corpo_json": "{rotto", "host_id": "h1"}
+        r = self._router("{rotto")
+        r._sys.finanza.esiste_evento.return_value = False
+        with mock.patch.object(r, "_applica_credito_host", create=True) as applica, \
+                mock.patch.object(r, "_giornale", create=True) as giornale:
+            _, errori = self._errori(lambda: r._credito_host_al_pagamento("BVIP-CR", rec))
+        self.assertTrue([m for m in errori if "corpo_illeggibile" in m and "BVIP-CR" in m],
+                        errori)
+        applica.assert_not_called()
+        giornale.assert_not_called()
+
+    def test_corpo_rotto_il_credito_referral_da_rendere_dice_perche(self):
+        r = self._router("{rotto")
+        fc = mock.Mock()
+        fc.movimenti.return_value = [{"tipo": "sconto_commissione", "soggetto": "host:h1",
+                                      "importo_cents": 300}]
+        _, errori = self._errori(lambda: r._rendi_credito_referral("BVIP-CR", fc))
+        self.assertTrue([m for m in errori if "corpo_illeggibile" in m and "BVIP-CR" in m
+                         and "A MANO" in m], errori)
+        r._sys.viral.rendi_credito.assert_not_called()
+
+    def test_corpo_rotto_la_cancellazione_dell_ospite_si_ferma_prima_delle_date(self):
+        """I9 (ALTO del silent-failure-hunter, misurato da PROTON il 12/11 col suo caso dei
+        184 EUR): l'ospite cancella una prenotazione PAGATA col corpo rotto -> il blocco sulla
+        carta risultava «nessuno», l'autorizzazione non si annullava, il giornale scriveva un
+        rimborso senza incasso e nessuno lo vedeva. Ora 503 PRIMA di toccare date e soldi."""
+        r = self._router("{rotto")
+        r._sys.pagamenti_pendenti.info.return_value = {"riferimento": "BVIP-CR",
+                                                       "stato": "pagato", "corpo_json": "{rotto"}
+        v = {"alloggio_id": "casa", "check_in": "2027-08-10", "check_out": "2027-08-12"}
+        # finti realistici: senza il fermo si arriva al rilascio delle date, e li' si grida
+        r._garanzia_gia_divisa = lambda rif: False
+        r._controversia_aperta = lambda rif: False
+        r._sys.concierge._now.return_value = 0
+        r._sys.concierge._fine_giorno_arrivo.return_value = 10 ** 12
+        r._sys.inventario.rilascia.side_effect = AssertionError("date toccate su un corpo rotto")
+        _, errori = self._errori(lambda: self.assertEqual(
+            r._cancella_prenotazione_sotto_chiave(v, "tok", "casa", "2027-08-10", "2027-08-12",
+                                                  "BVIP-CR", 18400, 30),
+            (503, {"errore": "corpo_illeggibile"})))
+        self.assertTrue([m for m in errori if "corpo_illeggibile" in m and "BVIP-CR" in m
+                         and "cancellazione_ospite" in m], errori)
+        r._sys.inventario.rilascia.assert_not_called()
+        r._sys.finanza.registra.assert_not_called()
+
+    def test_corpo_sano_il_credito_si_libera_e_si_tace(self):
+        r = self._router('{"credito_id": "cr_1"}')
+        _, errori = self._errori(lambda: r._libera_credito(
+            {"riferimento": "BVIP-CR", "corpo_json": '{"credito_id": "cr_1"}'}))
+        self.assertEqual(errori, [])
+        r._sys.credito_usati.libera.assert_called_once_with("cr_1", "BVIP-CR")
+
+
+class TestLaPenaleNonScriveNelRegistroLHostGrezzo(unittest.TestCase):
+    """I1 (CodeQL #236 #237, py/log-injection, nati nella PR #312): `_payout_per_penale`
+    scriveva l'host cosi' com'era nelle sue due righe di registro. Un a-capo dentro l'host
+    fabbrica una riga intera nel registro, dove il Guardiano cerca i guasti sui soldi."""
+
+    FINTO = "h1\nERROR PENALE COMPENSATA | HOST_ID: h1"
+
+    def test_le_due_righe_della_penale_a_debito_non_portano_a_capo(self):
+        class _RegistroGiu:
+            def info_host(self, _host):
+                raise RuntimeError("database giu'")
+
+        sistema = mock.Mock(payout=object(), connect=object(), registro_host=_RegistroGiu())
+        with self.assertLogs("core_auto.server", level="WARNING") as log:
+            esito = fase83_server._payout_per_penale(sistema, self.FINTO)
+        self.assertIsInstance(esito, fase83_server._NessunaRigaDaCompensare,
+                              "premessa: lettura fallita = penale tutta a debito")
+        self.assertEqual([r.levelname for r in log.records], ["WARNING", "ERROR"],
+                         "premessa: le due righe, lettura fallita e penale non compensata")
+        for r in log.records:
+            self.assertNotIn("\n", r.getMessage(),
+                             "riga %s: l'host entra grezzo nel registro" % r.levelname)
+            self.assertIn("h1", r.getMessage(), "la riga deve ancora dire di quale host")
+
+
+class TestLaMailInChatSiRiconosceInTempoLineare(unittest.TestCase):
+    """I2 (CodeQL #235, py/polynomial-redos, aperto dal 21/09): la regex che riconosce una
+    mail scritta in chat era quadratica (`[^@\\s]+\\.` puo' prendere anche il punto). Si legge
+    dal sorgente la regex VERA della rotta, non una copia, e la si mette alla prova."""
+
+    def _regex_della_rotta(self):
+        import ast
+        with io.open(fase83_server.__file__, encoding="utf-8") as f:
+            albero = ast.parse(f.read())
+        trovate = [n.args[0].value for n in ast.walk(albero)
+                   if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                   and n.func.attr == "fullmatch" and len(n.args) == 2
+                   and isinstance(n.args[1], ast.Name) and n.args[1].id == "testo_mail"]
+        self.assertEqual(len(trovate), 1, "premessa: UNA regex della mail in chat, trovate %r"
+                         % trovate)
+        return trovate[0]
+
+    def test_un_testo_costruito_apposta_non_la_fa_lavorare_al_quadrato(self):
+        regex = self._regex_della_rotta()
+        testo = "a@" + "." * 40000 + "@"
+        inizio = time.perf_counter()
+        self.assertIsNone(re.fullmatch(regex, testo), "premessa: non e' una mail")
+        durata = time.perf_counter() - inizio
+        self.assertLess(durata, 0.5, "%.2f s per 40.000 caratteri: la regex e' tornata "
+                        "quadratica" % durata)
+
+    def test_riconosce_le_stesse_mail_di_prima(self):
+        regex = self._regex_della_rotta()
+        for testo, mail in (("a@b.c", True), ("a.b@c.d.e", True), ("a@.b.c", True),
+                            ("a@b..c", True), ("a@b.c.", True), ("a@b.", False),
+                            ("a@.b", False), ("a@bc", False), ("a b@c.d", False),
+                            ("a@b@c.d", False), ("@b.c", False), ("a@b.c ", False)):
+            self.assertEqual(bool(re.fullmatch(regex, testo)), mail, repr(testo))
 
 
 if __name__ == "__main__":

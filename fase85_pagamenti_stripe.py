@@ -126,6 +126,18 @@ def _e_una_pagina(numero: Any) -> bool:
     return isinstance(numero, str) and _NUMERO_DELLA_PAGINA.fullmatch(numero) is not None
 
 
+_NUMERO_DI_STRIPE = re.compile(r"[a-z]+_[A-Za-z0-9_]+")
+
+
+def _e_un_numero_di_stripe(numero: Any, prefisso: str = "") -> bool:
+    """I4 (12/11): ogni altro numero che entra in un indirizzo di Stripe (`pi_`, `ch_`, `txn_`,
+    `seti_`, anche quelli letti da una risposta) ha la forma dei numeri veri -- lettere
+    minuscole, `_`, poi solo lettere, cifre e `_` -- e il prefisso atteso. Il solo
+    `startswith("pi_")` lasciava entrare `pi_x/../../customers`, come `_e_una_pagina` per i `cs_`."""
+    return (isinstance(numero, str) and numero.startswith(prefisso)
+            and _NUMERO_DI_STRIPE.fullmatch(numero) is not None)
+
+
 def _esito_sconosciuto(exc: BaseException) -> bool:
     """⛔ PILASTRO ZERO (19/10/2026). Una chiamata a Stripe finita in errore ha l'esito SCONOSCIUTO
     -- puo' essere stata ESEGUITA -- salvo un rifiuto certo: una risposta 4xx, tranne 409 (la
@@ -304,8 +316,10 @@ class ProviderStripe:
             if not isinstance(s, dict) or s.get("id") != sessione:
                 return dict(vuoto, motivo="risposta_inattesa: " + _in_breve(s))
             pi = s.get("payment_intent")
-            if not (isinstance(pi, str) and pi.startswith("pi_")):
+            if not pi:
                 return dict(vuoto, ok=True)
+            if not _e_un_numero_di_stripe(pi, "pi_"):
+                return dict(vuoto, motivo="risposta_inattesa: " + _in_breve(s))
             p = self._fetch(PAGAMENTI_URL + "/" + pi, None, intestazione)
             if not (isinstance(p, dict) and p.get("id") == pi
                     and isinstance(p.get("status"), str) and p.get("status")):
@@ -324,7 +338,7 @@ class ProviderStripe:
         rifiutato. «Gia' incassato» (`succeeded`) e «scaduto o annullato» (`canceled`) sono due
         fatti opposti, e la risposta d'errore non basta a distinguerli con certezza.
         Ritorna {'ok', 'stato', 'motivo'}; `ok=False` = NON LO SO."""
-        if not (isinstance(payment_intent, str) and payment_intent.startswith("pi_")):
+        if not _e_un_numero_di_stripe(payment_intent, "pi_"):
             return {"ok": False, "stato": "", "motivo": "payment_intent_assente"}
         try:
             p = self._fetch(PAGAMENTI_URL + "/" + payment_intent, None,
@@ -360,7 +374,7 @@ class ProviderStripe:
 
     def _gesto(self, payment_intent: Any, chiave_idem: Any, suffisso: str,
                params: List[Tuple[str, str]], stato_atteso: str, nome: str) -> Dict[str, Any]:
-        if not (isinstance(payment_intent, str) and payment_intent.startswith("pi_")):
+        if not _e_un_numero_di_stripe(payment_intent, "pi_"):
             return {"ok": False, "id": "", "motivo": "payment_intent_assente"}
         if not (isinstance(chiave_idem, str) and chiave_idem.strip()):
             return {"ok": False, "id": "", "motivo": "chiave_idempotenza_assente"}
@@ -415,7 +429,7 @@ class ProviderStripe:
                         si rifa' a mano (l'id `re_` resta nella risposta per ritrovarlo);
           `sconosciuto` True = timeout, 5xx, 409: la richiesta puo' essere stata ESEGUITA
                         (`_esito_sconosciuto`, la stessa regola del bonifico)."""
-        if not (isinstance(payment_intent, str) and payment_intent.startswith("pi_")):
+        if not _e_un_numero_di_stripe(payment_intent, "pi_"):
             return {"ok": False, "id": "", "motivo": "payment_intent_assente"}
         if not _intero_pos(importo_cents):
             return {"ok": False, "id": "", "motivo": "importo_non_valido"}
@@ -467,7 +481,7 @@ class ProviderStripe:
         risposta inattesa, errore di rete): il chiamante dichiara il fail-open e lo
         scrive nel registro; qui niente ERROR perche' in un'interruzione di Stripe
         diventerebbe posta quotidiana che nessuno legge piu' (ferrea 10)."""
-        if not (isinstance(payment_intent, str) and payment_intent.startswith("pi_")):
+        if not _e_un_numero_di_stripe(payment_intent, "pi_"):
             return ""
         try:
             from urllib.parse import urlencode
@@ -496,7 +510,7 @@ class ProviderStripe:
         bonifico allora parte come prima, dal saldo disponibile, e fase83 lo dice. Un AVVISO e
         non un ERROR, come `impronta_carta`: a ogni interruzione di Stripe sarebbe posta del
         Guardiano che nessuno legge piu' (ferrea 10)."""
-        if not (isinstance(payment_intent, str) and payment_intent.startswith("pi_")):
+        if not _e_un_numero_di_stripe(payment_intent, "pi_"):
             return ""
         try:
             resp = self._fetch(PAGAMENTI_URL + "/" + payment_intent, None,
@@ -566,7 +580,7 @@ class ProviderStripe:
 
         Ritorna sempre un dict: {'ok', 'rimborsi', 'rimborsato_cents', 'motivo'}, e con ok=True
         anche 'in_corso_cents' (rimborsi 'pending'/'requires_action': non ancora restituiti)."""
-        if not (isinstance(payment_intent, str) and payment_intent.startswith("pi_")):
+        if not _e_un_numero_di_stripe(payment_intent, "pi_"):
             return {"ok": False, "rimborsi": [], "rimborsato_cents": 0,
                     "motivo": "payment_intent_assente"}
         try:
@@ -615,7 +629,7 @@ class ProviderStripe:
         chiama deve tenere i soldi fermi.
 
         Ritorna sempre un dict: {'ok', 'contestato', 'motivo'}."""
-        if not (isinstance(payment_intent, str) and payment_intent.startswith("pi_")):
+        if not _e_un_numero_di_stripe(payment_intent, "pi_"):
             return {"ok": False, "contestato": False, "motivo": "payment_intent_assente"}
         try:
             from urllib.parse import urlencode
@@ -672,7 +686,7 @@ class ProviderStripe:
         Ritorna sempre un dict: {'ok', 'fee_cents', 'netto_cents', 'valuta', 'motivo'}.
         """
         vuoto = {"ok": False, "fee_cents": 0, "netto_cents": 0, "valuta": "", "motivo": ""}
-        if not (isinstance(payment_intent, str) and payment_intent.startswith("pi_")):
+        if not _e_un_numero_di_stripe(payment_intent, "pi_"):
             return dict(vuoto, motivo="payment_intent_assente")
         intestazione = {"Authorization": "Bearer " + self._key}
         try:
@@ -683,12 +697,16 @@ class ProviderStripe:
                 # fallito, o gia' annullato). Dirlo e' l'unica risposta onesta.
                 return dict(vuoto, motivo="nessun addebito sul pagamento (stato %r)"
                             % ((pi or {}).get("status"),))
-            ch = self._fetch(ADDEBITI_URL + "/" + str(addebito), None, intestazione)
+            if not _e_un_numero_di_stripe(addebito):
+                return dict(vuoto, motivo="risposta_inattesa: " + _in_breve(pi))
+            ch = self._fetch(ADDEBITI_URL + "/" + addebito, None, intestazione)
             movimento = (ch or {}).get("balance_transaction")
             if not movimento:
                 return dict(vuoto, motivo="addebito senza balance_transaction: la commissione "
                                           "non e' ancora stata calcolata da Stripe")
-            bt = self._fetch(MOVIMENTI_URL + "/" + str(movimento), None, intestazione)
+            if not _e_un_numero_di_stripe(movimento):
+                return dict(vuoto, motivo="risposta_inattesa: " + _in_breve(ch))
+            bt = self._fetch(MOVIMENTI_URL + "/" + movimento, None, intestazione)
             if not isinstance(bt, dict) or "fee" not in bt:
                 return dict(vuoto, motivo="risposta_inattesa: " + _in_breve(bt))
             return {"ok": True, "fee_cents": int(bt.get("fee") or 0),

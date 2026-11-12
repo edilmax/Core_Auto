@@ -1029,6 +1029,23 @@ class TestLaPrenotazioneSiTrovaDalPagamento(unittest.TestCase):
         self._reg("R-SOLO-LISTA", '["pi_SOLO"]')
         self.assertIsNone(self.pp.per_payment_intent("pi_SOLO"))
 
+    def test_I9_solo_una_riga_rotta_DI_QUEL_pagamento_ferma_la_ricerca(self):
+        """I9 (decisione A) senza rompere la regola qui sopra (PROTON e python-reviewer, 12/11):
+        `instr` cerca un pezzo di testo, e una riga rotta di pi_ABC fermava la contestazione di
+        pi_AB. Si ferma (errore + ERROR) solo se la riga rotta contiene QUEL pagamento a parola
+        intera e nessuna riga buona combacia."""
+        import logging
+        self._reg("R-ALTRO", '{"stripe_pi": "pi_ABC"')
+        self.assertIsNone(self.pp.per_payment_intent("pi_AB"),
+                          "una riga rotta di un ALTRO pagamento ha fermato la ricerca")
+        self._reg("R-SUO", '{"stripe_pi": "pi_SUO"')
+        with self.assertLogs("core_auto.pagamenti_pendenti", level="ERROR") as log:
+            with self.assertRaises(ValueError):
+                self.pp.per_payment_intent("pi_SUO")
+        self.assertTrue(any("R-SUO" in r.getMessage() and "corpo_illeggibile" in r.getMessage()
+                            for r in log.records if r.levelname == "ERROR"), log.output)
+        logging.getLogger("core_auto.pagamenti_pendenti").debug("fine")
+
     def test_quello_che_non_e_un_pagamento_non_trova_niente_e_non_esplode(self):
         self._reg("R-X", json.dumps({"stripe_pi": "pi_X", "carica": "ch_1"}))
         for cattivo in (None, 7, b"pi_X", "ch_1", ""):
@@ -1074,6 +1091,53 @@ class TestF17IlCorpoIlleggibileNellArchivioSiDice(unittest.TestCase):
     def _con(avvisi, livello, *parole):
         return [m for lv, m in avvisi if lv == livello and all(p in m for p in parole)]
 
+    def test_I7_il_blocco_della_carta_illeggibile_dice_di_quale_prenotazione(self):
+        """I7 (R2 dei revisori, 11/11): `blocco_della_carta` riceveva il corpo senza la
+        prenotazione, e il suo avviso diceva «riferimento: -»: un corpo rotto sui soldi senza
+        sapere di chi. I tre lettori che hanno la prenotazione in mano ora la passano."""
+        import fase83_server
+        from fase181_audit_console import _semaforo_coerenza
+        self.assertTrue(self.p.registra("R7", alloggio_id="casa", check_in="2027-05-10",
+                                        check_out="2027-05-12", corpo_json='{"blocco_pi": "pi_7"',
+                                        scadenza_ts=2000))
+        # (dal 12/11 `blocchi_aperti` legge il corpo da se', col suo punto: I9 parte F4)
+        casi = (("blocchi_aperti", "R7", lambda: self.p.blocchi_aperti(), "blocchi_aperti"),
+                ("fase83._blocco", "R6", lambda: fase83_server._blocco(self.p.info("R6")),
+                 "blocco_della_carta"),
+                ("fase181 coerenza", "R6",
+                 lambda: _semaforo_coerenza(self.p.info("R6"), None, []), "blocco_della_carta"))
+        for nome, rif, fai, punto in casi:
+            with self.subTest(nome):
+                _, avvisi = self._ascolta(fai)
+                self.assertTrue(self._con(avvisi, "WARNING", "corpo_illeggibile",
+                                          "punto: " + punto, "riferimento: " + rif),
+                                avvisi)
+
+    def test_I9_il_giro_dei_blocchi_grida_il_blocco_che_non_sa_leggere(self):
+        """I9 parte 3 (decisione A, 12/11): un blocco sulla carta col corpo rotto usciva dal
+        giro orario con un semplice avviso: nessuno lo incassava ne' lo annullava, e alla
+        scadenza dell'autorizzazione i soldi sparivano. Si salta lo stesso, ma con un ERROR
+        (lo legge il Guardiano). E a corpo sano il blocco resta nel giro, e si tace."""
+        self.assertTrue(self.p.registra("R9", alloggio_id="casa", check_in="2027-06-10",
+                                        check_out="2027-06-12", corpo_json='{"blocco_pi": "pi_9"',
+                                        scadenza_ts=2000))
+        self.assertTrue(self.p.registra("R10", alloggio_id="casa", check_in="2027-06-20",
+                                        check_out="2027-06-22",
+                                        corpo_json='{"blocco_pi": "pi_10"}', scadenza_ts=2000))
+        # pr-test-analyzer T6 (12/11): un corpo SANO che ha la parola nel testo (un campo scritto
+        # dall'ospite) non e' un blocco e non deve gridare ogni ora (regola ferrea 10)
+        self.assertTrue(self.p.registra("R11", alloggio_id="casa", check_in="2027-06-24",
+                                        check_out="2027-06-26",
+                                        corpo_json='{"nota": "blocco_pi"}', scadenza_ts=2000))
+        esito, avvisi = self._ascolta(lambda: self.p.blocchi_aperti())
+        nel_giro = [r["riferimento"] for r in esito]
+        self.assertEqual(nel_giro, ["R10"], "premessa: solo il blocco sano e' nel giro")
+        # revisore Stripe R8: il numero del pagamento, per trovarlo su Stripe a mano
+        self.assertTrue(self._con(avvisi, "ERROR", "blocco_illeggibile", "riferimento: R9",
+                                  "pi_9"), avvisi)
+        self.assertEqual(self._con(avvisi, "ERROR", "R10"), [], avvisi)
+        self.assertEqual(self._con(avvisi, "ERROR", "R11"), [], avvisi)
+
     def test_ogni_punto_dice_il_corpo_rotto_e_tiene_il_suo_ripiego(self):
         casi = (("salva_stripe_session", "R1", lambda: self.p.salva_stripe_session("R1", "cs_a"),
                  {"stripe_cs": "cs_a"}),
@@ -1083,20 +1147,29 @@ class TestF17IlCorpoIlleggibileNellArchivioSiDice(unittest.TestCase):
                  {"blocco_pi": "pi_1"}),
                 ("marca_cancellata_host", "R4", lambda: self.p.marca_cancellata_host("R4", 500),
                  {"penale_host_cents": 500}))
-        for punto, rif, fai, corpo_dopo in casi:
+        for punto, rif, fai, _corpo_di_prima in casi:
             with self.subTest(punto=punto):
                 esito, avvisi = self._ascolta(fai)
-                self.assertIs(esito, True, "il ripiego di prima: si scrive lo stesso")
-                self.assertEqual(json.loads(self.p.info(rif)["corpo_json"]), corpo_dopo)
-                # chi SCRIVE riscrive il record senza gli importi: ERROR, non un avviso
-                # (silent-failure-hunter, 11/11); il «rifiuto» e' una scelta del fondatore
+                # I9 (decisione A del fondatore, 12/11): prima si riscriveva il record col SOLO
+                # dato nuovo -- senza nessun importo -- e da li' sembrava sano a tutti. Ora non
+                # si scrive niente: il corpo rotto resta com'e' (lo si vede ancora) e si grida.
+                self.assertIs(esito, False, "su un corpo rotto non si scrive")
+                self.assertEqual(self.p.info(rif)["corpo_json"], self.ROTTO,
+                                 "il corpo rotto e' stato riscritto")
                 self.assertTrue(self._con(avvisi, "ERROR", "corpo_illeggibile",
-                                          "punto: " + punto, "riferimento: " + rif), avvisi)
+                                          "punto: " + punto, "riferimento: " + rif,
+                                          "NON si riscrive"), avvisi)
         with self.subTest(punto="per_payment_intent"):
-            esito, avvisi = self._ascolta(lambda: self.p.per_payment_intent("pi_9"))
-            self.assertIsNone(esito, "il ripiego di prima: il record rotto non si riconosce")
+            # I9 (decisione A): «nessuna prenotazione» faceva passare la contestazione della
+            # banca senza fermare i soldi; ora l'errore sale e il webhook fa ritentare Stripe
+            import logging
+            with self.assertLogs("core_auto.pagamenti_pendenti", level="WARNING") as log:
+                with self.assertRaises(ValueError):
+                    self.p.per_payment_intent("pi_9")
+            avvisi = [(r.levelname, r.getMessage()) for r in log.records]
             self.assertTrue(self._con(avvisi, "WARNING", "corpo_illeggibile",
-                                      "punto: per_payment_intent", "riferimento: R5"), avvisi)
+                                      "punto: per_payment_intent", "riferimento: R1"), avvisi)
+            logging.getLogger("core_auto.pagamenti_pendenti").debug("fine")
         with self.subTest(punto="aggrega_costi_tecnici"):
             esito, avvisi = self._ascolta(self.p.aggrega_costi_tecnici)
             self.assertEqual(esito["coperto_cents"], 0, "il ripiego di prima: si salta")
@@ -1111,9 +1184,11 @@ class TestF17IlCorpoIlleggibileNellArchivioSiDice(unittest.TestCase):
             self.assertTrue(self.p.scadi("R7"), "PREMESSA: blocco scaduto")
             self.p.scadenza_finita("R7")      # lo spazzino ha finito i suoi passi (misurato:
             #                                   prima `conferma` risponde «attendi_sweeper»)
-            _esito, avvisi = self._ascolta(lambda: self.p.conferma("R7"))
-            self.assertEqual(json.loads(self.p.info("R7")["corpo_json"]),
-                             {"pagamento_tardivo": "da_finire"}, "il ripiego di prima")
+            esito, avvisi = self._ascolta(lambda: self.p.conferma("R7"))
+            # I9 (decisione A): prima diventava 'pagato' col solo segno, senza importi
+            self.assertIs((esito or {}).get("corpo_illeggibile"), True, esito)
+            self.assertEqual((self.p.info("R7")["stato"], self.p.info("R7")["corpo_json"]),
+                             ("scaduto", self.ROTTO), "il CAS ha scritto su un corpo rotto")
             self.assertTrue(self._con(avvisi, "ERROR", "corpo_illeggibile",
                                       "punto: conferma_tardivo", "riferimento: R7"), avvisi)
         with self.subTest(punto="blocco_della_carta"):
@@ -1127,10 +1202,23 @@ class TestF17IlCorpoIlleggibileNellArchivioSiDice(unittest.TestCase):
         """pr-test-analyzer e python-reviewer (11/11): il ramo `non_oggetto` non aveva prova, e
         il riferimento nel registro si puliva solo dagli a-capo: ora come `_rif_per_registro`."""
         from fase162_pagamenti_pendenti import _corpo_salvato
-        esito, avvisi = self._ascolta(lambda: _corpo_salvato("[1]", "p", "R\x1b|x: falso\n"))
-        self.assertEqual(esito, [1], "torna com'e'")
+        with self.assertRaises(ValueError, msg="I8: un non-oggetto vale come illeggibile"):
+            self._ascolta(lambda: _corpo_salvato("[1]", "p", "R\x1b|x: falso\n"))
+        import logging
+        with self.assertLogs("core_auto.pagamenti_pendenti", level="WARNING") as log:
+            with self.assertRaises(ValueError):
+                _corpo_salvato("[1]", "p", "R\x1b|x: falso\n")
+        avvisi = [(r.levelname, r.getMessage()) for r in log.records]
         self.assertTrue(self._con(avvisi, "WARNING", "non_oggetto", "riferimento: Rx:falso"),
                         avvisi)
+        # I8 anche per chi scrive: un record con un JSON non oggetto non si riscrive
+        self.assertTrue(self.p.registra("R8", alloggio_id="casa", check_in="2027-06-10",
+                                        check_out="2027-06-12", corpo_json="[1]",
+                                        scadenza_ts=2000))
+        with self.assertLogs("core_auto.pagamenti_pendenti", level="ERROR"):
+            self.assertIs(self.p.salva_stripe_session("R8", "cs_a"), False)
+        self.assertEqual(self.p.info("R8")["corpo_json"], "[1]")
+        logging.getLogger("core_auto.pagamenti_pendenti").debug("fine")
 
     def test_un_corpo_buono_o_vuoto_tace(self):
         self.assertTrue(self.p.registra("B1", alloggio_id="casa", check_in="2027-02-10",

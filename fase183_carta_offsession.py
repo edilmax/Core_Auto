@@ -29,7 +29,7 @@ from typing import Any, Callable, Dict, Optional
 
 # F16 (11/11): nell'indirizzo di Stripe va solo il numero di una pagina; il controllo e' UNO,
 # in fase85 (gruppo H: forma dei numeri veri, `cs_../` non passa)
-from fase85_pagamenti_stripe import _e_una_pagina
+from fase85_pagamenti_stripe import _e_un_numero_di_stripe, _e_una_pagina
 
 logger = logging.getLogger("core_auto.carta_offsession")
 
@@ -94,6 +94,8 @@ class ProviderCarta:
             customer = s.get("customer") or ""
             si = s.get("setup_intent") or ""
             pm = ""
+            if si and not _e_un_numero_di_stripe(si, "seti_"):
+                return None
             if si:
                 sio = self._fetch("GET", "%s/setup_intents/%s" % (_BASE, si), None,
                                   self._headers())
@@ -119,6 +121,8 @@ class ProviderCarta:
             customer = s.get("customer") or ""
             pi = s.get("payment_intent") or ""
             pm = ""
+            if pi and not _e_un_numero_di_stripe(pi, "pi_"):
+                return None
             if pi:
                 pio = self._fetch("GET", "%s/payment_intents/%s" % (_BASE, pi), None,
                                   self._headers())

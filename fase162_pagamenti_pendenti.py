@@ -41,7 +41,8 @@ def _corpo_salvato(testo: Any, punto: str, riferimento: Any = "-", *,
     rif = re.sub(r"[^A-Za-z0-9:_.-]", "", str(riferimento))[:64]
     rif = rif.replace("\r", "").replace("\n", "")      # la barriera che CodeQL riconosce
     grida = logger.error if scrive else logger.warning
-    dopo = ("il record si riscrive SENZA i suoi importi" if scrive else "si fa come prima")
+    # I9 (decisione A del fondatore, 12/11): chi scrive NON riscrive piu' un corpo rotto
+    dopo = ("il record NON si riscrive, va sistemato a mano" if scrive else "si fa come prima")
     try:
         corpo = json.loads(testo or "{}")
     except Exception as exc:
@@ -53,6 +54,7 @@ def _corpo_salvato(testo: Any, punto: str, riferimento: Any = "-", *,
         grida("ARCHIVIO | codice: corpo_illeggibile | sottocodice: non_oggetto | punto: %s | "
               "riferimento: %s | messaggio: il corpo salvato della prenotazione non e' un "
               "oggetto, %s", punto, rif, dopo)
+        raise ValueError("corpo_non_oggetto")     # I8 (12/11): vale come illeggibile
     return corpo
 
 # ⛔ L'hold della stanza dura ALMENO quanto la pagina di pagamento di Stripe resta aperta
@@ -93,7 +95,7 @@ CAMPI_BLOCCO = ("blocco_pi", "blocco_incassa_dal_ts", "blocco_incassato_ts",
                 "blocco_annullato_ts", "blocco_rimborso_dovuto_cents", "pagamento_tardivo")
 
 
-def blocco_della_carta(corpo: Any) -> Dict[str, Any]:
+def blocco_della_carta(corpo: Any, riferimento: Any = "-") -> Dict[str, Any]:
     """Lo stato del BLOCCO SULLA CARTA scritto nel corpo di una prenotazione (dict o testo JSON).
     Ritorna {'pi', 'stato', 'incassa_dal_ts'}, con `stato`:
       'nessuno'   pagamento incassato subito, o nessun pagamento: il flusso di sempre;
@@ -103,7 +105,7 @@ def blocco_della_carta(corpo: Any) -> Dict[str, Any]:
       'annullato' autorizzazione annullata (cancellazione) o scaduta: soldi mai entrati."""
     if isinstance(corpo, str):
         try:
-            corpo = _corpo_salvato(corpo, "blocco_della_carta")
+            corpo = _corpo_salvato(corpo, "blocco_della_carta", riferimento)
         except (TypeError, ValueError):
             corpo = {}
     if not isinstance(corpo, dict):
@@ -286,10 +288,8 @@ class PagamentiPendenti:
                 try:
                     dj = _corpo_salvato(r["corpo_json"], "salva_stripe_session", riferimento,
                                         scrive=True)
-                    if not isinstance(dj, dict):
-                        dj = {}
                 except Exception:
-                    dj = {}
+                    return False                      # I9: un corpo rotto non si riscrive
                 if dj.get("stripe_cs") == cs_id and (pi is None or dj.get("stripe_pi") == pi):
                     return True                       # gia' salvato (retry webhook)
                 dj["stripe_cs"] = cs_id
@@ -338,10 +338,8 @@ class PagamentiPendenti:
                 try:
                     dj = _corpo_salvato(r["corpo_json"], "salva_costo_gateway", riferimento,
                                         scrive=True)
-                    if not isinstance(dj, dict):
-                        dj = {}
                 except Exception:
-                    dj = {}
+                    return False                      # I9: un corpo rotto non si riscrive
                 if dj.get("costo_stripe_reale_cents") == fee_cents:
                     return True                       # gia' salvato (retry webhook)
                 dj["costo_stripe_reale_cents"] = fee_cents
@@ -376,10 +374,8 @@ class PagamentiPendenti:
                 try:
                     dj = _corpo_salvato(r["corpo_json"], "segna_blocco", riferimento,
                                         scrive=True)
-                    if not isinstance(dj, dict):
-                        dj = {}
                 except Exception:
-                    dj = {}
+                    return False                      # I9: un corpo rotto non si riscrive
                 if all(dj.get(k) == v for k, v in nuovi.items()):
                     return True                       # gia' scritto (ritentativo)
                 dj.update(nuovi)
@@ -408,8 +404,27 @@ class PagamentiPendenti:
                 "ORDER BY creato_ts LIMIT ?", (lim,)).fetchall()
         finally:
             con.close()
-        return [self._riga(r) for r in righe
-                if blocco_della_carta(r["corpo_json"])["stato"] == "aperto"]
+        aperti = []
+        for r in righe:
+            try:
+                corpo = _corpo_salvato(r["corpo_json"], "blocchi_aperti", r["riferimento"])
+            except (TypeError, ValueError):
+                # I9 (decisione A, 12/11): la query l'ha scelto perche' nel testo c'e' un blocco, e
+                # il corpo non si legge. Prima usciva dal giro con un avviso: nessuno lo incassava
+                # ne' lo annullava. Si salta lo stesso (non si decide su un dato rotto) ma GRIDANDO,
+                # col numero del pagamento se si vede nel testo (revisore Stripe R8). Un corpo SANO
+                # che non e' un blocco aperto esce in silenzio (regola ferrea 10).
+                trovato = re.search(r"pi_[A-Za-z0-9_]{1,64}", str(r["corpo_json"] or ""))
+                logger.error("BLOCCO SULLA CARTA FERMO | codice: blocco_illeggibile | riferimento: "
+                             "%s | pi: %s | messaggio: il giro orario NON lo incassa ne' lo "
+                             "annulla: verificare a mano su Stripe (l'autorizzazione scade da "
+                             "sola)", re.sub(r"[^A-Za-z0-9:_.-]", "", str(r["riferimento"]))[:64]
+                             .replace("\r", "").replace("\n", ""),
+                             trovato.group(0) if trovato else "-")
+                continue
+            if blocco_della_carta(corpo)["stato"] == "aperto":
+                aperti.append(self._riga(r))
+        return aperti
 
     def cerca_prenotazioni(self, termine: Any, *, limit: int = 10, offset: int = 0
                            ) -> Dict[str, Any]:
@@ -522,9 +537,9 @@ class PagamentiPendenti:
                     # un'altra scrittura nel mezzo fa rileggere, non si perde.
                     try:
                         dj = _corpo_salvato(corpo, "conferma_tardivo", riferimento, scrive=True)
-                        dj = dj if isinstance(dj, dict) else {}
                     except Exception:
-                        dj = {}
+                        # I9 (decisione A): niente 'pagato' senza importi; fase83 risponde 503
+                        return dict(self._riga(r), corpo_illeggibile=True)
                     dj["pagamento_tardivo"] = "da_finire"
                     corpo = json.dumps(dj, ensure_ascii=False)
                 with con:
@@ -707,7 +722,7 @@ class PagamentiPendenti:
                         cj = _corpo_salvato(r["corpo_json"], "marca_cancellata_host",
                                             riferimento, scrive=True)
                     except Exception:
-                        cj = {}
+                        return False                  # I9: un corpo rotto non si riscrive
                 cj["penale_host_cents"] = int(penale_cents) if isinstance(penale_cents, int) else 0
                 import json as _j2
                 cur = con.execute(
@@ -1006,7 +1021,8 @@ class PagamentiPendenti:
         del blocco sulla carta). C53-B1-4: le contestazioni della carta arrivano col solo
         payment_intent. None se nessuna. Sola lettura; un archivio illeggibile SOLLEVA (chi
         chiama risponde 503 e Stripe ritenta). `instr` restringe soltanto: decide il confronto
-        esatto sui campi, e una riga col JSON rotto si salta invece di fermare la ricerca."""
+        esatto sui campi. Una riga rotta si salta; ma se contiene QUEL pagamento a parola intera
+        e nessuna riga buona combacia, la ricerca SOLLEVA gridando (I9, decisione A, 12/11)."""
         if not (isinstance(pi, str) and pi.startswith("pi_")):
             return None
         con = self._apri()
@@ -1015,13 +1031,29 @@ class PagamentiPendenti:
                                 (pi,)).fetchall()
         finally:
             con.close()
+        rotta = None
+        parola = re.compile(r"(?<![A-Za-z0-9_])" + re.escape(pi) + r"(?![A-Za-z0-9_])")
         for r in righe:
             try:
                 dj = _corpo_salvato(r["corpo_json"], "per_payment_intent", r["riferimento"])
-            except ValueError:
+            except json.JSONDecodeError:
+                # I9 (decisione A): un corpo rotto che contiene QUESTO pagamento non si salta in
+                # silenzio (la contestazione della banca non fermava i soldi), ma una riga buona
+                # trovata dopo vince e la riga rotta di un ALTRO pagamento non ferma niente
+                if rotta is None and parola.search(str(r["corpo_json"] or "")):
+                    rotta = r["riferimento"]
                 continue
-            if isinstance(dj, dict) and pi in (dj.get("stripe_pi"), dj.get("blocco_pi")):
+            except ValueError:
+                continue                  # JSON valido ma non un oggetto: non e' una prenotazione
+            if pi in (dj.get("stripe_pi"), dj.get("blocco_pi")):
                 return self._riga(r)
+        if rotta is not None:
+            logger.error("ARCHIVIO | codice: corpo_illeggibile | punto: per_payment_intent | "
+                         "riferimento: %s | messaggio: il pagamento sta in una prenotazione dal "
+                         "corpo rotto: niente si decide, va sistemato a mano",
+                         re.sub(r"[^A-Za-z0-9:_.-]", "", str(rotta))[:64]
+                         .replace("\r", "").replace("\n", ""))
+            raise ValueError("corpo_illeggibile")
         return None
 
 

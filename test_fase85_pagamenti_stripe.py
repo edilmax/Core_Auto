@@ -1065,5 +1065,107 @@ class TestUnaRispostaCheParlaDiUnAltroOggettoNonVale(unittest.TestCase):
                 self._guarda(_p(f).stato_pagamento("pi_b"), ("ok", "stato"), (False, ""))
 
 
+class _SpiaDegliIndirizzi:
+    """Segna ogni indirizzo chiesto a Stripe e risponde col primo copione che combacia."""
+
+    def __init__(self, copioni=()):
+        self.indirizzi = []
+        self._copioni = list(copioni)
+
+    def __call__(self, *argomenti):
+        url = next(a for a in argomenti if isinstance(a, str) and a.startswith("https://"))
+        self.indirizzi.append(url)
+        for inizio, risposta in self._copioni:
+            if url.startswith(inizio):
+                return risposta
+        return {}
+
+
+class TestUnNumeroStortoNonEntraNellIndirizzoDiStripe(unittest.TestCase):
+    """I4: un numero che comincia con `pi_` ma ha dentro `/`, `?`, a-capo o niente dopo il
+    prefisso entrava lo stesso nell'indirizzo che parte con la NOSTRA chiave (bastava
+    `startswith("pi_")`); e i numeri letti dalle risposte di Stripe ci entravano senza
+    nessun controllo. Come `_e_una_pagina` per i `cs_` (gruppo H)."""
+
+    # «pi_x/cancel»: la barra DA SOLA, senza punti ne' «?» (PROTON compito 15, 12/11: con la
+    # barra ammessa nella forma le prove restavano verdi, e «/cancel» e' una sotto-risorsa vera)
+    STORTI = ("pi_x/../../customers", "pi_x?expand[]=customer", "pi_", "pi_x\n", "pi_x y",
+              "pi_x/cancel")
+    VERO = "pi_3MtwBwLkdIwHu7ix28a3tqPa"
+
+    def _gesti(self, p, numero):
+        return {"stato_pagamento": lambda: p.stato_pagamento(numero),
+                "incassa": lambda: p.incassa(numero, "k1"),
+                "annulla": lambda: p.annulla(numero, "k1"),
+                "rimborsa": lambda: p.rimborsa(numero, 100, "k1"),
+                "impronta_carta": lambda: p.impronta_carta(numero),
+                "addebito_di": lambda: p.addebito_di(numero),
+                "rimborsi_di": lambda: p.rimborsi_di(numero),
+                "contestazione_di": lambda: p.contestazione_di(numero),
+                "commissione_effettiva": lambda: p.commissione_effettiva(numero)}
+
+    def test_le_porte_col_numero_del_pagamento_rifiutano_il_numero_storto(self):
+        for storto in self.STORTI:
+            for nome, gesto in self._gesti(None, storto).items():
+                spia = _SpiaDegliIndirizzi()
+                p = ProviderStripe("sk_test_x", "o", "k", fetch=spia)
+                with self.subTest(gesto=nome, numero=storto):
+                    self._gesti(p, storto)[nome]()
+                    self.assertEqual(spia.indirizzi, [], "numero storto mandato a Stripe")
+
+    def test_il_numero_vero_passa_ancora(self):
+        for nome in self._gesti(None, self.VERO):
+            spia = _SpiaDegliIndirizzi()
+            p = ProviderStripe("sk_test_x", "o", "k", fetch=spia)
+            with self.subTest(gesto=nome):
+                self._gesti(p, self.VERO)[nome]()
+                self.assertTrue(spia.indirizzi, "il numero vero non arriva piu' a Stripe")
+
+    def test_il_numero_storto_dentro_una_risposta_non_diventa_un_indirizzo(self):
+        for storto in ("ch_x/../../customers", "pi_x/../../customers", "", None, {"id": "ch_1"},
+                       "ch_x/refunds"):
+            with self.subTest(addebito=storto):
+                spia = _SpiaDegliIndirizzi([(PAGAMENTI_URL, {"latest_charge": storto})])
+                ProviderStripe("sk_test_x", "o", "k", fetch=spia).commissione_effettiva(
+                    self.VERO)
+                self.assertEqual([u for u in spia.indirizzi if u.startswith(ADDEBITI_URL)],
+                                 [])
+            with self.subTest(movimento=storto):
+                spia = _SpiaDegliIndirizzi([(PAGAMENTI_URL, {"latest_charge": "ch_1"}),
+                                            (ADDEBITI_URL, {"balance_transaction": storto})])
+                ProviderStripe("sk_test_x", "o", "k", fetch=spia).commissione_effettiva(
+                    self.VERO)
+                self.assertEqual([u for u in spia.indirizzi if u.startswith(MOVIMENTI_URL)],
+                                 [])
+            with self.subTest(pagamento_della_sessione=storto):
+                spia = _SpiaDegliIndirizzi([(STRIPE_URL, {"id": "cs_test_1",
+                                                          "payment_intent": storto})])
+                esito = ProviderStripe("sk_test_x", "o", "k",
+                                       fetch=spia).pagamento_della_sessione("cs_test_1")
+                self.assertEqual([u for u in spia.indirizzi if u.startswith(PAGAMENTI_URL)],
+                                 [])
+                self.assertEqual(esito["ok"], not storto,
+                                 "senza pagamento = niente bloccato; numero storto = NON LO SO")
+
+    def test_la_carta_dell_host_non_segue_un_numero_storto(self):
+        from fase183_carta_offsession import ProviderCarta
+        base = "https://api.stripe.com/v1/checkout/sessions/"
+        # buco I4-e2 di PROTON (12/11): ogni metodo riceve anche il numero di FORMA giusta col
+        # prefisso dell'altro («pi_abc» per l'impostazione, «seti_abc» per il pagamento), se no
+        # il controllo del prefisso si poteva togliere senza che niente diventasse rosso.
+        for storto in ("seti_x/../../customers", "pi_x/../../customers", "pi_",
+                       "pi_abc", "seti_abc"):
+            for metodo, campo in (("dettagli_da_sessione", "setup_intent"),
+                                  ("dettagli_pagamento_da_sessione", "payment_intent")):
+                if storto == ("seti_abc" if campo == "setup_intent" else "pi_abc"):
+                    continue                       # quello e' il numero GIUSTO per quel metodo
+                spia = _SpiaDegliIndirizzi([(base, {"customer": "cus_1", campo: storto})])
+                with self.subTest(metodo=metodo, numero=storto):
+                    esito = getattr(ProviderCarta("sk_test_x", fetch=spia), metodo)("cs_test_1")
+                    self.assertIsNone(esito)
+                    self.assertEqual(spia.indirizzi, [base + "cs_test_1"],
+                                     "numero storto della risposta mandato a Stripe")
+
+
 if __name__ == "__main__":
     unittest.main()
