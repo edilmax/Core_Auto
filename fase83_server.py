@@ -9699,8 +9699,10 @@ class RouterHTTP:
         #    stesso Credito Fondatore firmato, stesso allarme domanda): zero inventato.
         # I2 (CodeQL #235): stesse mail di prima, in tempo lineare -- il primo punto del
         # dominio dopo il suo primo carattere non puo' piu' essere preso anche dal `+`.
+        # L'ancora `^` (CodeQL sulla PR #312): con `fullmatch` non cambia niente, ma cercata in
+        # ogni punto del testo la regex lavorava al quadrato su «!» ripetuto.
         testo_mail = testo
-        if _re.fullmatch(r"[^@\s]+@[^@\s][^@\s.]*\.[^@\s]+", testo_mail):
+        if _re.fullmatch(r"^[^@\s]+@[^@\s][^@\s.]*\.[^@\s]+", testo_mail):
             import json as _j
             corpo_attesa = {"email": testo_mail,
                             "citta": (contesto.get("citta") or "") or None,

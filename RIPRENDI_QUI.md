@@ -4194,7 +4194,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 3f593b6
+CONSEGNE AGGIORNATE A: 5aa585e
+
+- AGGIORNAMENTO 12/11 notte, CI di 5aa585e (letta dall'API): full-suite e full-suite-311 VERDI, mutazione, copertura, browser, accessibilita, money-smoke, immagine, atheris, w3c verdi. ROSSI due, riparati qui: (1) `qualita` = ruff, 3 segnalazioni nuove nei MIEI file di prova (B023 una lambda nel ciclo in `test_fase83_server`, B007 una variabile del ciclo non usata in `test_fase85_pagamenti_stripe`); (2) il controllo «CodeQL» = 10 allarmi: 9 medium sono i 9 log-injection gia' noti di master (voce 267, elenco «dopo il lancio»), 1 HIGH NUOVO sulla regex della mail di I2 (py/polynomial-redos, «!» ripetuto). Misurato: con `fullmatch` (l'uso vero) la regex era lineare, ma cercata in ogni punto del testo (come la giudica CodeQL) 3,88 s per 40.000 caratteri. Riparata con l'ancora `^`: guardia nuova `test_e_lineare_anche_cercata_in_ogni_punto_come_la_giudica_codeql` vista ROSSA (3,88 s) e verde dopo; le risposte della regex identiche su 335.923 stringhe. Sul PC pip-audit dice 5 nuovi (anyio, urllib3): e' il falso noto del Python 3.9 del PC, in CI col 3.11 era verde.
 
 - AGGIORNAMENTO 12/11 notte: commit 3f593b6 (gruppo I + F). Il cricchetto contro master diceva 17 caselle ROSSE perche' la PR #312 ha cambiato file di altri blocchi (fase58, fase59, fase76, fase88): rimisurate con i 13 esami `--scrivi` sul commit 3f593b6, tutti uscita 0 tranne `esame_prenotazioni` (3 rossi su 34 nel sovra-affitto: la stanza non tornava libera). Causa nello STRUMENTO, non nel prodotto: lo Stripe finto di `collaudi/gare_estreme.py` non sapeva rispondere alla chiusura della pagina (`expire`, pezzo 3 dell'11/11) e lo spazzino diceva «non lo so». Il finto ora risponde `status: expired`; rifatti i 4 esami che lo usano (prenotazioni, gare, pannello soldi, percorso ruoli): uscita 0. Cricchetto: «nessuna casella persa». Prove che leggono la scheda o usano il finto: «Ran 528 tests» OK.
 
@@ -6721,7 +6723,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 8020 test
+SUITE ATTUALE: Ran 8021 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

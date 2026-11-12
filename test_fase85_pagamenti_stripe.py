@@ -1106,7 +1106,7 @@ class TestUnNumeroStortoNonEntraNellIndirizzoDiStripe(unittest.TestCase):
 
     def test_le_porte_col_numero_del_pagamento_rifiutano_il_numero_storto(self):
         for storto in self.STORTI:
-            for nome, gesto in self._gesti(None, storto).items():
+            for nome in self._gesti(None, storto):
                 spia = _SpiaDegliIndirizzi()
                 p = ProviderStripe("sk_test_x", "o", "k", fetch=spia)
                 with self.subTest(gesto=nome, numero=storto):

@@ -9463,7 +9463,7 @@ class TestI9IlCreditoSulCorpoRottoSiGrida(unittest.TestCase):
         for nome, fai, firma in casi:
             with self.subTest(nome):
                 r = self._router("{rotto")
-                esito, errori = self._errori(lambda: fai(r))
+                esito, errori = self._errori(lambda fai=fai, r=r: fai(r))
                 self.assertTrue([m for m in errori if "corpo_illeggibile" in m
                                  and "BVIP-CR" in m and firma in m], errori)
                 r._sys.credito_usati.libera.assert_not_called()
@@ -9575,6 +9575,19 @@ class TestLaMailInChatSiRiconosceInTempoLineare(unittest.TestCase):
         durata = time.perf_counter() - inizio
         self.assertLess(durata, 0.5, "%.2f s per 40.000 caratteri: la regex e' tornata "
                         "quadratica" % durata)
+
+    def test_e_lineare_anche_cercata_in_ogni_punto_come_la_giudica_codeql(self):
+        """CodeQL sulla PR #312 (12/11, nuovo allarme HIGH alla riga della regex): giudica la
+        regex come se si cercasse in OGNI punto del testo (`search`), dove «!» ripetuto la fa
+        lavorare al quadrato anche se noi usiamo `fullmatch`. L'ancora all'inizio chiude anche
+        quella strada: si misura proprio cosi'."""
+        regex = self._regex_della_rotta()
+        testo = "!" * 20000 + "@" + "!" * 20000
+        inizio = time.perf_counter()
+        re.search(regex, testo)
+        durata = time.perf_counter() - inizio
+        self.assertLess(durata, 0.5, "%.2f s per 40.000 caratteri cercando in ogni punto: "
+                        "CodeQL la segnala quadratica" % durata)
 
     def test_riconosce_le_stesse_mail_di_prima(self):
         regex = self._regex_della_rotta()
