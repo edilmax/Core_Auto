@@ -4321,6 +4321,19 @@ class TestLaReteAntiInterruzioneNONSiSpegneDaSola(unittest.TestCase):
                       "la traccia viene aperta e mai chiusa: resterebbe li' a bloccare il "
                       "commit successivo per NIENTE, e un falso allarme e' un difetto quanto "
                       "uno mancato (CLAUDE.md, regola 10)")
+        # ⛔ E si chiude SOLO il proprio biglietto (13/11, gemello dell'anomalia della PR #314):
+        # `_chiudi_traccia()` senza argomento cancella la traccia di TUTTI i giri, anche quello
+        # esterno che sta eseguendo la suite, e non guarda se il file e' tornato identico.
+        import ast
+        # Si accetta solo la forma `_chiudi_traccia(<nome del file>)`: senza argomento, con None o
+        # con `*a` la chiusura puo' cadere su «tutti».
+        senza = [c.lineno for c in ast.walk(ast.parse(tutto))
+                 if isinstance(c, ast.Call)
+                 and (getattr(c.func, "id", "") or getattr(c.func, "attr", "")) == "_chiudi_traccia"
+                 and not (len(c.args) == 1 and isinstance(c.args[0], ast.Name) and not c.keywords)]
+        self.assertEqual([], senza,
+                         "test_mutation_money chiude la traccia senza dire QUALE file (righe %r): "
+                         "cancella anche il biglietto di un giro esterno in corso" % (senza,))
 
     def test_eseguire_le_guardie_del_giudice_NON_cancella_una_traccia_viva(self):
         import io
@@ -4335,7 +4348,16 @@ class TestLaReteAntiInterruzioneNONSiSpegneDaSola(unittest.TestCase):
         # NON tocca la traccia vera della macchina -- sarebbe lo stesso difetto che vieta.
         d = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, d, True)
-        traccia = os.path.join(d, "bookinvip_mutazione_in_corso")
+        # ⛔ Il NOME della traccia si legge dal giudice, non si ricopia. Il 2026-08-14 e' diventato
+        # `bookinvip_mutazione_in_corso_<cartella>` e questa guardia scriveva ancora nel nome
+        # vecchio: il figlio non la guardava piu', e la guardia non poteva piu' diventare rossa.
+        # L'ha scoperto la CI del 13/11 (PR #314): «RIPRISTINO NON DIMOSTRATO» su
+        # deploy/cron_sweep_eventi.py, col biglietto del giro esterno cancellato da una prova
+        # di questo file che lancia il giudice senza una temporanea sua.
+        # ⚠️ NON ESAMINA (D18 punto 3): copre le prove elencate qui sotto; una prova NUOVA che
+        # lanci il giudice con la temporanea condivisa riaprirebbe il buco senza farla rossa.
+        nome = os.path.basename(TestIlGiudiceNonPuoGiudicareCodiceCheNonGIRA._motore()._TRACCIA)
+        traccia = os.path.join(d, nome)
         os.makedirs(traccia)
         with io.open(os.path.join(traccia, "quale.txt"), "w", encoding="utf-8") as f:
             f.write(os.path.join(radice, "fase_finta_di_prova.py"))
@@ -4347,7 +4369,9 @@ class TestLaReteAntiInterruzioneNONSiSpegneDaSola(unittest.TestCase):
         esito = subprocess.run(
             [sys.executable, "-m", "unittest",
              "test_pipeline_ci.TestGeneratoreDiMutanti",
-             "test_pipeline_ci.TestIlGiudiceNonPuoGiudicareCodiceCheNonGIRA"],
+             "test_pipeline_ci.TestIlGiudiceNonPuoGiudicareCodiceCheNonGIRA",
+             "test_pipeline_ci.TestIlGiudiceNonPuoUscireVERDESenzaAverMisurato."
+             "test_modulo_INESISTENTE_non_esce_verde"],
             cwd=radice, env=amb, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         self.assertEqual(0, esito.returncode,
                          "le guardie del generatore non sono verdi: %s"
@@ -6315,11 +6339,18 @@ class TestIlGiudiceNonPuoUscireVERDESenzaAverMisurato(unittest.TestCase):
     RADICE = os.path.dirname(os.path.abspath(__file__))
 
     def _esegui(self, *argomenti):
-        """Lancia il giudice come processo a se' e restituisce (uscita, testo)."""
+        """Lancia il giudice come processo a se' e restituisce (uscita, testo).
+        ⛔ Con una temporanea TUTTA SUA: il giudice all'avvio chiama `recupera_da_interruzione()`,
+        e con quella condivisa toglieva il guasto al giro esterno che sta eseguendo questo file
+        e ne cancellava il biglietto (CI della PR #314, 13/11). Guardia:
+        `test_eseguire_le_guardie_del_giudice_NON_cancella_una_traccia_viva`."""
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
         esito = subprocess.run(
             [sys.executable, os.path.join("collaudi", "mutazione_prodotto.py")]
             + list(argomenti),
-            cwd=self.RADICE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            cwd=self.RADICE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            env=dict(os.environ, TMP=d, TEMP=d, TMPDIR=d))
         return esito.returncode, esito.stdout.decode("utf-8", "replace")
 
     def test_modulo_INESISTENTE_non_esce_verde(self):

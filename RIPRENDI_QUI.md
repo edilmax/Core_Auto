@@ -4192,7 +4192,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: cb1db0a
+CONSEGNE AGGIORNATE A: 0186d43
 
 - AGGIORNAMENTO 13/11 (sessione e205dc64): la PR #312 (389 punti di mutazione, tetto 80) e' DIVISA in 7 pezzi per decisione del fondatore; questo ramo e' il PEZZO 1 (pezzo1-soldi-20261113, PR #313 = 164f98a..8056c54 + runner CI 24.04 + prova exc_info sulla riscossione interrotta nel dedicato di fase177 + bombe rimisurate 0 bombe + 9 caselle rimisurate + due import inutili tolti come in 3f512dd). I pezzi e il loro stato: Desktop\Core_Auto_GUARDIE_PRONTE\S_20261108_campagna_soldi\RILIEVI_DA_VERIFICARE_8_11.txt, consegna 13/11 in cima. Caricatore 7770. 13/11 pomeriggio (sessione 36c7333c): il job `caselle` su 41f8d85 ha trovato 16 sopravvissuti (15 in fase83: doppio clic VA1, credito EN1, semaforo EN4; 1 in fase99: exc_info del cambio) perche' le loro prove stavano in file che il giudice non accende; 11 prove nuove nel dedicato test_fase83_server (classe TestPR312PezzoUnoLeRigheCheIlGiudiceNonVedeva) + 1 in test_fase99_multicurrency, viste prendere 16 copie guaste su 16. Caricatore 7782.
 
@@ -6717,7 +6717,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 7861 test
+SUITE ATTUALE: Ran 7894 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
