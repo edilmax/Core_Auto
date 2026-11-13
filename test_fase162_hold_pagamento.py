@@ -407,6 +407,42 @@ class TestBuchiDiMutazione(unittest.TestCase):
         self.assertIs(True, esito.get("attendi_sweeper"))
         self.assertEqual("scaduto", self.p.info("R_FB5")["stato"])
 
+    # ── pezzo 3 della PR #312 (13/11): i quattro sopravvissuti del giudice sul diff ──────
+
+    def test_PR312_l_ora_di_nascita_del_record_si_rilegge_VERA(self):
+        # `int(g("creato_ts", 0) or 0)` con `and` al posto di `or` rilegge SEMPRE 0: ogni
+        # record sembrerebbe nato nel 1970, e chi ordina o pulisce per eta' sbaglia tutto.
+        self.clock["t"] = 1_700_000_123
+        self.p.registra("R_ETA", alloggio_id="casa", check_in="2027-01-10",
+                        check_out="2027-01-12")
+        self.assertEqual(1_700_000_123, self.p.info("R_ETA")["creato_ts"])
+
+    def test_PR312_un_pagamento_tardivo_tiene_gli_accenti_leggibili_nel_corpo(self):
+        # conferma su 'scaduto' riscrive il corpo col segno «pagamento_tardivo»: con
+        # ensure_ascii=True gli accenti diventerebbero \\uXXXX nel corpo salvato.
+        self._grezzo(riferimento="R_TARD", stato="scaduto",
+                     corpo_json='{"citta": "Città di Roma"}')
+        prima = self.p.conferma("R_TARD")
+        self.assertEqual("scaduto", prima["stato"])              # premessa: ramo del tardivo
+        corpo = self.p.info("R_TARD")["corpo_json"]
+        self.assertIn("da_finire", corpo)
+        self.assertIn("Città di Roma", corpo)
+
+    def test_PR312_scadenza_finita_rifiuta_un_riferimento_che_non_e_testo(self):
+        # Con `or` al posto di `and` il numero 123 passerebbe il controllo e SQLite lo
+        # confronterebbe come testo con il record «123»: il segno «da finire» sparirebbe
+        # per una chiamata sbagliata, e lo sweeper non finirebbe piu' quella scadenza.
+        self._grezzo(riferimento="123", stato="scaduto")
+        con = self.p._apri()
+        try:
+            with con:
+                con.execute("UPDATE pendenti SET scadenza_da_finire=1 WHERE riferimento='123'")
+        finally:
+            con.close()
+        self.assertIs(False, self.p.scadenza_finita(123))
+        self.assertIs(False, self.p.scadenza_finita(None))       # False, non un «vero» qualsiasi
+        self.assertEqual(["123"], [r["riferimento"] for r in self.p.scaduti_da_finire()])
+
     def test_riga166_se_l_aggancio_fallisce_si_registra_la_CAUSA(self):
         self._rompi_tabella()
         with self.assertLogs("core_auto", level="WARNING") as reg:
