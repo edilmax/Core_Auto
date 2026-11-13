@@ -14148,10 +14148,11 @@ def _payout_per_penale(sistema: Any, host_id: str) -> Any:
         if not acct or not _bonifici_forse_partiti(connect, acct, host_id, pd):
             return pd
     except Exception:
-        logger.warning("penale di %s: lettura dei bonifici fallita, tutta a debito", host_id,
-                       exc_info=True)
+        logger.warning("penale di %s: lettura dei bonifici fallita, tutta a debito",
+                       _testo_per_registro(host_id), exc_info=True)
     logger.error("PENALE NON COMPENSATA | HOST_ID: %s | codice: bonifico_forse_gia_partito | "
-                 "messaggio: la penale resta a debito e si riscuote piu' avanti", host_id)
+                 "messaggio: la penale resta a debito e si riscuote piu' avanti",
+                 _testo_per_registro(host_id))
     return _NessunaRigaDaCompensare()
 
 

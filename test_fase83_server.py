@@ -8799,6 +8799,23 @@ class TestPR314PezzoDueLeRigheCheIlGiudiceNonVedeva(unittest.TestCase):
         self.assertIsInstance(avvisi[0].exc_info, tuple)
         self.assertIs(avvisi[0].exc_info[0], RuntimeError)
 
+    def test_PR4_l_host_della_penale_non_scrive_righe_finte_nel_registro(self):
+        """CodeQL py/log-injection sulla PR #314 (fase83 `_payout_per_penale`): l'host_id
+        finiva nel registro com'era, e un a-capo dentro inventava una riga nuova."""
+        finto = "H-7\nPENALE COMPENSATA | HOST_ID: nessuno"
+
+        def esplode(acct, rif):
+            raise RuntimeError("stripe giu'")
+
+        for nome, parti in (("bonifico forse partito", {}),
+                            ("lettura esplosa", {"connect": types.SimpleNamespace(bonifico_di=esplode)})):
+            with self.subTest(nome):
+                with self.assertLogs("core_auto.server", level="WARNING") as reg:
+                    fase83_server._payout_per_penale(self._sistema_della_penale(**parti), finto)
+                self.assertEqual([x.getMessage() for x in reg.records if "\n" in x.getMessage()],
+                                 [], "un a-capo dell'host_id e' arrivato nel registro")
+                self.assertTrue(all("H-7" in x.getMessage() for x in reg.records), reg.output)
+
     def test_PR4_lo_sweeper_rilegge_i_bonifici_dell_host_della_prenotazione(self):
         visti, penali = [], []
 
