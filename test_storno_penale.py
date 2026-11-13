@@ -443,12 +443,14 @@ class _RigheDelRegistro:
     def __init__(self, nome):
         import logging
         self.righe = []
+        self.record = []                  # i record interi: servono per guardare exc_info
         self._log = logging.getLogger(nome)
         outer = self
 
         class _H(logging.Handler):
             def emit(self, rec):
                 outer.righe.append((rec.levelno, rec.getMessage()))
+                outer.record.append(rec)
 
         self._h = _H(level=logging.DEBUG)
 
@@ -597,6 +599,11 @@ class TestStornoPenaleOgniRigaHaLaSuaProva(_BaseStorno):
         self.assertEqual(ris["riscossi_cents"], 100, ris)
         self.assertEqual(self._debito(nd["nota_id"])["residuo_cents"], nd["importo_cents"] - 100)
         self.assertTrue(reg.errori(), reg.righe)
+        # Pezzo 1 della PR #312 (13/11): il giudice ha lasciato vivo exc_info=True -> False su
+        # questo log. Si prende LA riga giusta e si pretende una TUPLA: False non e' None.
+        interr = [r for r in reg.record if "segnale_storno_illeggibile" in r.getMessage()]
+        self.assertEqual(len(interr), 1, reg.righe)
+        self.assertIsInstance(interr[0].exc_info, tuple)
 
     def test_R3_nota_di_credito_mai_nata_la_penale_si_continua_a_riscuotere(self):
         """/code-review 8/11: la riga di giornale dello storno si scrive prima della nota. Se la
