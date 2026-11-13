@@ -172,6 +172,22 @@ class RegistroCreditiUsati:
             con.close()
 
 
+    def libera(self, credito_id: Any, riferimento: Any) -> bool:
+        """EN1 (8/11): il credito si brucia alla prenotazione, prima del pagamento; se quella
+        scade senza essere pagata torna spendibile. Solo se era bruciato per QUESTA prenotazione:
+        True se e' stato liberato, False se non c'era niente di suo da liberare."""
+        if not (isinstance(credito_id, str) and credito_id.strip() and riferimento):
+            return False
+        con = self._apri()
+        try:
+            with con:
+                cur = con.execute("DELETE FROM crediti_usati WHERE credito_id=? AND riferimento=?",
+                                  (credito_id, str(riferimento)))
+            return cur.rowcount == 1
+        finally:
+            con.close()
+
+
 def crea_registro_crediti_usati(percorso: str, *, orologio: Any = None
                                 ) -> RegistroCreditiUsati:
     if percorso == ":memory:":

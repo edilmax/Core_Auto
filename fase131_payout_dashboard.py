@@ -164,8 +164,13 @@ class PayoutDashboard:
                                 (str(prenotazione_id),)).fetchone()
                 if not r or nuovo not in _TRANSIZIONI.get(r[0], set()):
                     return False
-                con.execute("UPDATE payout SET stato=?, ts=? WHERE prenotazione_id=?",
-                            (nuovo, self._now(), str(prenotazione_id)))
+                # PY4 (8/11): solo se lo stato e' ancora quello letto, o si scavalcava chi
+                # lo aveva cambiato fra la lettura e questa scrittura
+                cur = con.execute("UPDATE payout SET stato=?, ts=? WHERE prenotazione_id=? "
+                                  "AND stato=?",
+                                  (nuovo, self._now(), str(prenotazione_id), r[0]))
+                if cur.rowcount != 1:
+                    return False
             return True
         except Exception:
             logger.warning("aggiorna_stato: errore DB (ISOLATO)", exc_info=True)

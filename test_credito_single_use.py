@@ -64,6 +64,19 @@ class TestRegistroCreditiUsati(unittest.TestCase):
         self.assertEqual(s.consuma("", "REF3"), "nuovo")
         self.assertFalse(s.usato(""))
 
+    def test_EN1_libera_solo_il_credito_di_quella_prenotazione(self):
+        s = crea_registro_crediti_usati(":memory:")
+        s.inizializza_schema()
+        s.consuma("cid1", "REF1")
+        self.assertIs(s.libera("cid1", "ALTRA"), False)         # non e' suo: resta bruciato
+        self.assertIs(s.libera("cid1", ""), False)              # vuoto: non identifica niente
+        self.assertIs(s.libera("", "REF1"), False)
+        self.assertTrue(s.usato("cid1"))
+        self.assertIs(s.libera("cid1", "REF1"), True)
+        self.assertFalse(s.usato("cid1"))
+        self.assertIs(s.libera("cid1", "REF1"), False)          # la seconda volta non c'e' piu'
+        self.assertEqual(s.consuma("cid1", "REF2"), "nuovo")    # e torna spendibile
+
     def test_durevole_su_file(self):
         d = tempfile.mkdtemp()
         try:

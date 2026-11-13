@@ -18,6 +18,7 @@ import sqlite3
 import tempfile
 import threading
 import time
+import types
 import unittest
 import urllib.error
 from unittest import mock
@@ -34,6 +35,7 @@ from test_fase160_escrow_garanzia import nella_finestra
 from test_movimenti_giornale import _BancoDeiBonifici, _StripeDeiBonifici
 from test_ritenuta import _Base as _BancoDellaRitenuta
 from test_financial_controller import _BancoOffset, HK as _HK_FC, CI as _CI_FC, CO as _CO_FC
+import test_race_hold_conferma as _thc
 from fase83_server import (
     RouterHTTP, crea_router, percorso_statico_sicuro,
     jsonld_alloggio, pagina_alloggio_html, sitemap_xml, robots_txt, _importo,
@@ -268,6 +270,9 @@ class TestLeCifreFisseDelPagaInStrutturaSonoInEuro(unittest.TestCase):
         def tasso(self, da, a):
             self.chiesti.append((da, a))
             return self.t
+
+        def stato(self):
+            return {"eta_ore": 1.0}
 
     def setUp(self):
         from decimal import Decimal
@@ -8080,6 +8085,266 @@ class TestLePrenotazioniNonPagateHannoUnTettoPerIndirizzo(_BancoDeiSoldiDelServe
         altra_rete, _ = self.prenota_da("2001:db8:1:3::a", quote=q_altra_rete)
         self.assertEqual(([201, 201, 201], 429, 201), (stessa_rete, quarta, altra_rete),
                          "CAMBIANDO INDIRIZZO DENTRO LA STESSA RETE IPv6 IL TETTO SI AGGIRA")
+
+
+class TestImportiDellaPagaInStruttura(unittest.TestCase):
+    """Campagna soldi 8/11: i tre pezzi che decidono quanto si rimborsa (primo occhio del Giudice)."""
+
+    def test_intero_positivo_accetta_solo_interi_veri(self):
+        for valore, atteso in ((7, 7), (0, 0), (-3, 0), (True, 0), ("5", 0), (None, 0), (2.5, 0)):
+            self.assertEqual(fase83_server._intero_positivo(valore), atteso, repr(valore))
+
+    def test_incassato_online(self):
+        f = fase83_server._incassato_online
+        self.assertEqual(f({"modo_pagamento": "online", "anticipo_online_cents": 5}, 900), 900)
+        self.assertEqual(f("non un documento", 900), 900)
+        self.assertEqual(f({"modo_pagamento": "in_struttura", "anticipo_online_cents": 66}, 900), 66)
+        self.assertEqual(f({"modo_pagamento": "in_struttura", "anticipo_online_cents": True}, 900), 0)
+        self.assertEqual(f({"modo_pagamento": "in_struttura"}, 900), 0)
+
+    def test_la_tassa_torna_solo_se_e_passata_online(self):
+        f = fase83_server._tassa_da_rendere
+        online = {"tassa_soggiorno_cents": 800}
+        struttura = {"modo_pagamento": "in_struttura", "tassa_soggiorno_cents": 800}
+        self.assertEqual(f(online, True), 800)
+        self.assertEqual(f(online, False), 0)
+        self.assertEqual(f(struttura, True), 0)
+        self.assertEqual(f(struttura, False), 0)
+
+
+class TestEN7IlBloccoGlobale(unittest.TestCase):
+    """EN7 (8/11): il registro non deve dire «attivato» se non lo e', e col blocco globale
+    acceso il giro delle carte non deve addebitare."""
+
+    def _imposta(self, riuscito):
+        import types
+        from fase83_server import RouterHTTP
+        bg = types.SimpleNamespace(imposta=lambda a, motivo, chi: riuscito,
+                                   stato=lambda: {"attivo": riuscito})
+        finto = types.SimpleNamespace(_bunker_auth=lambda h, azione: True,
+                                      _sys=types.SimpleNamespace(blocco_globale=bg),
+                                      _json=lambda b: {"attivo": True, "motivo": "prova"})
+        with self.assertLogs("core_auto.server", level="CRITICAL") as reg:
+            s, _ = RouterHTTP._bunker_blocco_globale_imposta(finto, "{}", {})
+        return s, reg.output[0]
+
+    def test_accensione_fallita_non_si_dice_attivata(self):
+        s, riga = self._imposta(False)
+        self.assertEqual(s, 500)
+        self.assertNotIn("ATTIVATO (freeze soldi)", riga)
+        self.assertIn("NON RIUSCITO", riga)
+
+    def test_accensione_riuscita_si_dice_attivata(self):
+        s, riga = self._imposta(True)
+        self.assertEqual(s, 200)
+        self.assertIn("ATTIVATO (freeze soldi)", riga)
+
+    def test_col_blocco_globale_il_giro_carte_non_addebita(self):
+        import os
+        import types
+        from unittest import mock
+        from fase83_server import RouterHTTP
+
+        def non_deve(*a, **k):
+            raise AssertionError("sistema toccato col blocco acceso")
+
+        finto = types.SimpleNamespace(_transazioni_bloccate=lambda: True,
+                                      _sys=types.SimpleNamespace(finanza=types.SimpleNamespace(
+                                          debiti_host=non_deve, riscuoti_da_carta=non_deve)))
+        with mock.patch.dict(os.environ, {"SCATTO3_ATTIVO": "1"}):
+            self.assertEqual(RouterHTTP.riscuoti_debiti_carta(finto).get("saltato"),
+                             "blocco_globale")
+
+
+class TestEN5IlCambioVecchioNonFissaLeSoglie(unittest.TestCase):
+    """EN5 (8/11): un guasto del cambio non si vede, e un tasso vecchio di giorni fissava le
+    soglie del paga in struttura. Con un tasso troppo vecchio resta solo il pagamento online."""
+
+    def _soglie(self, eta_ore):
+        import types
+        from decimal import Decimal
+        from fase83_server import RouterHTTP
+        tassi = types.SimpleNamespace(tasso=lambda o, d: Decimal(1),
+                                      stato=lambda: {"eta_ore": eta_ore})
+        finto = types.SimpleNamespace(
+            _valuta_estera=lambda c: True,
+            _sys=types.SimpleNamespace(tassi=tassi, config=types.SimpleNamespace(valuta="EUR")))
+        return RouterHTTP._soglie_struttura(finto, {"valuta": "USD"})
+
+    def test_tasso_fresco_si_usa(self):
+        self.assertTrue(self._soglie(1.0))
+
+    def test_tasso_al_limite_si_usa(self):
+        self.assertTrue(self._soglie(48.0))
+
+    def test_tasso_troppo_vecchio_non_si_usa(self):
+        self.assertIsNone(self._soglie(48.1))
+
+    def test_tasso_di_eta_ignota_non_si_usa(self):
+        self.assertIsNone(self._soglie(None))
+
+    def test_il_guasto_del_cambio_si_scrive(self):
+        from fase99_multicurrency import crea_provider_tassi
+
+        def guasto(url):
+            raise RuntimeError("rete giu'")
+
+        with self.assertLogs("core_auto.cambi", level="WARNING") as reg:
+            self.assertIs(crea_provider_tassi("chiave", fetch=guasto).aggiorna(), False)
+        self.assertIn("tassi_non_aggiornati", reg.output[0])
+
+
+class _PendenteFinto:
+    """Il registro dei pendenti ridotto a una sola prenotazione, letta da `info`."""
+
+    def __init__(self, rec):
+        self._rec = rec
+
+    def info(self, ref):
+        return dict(self._rec) if ref == self._rec.get("riferimento") else None
+
+
+class _CreditiSpia:
+    """Il registro dei crediti che annota chi chiede di liberarli (e puo' esplodere)."""
+
+    def __init__(self, guasto=None):
+        self.liberati = []
+        self._guasto = guasto
+
+    def libera(self, cid, rif):
+        if self._guasto:
+            raise self._guasto
+        self.liberati.append((cid, rif))
+
+
+class TestPR312PezzoUnoLeRigheCheIlGiudiceNonVedeva(unittest.TestCase):
+    """PR #313 (pezzo 1 della #312), job `caselle` del 13/11 su 41f8d85: 16 righe cambiate in
+    fase83 dove un guasto passava inosservato, perche' le loro prove stanno in file che il
+    giudice non accende (test_paga_struttura_e2e, test_race_hold_conferma, test_fase199). Qui,
+    nel file dedicato, una prova per ognuna: il doppio clic di chi paga in struttura (VA1), il
+    credito restituito alla scadenza e ripreso al pagamento tardivo (EN1), il semaforo dei
+    controlli che non dice ok su un archivio illeggibile (EN4)."""
+
+    # ── VA1: il doppio clic di chi paga in struttura ridà il link dell'ANTICIPO ─────────
+    def _replay(self, modo, link_anticipo):
+        r = crea_router(_sistema())
+        corpo = {"modo_pagamento": modo} if modo else {}
+        r._sys.pagamenti_pendenti = _PendenteFinto(
+            {"riferimento": "R-VA1", "stato": "in_attesa", "email": "o@x.it",
+             "corpo_json": json.dumps(dict(corpo, anticipo_online_cents=4500,
+                                           saldo_in_loco_cents=19500))})
+        chieste = []
+
+        def crea_link_anticipo(d):
+            chieste.append(d)
+            if isinstance(link_anticipo, Exception):
+                raise link_anticipo
+            return link_anticipo
+
+        r._sys.stripe = types.SimpleNamespace(crea_link_anticipo=crea_link_anticipo)
+        esito = r._replay_prenotazione({"riferimento": "R-VA1", "payment_url": "https://totale"})
+        return esito, chieste
+
+    def test_VA1_in_struttura_il_doppio_clic_porta_il_link_dell_anticipo(self):
+        (s, b), chieste = self._replay("in_struttura", "https://anticipo")
+        self.assertEqual(s, 201, b)
+        self.assertEqual(b["payment_url"], "https://anticipo", b)
+        self.assertEqual([d["anticipo_cents"] for d in chieste], [4500])
+        self.assertEqual(b["stato"], "in_attesa_pagamento", b)
+
+    def test_VA1_online_il_doppio_clic_non_chiede_l_anticipo(self):
+        (s, b), chieste = self._replay("", RuntimeError("anticipo chiesto per un online"))
+        self.assertEqual(s, 201, b)
+        self.assertEqual(b["payment_url"], "https://totale", b)
+        self.assertEqual(chieste, [])
+
+    def test_VA1_senza_link_dell_anticipo_si_risponde_riprova_mai_il_totale(self):
+        (s, b), _ = self._replay("in_struttura", None)
+        self.assertEqual((s, b), (503, {"errore": "pagamento_non_disponibile", "riprova": True}))
+
+    def test_VA1_stripe_che_esplode_lascia_la_traccia_e_niente_link(self):
+        finto = types.SimpleNamespace(_sys=types.SimpleNamespace(stripe=types.SimpleNamespace(
+            crea_link_anticipo=mock.Mock(side_effect=RuntimeError("stripe giu'")))))
+        fuori = {"riferimento": "R-VA1", "payment_url": "https://totale"}
+        with self.assertLogs("core_auto.server", level="ERROR") as reg:
+            self.assertIs(RouterHTTP._rifai_link_anticipo(finto, fuori, {}), False)
+        self.assertIsInstance(reg.records[0].exc_info, tuple, reg.output)
+        self.assertIs(reg.records[0].exc_info[0], RuntimeError)
+        self.assertEqual(fuori["payment_url"], "https://totale")
+
+    def test_VA1_il_link_rifatto_entra_nella_risposta(self):
+        finto = types.SimpleNamespace(_sys=types.SimpleNamespace(stripe=types.SimpleNamespace(
+            crea_link_anticipo=lambda d: "https://anticipo")))
+        fuori = {"riferimento": "R-VA1", "payment_url": "https://totale"}
+        self.assertIs(RouterHTTP._rifai_link_anticipo(finto, fuori, {}), True)
+        self.assertEqual(fuori["payment_url"], "https://anticipo")
+
+    # ── EN1: il credito torna all'ospite alla scadenza, si riprende al pagamento tardivo ──
+    def _libera(self, store, corpo):
+        r = crea_router(_sistema())
+        r._sys.credito_usati = store
+        r._libera_credito({"riferimento": "R-EN1", "corpo_json": json.dumps(corpo)})
+
+    def test_EN1_alla_scadenza_il_credito_di_quella_prenotazione_si_libera(self):
+        spia = _CreditiSpia()
+        self._libera(spia, {"credito_id": "CRED-1", "sconto_credito_cents": 500})
+        self.assertEqual(spia.liberati, [("CRED-1", "R-EN1")])
+
+    def test_EN1_un_credito_che_non_e_un_codice_non_si_libera(self):
+        for cid in (123, "", None):
+            with self.subTest(credito_id=cid):
+                spia = _CreditiSpia()
+                self._libera(spia, {"credito_id": cid})
+                self.assertEqual(spia.liberati, [])
+
+    def test_EN1_un_credito_non_liberato_si_vede_con_la_traccia(self):
+        spia = _CreditiSpia(guasto=RuntimeError("archivio crediti giu'"))
+        with self.assertLogs("core_auto.server", level="ERROR") as reg:
+            self._libera(spia, {"credito_id": "CRED-1"})
+        self.assertIn("credito_non_liberato", reg.output[0])
+        self.assertIsInstance(reg.records[0].exc_info, tuple, reg.output)
+
+    def _tardivo(self, rif, modo=""):
+        """Hold col credito, scaduto e liberato dallo sweeper (il banco di test_race_hold_conferma)."""
+        b = _thc.TestGaraSweeperConferma(methodName="setUp")
+        b.setUp()
+        self.addCleanup(b.tearDown)
+        b._hold_col_credito(rif, modo=modo)
+        _thc.sweep_hold_una_passata(b.sys, b.r)
+        self.assertFalse(b.reg.usato("CRED-1"))                         # premessa: restituito
+        return b
+
+    def test_EN1_tardivo_col_credito_speso_altrove_grida(self):
+        b = self._tardivo("EN1-ALTROVE")
+        self.assertEqual(b.reg.consuma("CRED-1", "ALTRA"), "nuovo")
+        with self.assertLogs("core_auto.server", level="ERROR") as reg:
+            b.r._conferma_pagamento("EN1-ALTROVE")
+        self.assertEqual(b.pp.info("EN1-ALTROVE")["stato"], "pagato")
+        self.assertTrue(any("credito_tardivo" in r for r in reg.output), reg.output)
+
+    def test_EN1_tardivo_senza_inventario_non_riprende_il_credito(self):
+        for modo in ("", "in_struttura"):
+            with self.subTest(modo=modo or "online"):
+                b = self._tardivo("EN1-INV-" + (modo or "online"), modo=modo)
+                with mock.patch.object(b.sys.inventario, "blocca",
+                                       side_effect=RuntimeError("inventario giu'")):
+                    b.r._conferma_pagamento("EN1-INV-" + (modo or "online"))
+                self.assertFalse(b.reg.usato("CRED-1"),
+                                 "stanza non ribloccata: il credito non va ripreso")
+
+    # ── EN4: il semaforo dei controlli non dice ok se un archivio non si legge ──────────
+    def test_EN4_ok_solo_senza_violazioni_e_senza_archivi_illeggibili(self):
+        import fase199_invarianti
+        finto = types.SimpleNamespace(_bunker_auth=lambda h, azione: True,
+                                      _data_dir=lambda: ".", _client_ip=lambda h: "x")
+        for viol, illeggibili, ok in (({}, ["rotto.db"], False), ({"x": [1]}, [], False),
+                                      ({}, [], True)):
+            with self.subTest(violazioni=viol, illeggibili=illeggibili):
+                rap = {"violazioni": viol, "prenotazioni_lette": 3, "db_illeggibili": illeggibili}
+                with mock.patch.object(fase199_invarianti, "scansiona_db", return_value=rap):
+                    s, c = RouterHTTP._bunker_invarianti(finto, {}, {})
+                self.assertEqual(s, 200, c)
+                self.assertIs(c["ok"], ok, c)
 
 
 if __name__ == "__main__":

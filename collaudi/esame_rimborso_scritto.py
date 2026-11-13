@@ -159,7 +159,7 @@ def fatti_del_percorso():
         "la tassa si somma intera al rimborso":
             bool(re.search(r"rimborso_totale = r\.get\(\"rimborso_cents\", 0\) \+ tassa", s)),
         "all'host resta la sua quota in proporzione al trattenuto":
-            bool(re.search(r"host_tiene = \(imp \* tratt // pagato\)", s)),
+            bool(re.search(r"host_tiene = \(_base_g \* tratt // pagato\)", s)),
         "la base del rimborso e' il prezzo pagato dall'ospite":
             bool(re.search(r"pagato = v\.get\(\"prezzo_guest_cents\", 0\)", s)),
     }

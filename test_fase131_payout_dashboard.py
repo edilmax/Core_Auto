@@ -61,6 +61,52 @@ class TestPayout(unittest.TestCase):
         self.assertEqual(pd().riepilogo("hX"), {})
 
 
+class _ConnConGara:
+    """Connessione vera: subito dopo la lettura dello stato, un altro processo lo cambia."""
+
+    def __init__(self, con, gara):
+        self._c, self._gara = con, gara
+
+    def __enter__(self):
+        self._c.__enter__()
+        return self
+
+    def __exit__(self, *a):
+        return self._c.__exit__(*a)
+
+    def close(self):
+        self._c.close()
+
+    def execute(self, sql, *a):
+        cur = self._c.execute(sql, *a)
+        if not sql.startswith("SELECT stato"):
+            return cur
+        righe = cur.fetchall()
+        self._gara(self._c)
+        import types
+        return types.SimpleNamespace(fetchone=lambda: righe[0] if righe else None)
+
+
+class TestPY4LaTransizioneNonScavalcaUnCambioNelFrattempo(unittest.TestCase):
+    def test_lo_stato_cambiato_fra_lettura_e_scrittura_non_si_sovrascrive(self):
+        p = pd()
+        self.assertTrue(p.registra_in_attesa("R1", "h1", 1000, "EUR"))
+        vero = p._apri
+        fatto = []
+
+        def gara(con):
+            if not fatto:
+                fatto.append(1)
+                con.execute("UPDATE payout SET stato='trattenuto' WHERE prenotazione_id='R1'")
+
+        p._apri = lambda: _ConnConGara(vero(), gara)
+        esito = p.aggiorna_stato("R1", "maturato")
+        p._apri = vero
+        self.assertEqual(fatto, [1])
+        self.assertIs(esito, False)
+        self.assertEqual(p.info("R1")["stato"], "trattenuto")
+
+
 class _ConnCheEsplode:
     """Una connessione che esplode a ogni istruzione: esercita il ramo `except` di OGNI metodo.
     `_apri` ingoia l'errore del PRAGMA (e' un `except sqlite3.Error`), quindi si arriva al metodo."""

@@ -2754,7 +2754,11 @@ class TestCartaEStornoRamiDErrore(_BaseFC):
         st = self.fc.storna_penale(nota_id="ND-2027-000001", payout=_LedgerCheDiceNo())
         self.assertEqual(st["riscosso_cents"], 1000)
         self.assertEqual(st["restituito_in_da_pagare"], 0)       # onesto: non e' passato
-        self.assertEqual(self.fc.nota("ND-2027-000001")["stato"], "stornata")
+        # DB2 (8/11): qui si pretendeva 'stornata', ed era il DIFETTO -- con la ND stornata il
+        # secondo «Storna» esce con gia_stornata e i 1000 riscossi non tornano mai. Ora la ND
+        # resta aperta (si ritenta) e il debito e' chiuso (nessuno lo riscuote nel frattempo).
+        self.assertEqual(self.fc.nota("ND-2027-000001")["stato"], "saldata")   # NON stornata
+        self.assertEqual([d["stato"] for d in self.fc.debiti_host("h1")], ["stornato"])
 
     def test_storno_penale_rifiuta_note_inesistenti_o_di_credito(self):
         self.assertIsNone(self.fc.storna_penale(nota_id="ND-2027-999999"))
@@ -2778,8 +2782,10 @@ class TestCartaEStornoRamiDErrore(_BaseFC):
         st = self.fc.storna_penale(nota_id="ND-2027-000001",
                                    payout=_LedgerCheEsplode(su=("registra_maturato",)))
         self.assertEqual(st["riscosso_cents"], 1000)
-        self.assertEqual(st["restituito_in_da_pagare"], 0)   # da rifare a mano
-        self.assertEqual(self.fc.nota("ND-2027-000001")["stato"], "stornata")
+        self.assertEqual(st["restituito_in_da_pagare"], 0)   # da rifare: si ritenta lo storno
+        # DB2 (8/11): vedi la prova sopra -- 'stornata' qui era il difetto, non la regola
+        self.assertEqual(self.fc.nota("ND-2027-000001")["stato"], "saldata")   # NON stornata
+        self.assertEqual([d["stato"] for d in self.fc.debiti_host("h1")], ["stornato"])
 
     def test_storno_penale_senza_payout_non_accredita_nulla(self):
         self.pd.registra_maturato("P0", "h1", 5000, "EUR")

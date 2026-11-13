@@ -184,7 +184,9 @@ def scansiona_db(percorso_dir: str) -> Dict[str, Any]:
     logger = logging.getLogger("core_auto.invarianti")
     prenotazioni: List[Dict[str, Any]] = []
     letti = 0
+    illeggibili: List[str] = []       # EN4 (8/11): un archivio non letto non e' un archivio sano
     for f in glob.glob(os.path.join(percorso_dir, "*.db")):
+        con = None
         try:
             # timeout=30 (standard, bug #36): l'auditor gira CONTRO i DB vivi di produzione,
             # in concorrenza col sito -> sotto contesa ASPETTA il turno, mai 'database is locked'.
@@ -203,14 +205,18 @@ def scansiona_db(percorso_dir: str) -> Dict[str, Any]:
                                              "unita": r[3] if uni else t, "rif": None,
                                              "prova_firmata": True})
                         letti += 1
-            con.close()
         except Exception:
-            logger.warning("invarianti: DB illeggibile (ISOLATO): %s", f, exc_info=True)
+            illeggibili.append(os.path.basename(f))
+            logger.error("INVARIANTI NON CONTROLLATI | codice: db_illeggibile | messaggio: "
+                         "archivio non letto: %s", os.path.basename(f), exc_info=True)
+        finally:
+            if con is not None:
+                con.close()
     viol = {"I1_DOPPIA_CONFERMA": i1_doppia_conferma(prenotazioni)}
     viol = {k: v for k, v in viol.items() if v}
     if viol:
         logger.error("INVARIANTI VIOLATI in produzione: %r", {k: len(v) for k, v in viol.items()})
-    return {"violazioni": viol, "prenotazioni_lette": letti}
+    return {"violazioni": viol, "prenotazioni_lette": letti, "db_illeggibili": sorted(illeggibili)}
 
 
 # ── DIMOSTRAZIONE FORMALE (Z3/SMT): non "tanti casi" ma TUTTI gli infiniti casi (∀) ──
@@ -373,7 +379,9 @@ def dimostra_transizioni() -> Dict[str, str]:
       - PREN_monotona_senza_cicli     : ogni transizione SALE di rango (⇒ grafo aciclico).
     PAYOUT (tabella _TRANSIZIONI letta DIRETTAMENTE dalla produzione fase131):
       - PAY_pagato_assorbente         : da 'pagato' (soldi partiti e arrivati) non si esce;
-      - PAY_mai_ritorno_in_coda       : nulla rientra in 'in_attesa'; 'maturato' solo da 'in_attesa';
+      - PAY_mai_ritorno_in_coda       : nulla rientra in 'in_attesa'; 'maturato' solo da 'in_attesa'
+                                        (vale per la TABELLA: `riallinea_maturato`, la quota
+                                        decisa dall'arbitro, ne sta fuori di proposito);
       - PAY_monotono_mai_indietro     : il rango di pipeline non scende MAI;
       - PAY_cicli_solo_coppia_hold    : ogni movimento a rango costante è dentro la coppia
                                         hold {in_transito,trattenuto} (sospensione/ripresa del

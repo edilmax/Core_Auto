@@ -490,8 +490,10 @@ class TestIgieneDelFile(unittest.TestCase):
                       "fondatore seleziona nella branch protection di GitHub, e "
                       "rinominarlo scollega silenziosamente la protezione del ramo")
         for nome, job in doc["jobs"].items():
-            self.assertEqual(job.get("runs-on"), "ubuntu-latest",
-                             "il job %r non dichiara il runner" % nome)
+            # 9/11: su 'ubuntu-latest' GitHub e' passato a una versione dove la nostra Python non
+            # si installa piu', e la CI e' diventata rossa senza che il codice fosse cambiato
+            self.assertEqual(job.get("runs-on"), "ubuntu-24.04",
+                             "il job %r non dichiara il runner fissato" % nome)
             self.assertTrue(_passi(job), "il job %r non ha passi" % nome)
 
 
@@ -15165,6 +15167,8 @@ class TestOgniCancellazioneDichiaraSeAzzeraIByte(unittest.TestCase):
                    "vecchio, ma passa dallo stesso archivio astratto di fase16"),
         "fase58_channel_manager.py": (False, "disponibilita' e blocchi di calendario: date, "
                                              "non persone"),
+        "fase167_credito_single_use.py": (False, "identificativo di un credito e riferimento "
+                                                 "di una prenotazione: nessun contatto"),
         "fase131_payout_dashboard.py": (False, "identificativo dell'host e un importo, senza "
                                                "nessun contatto: pseudonimo, non anagrafica"),
     }
