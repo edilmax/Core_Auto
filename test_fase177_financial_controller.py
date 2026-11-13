@@ -115,6 +115,22 @@ class TestStornoDellaPenale(unittest.TestCase):
         debito = self.fc.debiti_host("h1")[0]
         self.assertEqual((debito["stato"], debito["residuo_cents"]), ("aperto", 3000))
 
+    def test_PR312_la_riscossione_interrotta_porta_la_traccia_dell_errore(self):
+        # Pezzo 1 della PR #312 (13/11): il giudice ha lasciato vivo exc_info=True -> False sul
+        # log RISCOSSIONE INTERROTTA. Si prende LA riga giusta e si pretende una TUPLA: False
+        # non e' None (un assertIsNotNone qui sarebbe verde anche col guasto dentro).
+        self._penale(_Registro())
+
+        def illeggibile(nota_id):
+            raise RuntimeError("database is locked")
+
+        self.fc._storno_partito = illeggibile
+        with self.assertLogs("core_auto.financial_controller", level="ERROR") as reg:
+            self.fc.riscuoti_debiti(host_id="h1", payout=_Registro([("P1", 1000)]))
+        righe = [r for r in reg.records if "segnale_storno_illeggibile" in r.getMessage()]
+        self.assertEqual(len(righe), 1, reg.output)
+        self.assertIsInstance(righe[0].exc_info, tuple)
+
 
 if __name__ == "__main__":
     unittest.main()
