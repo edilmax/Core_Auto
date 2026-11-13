@@ -464,7 +464,6 @@ class FinancialController:
         tassa, netto all'host, rimborsi), la attribuisce all'anno/trimestre dell'INCASSO,
         e somma per host. Fonte: il giornale immutabile (verita' contabile). Ritorna
         {host_id: {n, lordo, netto, commissioni, tasse, rimborsi, trim{1..4}, trim_n{1..4}}}."""
-        import datetime as _dt
         try:
             anno = int(anno)
         except Exception:
@@ -542,7 +541,6 @@ class FinancialController:
         arrivato dopo non cambia cio' che e' stato trattenuto allora.
         Ritorna {mesi: {'AAAA-MM': {valuta: cents}}, host: {host_id: {n, base, ritenuta}},
         righe: [{ts, riferimento, host_id, base, ritenuta, valuta}]}."""
-        import datetime as _dt
         import re as _re
         out: Dict[str, Any] = {"mesi": {}, "host": {}, "righe": []}
         try:
