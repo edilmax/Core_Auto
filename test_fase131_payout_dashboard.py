@@ -381,6 +381,18 @@ class TestFB1LaRitenutaTrattenutaSiSegnaColBonifico(unittest.TestCase):
         self.assertEqual(p.ritenuta_trattenuta("nessuno"), 0)
         self.assertEqual(p.info("p1")["minori"], 18000)
 
+    def test_PR312_un_numero_al_posto_del_nome_non_tocca_il_bonifico_123(self):
+        # SQLite confronta il numero 123 col testo «123»: se il controllo sul nome passasse
+        # (`or` al posto di `and`) la ritenuta si toglierebbe, e si leggerebbe, sul bonifico
+        # di un'ALTRA prenotazione per una chiamata sbagliata.
+        p = pd()
+        p.registra_maturato("123", "h1", 18000, "EUR")             # ritenuta ancora da togliere
+        self.assertIs(p.trattieni_ritenuta(123, 100), False)
+        self.assertEqual((p.info("123")["minori"], p.ritenuta_trattenuta("123")), (18000, 0))
+        p.registra_maturato("456", "h1", 18000, "EUR")
+        self.assertTrue(p.trattieni_ritenuta("456", 4200))         # premessa: ritenuta segnata
+        self.assertEqual(p.ritenuta_trattenuta(456), 0)
+
     def test_un_archivio_di_prima_riceve_la_colonna_e_tiene_le_righe(self):
         import os
         import tempfile
