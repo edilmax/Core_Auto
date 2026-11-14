@@ -8954,6 +8954,12 @@ class TestIlCodiceDellHostNonEntraNudoNelRegistro(unittest.TestCase):
         """True se l'espressione `n` porta nel registro il codice di un host senza filtro.
         `pulite`: nomi assegnati nella funzione SOLO da espressioni filtrate."""
         import ast
+        if isinstance(n, (ast.ListComp, ast.SetComp, ast.GeneratorExp, ast.DictComp)):
+            # ⛔ (PROTON, compito 28) `', '.join(hid for hid in righe)`: la variabile della
+            # comprensione e' un nome NUOVO, nudo anche se fuori c'era un `hid` ripulito.
+            legati = {x.id for g in n.generators for x in ast.walk(g.target)
+                      if isinstance(x, ast.Name)}
+            pulite = frozenset(pulite) - legati
         if isinstance(n, ast.Call):
             f = n.func
             nome = f.id if isinstance(f, ast.Name) else (f.attr if isinstance(f, ast.Attribute)
@@ -9210,6 +9216,9 @@ def c27(host_id, ok, self):
     A.error('z %s', host_id)  # NUDO
     G = getattr(logging, 'getLogger')('x')
     G.error('k %s', host_id)  # NUDO
+def c28(hid, righe):
+    hid = _testo_per_registro(hid)
+    logger.error('%s %s', hid, ', '.join(hid for hid in righe))  # NUDO
 '''
     _SORGENTE_PULITO = '''
 def g(host_id, rec):
@@ -9234,7 +9243,7 @@ def i(hid, ok):
         dopo il compito 26 di PROTON ha la sua riga «# NUDO»."""
         attese = [i for i, r in enumerate(self._SORGENTE_NUDO.splitlines(), 1)
                   if r.endswith("# NUDO")]
-        self.assertEqual(len(attese), 25, "premessa: le righe NUDE del sorgente di prova")
+        self.assertEqual(len(attese), 26, "premessa: le righe NUDE del sorgente di prova")
         trovate = sorted({r for _, r, _, _ in self._scansiona(self._SORGENTE_NUDO, "x.py")[1]})
         self.assertEqual(trovate, attese)
         self.assertEqual(self._scansiona(self._SORGENTE_PULITO, "y.py")[1], [])
