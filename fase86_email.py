@@ -234,9 +234,11 @@ class CodaEmail:
             if ok:
                 consegnate += 1
             elif tent + 1 >= self._tentativi:
+                # il riferimento arriva dalla coda, salvato com'era (PROTON, compiti 24 e 29)
                 logger.critical("EMAIL NON CONSEGNABILE | riferimento: %s | tentativi: %d | "
                                 "messaggio: resta nella coda, va mandata a mano",
-                                rif, tent + 1)
+                                str(rif).replace("\r\n", "\\n").replace("\n", "\\n")
+                                .replace("\r", "\\r"), tent + 1)
         return consegnate
 
     def avvia(self, ogni_s: float = 30.0) -> None:
