@@ -1072,7 +1072,9 @@ class FinancialController:
                     finally:
                         con.close()
                     logger.warning("DEBITO SALDATO | HOST_ID: %s | NOTA: %s | "
-                                   "riscosso alla fonte sui payout", host_id, nota_id)
+                                   "riscosso alla fonte sui payout",
+                                   str(host_id).replace("\r\n", "\\n").replace("\n", "\\n")
+                                   .replace("\r", "\\r"), nota_id)
             if residuo > 0:
                 esito["debiti_aperti"] += 1
         return esito
@@ -1143,20 +1145,25 @@ class FinancialController:
                 esito["debiti_saldati"] += 1
                 from fase101_stripe_connect import _importo_per_registro   # r2-bis
                 logger.warning("DEBITO SALDATO SU CARTA | HOST_ID: %s | NOTA: %s | %s | PI: %s",
-                               host_id, nota_id, _importo_per_registro(residuo, valuta),
+                               str(host_id).replace("\r\n", "\\n").replace("\n", "\\n")
+                               .replace("\r", "\\r"), nota_id,
+                               _importo_per_registro(residuo, valuta),
                                r.get("pi", ""))
             elif stato == "richiede_azione":
                 self._debito_backoff(nota_id, host_id, rif_deb, residuo, valuta,
                                      tentativi + 1, ora)
                 esito["richiede_azione"] += 1
                 logger.warning("CARTA RICHIEDE AZIONE (SCA) | HOST_ID: %s | NOTA: %s | "
-                               "avvisare l'host di autenticare", host_id, nota_id)
+                               "avvisare l'host di autenticare",
+                               str(host_id).replace("\r\n", "\\n").replace("\n", "\\n")
+                               .replace("\r", "\\r"), nota_id)
             else:
                 self._debito_backoff(nota_id, host_id, rif_deb, residuo, valuta,
                                      tentativi + 1, ora)
                 esito["falliti"] += 1
                 logger.warning("CARTA ADDEBITO FALLITO | HOST_ID: %s | NOTA: %s | MOTIVO: %s",
-                               host_id, nota_id, r.get("motivo"))
+                               str(host_id).replace("\r\n", "\\n").replace("\n", "\\n")
+                               .replace("\r", "\\r"), nota_id, r.get("motivo"))
         return esito
 
     def _segna_nota_saldata(self, nota_id: str) -> None:
@@ -1265,7 +1272,10 @@ class FinancialController:
                 con.close()
             logger.warning("PENALE_STORNATA | NOTA: %s | NC: %s | HOST: %s | IMPORTO: %s | "
                            "RISCOSSO_DA_RESTITUIRE: %s | MOTIVO: %s | EMITTENTE: %s",
-                           nid, nc.get("nota_id"), host_id, _importo_per_registro(imp, val),
+                           nid, nc.get("nota_id"),
+                           str(host_id).replace("\r\n", "\\n").replace("\n", "\\n")
+                           .replace("\r", "\\r"),
+                           _importo_per_registro(imp, val),
                            _importo_per_registro(riscosso, val), (motivo or "-")[:120], emittente)
         return {"nota_id": nid, "nc_id": nc.get("nota_id"),
                 "riscosso_cents": riscosso, "restituito_in_da_pagare": restituito,

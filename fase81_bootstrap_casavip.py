@@ -407,6 +407,10 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
     pagamenti_pendenti = crea_pagamenti_pendenti(cfg.db_pendenti)
     pagamenti_pendenti.inizializza_schema()
     componenti.append("pagamenti_pendenti(162)")
+    if _connect is not None:
+        # PR5 (8/11): il bonifico di una prenotazione non e' piu' vecchio di lei (un giorno di margine)
+        _connect.da_quando = lambda rif: int(
+            (pagamenti_pendenti.info(rif) or {}).get("creato_ts") or 0) - 86400
 
     # L'archivio degli eventi del webhook (fase204): si scrive PRIMA di rispondere, perche'
     # un 2xx e' il punto di non ritorno -- Stripe non riprova mai piu'. Lo schema nasce qui,

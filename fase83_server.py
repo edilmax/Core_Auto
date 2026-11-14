@@ -3431,7 +3431,7 @@ class RouterHTTP:
             remoto = stripe_identity_stato(chiave, kyc.sessione(host_id))
             if remoto == "verified":
                 kyc.conferma(host_id, "verificato")
-                logger.warning("KYC IDENTITY VERIFICATO | HOST_ID: %s (Stripe)", host_id)
+                logger.warning("KYC IDENTITY VERIFICATO | HOST_ID: %s (Stripe)", _testo_per_registro(host_id))
                 # L'host si e' verificato DOPO aver firmato: chiudo ora il legame
                 # identita↔contratto, cosi' la prova diventa completa comunque.
                 self._lega_identita_se_possibile(
@@ -3474,7 +3474,8 @@ class RouterHTTP:
             return 503, {"errore": "sessione_non_creata"}
         if not kyc.registra_avvio(hid, esito["id"]):
             return 409, {"errore": "gia_in_corso", "stato": kyc.stato(hid)}
-        logger.info("KYC IDENTITY AVVIATO | HOST_ID: %s | SESSIONE: %s", hid, esito["id"])
+        logger.info("KYC IDENTITY AVVIATO | HOST_ID: %s | SESSIONE: %s", _testo_per_registro(hid),
+                    esito["id"])
         return 200, {"ok": True, "stato": "in_corso", "url": esito["url"]}
 
     # ── KYC DASHBOARD "Verifiche & Legale" (Incremento 10) ──────────────────
@@ -3585,7 +3586,7 @@ class RouterHTTP:
         h = dict(info)
         h["host_id"] = hid
         logger.info("ADMIN_ACTION | OGGETTO: %s | AZIONE: Visualizzazione | IP: %s",
-                    hid, self._client_ip(headers))
+                    _testo_per_registro(hid), self._client_ip(headers))
         return 200, {"host_id": hid, "email": info.get("email", ""),
                      "ragione_sociale": info.get("ragione_sociale", ""),
                      "tipo_soggetto": info.get("tipo_soggetto", ""),
@@ -3625,7 +3626,7 @@ class RouterHTTP:
         fc = getattr(self._sys, "finanza", None)
         debiti = fc.debiti_host(hid) if fc is not None else []
         logger.warning("ADMIN_ACTION | OGGETTO: %s | AZIONE: Download fascicolo | IP: %s",
-                       hid, self._client_ip(headers))
+                       _testo_per_registro(hid), self._client_ip(headers))
         return 200, {"fascicolo": {"host_id": hid, "identita": {
                          k: info.get(k, "") for k in ("email", "ragione_sociale",
                                                        "telefono", "tipo_soggetto")},
@@ -3903,7 +3904,8 @@ class RouterHTTP:
                         riprovati += 1
                     if riprovati:
                         logger.warning("PAYOUT_HOLD_RELEASED | HOST_ID: %s | RITENTATI: %d "
-                                       "| MOTIVO: DATI_FISCALI_COMPLETATI", hid, riprovati)
+                                       "| MOTIVO: DATI_FISCALI_COMPLETATI",
+                                       _testo_per_registro(hid), riprovati)
                 except Exception:
                     logger.warning("sblocco payout post-dati-fiscali fallito (ISOLATO: "
                                    "restano 'maturato', nulla perso)", exc_info=True)
@@ -3924,12 +3926,14 @@ class RouterHTTP:
         try:
             r = vies(numero, info.get("paese", ""))
         except Exception:
-            logger.error("VIES: verifica esplosa (ISOLATA) per l'host %s", hid, exc_info=True)
+            logger.error("VIES: verifica esplosa (ISOLATA) per l'host %s", _testo_per_registro(hid),
+                         exc_info=True)
             r = {"esito": "errore", "prova": "", "nome": "", "motivo": "eccezione"}
         reg.registra_verifica_piva(hid, numero, r.get("esito"), r.get("prova", ""),
                                    r.get("nome", ""))
         logger.warning("PARTITA IVA AL VIES | HOST_ID: %s | ESITO: %s | PROVA: %s | MOTIVO: %s",
-                       hid, r.get("esito"), r.get("prova") or "-", r.get("motivo") or "-")
+                       _testo_per_registro(hid), r.get("esito"), r.get("prova") or "-",
+                       r.get("motivo") or "-")
         return r.get("esito", "")
 
     def _host_dac7_stato(self, query, headers):
@@ -7427,6 +7431,13 @@ class RouterHTTP:
                                     "e' stato fatto (l'host trattiene una penale). Limite "
                                     "dichiarato, non una dimenticanza.",
                                     _rif_per_registro(riferimento))
+                    else:
+                        self._rendi_credito_referral(str(riferimento), fc)
+                        # V-d (10/11): anche il credito dell'OSPITE torna, una volta sola
+                        _pp = getattr(self._sys, "pagamenti_pendenti", None)
+                        _rec = _pp.info(str(riferimento)) if _pp is not None else None
+                        if _rec:
+                            self._libera_credito(_rec)
                 except Exception:
                     # ISOLATO come tutto il giornale: la scatola nera non ferma i soldi veri.
                     logger.warning("storno prenotazione fallito (ISOLATO) su %s",
@@ -7706,7 +7717,8 @@ class RouterHTTP:
             if not pd.imposta_importo(str(rif), minori - ritenuta):
                 raise RuntimeError("registro dei bonifici non aggiornato")
             logger.warning("RITENUTA OPERATA | RIF: %s | HOST_ID: %s | BASE: %d | RITENUTA: %d "
-                           "| BONIFICO: %d -> %d", _rif_per_registro(rif), host_id, base,
+                           "| BONIFICO: %d -> %d", _rif_per_registro(rif),
+                           _testo_per_registro(host_id), base,
                            ritenuta, minori, minori - ritenuta)
             return True
         except Exception:
@@ -7811,7 +7823,7 @@ class RouterHTTP:
                 logger.warning("PAYOUT_HOLD_TRIGGERED | HOST_ID: %s | RIF: %s | IMPORTO: %s | "
                                "MOTIVO: CONTO_STRIPE_NON_COLLEGATO | per pagarlo a mano: PRIMA "
                                "«Lo pago io a mano» nella scheda Audit, POI il bonifico dalla banca",
-                               host_id, _rif_per_registro(rif),
+                               _testo_per_registro(host_id), _rif_per_registro(rif),
                                self._fmt_importo(_m, valuta) or repr(_m))
                 return
             _stato_pay = pd.stato_di(rif) if pd is not None else None
@@ -7840,13 +7852,15 @@ class RouterHTTP:
                         logger.error("DEBITI NON RISCOSSI | HOST_ID: %s | codice: "
                                      "bonifico_forse_gia_partito | messaggio: un bonifico risulta "
                                      "su Stripe o non si riesce a leggerlo: si riprova al giro "
-                                     "dopo, per non compensare su soldi gia' usciti", host_id)
+                                     "dopo, per non compensare su soldi gia' usciti",
+                                     _testo_per_registro(host_id))
                         ris = {}
                     else:
                         ris = fc_.riscuoti_debiti(host_id=host_id, payout=pd)
                     if ris.get("riscossi_cents"):
                         logger.warning("DEBT_COLLECTED | HOST_ID: %s | RISCOSSI: %d cents "
-                                       "| SALDATI: %d | ANCORA APERTI: %d", host_id,
+                                       "| SALDATI: %d | ANCORA APERTI: %d",
+                                       _testo_per_registro(host_id),
                                        ris["riscossi_cents"], ris["debiti_saldati"],
                                        ris["debiti_aperti"])
                 except Exception:
@@ -7861,7 +7875,7 @@ class RouterHTTP:
                 if _rp is None or int(_rp.get("minori") or 0) <= 0:
                     logger.warning("PAYOUT GIA' COMPENSATO/ASSENTE | RIF: %s | HOST_ID: %s"
                                    " | nessun bonifico da inviare",
-                                   _rif_per_registro(rif), host_id)
+                                   _rif_per_registro(rif), _testo_per_registro(host_id))
                     return
                 if int(_rp["minori"]) != int(importo_cents):
                     logger.warning("IMPORTO RIALLINEATO AL LEDGER | RIF: %s | richiesto %d"
@@ -7879,7 +7893,8 @@ class RouterHTTP:
             if self._verifica_payout_bloccato(host_id):
                 import datetime as _dtv
                 logger.warning("PAYOUT_HOLD_TRIGGERED | HOST_ID: %s | RIF: %s | IMPORTO: %s"
-                               " | MOTIVO: VERIFICA_REVOCATA | DATA: %s", host_id,
+                               " | MOTIVO: VERIFICA_REVOCATA | DATA: %s",
+                               _testo_per_registro(host_id),
                                _rif_per_registro(rif),
                                self._fmt_importo(int(importo_cents), valuta),
                                _dtv.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%SZ"))
@@ -7893,7 +7908,8 @@ class RouterHTTP:
                 # Log formato kimi, finisce nei log del Bunker (app.log persistente).
                 import datetime as _dt
                 logger.warning("PAYOUT_HOLD_TRIGGERED | HOST_ID: %s | RIF: %s | IMPORTO: %s | "
-                               "MOTIVO: MANCANZA_DATI_FISCALI (%s) | DATA: %s", host_id,
+                               "MOTIVO: MANCANZA_DATI_FISCALI (%s) | DATA: %s",
+                               _testo_per_registro(host_id),
                                _rif_per_registro(rif), self._fmt_importo(int(importo_cents), valuta),
                                ",".join(manca),
                                _dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%SZ"))
@@ -7921,13 +7937,15 @@ class RouterHTTP:
                              "motivo e' nella riga di Connect qui sopra) e il bonifico PUO' essere "
                              "partito: NON pagarlo a mano, prima si guarda su Stripe; ogni nuovo "
                              "tentativo rilegge Stripe prima di rifarlo", _rif_per_registro(rif),
-                             host_id, self._fmt_importo(int(importo_cents), valuta), acct)
+                             _testo_per_registro(host_id),
+                             self._fmt_importo(int(importo_cents), valuta), acct)
                 return
             if tid:
                 if pd is not None:
                     pd.aggiorna_stato(rif, "in_transito")     # soldi partiti verso l'host
                 logger.info("Connect: transfer %s -> host %s (%s) per %s",
-                            tid, host_id, self._fmt_importo(int(importo_cents), valuta),
+                            tid, _testo_per_registro(host_id),
+                            self._fmt_importo(int(importo_cents), valuta),
                             _rif_per_registro(rif))
                 # SCATOLA NERA: il bonifico e' partito -> riga immutabile e datata (risponde
                 # per sempre a "ma il bonifico e' stato inviato?", anche dopo N deploy).
@@ -9228,7 +9246,9 @@ class RouterHTTP:
 
     def _libera_credito(self, rec):
         """EN1 (8/11): prenotazione scaduta senza pagamento: il credito bruciato per lei torna
-        all'ospite. Un guasto qui non deve fermare la liberazione della stanza, ma si deve vedere."""
+        all'ospite. Un guasto qui non deve fermare la liberazione della stanza, ma si deve vedere.
+        V-d (10/11): lo stesso su rimborso totale e su blocco della carta annullato. Ripetibile:
+        `libera` toglie solo il consumo di QUESTA prenotazione."""
         store = getattr(self._sys, "credito_usati", None)
         cid = self._corpo_del_pendente(rec).get("credito_id")
         if store is None or not (isinstance(cid, str) and cid):
@@ -9237,7 +9257,8 @@ class RouterHTTP:
             store.libera(cid, rec.get("riferimento"))
         except Exception:
             logger.error("CREDITO NON RESTITUITO | RIF: %s | codice: credito_non_liberato | "
-                         "messaggio: prenotazione scaduta, il credito dell'ospite resta bruciato: "
+                         "messaggio: prenotazione chiusa senza soldi trattenuti, il credito "
+                         "dell'ospite resta bruciato: "
                          "liberarlo a mano", _rif_per_registro(rec.get("riferimento")), exc_info=True)
 
     def _credito_tardivo(self, rec, rif):
@@ -10781,6 +10802,10 @@ class RouterHTTP:
         if stato == "succeeded":
             pp.segna_blocco(rif, blocco_incassato_ts=int(_t.time()))
             self._riasserisci_incasso(pp.info(rif), rif)
+            self._credito_host_al_pagamento(rif, pp.info(rif))
+            # V-b (10/11): il bonifico e' appena diventato 'maturato': solo ora conta per il premio
+            self._forse_qualifica_referral((pp.info(rif) or {}).get("host_id"),
+                                           getattr(self._sys, "payout", None))
             logger.info("BLOCCO SULLA CARTA | INCASSATO | rif %s | pi %s",
                         _rif_per_registro(rif), pi)
             # DIFETTO A (macchina delle combinazioni dei soldi, 11/10): «tutto ok» o l'arbitro
@@ -10860,6 +10885,7 @@ class RouterHTTP:
         if b["stato"] in ("nessuno", "incassato"):
             return False
         if b["stato"] == "annullato":
+            self._libera_credito(rec)           # V-d (10/11): soldi mai entrati, credito suo
             return True
         if trattenuto > 0:
             esito = self._incassa_blocco(rif, b["pi"])
@@ -10877,7 +10903,10 @@ class RouterHTTP:
                              "Stripe prima del prossimo giro, o lasciarla",
                              _rif_per_registro(rif), b["pi"], trattenuto)
             return esito != "incassato"
-        return self._annulla_blocco(rif, b["pi"]) != "incassato"
+        mai_entrati = self._annulla_blocco(rif, b["pi"]) != "incassato"
+        if mai_entrati:
+            self._libera_credito(rec)           # V-d (10/11)
+        return mai_entrati
 
     def _incassa_blocchi(self, ora_ts=None):
         """IL GIRO ORARIO DEL BLOCCO SULLA CARTA (tick orario di `avvia_server`). Per ogni blocco
@@ -11088,6 +11117,16 @@ class RouterHTTP:
                                _rif_per_registro(rif))
                 return
             stato = rec.get("stato", "")
+            try:
+                _segno = json.loads(rec.get("corpo_json") or "{}").get("pagamento_tardivo")
+            except Exception:
+                _segno = None
+            if stato == "pagato" and _segno in ("da_finire", "payout_scritto"):
+                # PR6 (8/11): il primo giro di un pagamento TARDIVO e' morto dopo il CAS (il
+                # segno nasce con 'pagato', fase162). Si rifa' il giro da 'scaduto': riblocco
+                # con la stessa chiave, credito e garanzia sono idempotenti, la riga del
+                # bonifico si salta se gia' scritta. Modello TLA+ PagamentoTardivo (10/11).
+                stato = "scaduto"
             if stato == "pagato":
                 # WEBHOOK DUPLICATO/RETRY. NON basta uscire: se il PRIMO handler e' morto
                 # DOPO il CAS 'pagato' ma PRIMA dei passi derivati (BUG #32 provato), la tassa
@@ -11104,6 +11143,11 @@ class RouterHTTP:
                 if not self._rec_in_struttura(rec):
                     if self._riasserisci_incasso(rec, rif) is False:
                         return False                  # C53-B1-5: bonifico ancora fermo
+                    # V-f (10/11): il premio al referente si ricontrolla anche qui (una volta
+                    # sola: lo garantisce qualifica_referee). Lo sconto referral dell'host NO:
+                    # `_applica_credito_host` non e' ripetibile (limite dichiarato, foglio V-f).
+                    self._forse_qualifica_referral(rec.get("host_id"),
+                                                   getattr(self._sys, "payout", None))
                 return
             # WHITELIST: si conferma SOLO 'in_attesa' (hold vivo) o 'scaduto' (re-block sotto).
             # Ogni altro stato (cancellata dal cliente/host, rimborsata, richiesta NON ancora
@@ -11149,6 +11193,8 @@ class RouterHTTP:
             # da maturare, nessun escrow. Se tardivo, ri-blocca come l'online (anti-gara).
             if self._rec_in_struttura(rec):
                 self._conferma_struttura(rec, rif, stato)
+                if stato == "scaduto":
+                    pp.segna_blocco(rif, pagamento_tardivo="finito")
                 return
             if stato == "scaduto":
                 # PAGAMENTO TARDIVO: la stanza era stata liberata. Ri-tento il blocco con
@@ -11157,12 +11203,7 @@ class RouterHTTP:
                 # 'ok' finto SENZA ribloccare davvero = doppia prenotazione possibile.
                 inv = getattr(self._sys, "inventario", None)
                 idem = "reblock:" + rif
-                esito = None
-                try:
-                    esito = inv.blocca(rec["alloggio_id"], rec["check_in"], rec["check_out"],
-                                       idem_key=idem, origine="pagamento_tardivo") if inv else None
-                except Exception:
-                    esito = None
+                esito = self._riblocca_tardivo(inv, rec, idem, "pagamento_tardivo")
                 if getattr(esito, "ok", False):
                     self._credito_tardivo(rec, rif)
                 if not getattr(esito, "ok", False):
@@ -11214,12 +11255,19 @@ class RouterHTTP:
                     dj = {}
                 pd = getattr(self._sys, "payout", None)
                 _versare = self._da_versare_host(dj)      # netto host + tassa (2026-08-19)
-                if pd is not None and dj.get("host_id") and _versare > 0:
-                    self._riga_payout_scritta(
-                        pd.registra_maturato(rif, dj["host_id"], _versare, dj.get("valuta", "EUR")),
-                        rif)
+                if (_segno != "payout_scritto" and pd is not None and dj.get("host_id")
+                        and _versare > 0):
+                    # V-a (10/11): coi soldi solo AUTORIZZATI sulla carta il bonifico aspetta
+                    # l'incasso, come nel ramo normale (`_incassa_blocco` lo matura dopo)
+                    _registra = (pd.registra_in_attesa if _blocco(rec)["stato"] == "aperto"
+                                 else pd.registra_maturato)
+                    _scritta = _registra(rif, dj["host_id"], _versare, dj.get("valuta", "EUR"))
+                    self._riga_payout_scritta(_scritta, rif)
+                    if _scritta:
+                        pp.segna_blocco(rif, pagamento_tardivo="payout_scritto")
                 self._apri_garanzia(rif, dj,
                                     rec.get("alloggio_id", ""), rec.get("check_in", ""))
+                pp.segna_blocco(rif, pagamento_tardivo="finito")
             # comune a 'in_attesa' e 'scaduto-ribloccato': 'pagato' è GIÀ scritto dal CAS
             # in cima (acquisizione atomica); qui restano tassa + payout maturato (idempotenti,
             # ri-asseriti anche sul retry per sanare un crash del primo handler - BUG #32).
@@ -11229,20 +11277,7 @@ class RouterHTTP:
             # REFERRAL: se l'host di questa prenotazione è stato INVITATO e raggiunge la soglia
             # di prenotazioni pagate -> premia il referente (una volta sola, mai in perdita).
             hid_pag = rec.get("host_id") if isinstance(rec, dict) else None
-            # scala il credito referral dell'host sulla commissione di questa prenotazione
-            try:
-                import json as _jc
-                dj = _jc.loads(rec.get("corpo_json") or "{}") if isinstance(rec, dict) else {}
-            except Exception:
-                dj = {}
-            scontato = self._applica_credito_host(rif, hid_pag, self._commissione_regalabile(dj), dj)
-            # DA3: la riga `commissione` e' gia' scritta piena; lo sconto la corregge nel giornale.
-            # Solo qui: la conferma immediata non scrive nessuna riga `commissione`.
-            self._giornale(tipo="sconto_commissione", riferimento=rif,
-                           soggetto="host:" + str(hid_pag), importo_cents=scontato,
-                           valuta=dj.get("valuta") or "EUR",
-                           causale="credito referral scalato dalla commissione",
-                           evento_id="sconto_commissione:" + str(rif))
+            self._credito_host_al_pagamento(rif, rec)
             self._forse_qualifica_referral(hid_pag, pd)
             # C53-B1-5: bonifico rimasto fermo -> False (503); il ritentativo passa dal ramo
             # 'pagato' qui sopra e lo matura senza rifare email e crediti
@@ -11256,6 +11291,28 @@ class RouterHTTP:
                          "stati scritti (Stripe ritentera')", _rif_per_registro(rif),
                          exc_info=True)
             return False
+
+    @staticmethod
+    def _riblocca_tardivo(inv, rec, idem, origine):
+        """Riblocco della stanza per un pagamento TARDIVO, con una chiave fresca (`idem`).
+        V-e (10/11): se lo sweeper e' morto dopo il CAS 'scaduto' e prima di liberare, la stanza
+        e' ancora tenuta dal blocco di QUESTA prenotazione e il riblocco falliva: ospite
+        rimborsato e stanza ferma. Si libera quel blocco (e' suo) e si riprova. Nel caso peggiore
+        un altro la prende in quell'istante: rimborso, mai doppia prenotazione."""
+        if inv is None:
+            return None
+        # ⛔ PRIMA del riblocco, non dopo: un riblocco fallito resta scritto con la sua chiave e
+        # un secondo tentativo con la stessa chiave ripete il rifiuto (idempotenza di fase58).
+        vecchio = rec.get("idem_key") or ""
+        stato_blocco = getattr(inv, "stato_blocco", None)
+        if (vecchio and vecchio != idem and stato_blocco is not None
+                and stato_blocco(vecchio) == "occupato"):
+            inv.rilascia(rec["alloggio_id"], rec["check_in"], rec["check_out"], idem_key=vecchio)
+        try:
+            return inv.blocca(rec["alloggio_id"], rec["check_in"], rec["check_out"],
+                              idem_key=idem, origine=origine)
+        except Exception:
+            return None
 
     def _rec_in_struttura(self, rec):
         """True se la prenotazione pendente e' 'paga in struttura' (letto dal corpo_json che
@@ -11278,12 +11335,7 @@ class RouterHTTP:
         if stato == "scaduto":
             inv = getattr(self._sys, "inventario", None)
             idem = "reblock:" + rif
-            esito = None
-            try:
-                esito = inv.blocca(rec["alloggio_id"], rec["check_in"], rec["check_out"],
-                                   idem_key=idem, origine="anticipo_tardivo") if inv else None
-            except Exception:
-                esito = None
+            esito = self._riblocca_tardivo(inv, rec, idem, "anticipo_tardivo")
             if getattr(esito, "ok", False):
                 self._credito_tardivo(rec, rif)
             if not getattr(esito, "ok", False):
@@ -11350,6 +11402,54 @@ class RouterHTTP:
             return 0
         return max(0, comm - gia_dato)
 
+    def _credito_host_al_pagamento(self, rif, rec):
+        """Scala il credito referral sulla commissione e lo scrive nel giornale (DA3: la riga
+        `commissione` e' gia' scritta piena, lo sconto la corregge; la conferma immediata non la
+        scrive e non passa di qui). Revisione 9/11: coi soldi solo autorizzati la commissione non
+        esiste ancora e il blocco si puo' annullare: si aspetta `_incassa_blocco`."""
+        if _blocco(rec)["stato"] in ("aperto", "annullato"):
+            return
+        evento = "sconto_commissione:" + str(rif)
+        fc = getattr(self._sys, "finanza", None)
+        if fc is not None and fc.esiste_evento(evento):
+            return
+        try:
+            dj = json.loads(rec.get("corpo_json") or "{}") if isinstance(rec, dict) else {}
+        except Exception:
+            dj = {}
+        hid = rec.get("host_id") if isinstance(rec, dict) else None
+        scontato = self._applica_credito_host(rif, hid, self._commissione_regalabile(dj), dj)
+        self._giornale(tipo="sconto_commissione", riferimento=rif, soggetto="host:" + str(hid),
+                       importo_cents=scontato, valuta=dj.get("valuta") or "EUR",
+                       causale="credito referral scalato dalla commissione", evento_id=evento)
+
+    def _rendi_credito_referral(self, rif, fc):
+        """Revisione 9/11 (DA3 a): rimborso totale, lo sconto sulla commissione non c'e' piu' e
+        il credito torna all'host, una volta sola. Mai solleva: il rimborso non si ferma."""
+        try:
+            righe = [m for m in fc.movimenti(rif) if m.get("tipo") == "sconto_commissione"]
+            if not righe:
+                return
+            host = str(righe[0].get("soggetto") or "")[len("host:"):]
+            sconto = int(righe[0].get("importo_cents") or 0)
+            pp = getattr(self._sys, "pagamenti_pendenti", None)
+            rec = pp.info(rif) if pp is not None else None
+            dj = json.loads((rec or {}).get("corpo_json") or "{}")
+            valore = self._valore_del_credito(dj)
+            viral = getattr(self._sys, "viral", None)
+            if valore is None or viral is None:
+                logger.error("CREDITO REFERRAL | codice: credito_non_reso | messaggio: host %s, "
+                             "prenotazione %s rimborsata: sconto di %s da restituire A MANO come "
+                             "credito (cambio non disponibile)", _testo_per_registro(host),
+                             _rif_per_registro(rif),
+                             _testo_per_registro(self._fmt_importo(sconto, dj.get("valuta") or "EUR")))
+                return
+            viral.rendi_credito(host, int(sconto / valore), "reso:" + str(rif))
+        except Exception:
+            logger.error("CREDITO REFERRAL | codice: credito_non_reso | messaggio: prenotazione "
+                         "%s rimborsata: credito da restituire A MANO", _rif_per_registro(rif),
+                         exc_info=True)
+
     def _valore_del_credito(self, corpo):
         """DA2 (8/11). Il credito referral e' nella moneta in cui incassiamo e non porta la
         valuta: quante unita' minime della moneta dell'annuncio vale un suo centesimo.
@@ -11388,7 +11488,7 @@ class RouterHTTP:
             if valore is None:
                 logger.warning("CREDITO REFERRAL | codice: cambio_non_disponibile | messaggio: "
                                "host %s, prenotazione %s: niente sconto, il credito resta intero",
-                               host_id, _rif_per_registro(ref))
+                               _testo_per_registro(host_id), _rif_per_registro(ref))
                 return 0
             res = viral.usa_credito(host_id, int(comm / valore))   # <- QUI il credito e' gia' COMMITTATO
             scalato = int(res.get("scontato_cents", 0)) if isinstance(res, dict) else 0
@@ -11414,15 +11514,15 @@ class RouterHTTP:
                     # servono l'host e i centesimi esatti.
                     logger.error("CREDITO REFERRAL PERSO: host %s, %d cent gia' scalati dal suo "
                                  "credito ma NON applicati alla commissione di %s -> "
-                                 "restituirglieli a mano", host_id, scalato,
+                                 "restituirglieli a mano", _testo_per_registro(host_id), scalato,
                                  _rif_per_registro(ref), exc_info=True)
                     return 0
                 logger.info("Credito referral scalato: host %s -%d di commissione su %s",
-                            host_id, used, _rif_per_registro(ref))
+                            _testo_per_registro(host_id), used, _rif_per_registro(ref))
             return used
         except Exception:
             logger.error("APPLICAZIONE CREDITO HOST FALLITA per %s su %s: l'host potrebbe non "
-                         "aver ricevuto lo sconto che gli spetta", host_id,
+                         "aver ricevuto lo sconto che gli spetta", _testo_per_registro(host_id),
                          _rif_per_registro(ref), exc_info=True)
             return 0
 
@@ -11444,14 +11544,14 @@ class RouterHTTP:
                 out = viral.qualifica_referee(host_id, premio_cents=int(premio))
                 if out.get("ok"):
                     logger.info("Referral qualificato: host %s ha raggiunto %d prenotazioni -> "
-                                "premio %d al referente %s", host_id, soglia, premio,
-                                out.get("referente_id"))
+                                "premio %d al referente %s", _testo_per_registro(host_id),
+                                soglia, premio, _testo_per_registro(out.get("referente_id")))
         except Exception:
             # Ha un recupero (il `>=` fa riprovare a ogni pagamento successivo), ma un guasto
             # PERSISTENTE lascerebbe il referente senza il premio promesso, in silenzio.
             logger.error("PREMIO REFERRAL non assegnato per l'invitato %s: chi l'ha portato "
                          "non ha ricevuto il premio (si riprova al prossimo pagamento)",
-                         host_id, exc_info=True)
+                         _testo_per_registro(host_id), exc_info=True)
 
     def _mcp(self, body):
         if self._sys.mcp is None:
@@ -11585,7 +11685,7 @@ class RouterHTTP:
                           doc_sha256_=privacy_sha256(), lang=lang, ip=ip, user_agent=ua)
         if not (r1.get("ok") and r2.get("ok")):
             logger.error("PROVA consensi INCOMPLETA per host %s (contratto=%s privacy=%s)",
-                         host_id, r1.get("ok"), r2.get("ok"))
+                         _testo_per_registro(host_id), r1.get("ok"), r2.get("ok"))
         out = {"registrata": bool(r1.get("ok")), "versione": r1.get("versione"),
                "vessatorie": bool(r1.get("vessatorie")),
                "privacy_registrata": bool(r2.get("ok")),
@@ -11659,7 +11759,8 @@ class RouterHTTP:
                 return 409, {"errore": "contratto_aggiornato", "doc_sha256": _dh(),
                              "versione": _v}
             out = self._registra_consensi(acc, host_id, str(dati.get("lang", "it")), headers)
-            logger.info("RI-ACCETTAZIONE | HOST_ID: %s | VERSIONE: %s", host_id, _v)
+            logger.info("RI-ACCETTAZIONE | HOST_ID: %s | VERSIONE: %s", _testo_per_registro(host_id),
+                    _v)
             return 200, {"ok": bool(out.get("registrata")), "accettazione": out}
         except Exception:
             logger.error("ri-accettazione: eccezione ISOLATA", exc_info=True)
@@ -11839,7 +11940,7 @@ class RouterHTTP:
                         acc, e.host_id, str(dati.get("lang", "it")), headers)
                 except Exception:
                     logger.error("PROVA accettazione contratto FALLITA per host %s",
-                                 getattr(e, "host_id", "?"), exc_info=True)
+                                 _testo_per_registro(getattr(e, "host_id", "?")), exc_info=True)
         # viral loop: se è arrivato con un codice referral, accredita referente+referee
         if e.ok:
             codice = dati.get("codice_referral")
@@ -13994,10 +14095,18 @@ def sweep_hold_una_passata(sistema: Any, router: Any) -> None:
     if pp is None or inv is None:
         return
     try:
-        for rec in pp.scaduti():
+        # V-e (10/11): anche gli 'scaduto' col segno acceso -- lo sweeper di prima e' morto fra
+        # il CAS e i passi qui sotto (tutti ripetibili). Senza, stanza bloccata fino alla pulizia
+        # e credito dell'ospite perso. Il segno si spegne a passi finiti.
+        da_fare = [(r, True) for r in pp.scaduti()]
+        if hasattr(pp, "scaduti_da_finire"):
+            da_fare += [(r, False) for r in pp.scaduti_da_finire()]
+        for rec, nuovo in da_fare:
             try:
-                if not pp.scadi(rec["riferimento"]):
+                if nuovo and not pp.scadi(rec["riferimento"]):
                     continue          # pagata/cancellata nel frattempo: non è più roba nostra
+                if not nuovo and (pp.info(rec["riferimento"]) or {}).get("stato") != "scaduto":
+                    continue          # V-e: pagata in ritardo nel frattempo, non si tocca
                 inv.rilascia(rec["alloggio_id"], rec["check_in"], rec["check_out"],
                              idem_key=(rec.get("idem_key") or ("hold_" + rec["riferimento"])))
                 if gz is not None:
@@ -14012,6 +14121,8 @@ def sweep_hold_una_passata(sistema: Any, router: Any) -> None:
                 # RECUPERO ONESTO (errore dei colossi = spam; noi UNA email transazionale):
                 # pagamento non completato -> le date sono di nuovo libere, link per riprovare.
                 router._email_recupero_hold(rec)
+                if hasattr(pp, "scadenza_finita"):
+                    pp.scadenza_finita(rec["riferimento"])
             except Exception:
                 logger.warning("sweep hold singolo fallito (ignorato)", exc_info=True)
         try:

@@ -317,6 +317,99 @@ class TestRegistrazione(unittest.TestCase):
         # l'hash dipende dal salt: due salt diversi -> hash diversi
         self.assertNotEqual(_hash_password("x", b"a" * 16), _hash_password("x", b"b" * 16))
 
+    # ── ORDINE DEL FONDATORE 10/11: telefono in formato internazionale (E.164) ──────
+    def _telefono_salvato(self, email):
+        con = self.reg._apri()
+        try:
+            return con.execute("SELECT telefono FROM host WHERE email=?",
+                               (email,)).fetchone()["telefono"]
+        finally:
+            con.close()
+
+    def test_il_telefono_si_salva_in_formato_internazionale(self):
+        for i, (scritto, atteso) in enumerate((("+39 333 123 4567", "+393331234567"),
+                                               ("0039-333-123-4567", "+393331234567"),
+                                               ("+1 (415) 555.0123", "+14155550123"),
+                                               (" +6681234567 ", "+6681234567"))):
+            email = "tel%d@b.it" % i
+            e = self.reg.registra(email, "passwordlunga", accetta_termini=True,
+                                  telefono=scritto)
+            self.assertTrue(e.ok, (scritto, e.errore))
+            self.assertEqual(self._telefono_salvato(email), atteso, scritto)
+
+    def test_un_telefono_senza_prefisso_o_sbagliato_si_rifiuta(self):
+        for cattivo in ("3331234567", "+39 abc 1234", "+0391234567", "+3912",
+                        "+3933312345678901", "++393331234567", "+39 333 123 4567 int 2"):
+            e = self.reg.registra("x@b.it", "passwordlunga", accetta_termini=True,
+                                  telefono=cattivo)
+            self.assertFalse(e.ok, cattivo)
+            self.assertEqual(e.errore, "telefono_non_valido", cattivo)
+
+    def test_il_telefono_resta_facoltativo(self):
+        e = self.reg.registra("vuoto@b.it", "passwordlunga", accetta_termini=True,
+                              telefono="   ")
+        self.assertTrue(e.ok, e.errore)
+        self.assertEqual(self._telefono_salvato("vuoto@b.it"), "")
+
+    def test_l_anti_riciclo_riconosce_lo_stesso_telefono_scritto_diverso(self):
+        """Le impronte anti-riciclo confrontavano il telefono COSI' COM'ERA SCRITTO: lo
+        stesso numero con gli spazi o con lo 00 era un host nuovo, e i 90 giorni allo 0%
+        ripartivano da capo (soldi della piattaforma)."""
+        t = {"v": 1000}
+        reg = crea_registro_host(":memory:", SEG, orologio=lambda: t["v"])
+        e = reg.registra("primo@b.it", "passwordlunga", accetta_termini=True,
+                         telefono="+39 333 777 8899")
+        self.assertTrue(e.ok, e.errore)
+        self.assertGreater(reg.deposita_impronte(e.host_id), 0)          # premessa
+        t["v"] = 1000 + 200 * 86400
+        e2 = reg.registra("secondo@b.it", "passwordlunga", accetta_termini=True,
+                          telefono="0039 3337778899")
+        self.assertTrue(e2.ok, e2.errore)
+        con = reg._apri()
+        try:
+            nato = con.execute("SELECT creato_ts FROM host WHERE host_id=?",
+                               (e2.host_id,)).fetchone()["creato_ts"]
+        finally:
+            con.close()
+        self.assertEqual(nato, 1000, "stesso telefono scritto diverso: anzianita' azzerata")
+
+
+class TestRegistrazioneDalSitoTelefono(unittest.TestCase):
+    """Il cablaggio fino alla rotta: il sito risponde 422 col codice che la pagina traduce."""
+
+    def setUp(self):
+        import json
+        import shutil
+        import tempfile
+        from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
+        from fase83_server import crea_router
+        from fase163_accettazioni import CONTRATTO_HOST_VERSIONE, doc_sha256
+        self.json = json
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
+        d = self.dir
+        self.r = crea_router(crea_sistema(ConfigCasaVIP(
+            abilitato=True, segreto_hmac=b"S" * 32, con_registrazione_host=True,
+            db_catalogo=f"{d}/c.db", db_inventario=f"{d}/i.db",
+            db_registro_host=f"{d}/r.db", db_accettazioni=f"{d}/a.db")),
+            host_key="hk", base_url="https://bookinvip.com")
+        self.base = {"password": "password1", "accetta_termini": True,
+                     "accetta_clausole": True, "accetta_privacy": True,
+                     "doc_sha256": doc_sha256(), "versione": CONTRATTO_HOST_VERSIONE}
+
+    def _registra(self, email, telefono):
+        corpo = dict(self.base, email=email, telefono=telefono)
+        return self.r.gestisci("POST", "/api/host/registrazione", {},
+                               self.json.dumps(corpo), {})
+
+    def test_telefono_senza_prefisso_422(self):
+        s, c = self._registra("t1@b.it", "333 1234567")
+        self.assertEqual((s, c.get("errore")), (422, "telefono_non_valido"), c)
+
+    def test_telefono_con_prefisso_201(self):
+        s, c = self._registra("t2@b.it", "+39 333 1234567")
+        self.assertEqual(s, 201, c)
+
 
 class TestLogin(unittest.TestCase):
     def setUp(self):
@@ -834,7 +927,8 @@ class TestI52PuntiSopravvissutiDellaNotteDel7Settembre(unittest.TestCase):
         e = self._host(telefono=" +39 333 7777777 ", line_token=CANALE_LINE,
                        wechat_webhook="https://wx.example/hook")
         info = self.reg.info_host(e.host_id)
-        self.assertEqual("+39 333 7777777", info["telefono"], "telefono perso alla registrazione")
+        # dal 10/11 si salva in formato internazionale (ordine del fondatore), senza spazi
+        self.assertEqual("+393337777777", info["telefono"], "telefono perso alla registrazione")
         self.assertEqual("LINE-1", info["line_token"], "line_token perso alla registrazione")
         self.assertEqual("https://wx.example/hook", info["wechat_webhook"],
                          "wechat_webhook perso alla registrazione")
@@ -909,7 +1003,7 @@ class TestI52PuntiSopravvissutiDellaNotteDel7Settembre(unittest.TestCase):
         self.assertTrue(self.reg.imposta_telegram_chat(e.host_id, "4242"))
         self.assertTrue(self.reg.imposta_stripe_account(e.host_id, "acct_1"))
         info = self.reg.info_host(e.host_id)
-        atteso = {"email": "host@mail.it", "telefono": "+39 333 7777777", "line_token": "LINE-1",
+        atteso = {"email": "host@mail.it", "telefono": "+393337777777", "line_token": "LINE-1",
                   "wechat_webhook": "https://wx.example/hook", "telegram_chat_id": "4242",
                   "stripe_account_id": "acct_1", "ragione_sociale": "B&B Sole"}
         for k, v in atteso.items():

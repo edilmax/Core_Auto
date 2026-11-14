@@ -11,6 +11,7 @@ import datetime
 import http.client
 import io
 import json
+import logging
 import os
 import re
 import shutil
@@ -44,6 +45,8 @@ import test_bunker_scaglioni_prove as _tbs
 import test_debt_status as _tds
 import test_paga_struttura_e2e as _tps
 import test_regali_non_superano_la_commissione as _trg
+# PR #315: il banco delle prove del pezzo 3 sul blocco della carta (solo il modulo, come sopra)
+import test_blocco_carta as _tbc
 from decimal import Decimal
 from fase58_channel_manager import EsitoPrenotazione
 from fase83_server import (
@@ -8837,6 +8840,300 @@ class TestPR314PezzoDueLeRigheCheIlGiudiceNonVedeva(unittest.TestCase):
             fase83_server._riprendi_cancellazione_host(sistema, None, rec)
         self.assertEqual(visti, ["H-7"])
         self.assertEqual([p["payout"] for p in penali], ["REGISTRO"])
+
+
+class TestPR315PezzoTreLeRigheCheIlGiudiceNonVedeva(unittest.TestCase):
+    """PR #315 (pezzo 3 della #312), job `caselle` del 14/11 su bb014a7: 35 righe cambiate in
+    fase83 dove un guasto passava inosservato, perche' le loro prove stanno in file che il
+    giudice non accende (test_blocco_carta, test_race_hold_conferma,
+    test_regali_non_superano_la_commissione). Qui, nel file dedicato: le stesse prove eseguite
+    sul loro banco (una sola fonte, nessuna copia che invecchia) e, dove nessuna prova guardava,
+    una prova nuova."""
+
+    _banco_di = TestPR314PezzoDueLeRigheCheIlGiudiceNonVedeva._banco_di
+
+    # ── i banchi degli altri file, con le loro prove ──────────────────────────────────────
+    def test_Vd_RV2_RV3_Vb_credito_e_premio_sul_blocco_della_carta(self):
+        for nome in ("test_Vd_rimborso_totale_il_credito_dell_ospite_torna",
+                     "test_Vb_il_premio_al_referente_scatta_all_incasso_del_blocco",
+                     "test_RV2_il_credito_non_si_scala_due_volte_se_il_giro_si_ripete",
+                     "test_RV3_rimborso_totale_il_credito_torna_una_volta_sola"):
+            with self.subTest(nome):
+                b = self._banco_di(_tbc.TestAFineFinestraSiIncassa)
+                getattr(b, nome)()
+
+    def test_PR6_Va_Ve_il_tardivo_interrotto_si_finisce(self):
+        for nome in ("test_PR6_pagamento_tardivo_interrotto_si_finisce_al_ritentativo",
+                     "test_PR6_in_struttura_interrotto_al_riblocco_si_finisce_al_ritentativo",
+                     "test_PR6_morto_dopo_il_bonifico_il_ritentativo_apre_la_garanzia",
+                     "test_PR6_il_ritentativo_non_riscrive_un_bonifico_gia_scritto",
+                     "test_Va_tardivo_col_blocco_sulla_carta_il_bonifico_resta_in_attesa",
+                     "test_Ve_sweeper_morto_dopo_scadi_il_giro_dopo_finisce",
+                     "test_Ve_un_tardivo_dopo_la_morte_dello_sweeper_non_viene_disfatto"):
+            with self.subTest(nome):
+                b = self._banco_di(_thc.TestGaraSweeperConferma)
+                getattr(b, nome)()
+
+    def test_RV3_il_credito_reso_torna_nella_sua_moneta(self):
+        self._banco_di(_trg.TestIRegaliNonSuperanoLaCommissione) \
+            .test_RV3_il_credito_reso_torna_nella_sua_moneta()
+
+    # ── prove nuove: righe che nessuna prova guardava ─────────────────────────────────────
+    def test_PR6_il_ritentativo_di_un_pagamento_in_tempo_non_rifa_il_giro_tardivo(self):
+        """Il segno del tardivo vale SOLO se acceso: un webhook ripetuto su un pagamento in
+        tempo non deve liberare il blocco della stanza per ribloccarla con un'altra chiave."""
+        b = self._banco_di(_thc.TestGaraSweeperConferma)
+        e = b.sys.inventario.blocca("casa-race", _thc.CI, _thc.CO, idem_key="hold_R315")
+        self.assertTrue(e.ok, getattr(e, "errore", ""))
+        b.pp.registra("R315", alloggio_id="casa-race", check_in=_thc.CI, check_out=_thc.CO,
+                      idem_key="hold_R315", scadenza_ts=int(time.time()) + 600)
+        b.r._conferma_pagamento("R315")
+        self.assertEqual(b.pp.info("R315")["stato"], "pagato")             # premessa
+        b.r._conferma_pagamento("R315")                                    # Stripe ritenta
+        self.assertEqual(b.pp.info("R315")["idem_key"], "hold_R315", "chiave della stanza cambiata")
+        self.assertEqual(b.sys.inventario.stato_blocco("hold_R315"), "occupato",
+                         "il ritentativo ha liberato la stanza di chi ha pagato in tempo")
+        self.assertIsNone(b._segno("R315"), "un pagamento in tempo trattato da tardivo")
+
+    def test_Va_tardivo_senza_niente_da_versare_non_scrive_un_bonifico_vuoto(self):
+        b = self._banco_di(_thc.TestGaraSweeperConferma)
+        b._scaduto_con_corpo("R315Z", {"host_id": "h_race", "netto_host_cents": 0,
+                                       "valuta": "EUR"})
+        b.r._conferma_pagamento("R315Z")
+        self.assertEqual(b.pp.info("R315Z")["stato"], "pagato")            # premessa
+        self.assertIsNone(b.sys.payout.info("R315Z"), "bonifico da zero scritto all'host")
+
+    class _Inv:
+        """Inventario finto: dice lo stato del blocco vecchio e annota cosa gli si chiede."""
+
+        def __init__(self, stato=None, guasto=False):
+            self.rilasci, self.blocchi, self._guasto = [], [], guasto
+            if stato is not None:
+                self.stato_blocco = lambda chiave: stato
+
+        def rilascia(self, alloggio_id, check_in, check_out, *, idem_key):
+            self.rilasci.append((alloggio_id, check_in, check_out, idem_key))
+
+        def blocca(self, alloggio_id, check_in, check_out, *, idem_key, origine):
+            if self._guasto:
+                raise RuntimeError("inventario guasto")
+            self.blocchi.append((alloggio_id, idem_key, origine))
+            return types.SimpleNamespace(ok=True)
+
+    def test_Ve_si_libera_solo_il_blocco_ancora_occupato_di_questa_prenotazione(self):
+        rec = {"alloggio_id": "casa", "check_in": "2027-01-01", "check_out": "2027-01-03"}
+        for vecchio, stato, liberato in (("hold_R", "occupato", True),
+                                         ("hold_R", "rilasciato", False),
+                                         ("hold_R", "assente", False),
+                                         ("hold_R", None, False),        # senza stato_blocco
+                                         ("", "occupato", False),
+                                         (None, "occupato", False),
+                                         ("reblock:R", "occupato", False)):  # e' gia' la nuova
+            with self.subTest(vecchio=vecchio, stato=stato):
+                inv = self._Inv(stato)
+                r = dict(rec) if vecchio is None else dict(rec, idem_key=vecchio)
+                esito = RouterHTTP._riblocca_tardivo(inv, r, "reblock:R", "pagamento_tardivo")
+                self.assertIs(getattr(esito, "ok", None), True)
+                self.assertEqual(inv.rilasci, [("casa", "2027-01-01", "2027-01-03", "hold_R")]
+                                 if liberato else [])
+                self.assertEqual(inv.blocchi, [("casa", "reblock:R", "pagamento_tardivo")])
+        self.assertIsNone(RouterHTTP._riblocca_tardivo(None, rec, "reblock:R", "x"))
+        self.assertIsNone(RouterHTTP._riblocca_tardivo(self._Inv("occupato", guasto=True),
+                                                       dict(rec, idem_key="hold_R"),
+                                                       "reblock:R", "x"))
+
+    def test_RV3_senza_cambio_il_grido_dice_quanto_e_in_che_moneta(self):
+        b = self._banco_di(_trg.TestIRegaliNonSuperanoLaCommissione)
+        fc = b._con_giornale()
+        b._annuncio_in_yen(1700, _trg._TassiFinti(170))
+        b._conferma()
+        b.sys.tassi = _trg._TassiFinti(None)
+        r = RouterHTTP.__new__(RouterHTTP)
+        r._sys = b.sys
+        yen, euro = r._fmt_importo(1700, "JPY"), r._fmt_importo(1700, "EUR")
+        self.assertNotEqual(yen, euro, "premessa: le due monete si scrivono diverse")
+        with self.assertLogs("core_auto", level="ERROR") as reg:
+            b._rendi_yen(fc)
+        gridi = [x.getMessage() for x in reg.records if "credito_non_reso" in x.getMessage()]
+        self.assertEqual(len(gridi), 1, reg.output)
+        self.assertIn("cambio non disponibile", gridi[0])
+        self.assertIn(yen, gridi[0], "lo sconto da rendere a mano va scritto nella sua moneta")
+
+    def test_RV2_la_riga_dello_sconto_gia_scritta_ferma_un_secondo_sconto(self):
+        """D19: la prima difesa contro lo sconto doppio e' la commissione gia' regalata
+        (`_commissione_regalabile`); la seconda e' la riga `sconto_commissione` gia' nel
+        giornale. Qui la prima si toglie a mano (regalabile sempre 500) e si guarda la seconda
+        da sola, nelle due direzioni: riga scritta -> nessuno sconto; riga assente o giornale
+        spento -> lo sconto si fa."""
+        for finanza, scritta, scontato in ((True, True, False), (True, False, True),
+                                           (False, None, True)):
+            with self.subTest(finanza=finanza, scritta=scritta):
+                r = RouterHTTP.__new__(RouterHTTP)
+                r._sys = types.SimpleNamespace(finanza=types.SimpleNamespace(
+                    esiste_evento=lambda e, s=scritta: s and e == "sconto_commissione:R-315S")
+                    if finanza else None)
+                applicati, righe = [], []
+                r._commissione_regalabile = lambda dj: 500
+                r._applica_credito_host = lambda *a, _a=applicati: _a.append(a) or 120
+                r._giornale = lambda _r=righe, **k: _r.append(k)
+                r._credito_host_al_pagamento("R-315S", {"host_id": "H-315", "corpo_json": "{}"})
+                self.assertEqual(len(applicati), 1 if scontato else 0, applicati)
+                self.assertEqual([(k["evento_id"], k["importo_cents"], k["soggetto"], k["valuta"])
+                                  for k in righe],
+                                 [("sconto_commissione:R-315S", 120, "host:H-315", "EUR")]
+                                 if scontato else [])
+
+    def test_RV3_il_grido_del_credito_non_reso_non_scrive_righe_finte_nel_registro(self):
+        """PROTON, compito 24 (14/11): nel grido «credito_non_reso» l'host (dal giornale) e la
+        moneta (dal corpo salvato della richiesta) entravano nudi nel registro, come l'host di
+        #236/#237 nel pezzo 2: un a-capo dentro fabbrica una riga nuova che il Guardiano legge."""
+        r = RouterHTTP.__new__(RouterHTTP)
+        r._sys = types.SimpleNamespace(
+            viral=None, pagamenti_pendenti=types.SimpleNamespace(
+                info=lambda rif: {"corpo_json": json.dumps({"valuta": "EUR\nVALUTA FINTA"})}))
+        fc = types.SimpleNamespace(movimenti=lambda rif: [
+            {"tipo": "sconto_commissione", "soggetto": "host:H-1\nCREDITO FINTO",
+             "importo_cents": 100}])
+        with self.assertLogs("core_auto", level="ERROR") as reg:
+            r._rendi_credito_referral("R-315L", fc)
+        gridi = [x.getMessage() for x in reg.records]
+        self.assertEqual(len(gridi), 1, reg.output)
+        self.assertIn("cambio non disponibile", gridi[0], "premessa: il ramo del grido col cambio")
+        self.assertNotIn("\n", gridi[0], "un a-capo da fuori e' arrivato nel registro")
+        self.assertIn("H-1\\nCREDITO FINTO", gridi[0], "l'host si deve ancora leggere")
+        self.assertIn("VALUTA FINTA", gridi[0])
+
+    def test_RV3_lo_sconto_del_credito_non_scrive_righe_finte_nel_registro(self):
+        """Revisione differenziale del pezzo 3 (14/11), variante del grido qui sopra: in
+        `_applica_credito_host` l'host entrava nudo in tre righe del registro (niente cambio,
+        credito perso, credito scalato). L'host_id non nasce solo «h_» + esadecimale (fase88):
+        con la chiave dell'operatore `_host_pubblica` lo prende dal corpo della richiesta, e
+        l'import degli annunci (fase77) lo prende dal file (PROTON, compito 25): un a-capo nel
+        mezzo arriva fin qui. Qui lo si costruisce a mano, una riga alla volta."""
+        host = "h_1\nCREDITO FINTO"
+        for marca, valore, aumentato in (("cambio_non_disponibile", None, None),
+                                         ("CREDITO REFERRAL PERSO", 1, False),
+                                         ("Credito referral scalato", 1, True)):
+            with self.subTest(marca=marca):
+                r = RouterHTTP.__new__(RouterHTTP)
+                r._sys = types.SimpleNamespace(
+                    viral=types.SimpleNamespace(usa_credito=lambda h, c: {"scontato_cents": 50}),
+                    payout=types.SimpleNamespace(aumenta_payout=lambda rif, c, _a=aumentato: _a))
+                r._valore_del_credito = lambda corpo, _v=valore: _v
+                with self.assertLogs("core_auto", level="INFO") as reg:
+                    r._applica_credito_host("R-315H", host, 500, {})
+                gridi = [x.getMessage() for x in reg.records if marca in x.getMessage()]
+                self.assertEqual(len(gridi), 1, reg.output)
+                self.assertNotIn("\n", gridi[0], "un a-capo da fuori e' arrivato nel registro")
+                self.assertIn("h_1\\nCREDITO FINTO", gridi[0], "l'host si deve ancora leggere")
+
+    def test_RV3_un_guasto_nel_rendere_il_credito_grida_con_la_sua_causa(self):
+        r = RouterHTTP.__new__(RouterHTTP)
+        r._sys = types.SimpleNamespace()
+
+        class _Guasto(Exception):
+            pass
+
+        def movimenti(rif):
+            raise _Guasto("giornale illeggibile")
+        with self.assertLogs("core_auto", level="ERROR") as reg:
+            r._rendi_credito_referral("R-315G", types.SimpleNamespace(movimenti=movimenti))
+        self.assertEqual(len(reg.records), 1, reg.output)
+        self.assertIn("credito_non_reso", reg.records[0].getMessage())
+        self.assertIsNotNone(reg.records[0].exc_info, "il grido ha perso la sua causa")
+        # PROTON (compito 25, G36): con exc_info=False la riga sotto esplodeva (TypeError) invece
+        # di fallire: il guasto era preso per errore, non per asserzione.
+        self.assertIsInstance(reg.records[0].exc_info, tuple, "il grido ha perso la sua causa")
+        self.assertIs(reg.records[0].exc_info[0], _Guasto)
+
+    # ── la famiglia dell'host nel registro (14/11, «autorizzato tutta la famiglia») ─────
+    # La guardia di tutta la famiglia e' strutturale (test_pipeline_ci,
+    # TestIlCodiceDellHostNonEntraNudoNelRegistro). Qui i tre gridi che il giudice vede per
+    # le righe toccate: la causa (exc_info) e i «-» al posto dei campi vuoti.
+
+    class _GuastoVies(Exception):
+        pass
+
+    def _router_vies(self, vies):
+        registrati = []
+        r = RouterHTTP.__new__(RouterHTTP)
+        r._sys = types.SimpleNamespace(vies=vies, registro_host=types.SimpleNamespace(
+            info_host=lambda h: {"partita_iva": "IT01234567890", "paese": "IT"},
+            registra_verifica_piva=lambda *a: registrati.append(a)))
+        return r, registrati
+
+    def test_VIES_un_guasto_grida_con_la_sua_causa_e_la_riga_dice_cosa_manca(self):
+        def vies(numero, paese):
+            raise self._GuastoVies("VIES irraggiungibile")
+        r, registrati = self._router_vies(vies)
+        with self.assertLogs("core_auto", level="WARNING") as reg:
+            self.assertEqual(r._verifica_partita_iva("h_1\nRIGA FINTA"), "errore")
+        gridi = [x for x in reg.records if x.levelno == logging.ERROR]
+        self.assertEqual(len(gridi), 1, reg.output)
+        self.assertIsInstance(gridi[0].exc_info, tuple, "il grido del VIES ha perso la causa")
+        self.assertIs(gridi[0].exc_info[0], self._GuastoVies)
+        riga = [x.getMessage() for x in reg.records if "PARTITA IVA AL VIES" in x.getMessage()]
+        self.assertEqual(len(riga), 1, reg.output)
+        self.assertIn("| PROVA: - |", riga[0])
+        self.assertIn("| MOTIVO: eccezione", riga[0])
+        for m in [x.getMessage() for x in reg.records]:
+            self.assertNotIn("\n", m, "un a-capo dell'host e' arrivato nel registro")
+        self.assertIn("h_1\\nRIGA FINTA", riga[0])
+        self.assertEqual([a[2] for a in registrati], ["errore"])
+
+    def test_VIES_la_riga_scrive_la_prova_vera_e_il_trattino_al_posto_del_motivo_vuoto(self):
+        r, _ = self._router_vies(lambda n, p: {"esito": "valida", "prova": "N-42",
+                                               "nome": "B&B", "motivo": ""})
+        with self.assertLogs("core_auto", level="WARNING") as reg:
+            self.assertEqual(r._verifica_partita_iva("h_2"), "valida")
+        riga = [x.getMessage() for x in reg.records if "PARTITA IVA AL VIES" in x.getMessage()]
+        self.assertEqual(len(riga), 1, reg.output)
+        self.assertIn("| PROVA: N-42 |", riga[0])
+        self.assertTrue(riga[0].endswith("| MOTIVO: -"), riga[0])
+
+    def test_PREMIO_REFERRAL_un_guasto_grida_con_la_causa_e_un_premio_scrive_host_puliti(self):
+        cfg = types.SimpleNamespace(referral_soglia_prenotazioni=3, referral_premio_cents=4000)
+        pd = types.SimpleNamespace(conta_pagati=lambda h: 3)
+
+        def esplode(h, premio_cents):
+            raise self._GuastoVies("archivio referral illeggibile")
+        r = RouterHTTP.__new__(RouterHTTP)
+        r._sys = types.SimpleNamespace(viral=types.SimpleNamespace(qualifica_referee=esplode),
+                                       config=cfg)
+        with self.assertLogs("core_auto", level="ERROR") as reg:
+            r._forse_qualifica_referral("h_3\nRIGA FINTA", pd)
+        self.assertEqual(len(reg.records), 1, reg.output)
+        self.assertIsInstance(reg.records[0].exc_info, tuple, "il grido ha perso la causa")
+        self.assertIs(reg.records[0].exc_info[0], self._GuastoVies)
+        self.assertNotIn("\n", reg.records[0].getMessage())
+        r._sys.viral = types.SimpleNamespace(
+            qualifica_referee=lambda h, premio_cents: {"ok": True, "referente_id": "h_R\nFINTO"})
+        with self.assertLogs("core_auto", level="INFO") as reg:
+            r._forse_qualifica_referral("h_3\nRIGA FINTA", pd)
+        premi = [x.getMessage() for x in reg.records if "Referral qualificato" in x.getMessage()]
+        self.assertEqual(len(premi), 1, reg.output)
+        self.assertNotIn("\n", premi[0])
+        self.assertIn("h_3\\nRIGA FINTA", premi[0])
+        self.assertIn("h_R\\nFINTO", premi[0])
+
+    def test_REGISTRAZIONE_la_prova_dei_consensi_fallita_grida_con_la_sua_causa(self):
+        router = crea_router(_sistema(), host_key="operatore")
+        self.assertIsNotNone(getattr(router._sys, "accettazioni", None), "premessa")
+
+        def esplode(*a, **k):
+            raise self._GuastoVies("prova firmata non scrivibile")
+        router._registra_consensi = esplode
+        with self.assertLogs("core_auto", level="ERROR") as reg:
+            s, c = router.gestisci("POST", "/api/host/registrazione", body=json.dumps(
+                {"email": "consensi@bnb.it", "password": "passwordlunga",
+                 "accetta_termini": True, "accetta_clausole": True, "accetta_privacy": True,
+                 "ragione_sociale": "B&B Consensi"}))
+        self.assertEqual(s, 201, c)
+        gridi = [x for x in reg.records if "accettazione contratto FALLITA" in x.getMessage()]
+        self.assertEqual(len(gridi), 1, reg.output)
+        self.assertIsInstance(gridi[0].exc_info, tuple, "il grido ha perso la causa")
+        self.assertIs(gridi[0].exc_info[0], self._GuastoVies)
+        self.assertIn(c["host_id"], gridi[0].getMessage())
 
 
 if __name__ == "__main__":

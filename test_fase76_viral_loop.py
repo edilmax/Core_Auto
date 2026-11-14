@@ -145,6 +145,28 @@ class TestRobustezza(unittest.TestCase):
                 self.fail(f"sollevato su {bad!r}: {ex}")
 
 
+class TestRendiCredito(unittest.TestCase):
+    """PR #315 (pezzo 3), job `caselle` del 14/11 su bb014a7: `rendi_credito` (il credito
+    referral che torna all'host su un rimborso totale) aveva le prove solo in file che il
+    giudice non accende. Il valore di ritorno dice al chiamante se ha accreditato ADESSO."""
+
+    def test_PR315_rende_una_volta_sola_e_lo_dice(self):
+        e = _eng()
+        self.assertIs(e.rendi_credito("host1", 700, "reso:R1"), True)
+        self.assertEqual(e.credito_disponibile("host1"), 700)
+        self.assertIs(e.rendi_credito("host1", 700, "reso:R1"), False, "un retry non raddoppia")
+        self.assertEqual(e.credito_disponibile("host1"), 700)
+        self.assertIs(e.rendi_credito("host1", 300, "reso:R2"), True, "un altro motivo si rende")
+        self.assertEqual(e.credito_disponibile("host1"), 1000)
+
+    def test_PR315_un_importo_non_valido_non_rende_niente(self):
+        e = _eng()
+        for cattivo in (0, -5, True, 2.5, "700", None):
+            with self.subTest(importo=cattivo):
+                self.assertIs(e.rendi_credito("host1", cattivo, "reso:%r" % (cattivo,)), False)
+        self.assertEqual(e.credito_disponibile("host1"), 0)
+
+
 class TestStress(unittest.TestCase):
     def test_referee_concorrenti_10x(self):
         for rip in range(10):

@@ -55,8 +55,10 @@ _AMMESSI = _sorgenti_ammesse()
 # fase181) -- tutti attraverso `blocco_della_carta`, mai a mano.
 # `blocco_rimborso_dovuto_cents` (voce 143): quanto spetta all'ospite che ha cancellato se il
 # blocco risulta poi INCASSATO; lo scrive la cancellazione, lo legge il giro orario.
+# `pagamento_tardivo` (PR6, 8/11) non riguarda la carta: e' il segno del giro di un pagamento
+# tardivo (da_finire -> payout_scritto -> finito), scritto con lo stesso `segna_blocco`.
 CAMPI_BLOCCO = ("blocco_pi", "blocco_incassa_dal_ts", "blocco_incassato_ts",
-                "blocco_annullato_ts", "blocco_rimborso_dovuto_cents")
+                "blocco_annullato_ts", "blocco_rimborso_dovuto_cents", "pagamento_tardivo")
 
 
 def blocco_della_carta(corpo: Any) -> Dict[str, Any]:
@@ -149,7 +151,10 @@ class PagamentiPendenti:
                         pass
                 # colonne INTEGER separate (promemoria check-in / invito recensione inviati;
                 # `cancellata_ts`: quando l'host ha cancellato, l'ordine di `cancellate_host`)
-                for _c in ("promemoria_ts", "invito_recensione_ts", "cancellata_ts"):
+                # `scadenza_da_finire` (V-e, 10/11): 1 dal CAS 'scaduto' fino a quando lo
+                # sweeper ha finito i passi (date, garanzia, payout, credito, email)
+                for _c in ("promemoria_ts", "invito_recensione_ts", "cancellata_ts",
+                           "scadenza_da_finire"):
                     try:
                         con.execute("ALTER TABLE pendenti ADD COLUMN %s INTEGER NOT NULL DEFAULT 0" % _c)
                     except sqlite3.OperationalError:
@@ -165,7 +170,8 @@ class PagamentiPendenti:
                 "idem_key": r["idem_key"], "tassa_cents": int(r["tassa_cents"]),
                 "comune": r["comune"], "stato": r["stato"], "scadenza_ts": int(r["scadenza_ts"]),
                 "host_id": g("host_id"), "email": g("email"),
-                "quote_token": g("quote_token"), "corpo_json": g("corpo_json")}
+                "quote_token": g("quote_token"), "corpo_json": g("corpo_json"),
+                "creato_ts": int(g("creato_ts", 0) or 0)}
 
     def registra(self, riferimento: Any, *, alloggio_id: str, check_in: str, check_out: str,
                  idem_key: str = "", tassa_cents: int = 0, comune: str = "",
@@ -464,10 +470,24 @@ class PagamentiPendenti:
                     return None
                 if r["stato"] not in _AMMESSI["pagato"]:
                     return self._riga(r)      # pagato/cancellata/...: nessuna scrittura
+                corpo = r["corpo_json"]
+                if r["stato"] == "scaduto":
+                    # PR6 (8/11): pagamento TARDIVO. Il segno nasce nella STESSA scrittura di
+                    # 'pagato': se il processo muore prima del riblocco, il ritentativo di
+                    # Stripe lo legge e rifa' il giro (fase83). Il CAS confronta anche il corpo:
+                    # un'altra scrittura nel mezzo fa rileggere, non si perde.
+                    try:
+                        dj = json.loads(corpo or "{}")
+                        dj = dj if isinstance(dj, dict) else {}
+                    except Exception:
+                        dj = {}
+                    dj["pagamento_tardivo"] = "da_finire"
+                    corpo = json.dumps(dj, ensure_ascii=False)
                 with con:
                     cur = con.execute(
-                        "UPDATE pendenti SET stato='pagato' WHERE riferimento=? AND stato=?",
-                        (riferimento, r["stato"]))
+                        "UPDATE pendenti SET stato='pagato', corpo_json=? WHERE riferimento=? "
+                        "AND stato=? AND corpo_json IS ?",
+                        (corpo, riferimento, r["stato"], r["corpo_json"]))
                 if cur.rowcount:
                     return self._riga(r)      # CAS vinto: r = lo stato PRECEDENTE, esatto
                 # CAS perso: lo stato è cambiato tra lettura e scrittura (es. lo sweeper
@@ -563,9 +583,33 @@ class PagamentiPendenti:
                     # entra nel testo della query, i valori viaggiano come parametri nella
                     # riga dopo. `ruff.toml` prescrive di guardare gli S608 uno per uno
                     # invece di ignorarli in blocco: questo e' stato guardato.
-                    "UPDATE pendenti SET stato='scaduto' WHERE riferimento=? AND "  # nosec B608  # noqa: S608
+                    "UPDATE pendenti SET stato='scaduto', scadenza_da_finire=1 "  # nosec B608  # noqa: S608
+                    "WHERE riferimento=? AND "
                     "stato IN (%s)" % ",".join("?" * len(_AMMESSI["scaduto"])),
                     (riferimento,) + _AMMESSI["scaduto"])
+            return bool(cur.rowcount)
+        finally:
+            con.close()
+
+    def scaduti_da_finire(self) -> List[Dict[str, Any]]:
+        """V-e (10/11): 'scaduto' col segno ancora acceso = lo sweeper e' morto dopo il CAS e
+        prima dei passi. Il giro dopo li finisce."""
+        con = self._apri()
+        try:
+            righe = con.execute("SELECT * FROM pendenti WHERE stato='scaduto' AND "
+                                "scadenza_da_finire=1").fetchall()
+            return [self._riga(r) for r in righe]
+        finally:
+            con.close()
+
+    def scadenza_finita(self, riferimento: Any) -> bool:
+        if not (isinstance(riferimento, str) and riferimento):
+            return False
+        con = self._apri()
+        try:
+            with con:
+                cur = con.execute("UPDATE pendenti SET scadenza_da_finire=0 WHERE riferimento=?",
+                                  (riferimento,))
             return bool(cur.rowcount)
         finally:
             con.close()

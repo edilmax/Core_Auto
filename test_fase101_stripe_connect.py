@@ -15,6 +15,7 @@ from fase101_stripe_connect import (STRIPE_URL, ProviderConnect, ProviderStripeC
                                     _esito_sconosciuto, _intero_pos, costruisci_params,
                                     crea_provider_stripe_connect)
 
+CHIAVE_FINTA = "sk_test_x"   # nessuna rete: la chiave non arriva mai a Stripe
 DATI = {"prezzo_guest_cents": 11200, "commissione_cents": 1500,
         "host_account": "acct_123", "riferimento": "REF1", "valuta": "usd"}
 
@@ -680,6 +681,36 @@ class TestPilastroZero_IlBonificoAllHostNonSiPagaDueVolte(unittest.TestCase):
         stripe = _StripeLista(post=_http(500), esegue=True)
         self.assertEqual(ProviderConnect("sk", fetch=stripe).trasferisci("acct_1", 100, "eur", ""),
                          "")
+
+    def test_PR5_il_bonifico_si_cerca_dal_giorno_della_prenotazione(self):
+        """Campagna 8/11: oltre 1000 bonifici a un host la ricerca dall'inizio dice «non so» per
+        sempre, e i soldi restano fermi. Un bonifico non e' piu' vecchio della sua prenotazione."""
+        s = _StripeLista()
+        p = ProviderConnect("sk", fetch=s)
+        p.da_quando = lambda rif: 1700000000 if rif == "R" else 0
+        self.assertEqual(p.bonifico_di("acct_1", "R"), {"ok": True, "bonifico": None})
+        q = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(s.letture[0]).query))
+        self.assertEqual(q.get("created[gte]"), "1700000000")
+        for nome, da_quando in (("data assente", lambda rif: 0),
+                                ("lettura esplosa", lambda rif: 1 // 0)):
+            with self.subTest(nome):
+                s = _StripeLista()
+                p = ProviderConnect("sk", fetch=s)
+                p.da_quando = da_quando
+                self.assertTrue(p.bonifico_di("acct_1", "R")["ok"])
+                self.assertNotIn("created", s.letture[0], "senza data si cerca dall'inizio")
+
+    def test_PR5_il_sistema_cabla_la_data_della_prenotazione(self):
+        import tempfile
+
+        from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
+        d = tempfile.mkdtemp()
+        sis = crea_sistema(ConfigCasaVIP(abilitato=True, segreto_hmac=b"S" * 32,
+                                         db_pendenti=d + "/p.db", stripe_secret_key=CHIAVE_FINTA))
+        self.assertTrue(sis.pagamenti_pendenti.registra(
+            "R-PR5", alloggio_id="casa", check_in="2027-01-01", check_out="2027-01-03"))
+        creato = sis.pagamenti_pendenti.info("R-PR5")["creato_ts"]
+        self.assertEqual(sis.connect.da_quando("R-PR5"), creato - 86400)
 
     def test_bonifico_di_chiede_il_conto_giusto_e_dice_non_so_quando_non_e_sicuro(self):
         for chiave, acct, rif in (("", "acct_1", "R"), ("sk", "cus_1", "R"), ("sk", None, "R"),

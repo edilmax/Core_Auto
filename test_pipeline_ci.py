@@ -8897,6 +8897,390 @@ class TestLaPuliziaDelRegistroDEVEESSEREVISIBILEACHIANALIZZA(unittest.TestCase):
                     "il riferimento ripulito supera i 64 caratteri dichiarati: %r" % (uscita,))
 
 
+class TestIlCodiceDellHostNonEntraNudoNelRegistro(unittest.TestCase):
+    """🔬 LA FAMIGLIA INTERA, NON LA RIGA CHE QUALCUNO HA VISTO.
+
+    **Il fatto, 2026-11-14 (PR #315, pezzo 3).** PROTON ha trovato un grido del registro che
+    scriveva l'host nudo; la revisione differenziale ne ha trovati altri tre poco sotto; il
+    variant-analysis ne ha contati 32 in sei moduli. Riparare le righe una alla volta, quando
+    qualcuno le nota, e' il modo in cui la famiglia torna: la prossima riga nuova nasce nuda.
+
+    ⛔ **L'host_id NON e' un dato nostro e basta** (PROTON, compito 25, verificato): con la
+    chiave dell'operatore `_host_pubblica` lo prende dal corpo della richiesta, e l'import degli
+    annunci (fase77) dal file, filtrato solo sui bordi. Un a-capo nel mezzo arriva nel
+    registro, dove il Guardiano (fase186) cerca i guasti sui soldi, e fabbrica una riga finta.
+
+    Qui si pretende, su TUTTI i file del prodotto: ogni argomento di una chiamata al registro
+    (messaggio compreso) che nomina il codice di un host passa da un filtro
+    (`_testo_per_registro`, `_rif_per_registro`, `_riga_registro`, `_mascherato`, chiamati
+    per nome e non come metodo di qualcos'altro) o da una catena di `.replace` che toglie SIA
+    «\\n» SIA «\\r» (i lettori del registro aprono il file in modo testo e dividono anche su
+    «\\r»: misurato da PROTON). Guarda l'albero sintattico, non il testo (S6).
+    Le porte chiuse dopo il controllo di PROTON (compito 26), ognuna col suo caso nella prova
+    di autocontrollo: il messaggio composto sul posto; `logger.log(livello, ...)`; un alias del
+    registro senza «log» nel nome; il `.replace` del solo «\\n»; il nome ripulito DOPO la
+    riga; il nome ripulito dentro una funzione annidata; un metodo che si chiama come un filtro.
+    ⚠️ LIMITE DICHIARATO (D18 punto 3): riconosce l'host dal NOME (`host`, `host_id`, `hid`,
+    `_hid`, `referente_id`, anche come chiave o `getattr`). Un host passato con un altro nome
+    (`x`, `soggetto`, `acct`) non lo vede; non segue il dato fra funzioni; un messaggio
+    composto in una variabile PRIMA della chiamata (`m = "..." % host_id; logger.info(m)`)
+    non lo vede.
+    """
+
+    NOMI_HOST = frozenset({"host", "host_id", "hid", "_hid", "referente_id"})
+    FILTRI = frozenset({"_testo_per_registro", "_rif_per_registro", "_riga_registro",
+                        "_mascherato"})
+    NUMERICI = frozenset({"len", "int", "float", "bool"})
+    LIVELLI = frozenset({"debug", "info", "warning", "warn", "error", "critical", "exception",
+                         "log"})
+    A_CAPO = ("\n", "\r\n")
+    # (file, funzione, espressione) -> perche' quel nome NON e' il codice di un host.
+    # Ogni voce deve esistere ancora (test sotto): un'esclusione rimasta orfana e' una porta.
+    ESCLUSI = {
+        ("fase83_server.py", "servi", "host"):
+            "indirizzo di ascolto del server, dalla riga di comando, non un host_id",
+        ("fase83_server.py", "_admin_search", "out['totali']['host']"):
+            "un conteggio scritto con %d, non un identificativo",
+    }
+
+    @classmethod
+    def _file_del_prodotto(cls):
+        import glob
+        nomi = sorted(os.path.basename(p) for p in glob.glob(os.path.join(QUI, "fase*.py")))
+        return nomi + ["main_casavip.py"]
+
+    @classmethod
+    def _nudo(cls, n, pulite):
+        """True se l'espressione `n` porta nel registro il codice di un host senza filtro.
+        `pulite`: nomi assegnati nella funzione SOLO da espressioni filtrate."""
+        import ast
+        if isinstance(n, (ast.ListComp, ast.SetComp, ast.GeneratorExp, ast.DictComp)):
+            # ⛔ (PROTON, compito 28) `', '.join(hid for hid in righe)`: la variabile della
+            # comprensione e' un nome NUOVO, nudo anche se fuori c'era un `hid` ripulito.
+            legati = {x.id for g in n.generators for x in ast.walk(g.target)
+                      if isinstance(x, ast.Name)}
+            pulite = frozenset(pulite) - legati
+        if isinstance(n, ast.Call):
+            f = n.func
+            nome = f.id if isinstance(f, ast.Name) else (f.attr if isinstance(f, ast.Attribute)
+                                                         else "")
+            # un filtro vale solo chiamato PER NOME: `self.x._rif_per_registro(...)` e' un
+            # metodo qualunque che si chiama cosi', e nessuno ha provato che filtri
+            if isinstance(f, ast.Name) and (nome in cls.FILTRI or nome in cls.NUMERICI):
+                return False
+            primo = n.args[0] if n.args else None
+            if nome == "replace" and cls._catena_pulita(n):
+                return False
+            if nome == "getattr" and len(n.args) >= 2 and isinstance(n.args[1], ast.Constant) \
+                    and n.args[1].value in cls.NOMI_HOST:
+                return True
+            if nome == "get" and isinstance(primo, ast.Constant) and primo.value in cls.NOMI_HOST:
+                return True
+        if isinstance(n, ast.Name) and n.id in cls.NOMI_HOST:
+            return n.id not in pulite
+        if isinstance(n, ast.Attribute) and n.attr in cls.NOMI_HOST:
+            return True
+        if isinstance(n, ast.Subscript):
+            # 3.8 avvolge la chiave in `Index`; dal 3.9 la chiave e' il nodo stesso (e un
+            # `Constant` ha anche lui un `.value`: non si legge con getattr alla cieca).
+            chiave = n.slice.value if type(n.slice).__name__ == "Index" else n.slice
+            if isinstance(chiave, ast.Constant) and chiave.value in cls.NOMI_HOST:
+                return True
+        return any(cls._nudo(c, pulite) for c in ast.iter_child_nodes(n))
+
+    @classmethod
+    def _catena_pulita(cls, n):
+        """Una catena di `.replace(costante, ...)` che parte da `n` e scende: pulita solo se
+        toglie SIA «\\n» (o «\\r\\n» E «\\n») SIA «\\r». Il solo «\\n» lascia il «\\r», su cui
+        i lettori del registro (file aperto in modo testo) dividono la riga lo stesso."""
+        import ast
+        tolti = set()
+        while isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) \
+                and n.func.attr == "replace" and len(n.args) >= 2 \
+                and isinstance(n.args[0], ast.Constant) and isinstance(n.args[0].value, str):
+            messo = n.args[1]
+            # ⛔ conta anche CON COSA si sostituisce (PROTON, compito 27): `.replace("\n", "\r")`
+            # sposta l'a-capo, non lo toglie. Il sostituto dev'essere una costante senza a-capo.
+            if not (isinstance(messo, ast.Constant) and isinstance(messo.value, str)
+                    and "\n" not in messo.value and "\r" not in messo.value):
+                return False
+            tolti.add(n.args[0].value)
+            n = n.func.value
+        return "\n" in tolti and "\r" in tolti
+
+    @classmethod
+    def _filtrato(cls, v):
+        """True solo se il valore ESCE da un filtro chiamato per nome o da una catena di
+        `.replace` pulita, anche tagliato (`[:64]`).
+        ⛔ «Non nomina l'host» non basta: `hid = self._host_id_da_token(h)` e
+        `host_id = str(soggetto).partition(":")[2]` sono host anche senza dirlo."""
+        import ast
+        while isinstance(v, ast.Subscript):
+            v = v.value
+        if isinstance(v, ast.Call) and isinstance(v.func, ast.Name) and v.func.id in cls.FILTRI:
+            return True
+        return isinstance(v, ast.Call) and isinstance(v.func, ast.Attribute) \
+            and v.func.attr == "replace" and cls._catena_pulita(v)
+
+    @classmethod
+    def _blocchi_sul_cammino(cls, fz, chiamata):
+        """Gli id delle istruzioni che stanno DIRETTAMENTE in un blocco che contiene la
+        chiamata (il corpo della funzione, e il ramo dell'if/try/for dove la chiamata sta).
+        Un'assegnazione li' e' eseguita per forza prima della chiamata, se le sta sopra."""
+        import ast
+        padre = {}
+        for nodo in ast.walk(fz):
+            for figlio in ast.iter_child_nodes(nodo):
+                padre[id(figlio)] = nodo
+        cammino, n = [], chiamata
+        while n is not fz and id(n) in padre:
+            cammino.append(n)
+            n = padre[id(n)]
+        cammino.append(fz)
+        dentro = set()
+        for nodo in cammino:
+            for campo in ("body", "orelse", "finalbody"):
+                lista = getattr(nodo, campo, None)
+                if isinstance(lista, list) and any(x in cammino for x in lista):
+                    dentro.update(id(x) for x in lista)
+        return dentro
+
+    @classmethod
+    def _assegnazioni(cls, fz, prima_di, chiamata=None):
+        """{nome: [valori]} assegnati nel corpo di `fz` PRIMA della riga `prima_di`, senza
+        scendere nelle funzioni, lambda e classi annidate (hanno nomi loro). Un `for`, un
+        `with ... as`, un `+=` o un `:=` assegnano un valore che nessuno ha filtrato: None.
+        ⛔ Un'assegnazione DENTRO un ramo (if, try, for, while, with) conta None anche se
+        filtrata (PROTON, compito 27): il ramo puo' non essere preso, e allora resta il valore
+        di prima. Vale solo quella scritta in un blocco che CONTIENE la chiamata (lo stesso
+        ramo, o uno che lo racchiude): quella e' eseguita per forza."""
+        import ast
+        visti = {}
+        diretti = (cls._blocchi_sul_cammino(fz, chiamata) if chiamata is not None
+                   else {id(s) for s in fz.body})
+        da_fare = list(ast.iter_child_nodes(fz))
+        while da_fare:
+            a = da_fare.pop()
+            if isinstance(a, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
+                continue
+            da_fare.extend(ast.iter_child_nodes(a))
+            if getattr(a, "lineno", prima_di) >= prima_di:
+                continue
+            coppie = []
+            if isinstance(a, ast.Assign):
+                coppie = [(t, a.value if id(a) in diretti else None) for t in a.targets]
+            elif isinstance(a, ast.AnnAssign):
+                coppie = [(a.target, a.value if id(a) in diretti else None)]
+            elif isinstance(a, (ast.AugAssign, ast.For, ast.AsyncFor)):
+                coppie = [(a.target, None)]
+            elif isinstance(a, ast.withitem) and a.optional_vars is not None:
+                coppie = [(a.optional_vars, None)]
+            elif isinstance(a, ast.NamedExpr):
+                coppie = [(a.target, None)]
+            for t, v in coppie:
+                for nome in [x.id for x in ast.walk(t) if isinstance(x, ast.Name)]:
+                    visti.setdefault(nome, []).append(v if isinstance(t, ast.Name) else None)
+        return visti
+
+    @classmethod
+    def _registri(cls, albero):
+        """I nomi che sono un registro: tutto cio' che ha «log» nel nome, piu' gli alias
+        rifatti finche' ne compaiono di nuovi. Un alias e' un nome O un attributo
+        (`self.registro`) assegnato, anche dentro una tupla (`A, B = logger, None`), da un
+        registro gia' noto, da `logging.root`, o da una chiamata a `getLogger` (anche
+        attraverso `getattr(logging, "getLogger")`). PROTON, compito 27.
+        ⚠️ Un registro passato come PARAMETRO (`def f(reg): reg.error(...)`) non lo vede."""
+        import ast
+        alias = set()
+
+        def e_registro(v):
+            testo = ast.unparse(v)
+            if isinstance(v, ast.Call):
+                return "getLogger" in testo
+            if isinstance(v, (ast.Name, ast.Attribute)):
+                return "log" in testo.lower() or testo in alias
+            return False
+        while True:
+            nuovi = set()
+            for a in ast.walk(albero):
+                if not isinstance(a, ast.Assign):
+                    continue
+                for t in a.targets:
+                    coppie = [(t, a.value)]
+                    if isinstance(t, (ast.Tuple, ast.List)) and isinstance(a.value, (ast.Tuple, ast.List)) \
+                            and len(t.elts) == len(a.value.elts):
+                        coppie = list(zip(t.elts, a.value.elts))
+                    for bersaglio, valore in coppie:
+                        if isinstance(bersaglio, (ast.Name, ast.Attribute)) and e_registro(valore):
+                            nome = ast.unparse(bersaglio)
+                            if nome not in alias:
+                                nuovi.add(nome)
+            if not nuovi:
+                return alias
+            alias |= nuovi
+
+    @classmethod
+    def _scansiona(cls, sorgente, nome_file):
+        """-> (chiamate al registro viste, [(file, riga, funzione, espressione)] nude)."""
+        import ast
+        albero = ast.parse(sorgente, nome_file)
+        alias = cls._registri(albero)
+        funzioni = [f for f in ast.walk(albero)
+                    if isinstance(f, (ast.FunctionDef, ast.AsyncFunctionDef))]
+        viste, nude = 0, []
+        for n in ast.walk(albero):
+            if not (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                    and n.func.attr in cls.LIVELLI):
+                continue
+            ricevente = ast.unparse(n.func.value)
+            if "log" not in ricevente.lower() and ricevente not in alias:
+                continue
+            viste += 1
+            dentro = [f for f in funzioni if f.lineno <= n.lineno <= f.end_lineno]
+            fz = min(dentro, key=lambda f: f.end_lineno - f.lineno) if dentro else None
+            assegnati = cls._assegnazioni(fz, n.lineno, n) if fz else {}
+            pulite = {k for k, vv in assegnati.items()
+                      if vv and all(v is not None and cls._filtrato(v) for v in vv)}
+            # ⛔ ANCHE il primo argomento: un messaggio composto sul posto («...» % host_id,
+            # f-string, .format) porta l'host dentro il testo; una costante non nomina niente.
+            # In `logger.log(livello, ...)` il primo e' il livello: si guarda tutto lo stesso.
+            # Gli argomenti con nome (`exc_info`, `extra`) il formato del registro non li scrive.
+            for arg in n.args:
+                if cls._nudo(arg, pulite):
+                    nude.append((nome_file, arg.lineno, fz.name if fz else "?",
+                                 ast.unparse(arg)))
+        return viste, nude
+
+    @classmethod
+    def setUpClass(cls):
+        cls.letti, cls.viste, cls.nude = 0, 0, []
+        for nome in cls._file_del_prodotto():
+            with io.open(os.path.join(QUI, nome), encoding="utf-8") as f:
+                v, nn = cls._scansiona(f.read(), nome)
+            cls.letti += 1
+            cls.viste += v
+            cls.nude.extend(nn)
+
+    def test_IL_CONTROLLO_HA_GUARDATO_DAVVERO(self):
+        """S1: un controllo che non ha letto niente non dice «pulito», dice «misura non valida»."""
+        self.assertGreater(self.letti, 100, "letti %d file del prodotto" % self.letti)
+        self.assertGreater(self.viste, 500, "viste %d chiamate al registro" % self.viste)
+
+    # Ogni riga che finisce con «# NUDO» la scansione DEVE segnalarla, e nessun'altra.
+    _SORGENTE_NUDO = '''
+import logging
+L = logger
+M = logging.getLogger(__name__)
+def f(host_id, rec, e, out, self):
+    logger.error('a %s', host_id)  # NUDO
+    logger.info('b %s', rec.get('host_id'))  # NUDO
+    logger.info('c %s', getattr(e, 'host_id', '?'))  # NUDO
+    logger.info('d %s', out.get('referente_id'))  # NUDO
+    logger.info('e %s' % host_id)  # NUDO
+    logger.info(f'f {host_id}')  # NUDO
+    logger.info('g {}'.format(host_id))  # NUDO
+    logger.log(logging.ERROR, 'h %s', host_id)  # NUDO
+    L.error('i %s', host_id)  # NUDO
+    M.warning('l %s', host_id)  # NUDO
+    logger.info('m %s', str(host_id).replace('\\n', '\\\\n'))  # NUDO
+    logger.info('n %s', self.x._rif_per_registro(host_id))  # NUDO
+def g(rec, headers, soggetto, self):
+    hid = rec['host_id']
+    logger.warning('o %s', hid)  # NUDO
+    hid = self._host_id_da_token(headers)
+    logger.info('p %s', hid)  # NUDO
+    host_id = str(soggetto).partition(':')[2]
+    logger.info('q %s', host_id)  # NUDO
+def h(hid):
+    logger.error('r %s', hid)  # NUDO
+    hid = _testo_per_registro(hid)
+def k(hid):
+    def dentro(hid):
+        hid = _testo_per_registro(hid)
+        return hid
+    logger.error('s %s', hid)  # NUDO
+def j(righe):
+    for host_id in righe:
+        logger.info('t %s', host_id)  # NUDO
+def c27(host_id, ok, self):
+    logger.info('u %s', host_id.replace('\\r', '').replace('\\n', '\\r'))  # NUDO
+    logger.info('v %s', host_id.replace('\\n', '\\n').replace('\\r', '\\r'))  # NUDO
+    if ok:
+        host_id = _testo_per_registro(host_id)
+    logger.error('w %s', host_id)  # NUDO
+    self.registro = logger
+    self.registro.error('x %s', host_id)  # NUDO
+    R = logging.root
+    R.error('y %s', host_id)  # NUDO
+    A, B = logger, None
+    A.error('z %s', host_id)  # NUDO
+    G = getattr(logging, 'getLogger')('x')
+    G.error('k %s', host_id)  # NUDO
+def c28(hid, righe):
+    hid = _testo_per_registro(hid)
+    logger.error('%s %s', hid, ', '.join(hid for hid in righe))  # NUDO
+'''
+    _SORGENTE_PULITO = '''
+def g(host_id, rec):
+    logger.error('a %s', _testo_per_registro(host_id))
+    logger.info('b %s', str(host_id).replace('\\r\\n', '').replace('\\n', '').replace('\\r', ''))
+    _hid = str(host_id).replace('\\n', '\\\\n').replace('\\r', '\\\\r')[:64]
+    logger.info('c %s', _hid)
+    logger.info('d %d', len(host_id))
+    logger.info('e host %s', 'testo fisso')
+    logger.error('f %s', _rif_per_registro(rec), exc_info=True)
+def h(hid):
+    hid = _testo_per_registro(hid)
+    logger.error('g %s', hid)
+def i(hid, ok):
+    if ok:
+        hid = _testo_per_registro(hid)
+        logger.error('h %s', hid)
+'''
+
+    def test_IL_CONTROLLO_GRIDA_SU_UNA_RIGA_NUDA_E_TACE_SU_QUELLE_PULITE(self):
+        """D18 punto 2: provato nelle due direzioni su sorgenti scritti qui. Ogni porta chiusa
+        dopo il compito 26 di PROTON ha la sua riga «# NUDO»."""
+        attese = [i for i, r in enumerate(self._SORGENTE_NUDO.splitlines(), 1)
+                  if r.endswith("# NUDO")]
+        self.assertEqual(len(attese), 26, "premessa: le righe NUDE del sorgente di prova")
+        trovate = sorted({r for _, r, _, _ in self._scansiona(self._SORGENTE_NUDO, "x.py")[1]})
+        self.assertEqual(trovate, attese)
+        self.assertEqual(self._scansiona(self._SORGENTE_PULITO, "y.py")[1], [])
+
+    def test_I_FILTRI_DI_CUI_SI_FIDA_FILTRANO_DAVVERO(self):
+        """La scansione si fida dei FILTRI per nome: se uno di loro lascia passare un a-capo,
+        ogni riga che lo usa e' nuda e la scansione sopra e' verde per finta. `_mascherato`
+        (fase156) tiene i primi 3 e gli ultimi 2 caratteri: un a-capo li' restava."""
+        import fase156_erasure
+        import fase83_server
+        filtri = {"_testo_per_registro": fase83_server._testo_per_registro,
+                  "_rif_per_registro": fase83_server._rif_per_registro,
+                  "_riga_registro": fase83_server._riga_registro,
+                  "_mascherato": fase156_erasure._mascherato}
+        self.assertEqual(set(filtri), set(self.FILTRI), "un filtro nuovo va provato qui")
+        for nome, filtro in filtri.items():
+            for ingresso in ("a\nb_lungo_quanto_basta\nz", "\r\nh_id_abbastanza_lungo\r\n",
+                             "h\rx_id_abbastanza_lungo\r", "h_1\nRIGA FINTA"):
+                with self.subTest(filtro=nome, ingresso=repr(ingresso)):
+                    uscita = filtro(ingresso)
+                    self.assertNotIn("\n", uscita)
+                    self.assertNotIn("\r", uscita)
+
+    def test_OGNI_ESCLUSIONE_ESISTE_ANCORA(self):
+        viste = {(f, fz, e) for f, _, fz, e in self.nude}
+        for chiave, motivo in self.ESCLUSI.items():
+            with self.subTest(esclusione=chiave):
+                self.assertIn(chiave, viste, "esclusione orfana (%s): va tolta" % motivo)
+
+    def test_NESSUNA_RIGA_DEL_REGISTRO_SCRIVE_IL_CODICE_DELL_HOST_NUDO(self):
+        restano = sorted(x for x in self.nude if (x[0], x[2], x[3]) not in self.ESCLUSI)
+        self.assertEqual(
+            restano, [],
+            "%d righe del registro scrivono il codice di un host senza filtro:\n%s"
+            % (len(restano), "\n".join("  %s:%d %s() %s" % x for x in restano)))
+
+
 class TestLaListaDeiFileESCLUSIDaCodeQL(unittest.TestCase):
     """🚧 UN ELENCO DI ESCLUSIONI E' LA SCAPPATOIA PIU' COMODA CHE ESISTA: qui c'e' il suo
     guardiano.

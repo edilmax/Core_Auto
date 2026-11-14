@@ -227,6 +227,23 @@ class TestDebtStatus(unittest.TestCase):
     def test_PR4_la_penale_non_compensa_se_stripe_non_risponde(self):
         self._penale_con_bonifico_incerto({"ok": False, "motivo": "rete"})
 
+    def test_PR4_anche_la_ripresa_dello_sweeper_non_compensa_un_bonifico_incerto(self):
+        """Revisione 9/11: la seconda strada della penale non aveva una prova sua."""
+        from unittest import mock
+
+        import fase83_server
+        self._pubblica("casa-a")
+        a = self._book_paga("casa-a", giorni=30)
+        netto_a = self.pd.info(a["riferimento"])["minori"]
+        self.fcn.risposte = {a["riferimento"]: {"ok": True, "bonifico": {"id": "tr_x"}}}
+        rec = {"riferimento": "B-RIPRESA", "host_id": self.hid,
+               "corpo_json": json.dumps({"penale_host_cents": 500, "valuta": "EUR"})}
+        with mock.patch.object(fase83_server, "_cancellazione_host_a_meta", return_value=False):
+            fase83_server._riprendi_cancellazione_host(self.sis, self.r, rec)
+        self.assertEqual(self.pd.info(a["riferimento"])["minori"], netto_a,
+                         "penale compensata su soldi forse gia' usciti")
+        self.assertEqual(len(self.fc.debiti_host(self.hid, stato="aperto")), 1)
+
     # ── 6) riscossione LIVE sul payout nuovo (end-to-end) ──────────────────────
     def test_riscossione_live_alla_conferma(self):
         self._pubblica("casa-a")

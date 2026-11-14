@@ -265,7 +265,9 @@ def cancella_attivita_host(sistema: Any, host_id: Any, *, forza: bool = False) -
         # (D19: una difesa non deve dipendere dal comportamento di un altro). Sono due
         # chiamate, ed e' anche la forma che CodeQL riconosce come barriera
         # (`ReplaceLineBreaksSanitizer`, in `LogInjectionCustomizations.qll`).
-        _hid = str(host_id).replace("\r\n", "\\n").replace("\n", "\\n")[:64]
+        # (14/11) anche «\r»: i lettori del registro aprono il file in modo testo e dividono la
+        # riga anche li' (misurato da PROTON, compito 26).
+        _hid = str(host_id).replace("\r\n", "\\n").replace("\n", "\\n").replace("\r", "\\r")[:64]
         logger.critical("ERASURE FORZATA su host con obblighi: %s -> %s", _hid, obblighi)
 
     cat = getattr(sistema, "catalogo", None)
@@ -418,8 +420,11 @@ def cancella_attivita_host(sistema: Any, host_id: Any, *, forza: bool = False) -
 
 def _mascherato(host_id: Any) -> str:
     """Un identificativo sicuro da scrivere nel registro: il registro dell'oblio non deve
-    diventare il posto dove il dato sopravvive."""
-    t = str(host_id or "")
+    diventare il posto dove il dato sopravvive.
+    ⛔ E non puo' contenere a-capo: l'host_id arriva dal CORPO della richiesta (vedi
+    `ERASURE FORZATA` sopra), e i primi 3 e gli ultimi 2 caratteri tenuti in chiaro bastano a
+    fabbricare una riga finta (CodeQL #233 #234). Stessa forma riconosciuta di quella riga."""
+    t = str(host_id or "").replace("\r\n", "\\n").replace("\n", "\\n").replace("\r", "\\r")
     return (t[:3] + "***" + t[-2:]) if len(t) > 6 else "***"
 
 
