@@ -369,6 +369,36 @@ class TestAgganciMoneyPath(_BancoDeiBonifici):
                 self.assertNotIn("payout_manuale", self._tipi(rif))
                 self.assertEqual(stripe.inattesi, [])
 
+    def _debito_nuovo(self, cents=3000):
+        class _SenzaRighe:
+            def elenca(self, *a, **k):
+                return []
+        self.sis.finanza.processa_penale(riferimento="ALTRA", host_id=self.hid, penale_cents=cents,
+                                         valuta="EUR", payout=_SenzaRighe())
+
+    def _dopo_il_timeout_arriva_un_debito(self, rotte):
+        stripe = _StripeDeiBonifici(TimeoutError("The read operation timed out"),
+                                    ricorda_chiavi=False, letture_rotte=rotte)
+        rif, netto = self._bonifico_con(stripe)
+        self.r._trasferisci_all_host(rif, netto)
+        self.assertEqual(len(stripe.bonifici), 1, "premessa: i soldi sono partiti")
+        self.assertEqual(self.sis.payout.stato_di(rif), "maturato", "premessa: esito sconosciuto")
+        self._debito_nuovo()
+        with self.assertLogs("core_auto", level="ERROR") as cattura:
+            self.r._trasferisci_all_host(rif, netto)
+        self.assertIn("bonifico_forse_gia_partito", "\n".join(cattura.output))
+        debito = self.sis.finanza.debiti_host(self.hid)[0]
+        self.assertEqual((debito["stato"], debito["residuo_cents"]), ("aperto", 3000),
+                         "debito riscosso su soldi gia' usciti verso l'host")
+        self.assertEqual((self.sis.payout.info(rif) or {}).get("minori"), netto)
+        self.assertEqual(len(stripe.bonifici), 1)
+
+    def test_PR4_il_debito_non_si_riscuote_su_un_bonifico_gia_partito(self):
+        self._dopo_il_timeout_arriva_un_debito((2,))
+
+    def test_PR4_se_stripe_non_risponde_il_debito_aspetta(self):
+        self._dopo_il_timeout_arriva_un_debito((2, 3))
+
     def test_PILASTRO_ZERO_le_due_direzioni(self):
         """Ferrea 10: le due prove sopra non devono gridare sempre. (a) Entro 24 ore la stessa
         chiave risolve da sola: un solo bonifico. (b) Un RIFIUTO vero (4xx col motivo, niente

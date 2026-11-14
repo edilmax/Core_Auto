@@ -375,6 +375,124 @@ class TestPagaStrutturaE2E(unittest.TestCase):
         self.assertEqual(c.get("rimborso_cents", 0), 0,
                          "fuori ripensamento l'anticipo NON e' rimborsabile: rimborso deve essere 0")
 
+    # ── VA2 e AT8 (8/11): cancellazione dell'ospite interrotta dopo la liberazione delle date ──
+    def _online_pagata(self):
+        import datetime
+        oggi = datetime.date.today()
+        d_in = (oggi + datetime.timedelta(days=10)).isoformat()
+        d_out = (oggi + datetime.timedelta(days=12)).isoformat()
+        self.g("POST", "/api/host/disponibilita_range",
+               {"alloggio_id": "casa", "da": d_in, "a": (oggi + datetime.timedelta(days=14)).isoformat(),
+                "unita_totali": 2, "prezzo_netto_cents": 30000}, {"X-Host-Token": self.tok})
+        _, b = self._prenota(d_in, d_out)
+        self._webhook(b["riferimento"])
+        self.assertEqual(self.sys.pagamenti_pendenti.info(b["riferimento"])["stato"], "pagato")
+        return b
+
+    def _cancella_che_muore(self, b):
+        class _Morto(BaseException):
+            pass
+
+        def muore(*a, **k):
+            raise _Morto()
+
+        self.r._chiudi_blocco = muore
+        try:
+            with self.assertRaises(_Morto):
+                self.g("POST", "/api/concierge/cancella", {"voucher_token": b["voucher_token"]})
+        finally:
+            del self.r._chiudi_blocco
+        self.assertEqual(self.sys.garanzia.stato(b["riferimento"])["stato"], "in_garanzia")  # premessa
+
+    def _cancella(self, b):
+        return self.g("POST", "/api/concierge/cancella", {"voucher_token": b["voucher_token"]})
+
+    def test_VA2_il_nuovo_clic_finisce_la_cancellazione_interrotta(self):
+        b = self._online_pagata()
+        rif = b["riferimento"]
+        self._cancella_che_muore(b)
+        s, c = self._cancella(b)
+        self.assertEqual(s, 200, c)
+        self.assertEqual(c["stato"], "cancellata", c)
+        self.assertGreater(c["rimborso_cents"], 0, c)
+        self.assertEqual(c["credito_viaggio_cents"], 0, c)
+        self.assertNotEqual(self.sys.pagamenti_pendenti.info(rif)["stato"], "pagato")
+        self.assertNotEqual(self.sys.garanzia.stato(rif)["stato"], "in_garanzia")
+        s, c3 = self._cancella(b)
+        self.assertEqual((s, c3["stato"]), (200, "gia_cancellata"), c3)
+
+    def test_VA2_finche_e_a_meta_la_garanzia_non_paga_l_host(self):
+        b = self._online_pagata()
+        rif = b["riferimento"]
+        self._cancella_che_muore(b)
+        with self.assertLogs("core_auto.server", level="ERROR") as reg:
+            self.r._sblocca_garanzie_scadute(ora_ts=int(time.time()) + 10 ** 8)
+        self.assertEqual(self.sys.garanzia.stato(rif)["stato"], "annullato")     # niente all'host
+        self.assertTrue(any("cancellazione_a_meta" in r for r in reg.output), reg.output)
+        s, c = self._cancella(b)                                 # e l'ospite puo' ancora finire
+        self.assertEqual((s, c["stato"]), (200, "cancellata"), c)
+        self.assertGreater(c["rimborso_cents"], 0, c)
+
+    def test_VA2_senza_cancellazione_la_garanzia_si_rilascia(self):
+        b = self._online_pagata()
+        self.r._sblocca_garanzie_scadute(ora_ts=int(time.time()) + 10 ** 8)
+        self.assertEqual(self.sys.garanzia.stato(b["riferimento"])["stato"], "rilasciato")
+
+    def _pagata_in_ritardo(self):
+        import datetime
+        oggi = datetime.date.today()
+        d_in = (oggi + datetime.timedelta(days=20)).isoformat()
+        d_out = (oggi + datetime.timedelta(days=22)).isoformat()
+        self.g("POST", "/api/host/disponibilita_range",
+               {"alloggio_id": "casa", "da": d_in, "a": (oggi + datetime.timedelta(days=24)).isoformat(),
+                "unita_totali": 2, "prezzo_netto_cents": 30000}, {"X-Host-Token": self.tok})
+        _, b = self._prenota(d_in, d_out)
+        rif = b["riferimento"]
+        pp = self.sys.pagamenti_pendenti
+        rec = pp.info(rif)
+        self.assertTrue(pp.scadi(rif))
+        self.sys.inventario.rilascia(rec["alloggio_id"], rec["check_in"], rec["check_out"],
+                                     idem_key=rec["idem_key"])
+        self.r._conferma_pagamento(rif)
+        self.assertEqual(pp.info(rif)["stato"], "pagato")                       # premessa
+        return b
+
+    # ── VA6 e SF1 (8/11): la riga del bonifico dell'host che non nasce deve vedersi ──
+    def _errori_registrati(self, fa):
+        import fase83_server as _srv
+        with mock.patch.object(_srv.logger, "error") as err:
+            fa()
+        return " ".join(str(c.args[0]) for c in err.call_args_list if c.args)
+
+    def _rifiuta_riga(self, nome):
+        vero = getattr(self.sys.payout, nome)
+        self.addCleanup(setattr, self.sys.payout, nome, vero)
+        setattr(self.sys.payout, nome, lambda *a, **k: False)
+
+    def test_VA6_riga_in_attesa_non_scritta_si_vede(self):
+        self._rifiuta_riga("registra_in_attesa")
+        self.assertIn("riga_payout_non_scritta", self._errori_registrati(
+            lambda: self._prenota("2026-09-05", "2026-09-08")))
+
+    def test_VA6_riga_del_pagamento_tardivo_non_scritta_si_vede(self):
+        self._rifiuta_riga("registra_maturato")
+        self.assertIn("riga_payout_non_scritta", self._errori_registrati(self._pagata_in_ritardo))
+
+    def test_VA6_riga_scritta_nessun_allarme(self):
+        self.assertNotIn("riga_payout_non_scritta", self._errori_registrati(self._pagata_in_ritardo))
+
+    def test_AT8_pagata_in_ritardo_non_risulta_cancellazione_a_meta(self):
+        b = self._pagata_in_ritardo()
+        self.assertIs(self.r._cancellazione_ospite_a_meta(b["riferimento"]), False)
+
+    def test_AT8_pagata_in_ritardo_si_cancella_davvero_e_libera_le_date(self):
+        b = self._pagata_in_ritardo()
+        rif = b["riferimento"]
+        s, c = self._cancella(b)
+        self.assertEqual((s, c["stato"]), (200, "cancellata"), c)
+        self.assertGreater(c["rimborso_cents"], 0, c)
+        self.assertEqual(self.sys.inventario.stato_blocco("reblock:" + rif), "rilasciato")
+
     # ── CAMPAGNA SOLDI 8/11 (CP1 e CP2): guardie scritte PRIMA della riparazione (D20) ──
     def _prenota_con_tassa_vicina(self):
         import datetime

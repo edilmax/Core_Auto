@@ -215,6 +215,44 @@ class TestRipristinoAPezziNonPassa(unittest.TestCase):
         self.assertEqual(0, codice, "un pacchetto completo e coerente e' stato RIFIUTATO:\n%s" % uscita)
         self.assertIn("RESTORE OK", uscita)
 
+    def _blocco_acceso(self, d):
+        from fase191_blocco_globale import crea_blocco_globale
+        flag = os.path.join(d, "dest", "blocco_globale.flag")
+        self.assertTrue(os.path.exists(flag), "il ripristino non ha fermato i soldi")
+        self.assertIs(crea_blocco_globale(flag, env_var="BLOCCO_PROVA_PR2").attivo(), True)
+
+    def test_PR2_dopo_il_ripristino_i_soldi_ripartono_fermi(self):
+        """PR2 (8/11): i dati tornano indietro, Stripe no. Il giro orario pagherebbe bonifici
+        su soldi gia' resi: si riparte col blocco globale, lo toglie una persona dopo il confronto."""
+        d, enc = self._pacchetto([("finanza", "20260101-000000")],
+                                 manifesto=["finanza-20260101-000000.db.gz"])
+        codice, uscita = self._restore(d, enc)
+        self.assertEqual(0, codice, uscita)
+        self._blocco_acceso(d)
+        self.assertIn("BLOCCO GLOBALE", uscita, "chi ripristina deve saperlo")
+
+    def test_PR2_il_blocco_vale_anche_per_il_ripristino_parziale(self):
+        d, enc = self._pacchetto([("finanza", "20260101-000000")], manifesto=None)
+        codice, uscita = self._restore(d, enc, parziale=True)
+        self.assertEqual(0, codice, uscita)
+        self._blocco_acceso(d)
+
+    def test_PR2_la_procedura_copia_anche_il_blocco(self):
+        with open(os.path.join(os.path.dirname(DEPLOY), "DEPLOY.md"), encoding="utf-8") as f:
+            testo = f.read()
+        self.assertNotIn("~/RESTORE/*.db", testo, "copiando solo i .db il blocco resta sul PC")
+        self.assertIn("blocco_globale", testo)
+
+    def test_dopo_il_ripristino_l_app_puo_scrivere_nel_volume(self):
+        """Revisione 9/11, misurato in Docker: dati copiati da root in un volume creato a mano,
+        l'app gira come utente `app`: «readonly database» e il blocco non si toglie dal Bunker."""
+        with open(os.path.join(os.path.dirname(DEPLOY), "DEPLOY.md"), encoding="utf-8") as f:
+            copie = f.read().split("scp ~/RESTORE/*")[1:]
+        self.assertEqual(2, len(copie), "le procedure di ripristino sono cambiate: rivedere")
+        for dopo_la_copia in copie:
+            self.assertIn("--user root --entrypoint chown app -R app:app /data",
+                          dopo_la_copia.split(" up -d")[0])
+
     def test_archivi_da_DUE_giri_diversi_vengono_RIFIUTATI(self):
         d, enc = self._pacchetto([("finanza", "20260101-000000"),
                                   ("finanza", "20260102-000000"),

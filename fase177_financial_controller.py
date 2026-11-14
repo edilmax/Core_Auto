@@ -47,6 +47,7 @@ TIPI_GIORNALE = ("nota_debito", "nota_credito", "penale_offset", "penale_incassa
                  # (prima il netto DAC7 veniva letto solo dai bonifici COMPLETATI -> host reportabile
                  #  con payout trattenuto -> netto=0 -> commissioni=lordo pieno = misreport al Fisco).
                  "commissione",
+                 "sconto_commissione",  # DA3: il credito referral abbassa la commissione trattenuta
                  # ── i tre movimenti nati il 2026-08-17, dopo il PRIMO pagamento vero ──
                  # Su una prova da 1,00 EUR incassata e poi rimborsata, il libro dichiarava
                  # cassa **0** e un **ricavo** di 30, mentre il saldo Stripe era **-0,27 EUR**
@@ -98,6 +99,7 @@ _CONTI_MOVIMENTO = {
     "tassa_incassata": ("debiti_vs_host", "debiti_vs_host"),   # memoria: e' denaro dell'host
     "tassa_stornata":  ("debiti_vs_host", "debiti_vs_host"),   # memoria: rimborsata con lui
     "commissione":     ("debiti_vs_host", "ricavi_commissioni"),     # cio' che tratteniamo all'host
+    "sconto_commissione": ("ricavi_commissioni", "debiti_vs_host"),  # quella parte torna all'host
     # ── 2026-08-17: i tre che mancavano, e senza i quali il libro dice il falso ──
     # `costo_gateway`: la commissione che il gestore TRATTIENE sull'incasso. Prima l'`incasso`
     # scriveva il LORDO in cassa mentre in cassa arrivava il netto: la differenza -- soldi veri
@@ -304,6 +306,15 @@ class FinancialController:
         finally:
             con.close()
 
+    @staticmethod
+    def _grida_se_storno_mancato(esito: Any, nota_id: str, pid: Any) -> None:
+        """VA7 (8/11): compensazione scritta, bonifico non ridotto e storno non scritto: il
+        giornale dice che la quota e' stata presa e non e' vero."""
+        if esito is None:
+            logger.error("COMPENSAZIONE NON STORNATA | NOTA: %s | PAYOUT: %s | codice: "
+                         "storno_offset_non_scritto | messaggio: correggere il giornale a mano",
+                         nota_id, pid)
+
     def _storno_partito(self, nota_id: str) -> bool:
         """Lo storno di una nota e' partito se la sua nota di credito ESISTE. La riga di giornale
         non basta: si scrive prima della nota e, se la nota fallisce, la penale resterebbe aperta
@@ -416,6 +427,8 @@ class FinancialController:
                 valuta = m.get("valuta") or valuta
             elif tipo == "commissione":
                 commissione += importo
+            elif tipo == "sconto_commissione":
+                commissione -= importo
         # PY1 (8/11): gia' fatto solo se ci sono TUTTE le righe dovute: se il processo moriva
         # fra le due, la prima faceva da cancello e lo storno della commissione non nasceva piu'
         if (self.esiste_evento("debito_all_ospite:" + riferimento)
@@ -496,6 +509,8 @@ class FinancialController:
                 d["ha_comm"] = True
                 if sog.startswith("host:") and not d["host"]:
                     d["host"] = sog[5:]
+            elif tipo == "sconto_commissione":
+                d["commissione"] -= imp
             elif tipo == "rimborso":
                 d["rimborso"] += imp
         agg: Dict[str, Dict[str, Any]] = {}
@@ -826,14 +841,15 @@ class FinancialController:
                 ok = False
             if not ok:
                 # ledger non allineato: STORNO immediato della riga di offset
-                self.registra(evento_id="storno-offset:%s:%s" % (nota["nota_id"], pid),
-                              tipo="storno", riferimento=riferimento,
-                              soggetto="host:" + host_id,
-                              conto_dare="crediti_vs_host",
-                              conto_avere="debiti_vs_host_payout",
-                              importo_cents=quota, valuta=valuta,
-                              causale="storno offset: ledger payout non aggiornabile",
-                              emittente="sistema")
+                self._grida_se_storno_mancato(
+                    self.registra(evento_id="storno-offset:%s:%s" % (nota["nota_id"], pid),
+                                  tipo="storno", riferimento=riferimento,
+                                  soggetto="host:" + host_id,
+                                  conto_dare="crediti_vs_host",
+                                  conto_avere="debiti_vs_host_payout",
+                                  importo_cents=quota, valuta=valuta,
+                                  causale="storno offset: ledger payout non aggiornabile",
+                                  emittente="sistema"), nota["nota_id"], pid)
                 continue
             residuo -= quota
         offset_tot = imp - residuo           # storico (dal giornale) + nuovi consumi
@@ -1029,14 +1045,15 @@ class FinancialController:
                                    "segue storno)", exc_info=True)
                     ok = False
                 if not ok:
-                    self.registra(evento_id="storno-offset:%s:%s" % (nota_id, pid),
-                                  tipo="storno", riferimento=rif_deb,
-                                  soggetto="host:" + host_id,
-                                  conto_dare="crediti_vs_host",
-                                  conto_avere="debiti_vs_host_payout",
-                                  importo_cents=quota, valuta=valuta,
-                                  causale="storno riscossione: ledger payout non aggiornabile",
-                                  emittente="sistema")
+                    self._grida_se_storno_mancato(
+                        self.registra(evento_id="storno-offset:%s:%s" % (nota_id, pid),
+                                      tipo="storno", riferimento=rif_deb,
+                                      soggetto="host:" + host_id,
+                                      conto_dare="crediti_vs_host",
+                                      conto_avere="debiti_vs_host_payout",
+                                      importo_cents=quota, valuta=valuta,
+                                      causale="storno riscossione: ledger payout non aggiornabile",
+                                      emittente="sistema"), nota_id, pid)
                     continue
                 residuo -= quota
                 esito["riscossi_cents"] += quota

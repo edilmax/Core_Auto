@@ -132,8 +132,10 @@ class TestMutationMoney(unittest.TestCase):
                 with open(percorso, "wb") as f:
                     f.write(originale)
                 _butta_pyc(percorso)          # nessun bytecode mutato per i posteri
-                _chiudi_traccia()             # ...e la rete si richiude: una traccia lasciata
-                                              # aperta bloccherebbe il commit dopo per NIENTE
+                _chiudi_traccia(percorso)     # ...e la rete si richiude: una traccia lasciata
+                                              # aperta bloccherebbe il commit dopo per NIENTE.
+                                              # Solo la SUA: senza argomento cancellava anche il
+                                              # biglietto di un giro esterno in corso (13/11)
             self.assertEqual(_hash(percorso), h0,
                              "%s: file NON ripristinato!" % nomefile)
             print(("UCCISO  " if ucciso else "SOPRAV. ") + etichetta

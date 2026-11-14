@@ -963,9 +963,11 @@ class TestPagamentiPendentiRamiDErrore(unittest.TestCase):
         self.assertEqual(out["letti"], 7)
         self.assertEqual(out["incassate"]["conteggio"], 1)
         self.assertEqual(out["incassate"]["cents"], 300)
-        self.assertEqual(out["perdite"]["conteggio"], 2)
-        self.assertEqual(out["perdite"]["cents"], 200)
-        self.assertEqual(out["coperto_cents"], 100)
+        # DA4 (8/11): qui prima si pretendeva 200, cioe' 120 EUR + 80 USD sommati. In testa solo
+        # gli euro: le altre monete stanno in `per_valuta`.
+        self.assertEqual(out["perdite"]["conteggio"], 1)
+        self.assertEqual(out["perdite"]["cents"], 120)
+        self.assertEqual(out["coperto_cents"], 180)
         self.assertEqual(out["per_valuta"], {
             "EUR": {"incassate_cents": 300, "perdite_cents": 120, "conteggio": 2},
             "USD": {"incassate_cents": 0, "perdite_cents": 80, "conteggio": 1}})

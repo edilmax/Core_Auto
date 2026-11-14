@@ -880,7 +880,7 @@ class TestStripeConnectContratto(_ContrattiPuliti):
         r = f.ultima
         self.assertEqual(r["url"], "https://api.stripe.com/v1/transfers")
         self.assertEqual(r["headers"]["Authorization"], "Bearer sk_test_x")
-        self.assertEqual(r["headers"]["Idempotency-Key"], "transfer_BVIP-AAAA")
+        self.assertRegex(r["headers"]["Idempotency-Key"], r"^transfer_BVIP-AAAA_\d{8}$")
         c = r["campi"]
         self.assertEqual(c["amount"], "21600")
         self.assertTrue(c["amount"].isdigit())
@@ -898,7 +898,8 @@ class TestStripeConnectContratto(_ContrattiPuliti):
         self.assertEqual(p.trasferisci("acct_H1", 21600, "EUR", "BVIP-AAAA"), "tr_123")
         self.assertEqual(p.trasferisci("acct_H1", 21600, "EUR", "BVIP-AAAA"), "tr_123")
         chiavi = [r["headers"].get("Idempotency-Key") for r in f.richieste if r["corpo"]]
-        self.assertEqual(chiavi, ["transfer_BVIP-AAAA"])
+        self.assertEqual(len(chiavi), 1)
+        self.assertRegex(chiavi[0], r"^transfer_BVIP-AAAA_\d{8}$")
         self.assertEqual(len([r for r in f.richieste if not r["corpo"]]), 2, "le due riletture")
 
     def test_riferimenti_diversi_chiavi_diverse(self):
@@ -2258,7 +2259,7 @@ class TestApiDbConnectPayout(_BaseIntegrazione):
         # 1) la richiesta a Stripe: transfer con Idempotency-Key per riferimento
         tr = [r for r in self.connect.richieste if r["url"].endswith("/transfers")]
         self.assertEqual(len(tr), 1, "un solo transfer")
-        self.assertEqual(tr[0]["headers"]["Idempotency-Key"], "transfer_" + self.rif)
+        self.assertRegex(tr[0]["headers"]["Idempotency-Key"], "^transfer_" + self.rif + r"_\d{8}$")
         self.assertEqual(int(tr[0]["campi"]["amount"]), int(self.b["netto_host_cents"]))
         self.assertEqual(tr[0]["campi"]["destination"], "acct_HOST1")
         # 2) DISCO: payout in transito + riga di bonifico a giornale

@@ -61,6 +61,17 @@ class TestEstrattoStreaming(unittest.TestCase):
         self.assertIn("BookinVIP", primo)
         g.close()
 
+    def test_DA7_ogni_moneta_nella_sua_unita(self):
+        """DA7 (8/11): 170000 yen uscivano come 1700.00, cioe' cento volte meno."""
+        self.sis.finanza.movimento(tipo="incasso", riferimento="BJ", soggetto="host:h1",
+                                   importo_cents=170000, valuta="JPY", causale="x")
+        self.sis.finanza.movimento(tipo="incasso", riferimento="BK", soggetto="host:h1",
+                                   importo_cents=12345, valuta="KWD", causale="x")
+        csv_txt = "".join(self.r.genera_estratto_csv(ip="1.2.3.4"))
+        self.assertIn(",170000,170000,JPY,", csv_txt)
+        self.assertIn(",12345,12.345,KWD,", csv_txt)
+        self.assertIn(",20800,208.00,EUR,", csv_txt)
+
     def test_integro_footer_e_movimenti(self):
         csv_txt = "".join(self.r.genera_estratto_csv(ip="1.2.3.4"))
         self.assertIn("seq,data_utc,tipo", csv_txt)          # intestazione colonne

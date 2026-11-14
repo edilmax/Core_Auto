@@ -330,6 +330,44 @@ class TestIlRimborsoARRIVADavveroAllOspite(unittest.TestCase):
                       "importo rimborsato diverso dal totale pagato dall'ospite "
                       "(atteso %d): %r" % (atteso, corpo))
 
+    def _rimborso_che_muore_alla_marcatura(self, ci, co, marca_prima):
+        """VA3 (8/11): il processo muore intorno a `marca_da_rimborsare`."""
+        class _Morto(BaseException):
+            pass
+
+        rif, idem = self._prenota_e_paga(ci, co)
+        pp = self.sys.pagamenti_pendenti
+        vero = pp.marca_da_rimborsare
+
+        def muore(r):
+            if marca_prima:
+                vero(r)
+            raise _Morto()
+
+        pp.marca_da_rimborsare = muore
+        corpo = {"alloggio_id": "casa", "check_in": ci, "check_out": co, "idem_key": idem}
+        try:
+            with self.assertRaises(_Morto):
+                self.g("POST", "/api/admin/rimborso", corpo, {"X-Admin-Key": "ak"})
+        finally:
+            del pp.marca_da_rimborsare
+        return rif, corpo
+
+    def _righe_rimborso(self, rif):
+        return [m for m in self.sys.finanza.movimenti(rif) if m["tipo"] == "rimborso"]
+
+    def test_VA3_morto_alla_marcatura_il_debito_verso_l_ospite_resta_scritto(self):
+        rif, _ = self._rimborso_che_muore_alla_marcatura("2026-09-14", "2026-09-16", True)
+        self.assertEqual(self.sys.pagamenti_pendenti.info(rif)["stato"], "rimborsato")   # premessa
+        self.assertEqual(len(self._righe_rimborso(rif)), 1)
+
+    def test_VA3_ritentando_il_rimborso_parte_una_volta_e_una_riga_sola(self):
+        rif, corpo = self._rimborso_che_muore_alla_marcatura("2026-09-16", "2026-09-18", False)
+        s, res = self.g("POST", "/api/admin/rimborso", corpo, {"X-Admin-Key": "ak"})
+        self.assertEqual(s, 200, res)
+        self.assertEqual(len(self._rimborsi()), 1)
+        self.assertEqual(len(self._righe_rimborso(rif)), 1)
+
     def test_LA_CHIAVE_DI_IDEMPOTENZA_C_E_ED_E_STABILE(self):
         """Senza `Idempotency-Key` un ritentativo di rete rimborsa DUE volte: e' il rovescio
         esatto del doppio pagamento, e i soldi escono da noi."""

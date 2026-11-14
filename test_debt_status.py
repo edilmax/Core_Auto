@@ -40,6 +40,11 @@ class ConnectFinto:
         self.transfers.append((acct, amount, currency, rif))
         return "tr_%d" % len(self.transfers)
 
+    risposte: dict = {}                             # PR4: rif -> risposta di Stripe
+
+    def bonifico_di(self, acct, rif):
+        return self.risposte.get(rif, {"ok": True, "bonifico": None})
+
 
 class TestDebtStatus(unittest.TestCase):
     @classmethod
@@ -200,6 +205,27 @@ class TestDebtStatus(unittest.TestCase):
         self.assertEqual(len(self.fcn.transfers), 1)
         self.assertEqual(self.fcn.transfers[-1][1], ridotto)       # MAI il pieno
         self.assertTrue(self.fc.verifica_catena()["ok"])
+
+    def _penale_con_bonifico_incerto(self, risposta):
+        """PR4 (8/11), l'altra strada: la penale si compensava subito sulle righe maturate."""
+        self._pubblica("casa-a")
+        self._pubblica("casa-b")
+        a = self._book_paga("casa-a", giorni=30)
+        b = self._book_paga("casa-b", giorni=40)
+        netto_a = self.pd.info(a["riferimento"])["minori"]
+        self.fcn.risposte = {a["riferimento"]: risposta}
+        s, out = self.g("POST", "/api/host/cancella",
+                        {"riferimento": b["riferimento"]}, {"X-Host-Token": self.tok})
+        self.assertEqual(s, 200, out)
+        self.assertEqual(self.pd.info(a["riferimento"])["minori"], netto_a,
+                         "penale compensata su soldi forse gia' usciti")
+        self.assertEqual(len(self.fc.debiti_host(self.hid, stato="aperto")), 1)
+
+    def test_PR4_la_penale_non_compensa_un_bonifico_gia_partito(self):
+        self._penale_con_bonifico_incerto({"ok": True, "bonifico": {"id": "tr_x"}})
+
+    def test_PR4_la_penale_non_compensa_se_stripe_non_risponde(self):
+        self._penale_con_bonifico_incerto({"ok": False, "motivo": "rete"})
 
     # ── 6) riscossione LIVE sul payout nuovo (end-to-end) ──────────────────────
     def test_riscossione_live_alla_conferma(self):

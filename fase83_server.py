@@ -4267,6 +4267,7 @@ class RouterHTTP:
         rotta = None
         errore = False
         try:
+            from fase99_multicurrency import esponente as _esp
             sorgente = fc.stream_giornale() if fc is not None else iter(())
             for r in sorgente:
                 canon = "|".join([r["evento_id"], str(r["ts"]), r["tipo"], r["riferimento"],
@@ -4288,7 +4289,8 @@ class RouterHTTP:
                 buf = _io.StringIO()
                 _csv.writer(buf).writerow([self._cella_csv_sicura(x) for x in (
                     r["seq"], data, r["tipo"], r["riferimento"], r["soggetto"],
-                    r["conto_dare"], r["conto_avere"], imp, "%.2f" % (imp / 100.0),
+                    r["conto_dare"], r["conto_avere"], imp,
+                    "%.*f" % (_esp(r["valuta"]), imp / 10 ** _esp(r["valuta"])),   # DA7 (8/11)
                     r["valuta"], r["causale"], r["emittente"], r["hash"])])
                 yield buf.getvalue()
         except Exception:
@@ -4506,6 +4508,21 @@ class RouterHTTP:
                          "%d,,\r\n" % _ign.get("conteggio", 0))
             yield emetti("coperto_netto,saldo,,%d,%.2f\r\n"
                          % (inc - per, (inc - per) / 100.0))
+            # DA4 (8/11): le righe qui sopra sono in euro; le altre monete hanno righe loro
+            from fase99_multicurrency import esponente as _esp
+            for _v, _r in sorted((costi.get("per_valuta") or {}).items()):
+                if _v == "EUR":
+                    continue
+                for _voce, _cl, _k in (
+                        ("tariffa_tecnica_incassata",
+                         "RICAVO TECNICO COPERTO (ribaltato all'host)", "incassate_cents"),
+                        ("tariffa_tecnica_non_incassata",
+                         "RICAVO TECNICO MANCATO - NON e' un costo sostenuto", "perdite_cents")):
+                    buf = _io.StringIO()
+                    _csv.writer(buf).writerow([
+                        self._cella_csv_sicura("%s_%s" % (_voce, _v)), _cl, "", _r[_k],
+                        "%.*f" % (_esp(_v), _r[_k] / 10 ** _esp(_v))])
+                    yield emetti(buf.getvalue())
             yield emetti("# nota,Il gestore di pagamento NON restituisce la sua commissione sui "
                          "rimborsi: QUELLA e' la perdita deducibile ed e' la riga "
                          "commissione_gestore_non_restituita. La tariffa tecnica non incassata "
@@ -5326,6 +5343,17 @@ class RouterHTTP:
                 rec = pp.info(rif)
                 if rec is not None and rec.get("stato") != "rimborsato":
                     _era_pagato = (rec.get("stato") == "pagato")
+                    # VA3 (8/11): il debito verso l'ospite si scrive PRIMA di 'rimborsato': se il
+                    # processo moriva in mezzo, il ritentativo non vedeva piu' nessun incasso. Il
+                    # blocco sulla carta resta dopo: serve la marcatura per chiuderlo.
+                    if _era_pagato and _blocco(rec)["stato"] not in ("aperto", "annullato"):
+                        _dj0 = self._corpo_del_pendente(rec)
+                        _tot0 = _pagato_online_cents(_dj0)
+                        if _tot0 > 0:
+                            self._giornale(tipo="rimborso", riferimento=rif,
+                                           soggetto="ospite:" + rif, importo_cents=_tot0,
+                                           valuta=_dj0.get("valuta") or "EUR",
+                                           causale="rimborso disposto da admin")
                     pp.marca_da_rimborsare(rif)        # blocca il transfer + nessuna conferma tardiva
                     # SCATOLA NERA del rimborso admin (importo = totale ospite dal record)
                     import json as _jr
@@ -5351,7 +5379,7 @@ class RouterHTTP:
                     if tot > 0 and _era_pagato and not _senza_incasso:
                         self._giornale(tipo="rimborso", riferimento=rif, soggetto="ospite:" + rif,
                                        importo_cents=tot, valuta=_valuta,
-                                       causale="rimborso disposto da admin")
+                                       causale="rimborso disposto da admin (blocco chiuso dopo)")
                     elif tot > 0 and _era_pagato:
                         # Voce 179: come la cancellazione dell'ospite (voce 143). Se l'annullo non e'
                         # riuscito e poi i soldi risultano INCASSATI, il giro orario scrive la riga
@@ -7336,14 +7364,22 @@ class RouterHTTP:
             # finché non paga; se l'hold scade viene rimosso). Senza pagamento online (conferma
             # immediata / su-richiesta approvata) -> 'maturato'. Fine dei "guadagni" fantasma.
             if corpo.get("payment_url"):
-                pd.registra_in_attesa(ref, host, netto, valuta)
+                self._riga_payout_scritta(pd.registra_in_attesa(ref, host, netto, valuta), ref)
             else:
-                pd.registra_maturato(ref, host, netto, valuta)
+                self._riga_payout_scritta(pd.registra_maturato(ref, host, netto, valuta), ref)
                 # conferma immediata (no Stripe): scala subito il credito referral dell'host
-                self._applica_credito_host(ref, host, self._commissione_regalabile(corpo))
+                self._applica_credito_host(ref, host, self._commissione_regalabile(corpo), corpo)
                 self._forse_qualifica_referral(host, pd)
         except Exception:
             logger.warning("registra payout fallito (ignorato)", exc_info=True)
+
+    @staticmethod
+    def _riga_payout_scritta(esito, ref):
+        """VA6 e SF1 (8/11): senza la riga nel registro l'host non verra' mai pagato."""
+        if esito is False:
+            logger.error("BONIFICO SENZA RIGA | RIF: %s | codice: riga_payout_non_scritta | "
+                         "messaggio: quota dell'host non scritta nel registro dei bonifici: "
+                         "scriverla a mano o non verra' pagata", _rif_per_registro(ref))
 
     def _giornale(self, *, tipo, riferimento, soggetto, importo_cents, valuta,
                   causale, evento_id=None):
@@ -7627,6 +7663,7 @@ class RouterHTTP:
             if fc is None or pd is None:
                 raise RuntimeError("giornale o registro dei bonifici assente")
             if fc.esiste_evento("ritenuta:" + str(rif)):
+                self._completa_ritenuta(fc, pd, str(rif))
                 return True                           # gia' operata: i ritentativi non la rifanno
             corpo = _jr.loads(rec.get("corpo_json") or "{}")
             if penale or corpo.get("modo_pagamento") == "in_struttura":
@@ -7657,16 +7694,17 @@ class RouterHTTP:
             minori = int(riga["minori"])
             if ritenuta >= minori:
                 raise RuntimeError("la ritenuta (%d) non sta nel bonifico (%d)" % (ritenuta, minori))
-            if not pd.imposta_importo(str(rif), minori - ritenuta):
-                raise RuntimeError("registro dei bonifici non aggiornato")
+            # VA4 (8/11): prima il giornale, poi il bonifico. Al contrario, un processo morto in
+            # mezzo lasciava il bonifico ridotto senza riga e il giro dopo toglieva di nuovo
             fatto = fc.movimento(tipo="ritenuta", riferimento=str(rif),
                                  soggetto="host:" + str(host_id), importo_cents=ritenuta,
                                  valuta=corpo.get("valuta") or "EUR",
-                                 causale="ritenuta locazione breve | base=%d | notti=%d"
-                                 % (base, notti))
+                                 causale="ritenuta locazione breve | base=%d | notti=%d | bonifico=%d"
+                                 % (base, notti, minori - ritenuta))
             if not fatto:
-                pd.imposta_importo(str(rif), minori)  # senza la riga nel giornale non si trattiene
                 raise RuntimeError("giornale non scritto")
+            if not pd.imposta_importo(str(rif), minori - ritenuta):
+                raise RuntimeError("registro dei bonifici non aggiornato")
             logger.warning("RITENUTA OPERATA | RIF: %s | HOST_ID: %s | BASE: %d | RITENUTA: %d "
                            "| BONIFICO: %d -> %d", _rif_per_registro(rif), host_id, base,
                            ritenuta, minori, minori - ritenuta)
@@ -7676,6 +7714,20 @@ class RouterHTTP:
                          "FERMO finche' una persona non guarda", _rif_per_registro(rif),
                          exc_info=True)
             return False
+
+    @staticmethod
+    def _completa_ritenuta(fc, pd, rif):
+        """VA4 (8/11): riga di giornale scritta e bonifico non ancora ridotto (processo morto
+        in mezzo): si riduce. Solo se il bonifico e' ancora quello PIENO: una penale compensata
+        dopo l'ha cambiato legittimamente, e non va restituita."""
+        riga = next((m for m in fc.movimenti(rif) if m.get("tipo") == "ritenuta"), None)
+        obiettivo = str((riga or {}).get("causale") or "").rpartition("bonifico=")[2]
+        attuale = pd.info(rif)
+        if not obiettivo.isdigit() or attuale is None:
+            return
+        if int(attuale["minori"]) == int(obiettivo) + int(riga["importo_cents"]):
+            if not pd.imposta_importo(rif, int(obiettivo)):
+                raise RuntimeError("registro dei bonifici non aggiornato")
 
     def _trasferisci_all_host(self, rif, importo_cents, penale=False, a_mano=False):
         """SOLDI ALL'HOST IN AUTOMATICO (strategia fondatore): allo sblocco dell'escrow
@@ -7783,7 +7835,15 @@ class RouterHTTP:
             fc_ = getattr(self._sys, "finanza", None)
             if fc_ is not None and pd is not None and hasattr(fc_, "riscuoti_debiti"):
                 try:
-                    ris = fc_.riscuoti_debiti(host_id=host_id, payout=pd)
+                    if (acct and fc_.debiti_host(host_id, stato="aperto")
+                            and _bonifici_forse_partiti(connect, acct, host_id, pd)):
+                        logger.error("DEBITI NON RISCOSSI | HOST_ID: %s | codice: "
+                                     "bonifico_forse_gia_partito | messaggio: un bonifico risulta "
+                                     "su Stripe o non si riesce a leggerlo: si riprova al giro "
+                                     "dopo, per non compensare su soldi gia' usciti", host_id)
+                        ris = {}
+                    else:
+                        ris = fc_.riscuoti_debiti(host_id=host_id, payout=pd)
                     if ris.get("riscossi_cents"):
                         logger.warning("DEBT_COLLECTED | HOST_ID: %s | RISCOSSI: %d cents "
                                        "| SALDATI: %d | ANCORA APERTI: %d", host_id,
@@ -7959,6 +8019,17 @@ class RouterHTTP:
                        self._fmt_importo(int(importo_cents), valuta))
         return ""
 
+    def _cancellazione_ospite_a_meta(self, rif):
+        """VA2 (8/11): prenotazione 'pagato' con le date gia' liberate dalla cancellazione: il
+        processo e' morto prima dei passi sui soldi. Il pagamento tardivo ha un suo blocco vivo
+        ('reblock:') e non e' questo caso."""
+        rec = self._sys.pagamenti_pendenti.info(rif)
+        if not rec or rec.get("stato") != "pagato" or not rec.get("idem_key"):
+            return False
+        inv = self._sys.inventario
+        return (inv.stato_blocco(rec["idem_key"]) == "rilasciato"
+                and inv.stato_blocco("reblock:" + str(rif)) != "occupato")
+
     def _sblocca_garanzie_scadute(self, ora_ts=None):
         """Il giro orario della garanzia (tick di `avvia_server`): 24h di silenzio = tutto ok ->
         rilascio + bonifico AUTOMATICO all'host. PREVENZIONE perdita: non si versa l'escrow
@@ -7973,7 +8044,15 @@ class RouterHTTP:
         def _rimborsata(_rif):
             try:
                 _i = pp.info(_rif) if pp is not None else None
-                return bool(_i) and _i.get("stato") in ("rimborsato", "cancellata_host")
+                if bool(_i) and _i.get("stato") in ("rimborsato", "cancellata_host"):
+                    return True
+                if not self._cancellazione_ospite_a_meta(_rif):
+                    return False
+                logger.error("CANCELLAZIONE A META' | RIF: %s | codice: cancellazione_a_meta | "
+                             "messaggio: date liberate ma soldi non sistemati: bonifico all'host "
+                             "fermo; finire la cancellazione dal voucher o dal pannello",
+                             _rif_per_registro(_rif))
+                return True
             except Exception:
                 return False
         # Voce 177, 26/10 («autorizzato» per delega): il rilascio sotto `_BONIFICI_LOCK`, come il
@@ -8206,7 +8285,7 @@ class RouterHTTP:
                     esito_fin = fc.processa_penale(
                         riferimento=ref, host_id=(host_id or rec.get("host_id") or ""),
                         penale_cents=penale, valuta=valuta,
-                        payout=getattr(self._sys, "payout", None))
+                        payout=_payout_per_penale(self._sys, host_id or rec.get("host_id") or ""))
                 except Exception:
                     logger.error("host cancella %s: codice: nota_debito_rinviata | messaggio: la "
                                  "nota della penale e' ESPLOSA, la cancellazione prosegue e la "
@@ -8722,7 +8801,8 @@ class RouterHTTP:
             return 503, {"errore": "service_unavailable"}
         if not getattr(e, "ok", False):
             return 409, {"stato": "rifiutato", "motivo": getattr(e, "motivo", "")}
-        if getattr(e, "idempotente", False):
+        if getattr(e, "idempotente", False) and not (_rec is not None
+                                                     and _rec.get("stato") == "pagato"):
             # REPLAY: la cancellazione era GIA' stata processata (il rilascio delle date e'
             # idempotente sulla idem_key del voucher). Qui si ESCE: NON riconiare il Credito
             # Viaggio, NON ri-toccare payout/escrow. BUG PROVATO al collaudo: la guardia
@@ -8735,6 +8815,17 @@ class RouterHTTP:
                          "rimborso_cents": 0, "credito_viaggio_cents": 0,
                          "credito_viaggio_token": "", "money_unit": "cents_integer",
                          "nota": "prenotazione gia' cancellata: nessun nuovo credito."}
+        # VA2 e AT8 (8/11): date gia' liberate ma prenotazione ancora 'pagato'. O un pagamento
+        # tardivo, che tiene le date con 'reblock:' e va liberato adesso, o una cancellazione morta
+        # a meta': si finisce, senza coniare un secondo Credito Viaggio.
+        _ripresa = False
+        if getattr(e, "idempotente", False):
+            try:
+                _e2 = self._sys.inventario.rilascia(allog, ci, co, idem_key="reblock:" + str(rif))
+            except Exception:
+                logger.error("cancella prenotazione: rilascio reblock esploso", exc_info=True)
+                return 503, {"errore": "service_unavailable"}
+            _ripresa = not getattr(_e2, "ok", False) or bool(getattr(_e2, "idempotente", False))
         # IL BLOCCO SULLA CARTA, PRIMA della cassaforte e del bonifico: nelle 48 ore il blocco si
         # ANNULLA (niente riga di rimborso: i soldi non sono mai entrati); con una penale si
         # INCASSA tutto prima, cosi' la quota dell'host esiste davvero quando parte il bonifico.
@@ -8943,7 +9034,7 @@ class RouterHTTP:
                              self._fmt_importo(int(rimborso_totale), v.get("valuta", "EUR")))
         return {"r": r, "pagato_davvero": pagato_davvero, "senza_incasso": _senza_incasso,
                 "tratt_originale": tratt_originale, "tassa": tassa,
-                "rimborso_totale": rimborso_totale}
+                "rimborso_totale": rimborso_totale, "ripresa": _ripresa}
 
     def _cancella_prenotazione_coda(self, v, rif, giorni, fatto):
         """La coda di `_cancella_prenotazione`, FUORI dal lucchetto: credito, email e penale in
@@ -8954,8 +9045,9 @@ class RouterHTTP:
         # il credito nasce dal trattenuto ORIGINALE della politica: il taglio anti-perdita
         # (tetto di cassa) non deve MAI coniare Credito Viaggio nuovo dal nulla.
         # (e su un blocco mai incassato la penale non e' mai entrata: niente credito da coniare)
-        cv_cents, cv_token = self._credito_anti_rimpianto(0 if _senza_incasso else tratt_originale,
-                                                          v.get("valuta", "EUR"))
+        cv_cents, cv_token = self._credito_anti_rimpianto(
+            0 if (_senza_incasso or fatto.get("ripresa")) else tratt_originale,
+            v.get("valuta", "EUR"))
         if pagato_davvero:                     # C3: conferma cancellazione + rimborso in email
             self._email_cancellazione(rif, rimborso_totale, v.get("valuta", "EUR"), cv_cents)
         # PAGA IN STRUTTURA (FASE 3): PENALE tardiva. Regola fondatore: normale -> si trattiene
@@ -11123,8 +11215,9 @@ class RouterHTTP:
                 pd = getattr(self._sys, "payout", None)
                 _versare = self._da_versare_host(dj)      # netto host + tassa (2026-08-19)
                 if pd is not None and dj.get("host_id") and _versare > 0:
-                    pd.registra_maturato(rif, dj["host_id"], _versare,
-                                         dj.get("valuta", "EUR"))
+                    self._riga_payout_scritta(
+                        pd.registra_maturato(rif, dj["host_id"], _versare, dj.get("valuta", "EUR")),
+                        rif)
                 self._apri_garanzia(rif, dj,
                                     rec.get("alloggio_id", ""), rec.get("check_in", ""))
             # comune a 'in_attesa' e 'scaduto-ribloccato': 'pagato' è GIÀ scritto dal CAS
@@ -11142,7 +11235,14 @@ class RouterHTTP:
                 dj = _jc.loads(rec.get("corpo_json") or "{}") if isinstance(rec, dict) else {}
             except Exception:
                 dj = {}
-            self._applica_credito_host(rif, hid_pag, self._commissione_regalabile(dj))
+            scontato = self._applica_credito_host(rif, hid_pag, self._commissione_regalabile(dj), dj)
+            # DA3: la riga `commissione` e' gia' scritta piena; lo sconto la corregge nel giornale.
+            # Solo qui: la conferma immediata non scrive nessuna riga `commissione`.
+            self._giornale(tipo="sconto_commissione", riferimento=rif,
+                           soggetto="host:" + str(hid_pag), importo_cents=scontato,
+                           valuta=dj.get("valuta") or "EUR",
+                           causale="credito referral scalato dalla commissione",
+                           evento_id="sconto_commissione:" + str(rif))
             self._forse_qualifica_referral(hid_pag, pd)
             # C53-B1-5: bonifico rimasto fermo -> False (503); il ritentativo passa dal ramo
             # 'pagato' qui sopra e lo matura senza rifare email e crediti
@@ -11250,10 +11350,31 @@ class RouterHTTP:
             return 0
         return max(0, comm - gia_dato)
 
-    def _applica_credito_host(self, ref, host_id, commissione_cents):
+    def _valore_del_credito(self, corpo):
+        """DA2 (8/11). Il credito referral e' nella moneta in cui incassiamo e non porta la
+        valuta: quante unita' minime della moneta dell'annuncio vale un suo centesimo.
+        1 = stessa moneta. None = nessun cambio buono (assente o vecchio): non si scala."""
+        if not self._valuta_estera(corpo):
+            return 1
+        try:
+            from decimal import Decimal
+            from fase99_multicurrency import esponente
+            tassi = getattr(self._sys, "tassi", None)
+            eta = tassi.stato().get("eta_ore")
+            if eta is None or eta > 48:
+                return None
+            incasso = str(getattr(getattr(self._sys, "config", None), "valuta", "EUR") or "EUR").upper()
+            dest = str(corpo.get("valuta")).upper()
+            t = Decimal(str(tassi.tasso(incasso, dest)))
+            return t * Decimal(10) ** (esponente(dest) - esponente(incasso)) if t > 0 else None
+        except Exception:
+            return None
+
+    def _applica_credito_host(self, ref, host_id, commissione_cents, corpo=None):
         """Scala il credito referral dell'host sulla commissione di questa prenotazione:
         meno commissione paga l'host -> più incassa. Il credito è non-cashabile, si consuma qui.
-        Ritorna quanti cent sono stati scalati."""
+        `corpo` dice la moneta dell'annuncio. Ritorna quanto e' salito il payout, in quella
+        moneta."""
         try:
             viral = getattr(self._sys, "viral", None)
             pd = getattr(self._sys, "payout", None)
@@ -11263,9 +11384,16 @@ class RouterHTTP:
                 not isinstance(commissione_cents, bool) and commissione_cents > 0 else 0
             if comm <= 0:
                 return 0
-            res = viral.usa_credito(host_id, comm)   # <- QUI il credito e' gia' COMMITTATO
-            used = int(res.get("scontato_cents", 0)) if isinstance(res, dict) else 0
-            if used > 0:
+            valore = self._valore_del_credito(corpo)
+            if valore is None:
+                logger.warning("CREDITO REFERRAL | codice: cambio_non_disponibile | messaggio: "
+                               "host %s, prenotazione %s: niente sconto, il credito resta intero",
+                               host_id, _rif_per_registro(ref))
+                return 0
+            res = viral.usa_credito(host_id, int(comm / valore))   # <- QUI il credito e' gia' COMMITTATO
+            scalato = int(res.get("scontato_cents", 0)) if isinstance(res, dict) else 0
+            used = int(scalato * valore)
+            if scalato > 0:
                 try:
                     # ATTENZIONE al valore di ritorno: `aumenta_payout` fa un UPDATE e torna
                     # False (SENZA sollevare) se non esiste una riga payout per questa
@@ -11286,7 +11414,7 @@ class RouterHTTP:
                     # servono l'host e i centesimi esatti.
                     logger.error("CREDITO REFERRAL PERSO: host %s, %d cent gia' scalati dal suo "
                                  "credito ma NON applicati alla commissione di %s -> "
-                                 "restituirglieli a mano", host_id, used,
+                                 "restituirglieli a mano", host_id, scalato,
                                  _rif_per_registro(ref), exc_info=True)
                     return 0
                 logger.info("Credito referral scalato: host %s -%d di commissione su %s",
@@ -13961,7 +14089,7 @@ def _riprendi_cancellazione_host(sistema: Any, router: Any, rec: Dict[str, Any])
         return
     esito = fc.processa_penale(riferimento=rif, host_id=str(rec.get("host_id") or ""),
                                penale_cents=pen, valuta=valuta,
-                               payout=getattr(sistema, "payout", None))
+                               payout=_payout_per_penale(sistema, str(rec.get("host_id") or "")))
     if esito is None:
         # (None anche con host o penale non validi, fase177: la causa non e' sempre il giornale)
         logger.error("riasserzione penale %s: codice: nota_debito_rinviata | messaggio: nota non "
@@ -13989,6 +14117,43 @@ def _tassa_da_rendere(voucher: Any, pagato_davvero: bool) -> int:
     if not pagato_davvero or voucher.get("modo_pagamento") == "in_struttura":
         return 0
     return _intero_positivo(voucher.get("tassa_soggiorno_cents", 0))
+
+
+def _bonifici_forse_partiti(connect: Any, acct: str, host_id: str, pd: Any) -> bool:
+    """PR4 (8/11). Una riga 'maturato' puo' avere il bonifico gia' partito con la risposta persa.
+    Prima di compensarci sopra si rilegge Stripe: vero se ne trova uno, o se non si sa."""
+    letture = (connect.bonifico_di(acct, r["prenotazione_id"])
+               for r in pd.elenca(host_id, stato="maturato"))
+    return any(not x.get("ok") or x.get("bonifico") is not None for x in letture)
+
+
+class _NessunaRigaDaCompensare:
+    """Il registro dei bonifici per una penale che non puo' compensare: tutta a debito."""
+
+    @staticmethod
+    def elenca(*_a: Any, **_k: Any) -> List[Any]:
+        return []
+
+
+def _payout_per_penale(sistema: Any, host_id: str) -> Any:
+    """PR4: se un bonifico dell'host e' forse gia' partito la penale diventa tutta debito, e la
+    riscossione la riprende quando la riga e' chiara. Non si sa -> debito: mai sui soldi usciti."""
+    pd = getattr(sistema, "payout", None)
+    connect = getattr(sistema, "connect", None)
+    reg = getattr(sistema, "registro_host", None)
+    if pd is None or connect is None or reg is None:
+        return pd
+    try:
+        acct = (reg.info_host(host_id) or {}).get("stripe_account_id", "")
+        if not acct or not _bonifici_forse_partiti(connect, acct, host_id, pd):
+            return pd
+    except Exception:
+        logger.warning("penale di %s: lettura dei bonifici fallita, tutta a debito",
+                       _testo_per_registro(host_id), exc_info=True)
+    logger.error("PENALE NON COMPENSATA | HOST_ID: %s | codice: bonifico_forse_gia_partito | "
+                 "messaggio: la penale resta a debito e si riscuote piu' avanti",
+                 _testo_per_registro(host_id))
+    return _NessunaRigaDaCompensare()
 
 
 def _penale_finita(fc: Any, rif: str) -> bool:

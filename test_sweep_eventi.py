@@ -227,6 +227,52 @@ class TestLoSweeperRitenta(BancoSweep):
                       "restato fuori dallo sweeper. Consegnati: %r" % (consegnati,))
 
 
+class TestLoSweeperUsaLaStessaConfigDelSito(unittest.TestCase):
+    """PR3 (campagna soldi 8/11): il processo separato costruiva una config sua, senza SMTP e con
+    molti archivi in RAM: il pagamento confermato da qui non mandava il voucher all'ospite."""
+
+    def _config_del_giro(self):
+        from unittest import mock
+
+        from deploy.cron_sweep_eventi import _sistema_da_env
+        ambiente = {"SMTP_HOST": "smtp.prova", "EMAIL_MITTENTE": "a@b.it",
+                    "CASAVIP_SEGRETO": "ab" * 32, "DB_CREDITO_USATI": "/d/credito_usati.db",
+                    "DB_KYC": "/d/kyc.db", "PAGAMENTO_BPS": "500"}
+        with mock.patch.dict("os.environ", ambiente), \
+                mock.patch("fase81_bootstrap_casavip.crea_sistema", side_effect=lambda c: c):
+            return _sistema_da_env()
+
+    def test_il_giro_ha_l_email_del_sito(self):
+        cfg = self._config_del_giro()
+        self.assertEqual((cfg.smtp_host, cfg.email_mittente), ("smtp.prova", "a@b.it"))
+
+    def test_nessun_archivio_in_memoria(self):
+        cfg = self._config_del_giro()
+        in_ram = [k for k, v in vars(cfg).items() if k.startswith("db_") and v == ":memory:"]
+        self.assertEqual(in_ram, [])
+        self.assertEqual(cfg.db_credito_usati, "/d/credito_usati.db")
+
+    def test_il_giro_non_consuma_i_cambi_a_ogni_partenza(self):
+        """Parte ogni 15 minuti: il sistema all'avvio scarica i cambi, e il piano gratuito ne
+        concede circa 1000 al mese. Senza cambi il credito non si scala e resta intero."""
+        from unittest import mock
+        with mock.patch.dict("os.environ", {"OXR_APP_ID": "chiave-prova"}):
+            self.assertEqual(self._config_del_giro().oxr_app_id, "")
+
+    def test_il_giro_aspetta_che_le_email_partano(self):
+        """Un processo breve che esce uccide i thread demone: l'email non partirebbe mai."""
+        import threading
+        import time
+
+        from deploy.cron_sweep_eventi import _aspetta_email
+        fatto = []
+        t = threading.Thread(target=lambda: (time.sleep(0.2), fatto.append(1)),
+                             name="email-prova", daemon=True)
+        t.start()
+        _aspetta_email(5)
+        self.assertEqual(fatto, [1])
+
+
 class TestLoSweeperNonPUOBARARE(unittest.TestCase):
     """D18: lo strumento prova prima se stesso, e in mancanza di config NON ESEGUITO (S7)."""
 

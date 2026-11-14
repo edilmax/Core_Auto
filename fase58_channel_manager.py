@@ -1090,6 +1090,19 @@ class ChannelManager:
             if nuovo_ok:
                 self._notifica_isolata(aid, check_in, check_out, origine)
 
+    def stato_blocco(self, idem_key: str) -> str:
+        """VA2 (8/11): 'occupato', 'rilasciato' o 'assente' (nessun blocco con questa chiave)."""
+        chiave = str(idem_key)
+        con = self._apri()
+        try:
+            if con.execute("SELECT 1 FROM movimenti WHERE idem_key=?",
+                           ("rilascio:" + chiave,)).fetchone() is not None:
+                return "rilasciato"
+            r = con.execute("SELECT esito FROM movimenti WHERE idem_key=?", (chiave,)).fetchone()
+            return "occupato" if r is not None and r["esito"] == "occupato" else "assente"
+        finally:
+            con.close()
+
     def rilascia(self, alloggio_id: str, check_in: str, check_out: str, *,
                  idem_key: str) -> EsitoPrenotazione:
         """Libera le notti di un blocco precedente (cancellazione/rimborso). Idempotente:

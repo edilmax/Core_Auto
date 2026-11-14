@@ -22,6 +22,7 @@ CODICI D'USCITA: 0 = nessun pendente o tutti riprocessati, nessuna anomalia;
 import json
 import os
 import sys
+import threading
 import time
 
 # LANCIATO DA CRON lo script gira DA SOLO: sys.path[0] e' la cartella dello script
@@ -34,41 +35,24 @@ ANOMALIA_SEC = 3600        # la soglia della casella: un'ora di tentativi = anom
 LOG = "/data/sweep_eventi.log"
 
 
-def _sistema_da_env(env):
-    """Il sistema vero, dallo stesso ambiente del container (stessa mappa di main_casavip
-    per i percorsi dei dati). Nel giro di prova il sistema arriva INIETTATO e questo non
-    gira mai: i banchi non devono dipendere dall'ambiente della macchina che li esegue."""
-    from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
-    raw = (env.get("CASAVIP_SEGRETO") or "").strip()
-    if raw:
-        try:
-            segreto = bytes.fromhex(raw)
-        except ValueError:
-            segreto = raw.encode("utf-8")[:64]
-        if len(segreto) < 16:
-            segreto = segreto.ljust(32, b"0")
-    else:
-        import secrets
-        segreto = secrets.token_bytes(32)
-    d = env.get("DATA_DIR") or "data"
-    cfg = ConfigCasaVIP(
-        abilitato=True, segreto_hmac=segreto,
-        db_catalogo=env.get("DB_CATALOGO", f"{d}/catalogo.db"),
-        db_inventario=env.get("DB_INVENTARIO", f"{d}/inventario.db"),
-        db_registro_host=env.get("DB_REGISTRO_HOST", f"{d}/registro_host.db"),
-        db_viral=env.get("DB_VIRAL", f"{d}/viral.db"),
-        db_messaggi=env.get("DB_MESSAGGI", f"{d}/messaggi.db"),
-        db_domanda=env.get("DB_DOMANDA", f"{d}/domanda.db"),
-        db_garanzia=env.get("DB_GARANZIA", f"{d}/garanzia.db"),
-        db_pendenti=env.get("DB_PENDENTI", f"{d}/pendenti.db"),
-        db_eventi_stripe=env.get("DB_EVENTI_STRIPE", f"{d}/eventi_stripe.db"),
-        db_tassa_comunale=env.get("DB_TASSA_COMUNALE", f"{d}/tassa_comunale.db"),
-        db_finanza=env.get("DB_FINANZA", f"{d}/finanza.db"),
-        db_payout=env.get("DB_PAYOUT", f"{d}/payout.db"),
-        db_accettazioni=env.get("DB_ACCETTAZIONI", f"{d}/accettazioni.db"),
-        stripe_webhook_secret=env.get("STRIPE_WEBHOOK_SECRET", ""),
-        stripe_secret_key=env.get("STRIPE_SECRET_KEY", ""))
-    return crea_sistema(cfg)
+def _sistema_da_env():
+    """Il sistema vero, con la stessa configurazione del sito (PR3, 8/11: una sua, senza email
+    e con archivi in RAM, non mandava il voucher). Nel giro di prova il sistema arriva
+    INIETTATO e questo non gira mai."""
+    from dataclasses import replace
+
+    from fase81_bootstrap_casavip import crea_sistema
+    from main_casavip import config_da_ambiente
+    # senza cambi: il sistema li scaricherebbe a ogni partenza, ogni 15 minuti, oltre il piano
+    return crea_sistema(replace(config_da_ambiente(), oxr_app_id=""))
+
+
+def _aspetta_email(secondi):
+    """Le email partono su thread demone, che muoiono quando questo processo breve esce."""
+    fine = time.monotonic() + secondi
+    for t in threading.enumerate():
+        if t is not threading.current_thread():
+            t.join(max(0, fine - time.monotonic()))
 
 
 def main(env, send, ora=time.time, sistema=None, router=None):
@@ -85,7 +69,7 @@ def main(env, send, ora=time.time, sistema=None, router=None):
         return 2
     try:
         if sistema is None:
-            sistema = _sistema_da_env(env)
+            sistema = _sistema_da_env()
         if router is None:
             from fase83_server import crea_router
             router = crea_router(sistema, host_key=(env.get("HOST_KEY") or "hk"),
@@ -169,4 +153,6 @@ if __name__ == "__main__":
                           os.environ.get("SMTP_PASSWORD", ""),
                           os.environ.get("EMAIL_MITTENTE", ""))
         return p.invia(dest, oggetto, corpo)
-    sys.exit(main(os.environ, _send_reale))
+    codice = main(os.environ, _send_reale)
+    _aspetta_email(30)
+    sys.exit(codice)

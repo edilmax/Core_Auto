@@ -83,6 +83,19 @@ class TestStornoDellaPenale(unittest.TestCase):
         tipi = self._tipi("RC")
         self.assertEqual((tipi.count("debito_all_ospite"), tipi.count("storno_commissione")), (1, 1))
 
+    def test_VA7_storno_della_compensazione_non_scritto_si_vede(self):
+        """Il registro non si aggiorna e nemmeno lo storno riesce: la quota risulta presa nel
+        giornale senza esserlo nei bonifici. Due guasti insieme, ma non deve restare muto."""
+        self._penale(_Registro())
+        registro = _Registro([("P1", 1000)])
+        registro.imposta_importo = registro.rimuovi = lambda *a, **k: False
+        vero = self.fc.registra
+        self.fc.registra = lambda **kw: (None if kw["evento_id"].startswith("storno-offset:")
+                                         else vero(**kw))
+        with self.assertLogs("core_auto.financial_controller", level="ERROR") as reg:
+            self.fc.riscuoti_debiti(host_id="h1", payout=registro)
+        self.assertTrue(any("storno_offset_non_scritto" in r for r in reg.output), reg.output)
+
     # 1 gennaio 2026, 00:30 in Italia: per l'ora di Greenwich e' ancora il 31 dicembre 2025
     _CAPODANNO = 1767223800
 
@@ -106,6 +119,34 @@ class TestStornoDellaPenale(unittest.TestCase):
         self.assertIs(self.fc.storna_prenotazione(riferimento="RD")["gia_fatto"], True)
         tipi = self._tipi("RD")
         self.assertEqual((tipi.count("debito_all_ospite"), tipi.count("storno_commissione")), (1, 1))
+
+    # DA3 (campagna soldi 8/11): il credito referral abbassa la commissione trattenuta, ma il
+    # giornale restava alla commissione piena: ricavo gonfiato e netto DAC7 dell'host basso.
+    def _con_sconto(self, rif, importo=400):
+        self._prenotazione_incassata(rif)
+        self.assertIsNotNone(
+            self.fc.movimento(tipo="sconto_commissione", riferimento=rif, soggetto="host:h1",
+                              importo_cents=importo, valuta="EUR", causale="credito"),
+            "il giornale non conosce il movimento dello sconto")
+
+    def test_DA3_lo_sconto_toglie_dal_ricavo_e_torna_debito_verso_l_host(self):
+        self._con_sconto("RS")
+        saldi = self.fc.saldi()
+        self.assertEqual(saldi["ricavi_commissioni"], -600)
+        self.assertEqual(saldi["debiti_vs_host"], -9400)
+
+    def test_DA3_il_dac7_conta_la_commissione_scontata(self):
+        self.fc._now = lambda: self._CAPODANNO
+        self._con_sconto("RS")
+        riga = self.fc.aggrega_dac7(2026)["h1"]
+        self.assertEqual((riga["commissioni"], riga["netto"]), (600, 9400))
+
+    def test_DA3_lo_storno_rende_solo_la_commissione_davvero_trattenuta(self):
+        self._con_sconto("RS")
+        esito = self.fc.storna_prenotazione(riferimento="RS")
+        self.assertEqual((esito["storno_commissione"], esito["debito_all_ospite"]), (600, 9400))
+        self.assertEqual(self.fc.saldi().get("ricavi_commissioni", 0), 0,
+                         "dopo il rimborso totale non deve restare ne' ricavo ne' ammanco")
 
     def test_storno_entrato_a_meta_giro_lascia_il_debito_com_era(self):
         self._penale(_Registro())
