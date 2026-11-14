@@ -198,10 +198,13 @@ class TestRobustezza(unittest.TestCase):
                 self.fail(f"sollevato su {bad!r}: {ex}")
 
 
-class TestRendiCredito(unittest.TestCase):
+class TestRendiCreditoPR315(unittest.TestCase):
     """PR #315 (pezzo 3), job `caselle` del 14/11 su bb014a7: `rendi_credito` (il credito
     referral che torna all'host su un rimborso totale) aveva le prove solo in file che il
-    giudice non accende. Il valore di ritorno dice al chiamante se ha accreditato ADESSO."""
+    giudice non accende. Il valore di ritorno dice al chiamante se ha accreditato ADESSO.
+    ⛔ Si chiamava `TestRendiCredito` come la classe del pezzo 4 qui sopra: unendo i due
+    pezzi la seconda NASCONDEVA la prima e le sue 5 prove non giravano piu', con la suite
+    verde (lo ha visto solo ruff F811 nel job `qualita`, 14/11)."""
 
     def test_PR315_rende_una_volta_sola_e_lo_dice(self):
         e = _eng()
