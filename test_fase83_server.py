@@ -9237,5 +9237,237 @@ class TestPR315PezzoTreLeRigheCheIlGiudiceNonVedeva(unittest.TestCase):
         self.assertIn(c["host_id"], gridi[0].getMessage())
 
 
+class TestPR316LEmailFallitaDiceComeEFallitaESiSalva(unittest.TestCase):
+    """Pezzo 4 (PR #316): sopravvissuti del giudice sul diff (job caselle di 2bfa64b) a fase83
+    :153 :168 :181 (`_invia_tracciato` e `_accoda_email`). Le prove c'erano in
+    test_email_tracciata, che il giudice per fase83 non accende."""
+
+    class _Guasto(Exception):
+        pass
+
+    class _Prov(object):
+        def __init__(self, esito=False, solleva=None, coda=None):
+            self.esito, self.solleva = esito, solleva
+            if coda is not None:
+                self.coda_email = coda
+
+        def invia(self, destinatario, oggetto, corpo_html):
+            if self.solleva is not None:
+                raise self.solleva
+            return self.esito
+
+    class _Coda(object):
+        def __init__(self, solleva=None):
+            self.solleva, self.accodate = solleva, []
+
+        def accoda(self, *a):
+            if self.solleva is not None:
+                raise self.solleva
+            self.accodate.append(a)
+            return True
+
+    def _manda(self, prov):
+        from fase83_server import _invia_tracciato
+        with self.assertLogs("core_auto.server", level="DEBUG") as reg:
+            esito = _invia_tracciato(prov, "ospite@example.com", "Voucher", "<p>v</p>",
+                                     "voucher", "REF-316")
+        self.assertFalse(esito)
+        return reg.records
+
+    def test_il_provider_che_risponde_NO_si_dice_una_volta(self):
+        righe = [r for r in self._manda(self._Prov(esito=False))
+                 if "il provider ha risposto NO" in r.getMessage()]
+        self.assertEqual(1, len(righe), "il NO del provider non e' stato detto (una volta)")
+        self.assertEqual("ERROR", righe[0].levelname)
+
+    def test_un_eccezione_del_provider_non_si_spaccia_per_un_NO(self):
+        scritte = [r.getMessage() for r in self._manda(self._Prov(solleva=self._Guasto("smtp")))]
+        self.assertTrue(any("eccezione ISOLATA" in m for m in scritte), scritte)
+        self.assertFalse(any("il provider ha risposto NO" in m for m in scritte),
+                         "un'eccezione detta come un NO del provider: %r" % (scritte,))
+
+    def test_con_la_coda_l_email_fallita_si_salva(self):
+        coda = self._Coda()
+        scritte = [r.getMessage() for r in self._manda(self._Prov(esito=False, coda=coda))]
+        self.assertEqual([("ospite@example.com", "Voucher", "<p>v</p>", "voucher", "REF-316")],
+                         coda.accodate, "email fallita e non salvata nella coda: persa")
+        self.assertTrue(any("EMAIL IN CODA" in m for m in scritte), scritte)
+
+    def test_senza_coda_non_grida_una_coda_rotta(self):
+        scritte = [r.getMessage() for r in self._manda(self._Prov(esito=False))]
+        self.assertFalse(any("EMAIL PERSA" in m for m in scritte),
+                         "senza coda si grida una coda rotta (falso allarme): %r" % (scritte,))
+
+    def test_la_coda_rotta_grida_con_la_sua_causa(self):
+        righe = [r for r in self._manda(self._Prov(esito=False,
+                                                   coda=self._Coda(solleva=self._Guasto("db"))))
+                 if "coda_non_scrivibile" in r.getMessage()]
+        self.assertEqual(1, len(righe))
+        self.assertEqual("ERROR", righe[0].levelname)
+        self.assertIsInstance(righe[0].exc_info, tuple, "il grido ha perso la causa")
+        self.assertIs(righe[0].exc_info[0], self._Guasto)
+
+
+class TestPR316LaBancaHaChiusoLaContestazione(_BancoDeiSoldiDelServer):
+    """Pezzo 4 (PR #316): sopravvissuti del giudice a fase83 :10660 :10666 :10670 (la riga di
+    `_contestazione_chiusa`) e :10676 :10677 :10683 :10684 (`_banca_ha_chiuso`). La prova ST3
+    guardava che la riga ci fosse, non COSA diceva; e `_banca_ha_chiuso` si guardava solo dal
+    pulsante dell'arbitro, mai nei suoi casi di confine."""
+
+    class _Guasto(Exception):
+        pass
+
+    def _chiusura(self, pi, dp, esito):
+        return self.evento("charge.dispute.closed",
+                           {"id": dp, "object": "dispute", "payment_intent": pi,
+                            "charge": "ch_banco", "amount": 20000, "currency": "eur",
+                            "status": esito}, evt_id="evt_chiusa_" + dp)
+
+    def _riga_di_chiusura(self, pi, dp, esito):
+        with self.ascolta() as righe:
+            s, c = self._chiusura(pi, dp, esito)
+        self.assertEqual(200, s, c)
+        trovate = self.errori_con(righe, "chargeback_chiuso", dp)
+        self.assertEqual(1, len(trovate), righe)
+        return trovate[0]
+
+    def test_PERSA_la_riga_nomina_la_prenotazione_e_dice_che_va_scritta_a_mano(self):
+        self.pubblica("casa-316a")
+        b = self.prenota("casa-316a", 5)
+        _deve(self.paga(b["riferimento"], "pi_316a")[0] == 200, "PREMESSA: pagata")
+        riga = self._riga_di_chiusura("pi_316a", "dp_316a", "lost")
+        self.assertIn("RIF: %s |" % fase83_server._rif_per_registro(b["riferimento"]), riga,
+                      "la riga non dice QUALE prenotazione ha perso la contestazione")
+        self.assertIn("PERSA: Stripe ha tenuto importo e commissione", riga)
+        self.assertNotIn("Vinta o chiusa", riga)
+
+    def test_VINTA_su_un_pagamento_sconosciuto_lo_dice(self):
+        riga = self._riga_di_chiusura("pi_316_ignoto", "dp_316b", "won")
+        self.assertIn("RIF: sconosciuto |", riga)
+        self.assertIn("Vinta o chiusa: i soldi tornano su Stripe", riga)
+        self.assertNotIn("PERSA", riga)
+
+    class _Archivio(object):
+        def __init__(self, risposta=True, solleva=None):
+            self.risposta, self.solleva, self.chieste = risposta, solleva, []
+
+        def fatto_gia_presente(self, **k):
+            self.chieste.append(k)
+            if self.solleva is not None:
+                raise self.solleva
+            return self.risposta
+
+    def _chiede(self, archivio, dp):
+        with mock.patch.object(self.sis, "eventi_stripe", archivio), self.ascolta() as righe:
+            esito = self.r._banca_ha_chiuso(dp)
+        return esito, righe
+
+    def test_senza_archivio_la_banca_NON_ha_chiuso_e_non_si_grida(self):
+        esito, righe = self._chiede(None, "dp_316c")
+        self.assertIs(False, esito, "senza l'archivio dei webhook si sblocca l'arbitro")
+        self.assertEqual([], [r for r in righe if r.startswith(("WARNING:", "ERROR:"))],
+                         "un archivio assente gridato come illeggibile (falso allarme)")
+
+    def test_senza_contestazione_la_banca_NON_ha_chiuso_anche_se_l_archivio_dice_si(self):
+        arch = self._Archivio(risposta=True)
+        self.assertIs(False, self._chiede(arch, "")[0])
+        self.assertEqual([], arch.chieste, "chiesto all'archivio senza una contestazione")
+        self.assertIs(True, self._chiede(arch, "dp_316d")[0], "PREMESSA: l'archivio dice si'")
+        self.assertEqual([{"tipo": "charge.dispute.closed", "oggetto_id": "dp_316d",
+                           "evt_id": "-"}], arch.chieste)
+
+    def test_archivio_illeggibile_la_banca_NON_ha_chiuso_e_si_dice_perche(self):
+        esito, righe = self._chiede(self._Archivio(solleva=self._Guasto("db")), "dp_316e")
+        self.assertIs(False, esito, "un archivio illeggibile sblocca l'arbitro")
+        avvisi = self.avvisi_con(righe, "archivio dei webhook illeggibile", "dp_316e")
+        self.assertEqual(1, len(avvisi), righe)
+        self.assertTrue(avvisi[0].endswith("|exc_info:_Guasto"), "l'avviso ha perso la causa: %r"
+                        % (avvisi[0],))
+
+
+class TestPR316IlTettoDiCassaDellaCancellazione(_BancoDeiSoldiDelServer):
+    """Pezzo 4 (PR #316): sopravvissuti del giudice a fase83 :8930 (`and` -> `or`, `in` ->
+    `not in`), la condizione che decide se la garanzia e' GIA' uscita. Le prove del taglio
+    stavano in test_escrow_gia_liquidato, fuori dagli occhi del giudice, e dal 2026-10-11 il
+    freno davanti (409 escrow_gia_liquidato) le ferma prima. Il taglio resta la seconda difesa
+    per quando l'archivio dei pagamenti non risponde: qui lo si prova in quella strada, e
+    dall'altro lato si prova che NON taglia la cancellazione morta a meta' e ripresa (FB2),
+    dove la garanzia l'ha divisa proprio lei."""
+
+    class _Morte(BaseException):          # come TestFB2...: il processo muore
+        pass
+
+    def test_garanzia_gia_dell_host_e_archivio_muto_il_rimborso_e_tagliato(self):
+        self.pubblica("casa-316t", "flessibile")
+        b = self.prenota("casa-316t", 20)
+        rif, pagato = b["riferimento"], int(b["prezzo_guest_cents"])
+        _deve(self.paga(rif, "pi_316t")[0] == 200, "PREMESSA: pagata")
+        with nella_finestra(self.sis, b["voucher_token"]):
+            s, c = self.g("POST", "/api/garanzia/conferma", {"voucher_token": b["voucher_token"]})
+        _deve(s == 200, "PREMESSA: «tutto ok»", s, c)
+        st = self.sis.garanzia.stato(rif)
+        gia_host = int(st["host_riceve_cents"])
+        _deve(st["stato"] == "rilasciato" and gia_host > 0, "PREMESSA: garanzia all'host", st)
+        guasto = mock.patch.object(self.sis.pagamenti_pendenti, "info",
+                                   side_effect=RuntimeError("archivio dei pagamenti muto"))
+        with guasto, self.ascolta() as righe:
+            s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": b["voucher_token"]})
+        self.assertEqual(200, s, "PREMESSA: con l'archivio muto il freno davanti non scatta: %r"
+                         % (c,))
+        self.assertEqual(pagato - gia_host, int(c["rimborso_soggiorno_cents"]),
+                         "PERDITA: rimborso promesso %r su %d incassati, %d gia' all'host"
+                         % (c.get("rimborso_soggiorno_cents"), pagato, gia_host))
+        self.assertEqual(1, len(self.errori_con(righe, "RIMBORSO TAGLIATO AL TETTO DI CASSA")),
+                         righe)
+
+    def _conti(self, rif):
+        gz = self.sis.garanzia.stato(rif) or {}
+        po = self.sis.payout.info(rif) or {}
+        return {"pendente": self.sis.pagamenti_pendenti.info(rif)["stato"],
+                "garanzia": gz.get("stato"), "host_riceve": gz.get("host_riceve_cents"),
+                "ospite_dalla_garanzia": gz.get("ospite_rimborso_cents"),
+                "bonifico": po.get("stato"), "bonifico_importo": po.get("minori"),
+                "rimborsi": [int(m["importo_cents"]) for m in self.sis.finanza.movimenti(rif)
+                             if m.get("tipo") == "rimborso"]}
+
+    def test_FB2_con_penale_parziale_la_ripresa_non_taglia_il_rimborso(self):
+        self.pubblica("casa-316o", "moderata")
+        self.pubblica("casa-316m", "moderata")
+        bo, bm = self.prenota("casa-316o", 2), self.prenota("casa-316m", 2)   # 50% all'ospite
+        _deve(self.paga(bo["riferimento"], "pi_316o")[0] == 200, "PREMESSA: pagata")
+        _deve(self.paga(bm["riferimento"], "pi_316m")[0] == 200, "PREMESSA: pagata")
+        s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": bo["voucher_token"]})
+        _deve(s == 200, "ORACOLO: la cancellazione normale riesce", s, c)
+        atteso = self._conti(bo["riferimento"])
+        _deve(atteso["garanzia"] == "risolto" and (atteso["host_riceve"] or 0) > 0,
+              "ORACOLO: penale parziale, garanzia divisa", atteso)
+        _deve(len(atteso["rimborsi"]) == 1 and atteso["rimborsi"][0] > 0
+              and atteso["rimborsi"][0] > int(bo["prezzo_guest_cents"]) - (
+                  int(atteso["host_riceve"]) + int(atteso["ospite_dalla_garanzia"])),
+              "PREMESSA NON VALIDA: il rimborso deve superare cio' che resterebbe in cassa se "
+              "la garanzia divisa contasse come gia' uscita", atteso, bo)
+
+        rif = bm["riferimento"]
+        vero = self.r._trasferisci_all_host
+
+        def muore(*a, **k):
+            raise self._Morte()
+        self.r._trasferisci_all_host = muore
+        try:
+            with self.assertRaises(self._Morte):              # premessa: arrivata al bonifico
+                self.g("POST", "/api/concierge/cancella", {"voucher_token": bm["voucher_token"]})
+        finally:
+            self.r._trasferisci_all_host = vero
+        _deve((self.sis.garanzia.stato(rif) or {}).get("stato") == "risolto",
+              "PREMESSA: la garanzia e' gia' stata divisa da questa cancellazione")
+        with self.ascolta() as righe:
+            s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": bm["voucher_token"]})
+        self.assertEqual(200, s, "il secondo clic deve finire la cancellazione: %r" % (c,))
+        self.assertEqual(atteso, self._conti(rif),
+                         "la ripresa deve finire coi conti di una cancellazione normale")
+        self.assertEqual([], self.errori_con(righe, "RIMBORSO TAGLIATO"),
+                         "la quota divisa da questa stessa cancellazione contata come uscita")
+
+
 if __name__ == "__main__":
     unittest.main()

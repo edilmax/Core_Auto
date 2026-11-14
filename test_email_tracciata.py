@@ -751,6 +751,10 @@ class TestLaCodaEmailIConfini(unittest.TestCase):
         c.accoda("a@b.it", "o", "<p>x</p>")
         with self.assertLogs("core_auto.email", level="ERROR") as log:
             c.avvia(ogni_s=0.01)
+            # PRIMA di ogni asserzione (pezzo 4, PR #316): col guasto `daemon=False` (fase86:259)
+            # l'asserzione qui sotto cadeva e il giro restava vivo, il processo non finiva piu' e
+            # il giudice scriveva «i test non hanno finito in tempo» invece di «ucciso»
+            self.addCleanup(c.ferma)
             giro = c._giro
             self.assertTrue(giro.daemon, "il giro deve essere un thread demone")
             c.avvia(ogni_s=0.01)
