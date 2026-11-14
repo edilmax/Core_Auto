@@ -121,6 +121,149 @@ def crea_provider_email(host: Optional[str], port: int = 587, user: str = "",
 
 
 # ═══════════════════════════════════════════════════════════════════════════════════
+#  LA CODA DELLE EMAIL FALLITE (ordine del fondatore 10/11): si salvano e si ritentano.
+#  Sola libreria standard e un archivio SQLite tutto suo (niente soldi, niente sito).
+#  ⛔ Non e' la coda del vecchio impianto: quella portava in produzione il modulo che importa
+#  flask, psutil e requests, e altri tre moduli fuori da ogni misura. Due processi possono aprire lo stesso
+#  archivio (il sito e cron_sweep_eventi): una riga si PRENDE con un CAS prima di mandarla,
+#  e una presa piu' vecchia di PRESA_SCADE_S e' di un processo morto e si riprende.
+# ═══════════════════════════════════════════════════════════════════════════════════
+TENTATIVI_EMAIL = 288        # attesa che raddoppia fino a 5 minuti: circa un giorno
+ATTESA_PRIMA_S = 30
+ATTESA_MASSIMA_S = 300
+PRESA_SCADE_S = 600
+
+
+class CodaEmail:
+    """`accoda` salva un'email fallita; `un_giro` ritenta quelle scadute; consegnata =
+    riga cancellata (dati personali). Oltre `tentativi` resta 'non_consegnabile' con un
+    CRITICAL. `invia(a, oggetto, html) -> bool` e `ora` sono iniettati."""
+
+    def __init__(self, percorso: str, invia: Callable[[Any, str, str], Any], *,
+                 tentativi: int = TENTATIVI_EMAIL,
+                 ora: Callable[[], float] = time.time) -> None:
+        self.percorso = percorso
+        self._invia = invia
+        self._tentativi = tentativi
+        self._ora = ora
+        self._ferma = None
+        self._giro = None
+
+    def _apri(self):
+        import sqlite3
+        con = sqlite3.connect(self.percorso, timeout=30)
+        con.execute("PRAGMA journal_mode=WAL")
+        con.execute("PRAGMA secure_delete=ON")   # consegnata = cancellata anche dai byte
+        con.execute("CREATE TABLE IF NOT EXISTS coda_email (id INTEGER PRIMARY KEY "
+                    "AUTOINCREMENT, a TEXT NOT NULL, oggetto TEXT NOT NULL, html TEXT NOT NULL, "
+                    "template TEXT NOT NULL DEFAULT '', riferimento TEXT NOT NULL DEFAULT '', "
+                    "stato TEXT NOT NULL DEFAULT 'attesa', tentativi INTEGER NOT NULL DEFAULT 0, "
+                    "prossimo_ts INTEGER NOT NULL, presa_ts INTEGER NOT NULL DEFAULT 0, "
+                    "creato_ts INTEGER NOT NULL)")
+        return con
+
+    def inizializza_schema(self) -> None:
+        """Crea l'archivio all'avvio: un guasto del disco si vede subito, non alla prima
+        email fallita."""
+        self._apri().close()
+
+    def accoda(self, destinatario: Any, oggetto: Any, html: Any, template: Any = "",
+               riferimento: Any = "") -> bool:
+        if not (isinstance(destinatario, str) and "@" in destinatario):
+            return False
+        ora = int(self._ora())
+        con = self._apri()
+        try:
+            with con:
+                con.execute("INSERT INTO coda_email (a, oggetto, html, template, riferimento, "
+                            "prossimo_ts, creato_ts) VALUES (?,?,?,?,?,?,?)",
+                            (destinatario, str(oggetto), str(html), str(template or ""),
+                             str(riferimento or ""), ora, ora))
+        finally:
+            con.close()
+        return True
+
+    def _prendi(self, id_riga: int) -> bool:
+        """CAS: la riga e' mia solo se era in attesa, o presa da un processo morto."""
+        ora = int(self._ora())
+        con = self._apri()
+        try:
+            with con:
+                cur = con.execute("UPDATE coda_email SET stato='presa', presa_ts=? WHERE id=? "
+                                  "AND (stato='attesa' OR (stato='presa' AND presa_ts<=?))",
+                                  (ora, id_riga, ora - PRESA_SCADE_S))
+            return cur.rowcount == 1
+        finally:
+            con.close()
+
+    def un_giro(self, limite: int = 20) -> int:
+        """Ritenta le email scadute. Ritorna quante sono state consegnate."""
+        ora = int(self._ora())
+        con = self._apri()
+        try:
+            righe = con.execute("SELECT id, a, oggetto, html, riferimento, tentativi FROM "
+                                "coda_email WHERE (stato='attesa' AND prossimo_ts<=?) OR "
+                                "(stato='presa' AND presa_ts<=?) ORDER BY id LIMIT ?",
+                                (ora, ora - PRESA_SCADE_S, limite)).fetchall()
+        finally:
+            con.close()
+        consegnate = 0
+        for id_riga, a, ogg, html, rif, tent in righe:
+            if not self._prendi(id_riga):
+                continue
+            try:
+                ok = bool(self._invia(a, ogg, html))
+            except Exception:
+                logger.warning("Coda email: invio fallito (ISOLATO)", exc_info=True)
+                ok = False
+            con = self._apri()
+            try:
+                with con:
+                    if ok:
+                        con.execute("DELETE FROM coda_email WHERE id=?", (id_riga,))
+                    elif tent + 1 >= self._tentativi:
+                        con.execute("UPDATE coda_email SET stato='non_consegnabile', "
+                                    "tentativi=? WHERE id=?", (tent + 1, id_riga))
+                    else:
+                        attesa = min(ATTESA_MASSIMA_S, ATTESA_PRIMA_S * 2 ** tent)
+                        con.execute("UPDATE coda_email SET stato='attesa', tentativi=?, "
+                                    "prossimo_ts=? WHERE id=?",
+                                    (tent + 1, int(self._ora()) + attesa, id_riga))
+            finally:
+                con.close()
+            if ok:
+                consegnate += 1
+            elif tent + 1 >= self._tentativi:
+                logger.critical("EMAIL NON CONSEGNABILE | riferimento: %s | tentativi: %d | "
+                                "messaggio: resta nella coda, va mandata a mano",
+                                rif, tent + 1)
+        return consegnate
+
+    def avvia(self, ogni_s: float = 30.0) -> None:
+        """Il giro in un thread demone: un errore del giro non lo ferma."""
+        import threading
+        if self._giro is not None:
+            return
+        self._ferma = threading.Event()
+
+        def _ciclo() -> None:
+            while not self._ferma.wait(ogni_s):
+                try:
+                    self.un_giro()
+                except Exception:
+                    logger.error("CODA EMAIL | codice: giro_fallito | messaggio: il giro della "
+                                 "coda e' esploso, riprova al prossimo", exc_info=True)
+
+        self._giro = threading.Thread(target=_ciclo, name="coda-email", daemon=True)
+        self._giro.start()
+
+    def ferma(self) -> None:
+        if self._ferma is not None:
+            self._ferma.set()
+        self._giro = None
+
+
+# ═══════════════════════════════════════════════════════════════════════════════════
 #  LOCALIZZAZIONE — tutte le email in 8 lingue. Ripiego su INGLESE, mai su italiano.
 # ═══════════════════════════════════════════════════════════════════════════════════
 LINGUE = ("it", "en", "es", "fr", "de", "pt", "ja", "zh")

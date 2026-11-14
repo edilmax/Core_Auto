@@ -1230,6 +1230,7 @@ class TestIRamiDelBloccoCheNessunoEseguiva(_Base):
         pp = self.sis.pagamenti_pendenti
         rec = pp.info(rif)
         pp.scadi(rif)
+        pp.scadenza_finita(rif)    # FB5: lo sweeper vero finisce i passi nello stesso giro
         ci, co = _vero(ci), _vero(co)
         self.sis.inventario.rilascia("casa", ci, co,
                                      idem_key=(rec.get("idem_key") or ("hold_" + rif)))

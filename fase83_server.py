@@ -148,14 +148,37 @@ def _invia_tracciato(prov: Any, destinatario: Any, oggetto: Any, corpo_html: Any
     except Exception:
         logger.error("EMAIL NON CONSEGNATA (eccezione ISOLATA): template=%s riferimento=%s",
                      _riga_registro(template), _riga_registro(riferimento), exc_info=True)
-        _conta_email_ko(template)
-        return False
+        esito = None
     if not esito:
-        logger.error("EMAIL NON CONSEGNATA: template=%s riferimento=%s -- il provider ha "
-                     "risposto NO dopo i suoi tentativi",
-                     _riga_registro(template), _riga_registro(riferimento))
+        if esito is False:
+            logger.error("EMAIL NON CONSEGNATA: template=%s riferimento=%s -- il provider ha "
+                         "risposto NO dopo i suoi tentativi",
+                         _riga_registro(template), _riga_registro(riferimento))
         _conta_email_ko(template)
-    return esito
+        _accoda_email(prov, destinatario, oggetto, corpo_html, template, riferimento)
+    return bool(esito)
+
+
+def _accoda_email(prov: Any, destinatario: Any, oggetto: Any, corpo_html: Any,
+                  template: str, riferimento: str) -> None:
+    """ORDINE DEL FONDATORE (10/11): l'email fallita si SALVA e si ritenta (coda di fase86,
+    collegata da fase81.collega_coda_email). Senza coda resta il comportamento di prima:
+    contata e gridata. Mai solleva: gira dentro il thread dell'invio."""
+    coda = getattr(prov, "coda_email", None)
+    if coda is None:
+        return
+    try:
+        if not coda.accoda(destinatario, oggetto, corpo_html, template, riferimento):
+            logger.error("EMAIL PERSA | codice: destinatario_non_valido | template=%s "
+                         "riferimento=%s | messaggio: indirizzo assente o senza @, non si "
+                         "ritenta", _riga_registro(template), _riga_registro(riferimento))
+            return
+        logger.warning("EMAIL IN CODA: template=%s riferimento=%s -- si ritenta da sola",
+                       _riga_registro(template), _riga_registro(riferimento))
+    except Exception:
+        logger.error("EMAIL PERSA | codice: coda_non_scrivibile | template=%s riferimento=%s "
+                     "| messaggio: l'email fallita non e' stata salvata per ritentarla",
+                     _riga_registro(template), _riga_registro(riferimento), exc_info=True)
 
 # La FORMA di un riferimento di prenotazione. MISURATA, non supposta: su 300 riferimenti
 # generati dal vero (`fase59:547`, `idem[:24]` della firma) l'esito e' sempre
@@ -3236,6 +3259,17 @@ class RouterHTTP:
                            exc_info=True)
             return False
 
+    def _divisa_dalla_cancellazione(self, rif, st=None):
+        """FB2 (11/11): la garanzia e' 'risolto' perche' l'ha divisa la cancellazione di QUESTA
+        prenotazione (`chiudi_proporzionale` con motivo `cancellazione:<rif>`), non l'arbitro.
+        Vuol dire una cancellazione morta dopo la divisione: si puo' finire. Una garanzia
+        illeggibile SOLLEVA, come in `_garanzia_gia_divisa`: nel dubbio decide chi chiama."""
+        if st is None:
+            gz = getattr(self._sys, "garanzia", None)
+            st = gz.stato(str(rif)) if gz is not None else None
+        return (isinstance(st, dict) and st.get("stato") == "risolto"
+                and st.get("motivo") == "cancellazione:" + str(rif))
+
     def _garanzia_aperta(self, rif):
         """La garanzia di questa prenotazione NON e' ancora chiusa a favore dell'host
         ('rilasciato' o 'risolto')? Allora i soldi non sono suoi: il bonifico parte allo
@@ -6014,8 +6048,9 @@ class RouterHTTP:
         # una» (docs.stripe.com/disputes/how-disputes-work). Quando la banca l'ha chiusa (si
         # guarda sul pannello di Stripe) l'arbitro decide dicendolo apposta, cosi' i soldi
         # non restano fermi per sempre: `la_banca_ha_deciso`.
-        if (str(st.get("motivo") or "").startswith("chargeback:")
-                and dati.get("la_banca_ha_deciso") is not True):
+        _motivo = str(st.get("motivo") or "")
+        if (_motivo.startswith("chargeback:") and dati.get("la_banca_ha_deciso") is not True
+                and not self._banca_ha_chiuso(_motivo[len("chargeback:"):])):
             return 409, {"errore": "decide_la_banca"}
         importo = int(st.get("importo_host_cents", 0))
         # calcolo il rimborso: da percentuale (0-100) oppure importo esatto
@@ -8782,7 +8817,9 @@ class RouterHTTP:
         # passato non si cancella» stanno in un posto solo. Dopo l'arrivo c'e' «segnala un
         # problema». Guardie: `test_fase83_server.TestUnSoggiornoGiaIniziatoNonSiCancellaDalVoucher`.
         if _rec is not None and _rec.get("stato") == "pagato":
-            if self._garanzia_gia_divisa(rif):
+            # FB2 (11/11): una garanzia divisa da QUESTA cancellazione (morta dopo la divisione)
+            # non chiude la porta: il clic dopo la finisce, con la quota gia' decisa.
+            if self._garanzia_gia_divisa(rif) and not self._divisa_dalla_cancellazione(rif):
                 return 409, {"errore": "escrow_gia_liquidato"}
             _conc = self._sys.concierge
             if _conc._now() >= _conc._fine_giorno_arrivo(allog, ci):
@@ -8885,10 +8922,13 @@ class RouterHTTP:
             if gz is not None:
                 st = gz.stato(rif)
                 imp = st.get("importo_host_cents", 0) if isinstance(st, dict) else 0
+                _divisa_qui = self._divisa_dalla_cancellazione(rif, st)
                 # ESCROW GIA' DECISO: 'rilasciato' (l'ospite ha premuto "tutto ok" -> bonifico
                 # Connect gia' partito) o 'risolto' (arbitrato: quota host + quota rimborsata).
-                # Quei soldi NON sono piu' in cassa nostra.
-                if isinstance(st, dict) and st.get("stato") in ("rilasciato", "risolto"):
+                # Quei soldi NON sono piu' in cassa nostra. FB2: non se a dividerla e' stata
+                # questa stessa cancellazione, morta a meta': la quota decisa allora vale ancora.
+                if (isinstance(st, dict) and st.get("stato") in ("rilasciato", "risolto")
+                        and not _divisa_qui):
                     gia_uscito = (int(st.get("host_riceve_cents", 0) or 0)
                                   + int(st.get("ospite_rimborso_cents", 0) or 0))
                 tratt = r.get("trattenuto_cents", 0)
@@ -8896,8 +8936,11 @@ class RouterHTTP:
                 # dell'host si calcola sul solo soggiorno, o quei soldi uscirebbero due volte
                 _base_g = max(0, imp - _intero_positivo(v.get("tassa_soggiorno_cents", 0)))
                 host_tiene = (_base_g * tratt // pagato) if pagato else 0
-                if host_tiene > 0:
-                    esito_gz = gz.chiudi_proporzionale(rif, host_tiene)
+                if _divisa_qui:
+                    host_tiene = int(st.get("host_riceve_cents", 0) or 0)
+                elif host_tiene > 0:
+                    esito_gz = gz.chiudi_proporzionale(rif, host_tiene,
+                                                       motivo="cancellazione:" + str(rif))
                     if not (isinstance(esito_gz, dict) and esito_gz.get("ok")):
                         host_tiene = 0     # escrow gia' deciso altrove: non pagare due volte
                 else:
@@ -10506,6 +10549,8 @@ class RouterHTTP:
                 esito_perso = "conferma_pagamento_fallita"
         elif tipo == "charge.dispute.created":
             esito_perso = self._contestazione_carta((dati or {}).get("object", {}) or {})
+        elif tipo == "charge.dispute.closed":
+            self._contestazione_chiusa((dati or {}).get("object", {}) or {})
         elif str(tipo).startswith("identity.verification_session."):
             # STRIPE IDENTITY (Incr.11): il webhook porta l'ESITO (mai il documento).
             # ISOLATO: qualunque errore qui non tocca il resto del webhook.
@@ -10601,6 +10646,42 @@ class RouterHTTP:
                          "contestazione: %s | niente scritto: Stripe ritentera'", dp,
                          exc_info=True)
             return "contestazione_esplosa"
+
+    def _contestazione_chiusa(self, obj):
+        """ST3/CP5 (campagna 8/11): la banca ha deciso la contestazione. L'evento resta
+        nell'archivio dei webhook (fase204), ed e' da li' che l'arbitro sa che puo' decidere
+        (`_banca_ha_chiuso`). Qui si dice a una persona cosa e' successo: con 'lost' Stripe
+        ha tenuto importo e commissione, e la riga di perdita nel giornale NON e' ancora
+        automatica (limite dichiarato: va scritta a mano finche' non si decide chi la paga)."""
+        esito = _rif_per_registro(obj.get("status") or "")
+        dp = _rif_per_registro(obj.get("id") or "")
+        try:
+            pp = getattr(self._sys, "pagamenti_pendenti", None)
+            rec = pp.per_payment_intent(obj.get("payment_intent")) if pp is not None else None
+        except Exception:
+            rec = None
+        logger.error("CHARGEBACK | codice: chargeback_chiuso | esito: %s | contestazione: %s | "
+                     "RIF: %s | importo: %s %s | messaggio: la banca ha deciso; «Risolvi» nel "
+                     "pannello ora decide la garanzia. %s", esito, dp,
+                     _rif_per_registro((rec or {}).get("riferimento") or "sconosciuto"),
+                     _rif_per_registro(obj.get("amount", "")),
+                     _rif_per_registro(obj.get("currency", "")),
+                     "PERSA: Stripe ha tenuto importo e commissione, la perdita va scritta a mano "
+                     "nel giornale" if obj.get("status") == "lost" else
+                     "Vinta o chiusa: i soldi tornano su Stripe")
+
+    def _banca_ha_chiuso(self, dp):
+        """True se Stripe ci ha detto che la contestazione `dp` e' chiusa (evento elaborato)."""
+        archivio = getattr(self._sys, "eventi_stripe", None)
+        if archivio is None or not dp:
+            return False
+        try:
+            return bool(archivio.fatto_gia_presente(tipo="charge.dispute.closed",
+                                                    oggetto_id=dp, evt_id="-"))
+        except Exception:
+            logger.warning("archivio dei webhook illeggibile: contestazione %s ancora aperta",
+                           dp, exc_info=True)
+            return False
 
     # ── SCATTO ③: carta host off-session (fase183) ──────────────────────────
     MANDATO_CARTA = ("Autorizzo BookinVIP ad addebitare su questa carta gli importi che "
@@ -11116,6 +11197,13 @@ class RouterHTTP:
                 logger.warning("pagamento per riferimento sconosciuto '%s' (ignorato)",
                                _rif_per_registro(rif))
                 return
+            if rec.get("attendi_sweeper"):
+                # FB5 (10/11): pagamento tardivo arrivato mentre lo sweeper finisce la scadenza
+                logger.error("webhook | codice: sweeper_in_corso | riferimento: %s | messaggio: "
+                             "pagamento tardivo arrivato a scadenza non ancora finita: niente "
+                             "conferma, rispondo 503 perche' Stripe ritenti",
+                             _rif_per_registro(rif))
+                return False
             stato = rec.get("stato", "")
             try:
                 _segno = json.loads(rec.get("corpo_json") or "{}").get("pagamento_tardivo")

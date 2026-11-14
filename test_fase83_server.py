@@ -4285,6 +4285,77 @@ class TestIlBloccoIncassatoSuUnaCancellazioneDellOspiteSiRestituisce(_OraVeraPer
                          "IMPORTO DOVUTO DI ZERO SEGNATO NEL BLOCCO: %r" % (self.corpo(rif),))
 
 
+class TestFB2CancellazioneConPenaleMortaDopoLaGaranzia(_OraVeraPerIlPreventivo, _BancoDelBlocco):
+    """FB2 (revisione Fable, 10/11): l'ospite cancella fuori dalle 48 ore (penale: politica
+    `non_rimborsabile`, all'ospite torna la tassa), la garanzia viene divisa
+    (`chiudi_proporzionale` -> 'risolto') e il processo muore nel bonifico all'host. Il pendente
+    restava 'pagato', la riga 'rimborso' non nasceva, e ogni nuovo clic rispondeva 409
+    escrow_gia_liquidato: l'ospite non compariva mai in «Rimborsi dovuti». ORACOLO: una seconda
+    prenotazione identica cancellata senza morte; la ripresa deve finire con gli STESSI conti."""
+
+    def _paga(self, rif, n):
+        cs, pi = "cs_fb2_%d" % n, "pi_fb2_%d" % n
+        self.stripe.sessioni[cs] = ("paid", pi)
+        self.stripe.pagamenti[pi] = "succeeded"
+        s, c = self.evento("evt_fb2_%d" % n, "checkout.session.completed", rif, cs, pi)
+        self.assertEqual(s, 200, "PREMESSA: %r" % (c,))
+        self.assertEqual(self.stato(rif), "pagato", "PREMESSA: pagata")
+
+    def _conti(self, rif):
+        gz = self.sis.garanzia.stato(rif) or {}
+        po = self.sis.payout.info(rif) or {}
+        return {"pendente": self.stato(rif), "garanzia": gz.get("stato"),
+                "host_riceve": gz.get("host_riceve_cents"),
+                "ospite_dalla_garanzia": gz.get("ospite_rimborso_cents"),
+                "bonifico": po.get("stato"), "bonifico_importo": po.get("minori"),
+                "rimborsi": [int(m["importo_cents"]) for m in self.movimenti(rif, "rimborso")]}
+
+    def test_FB2_morta_dopo_chiudi_proporzionale_il_secondo_clic_finisce_la_cancellazione(self):
+        class _Morte(BaseException):          # come test_race_hold_conferma: il processo muore
+            pass
+
+        rif, vt, _tot = self.prenota("2027-04-10", "2027-04-12")
+        rif_o, vt_o, _tot_o = self.prenota("2027-05-10", "2027-05-12")
+        self._paga(rif, 1)
+        self._paga(rif_o, 2)
+        dopo = time.time() + fase83_server.SECONDI_RIPENSAMENTO + 3600   # fuori dalle 48 ore
+
+        with mock.patch("time.time", return_value=dopo):                 # l'oracolo: senza morte
+            s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": vt_o})
+        self.assertEqual(s, 200, "ORACOLO: la cancellazione normale riesce: %r" % (c,))
+        atteso = self._conti(rif_o)
+        self.assertGreater(atteso["host_riceve"] or 0, 0, "ORACOLO: c'e' una penale per l'host")
+        self.assertEqual(len(atteso["rimborsi"]), 1, "ORACOLO: una riga di rimborso (la tassa)")
+
+        vero = self.r._trasferisci_all_host
+
+        def muore(*a, **k):
+            raise _Morte()
+        self.r._trasferisci_all_host = muore
+        try:
+            with mock.patch("time.time", return_value=dopo):
+                with self.assertRaises(_Morte):               # premessa: e' arrivata al bonifico
+                    self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
+        finally:
+            self.r._trasferisci_all_host = vero
+        self.assertEqual((self.sis.garanzia.stato(rif) or {}).get("stato"), "risolto",
+                         "PREMESSA: la garanzia e' gia' stata divisa dalla penale")
+        self.assertEqual(self.stato(rif), "pagato", "PREMESSA: il pendente non e' stato marcato")
+        self.assertEqual(self.movimenti(rif, "rimborso"), [], "PREMESSA: nessuna riga di rimborso")
+
+        with mock.patch("time.time", return_value=dopo + 60):           # il secondo clic
+            s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
+        self.assertEqual(s, 200,
+                         "CANCELLAZIONE MORTA A META' E MAI FINITA: il secondo clic dell'ospite "
+                         "risponde %r" % (c,))
+        self.assertEqual(self._conti(rif), atteso,
+                         "la cancellazione ripresa deve finire coi conti di una cancellazione "
+                         "normale (rimborso all'ospite, quota e bonifico dell'host)")
+        with mock.patch("time.time", return_value=dopo + 120):          # un terzo clic: niente
+            s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
+        self.assertEqual(self._conti(rif), atteso, "un terzo clic non cambia piu' niente: %r" % (c,))
+
+
 class TestIlRimborsoDellAdminColBloccoIncassatoDopo(_OraVeraPerIlPreventivo, _SpieDelBlocco):
     """Limite 8a della voce 143 (voce 179, PROTON 26/10), SPOSTATA qui da test_blocco_carta
     `TestIlRimborsoDellAdminColBlocco` (27/10): la riga che guarda sta in fase83
@@ -4764,6 +4835,36 @@ class TestUnaControversiaApertaFermaISoldi(_BancoDeiSoldiDelServer):
         self.assertEqual(200, s, "con la banca che ha deciso l'arbitro deve poter chiudere: %r"
                          % (c,))
         self.assertEqual("risolto", self.sis.garanzia.stato(rif)["stato"])
+
+    # ── ST3/CP5 (campagna 8/11): il pulsante «Risolvi» del pannello non manda mai
+    #    `la_banca_ha_deciso`, e nessuno ascoltava `charge.dispute.closed`: soldi fermi per sempre
+    def _chiusura(self, pi, dp, esito):
+        return self.evento("charge.dispute.closed",
+                           {"id": dp, "object": "dispute", "payment_intent": pi,
+                            "charge": "ch_banco", "amount": 20000, "currency": "eur",
+                            "status": esito}, evt_id="evt_chiusa_" + dp)
+
+    def test_ST3_chiusa_dalla_banca_l_arbitro_decide_senza_spunta_e_lo_si_dice(self):
+        b = self._pagata("casa-st3", 2, "pi_st3")
+        rif = b["riferimento"]
+        s, c = self.contestazione("pi_st3", dp="dp_st3")
+        _deve(s == 200, "PREMESSA: contestazione della banca registrata", s, c)
+        with self.ascolta() as righe:
+            s, c = self._chiusura("pi_st3", "dp_st3", "lost")
+        self.assertEqual(200, s, c)
+        self.assertTrue(self.errori_con(righe, "chargeback_chiuso", "dp_st3", "lost"),
+                        "la banca ha chiuso la contestazione e nessuno lo sa: %r" % (righe,))
+        s, c = self._arbitro(rif, 100)
+        self.assertEqual(200, s, "la banca ha deciso e l'arbitro resta bloccato: %r" % (c,))
+        self.assertEqual("risolto", self.sis.garanzia.stato(rif)["stato"])
+
+    def test_ST3_la_chiusura_di_UN_ALTRA_contestazione_non_sblocca(self):
+        b = self._pagata("casa-st3b", 2, "pi_st3b")
+        rif = b["riferimento"]
+        self.contestazione("pi_st3b", dp="dp_st3b")
+        self._chiusura("pi_altro", "dp_altra", "won")
+        s, c = self._arbitro(rif, 50)
+        self.assertEqual((409, "decide_la_banca"), (s, (c or {}).get("errore")), c)
 
     def _all_istante(self, b, secondi_dallo_sblocco, rotta):
         rif = b["riferimento"]

@@ -798,6 +798,9 @@ class FinancialController:
             if (m.get("tipo") == "penale_offset"
                     and ev.startswith("offset:%s:" % nota["nota_id"])):
                 storico += int(m.get("importo_cents") or 0)
+            elif (m.get("tipo") == "penale_incassata"   # variante FB4: gia' presa dalla carta
+                  and ev.startswith("carta:%s:" % nota["nota_id"])):
+                storico += int(m.get("importo_cents") or 0)
             elif (m.get("tipo") == "storno"
                   and ev.startswith("storno-offset:%s:" % nota["nota_id"])):
                 storico -= int(m.get("importo_cents") or 0)
@@ -1118,7 +1121,7 @@ class FinancialController:
             if isinstance(prossimo, int) and not isinstance(prossimo, bool) and prossimo > ora:
                 continue                       # ancora in backoff: non ritentare adesso
             # DB5 (8/11): lo storno della nota e' partito dopo la lettura dei debiti -> niente
-            # addebito (lo storno conta solo le compensazioni: questi soldi non tornerebbero)
+            # addebito (si prenderebbero dalla carta soldi gia' da restituire)
             if self._storno_partito(nota_id):
                 continue
             idem = "carta:%s:%d" % (nota_id, residuo)
@@ -1203,7 +1206,8 @@ class FinancialController:
           2) il debito -> residuo 0, stato 'stornato'
              (riscuoti_debiti non lo riprendera' MAI piu': filtra stato='aperto');
           3) RESTITUZIONE dell'eventuale gia' RISCOSSO (verita' dal giornale: offset
-             della nota meno storni) -> riga payout 'maturato' `stornoND-<ND>` visibile
+             della nota e penale presa dalla carta, meno storni; FB4 10/11) -> riga payout
+             'maturato' `stornoND-<ND>` visibile
              in da_pagare per il bonifico MANUALE del fondatore (una correzione la firma
              un umano, mai un transfer automatico; PK fissa = zero doppi accrediti);
           4) SOLO ALLA FINE ND -> 'stornata': se la restituzione manca resta com'e' e
@@ -1243,6 +1247,8 @@ class FinancialController:
             ev = str(m.get("evento_id") or "")
             if m.get("tipo") == "penale_offset" and ev.startswith("offset:%s:" % nid):
                 riscosso += int(m.get("importo_cents") or 0)
+            elif m.get("tipo") == "penale_incassata" and ev.startswith("carta:%s:" % nid):
+                riscosso += int(m.get("importo_cents") or 0)   # FB4: presa dalla carta
             elif m.get("tipo") == "storno" and ev.startswith("storno-offset:%s:" % nid):
                 riscosso -= int(m.get("importo_cents") or 0)
         riscosso = max(0, riscosso)

@@ -88,6 +88,12 @@ class TestCasFase162(unittest.TestCase):
             if esiti["scadi"]:
                 self.assertEqual(esiti["prev"], "scaduto",
                                  "giro %d: sweeper ha vinto -> la conferma DEVE saperlo" % i)
+                # FB5 (10/11): lo sweeper ha preso il record e deve ancora fare i suoi passi:
+                # la conferma ASPETTA (503, Stripe ritenta) e conferma a passi finiti.
+                self.assertEqual(self.pp.info(rif)["stato"], "scaduto",
+                                 "giro %d: confermato mentre lo sweeper era a meta'" % i)
+                self.pp.scadenza_finita(rif)
+                self.assertEqual((self.pp.conferma(rif) or {}).get("stato"), "scaduto")
             else:
                 self.assertEqual(esiti["prev"], "in_attesa",
                                  "giro %d: conferma ha vinto -> scadi deve fallire" % i)
@@ -424,10 +430,18 @@ class TestGaraSweeperConferma(unittest.TestCase):
         self.assertEqual(self.recuperi, ["VE1"], "email «riprova» mandata due volte")
 
     def test_Ve_un_tardivo_dopo_la_morte_dello_sweeper_non_viene_disfatto(self):
+        """FB5 (10/11): con lo sweeper morto a meta' (segno acceso) il pagamento tardivo NON
+        conferma subito: 503, e Stripe ritenta. Il giro dopo dello sweeper finisce i passi e
+        spegne il segno; il ritentativo conferma col riblocco. Prima confermava subito, ed era
+        la stessa porta da cui passava FB5 (sweeper gia' in corsa che cancella bonifico e
+        garanzia). Limite dichiarato: nel mezzo all'ospite parte l'email «riprova»."""
         self._hold_col_credito("VE2")
         self._sweep_che_muore()
-        self.r._conferma_pagamento("VE2")                                  # paga in ritardo
-        self.assertEqual(self.pp.info("VE2")["stato"], "pagato")          # premessa
+        self.assertIs(self.r._conferma_pagamento("VE2"), False, "doveva rispondere 503")
+        self.assertEqual(self.pp.info("VE2")["stato"], "scaduto")         # premessa
+        sweep_hold_una_passata(self.sys, self.r)                          # finisce i passi
+        self.assertIsNot(self.r._conferma_pagamento("VE2"), False)       # ritentativo di Stripe
+        self.assertEqual(self.pp.info("VE2")["stato"], "pagato")
         sweep_hold_una_passata(self.sys, self.r)
         self.assertFalse(self.sys.inventario.blocca("casa-race", CI, CO, idem_key="ladroVE").ok,
                          "lo sweeper ha liberato la stanza di chi ha pagato")
@@ -462,6 +476,87 @@ class TestGaraSweeperConferma(unittest.TestCase):
         self.r._conferma_pagamento("RACE4")
         self.assertEqual(self.pp.info("RACE4")["stato"], "rimborsato",
                          "stanza presa da altri -> il pagatore tardivo va rimborsato")
+
+
+class _PPTrappolaSullaLettura:
+    """Il pagamento tardivo arriva ESATTAMENTE fra la lettura della ripresa V-e (`pp.info`,
+    che dice ancora 'scaduto') e i passi dello sweeper. Scatta una volta sola."""
+
+    def __init__(self, vero, dopo_la_lettura):
+        self._vero = vero
+        self._dopo = dopo_la_lettura
+        self._scattata = False
+
+    def info(self, riferimento):
+        r = self._vero.info(riferimento)
+        if not self._scattata and (r or {}).get("stato") == "scaduto":
+            self._scattata = True
+            self._dopo()
+        return r
+
+    def __getattr__(self, nome):
+        return getattr(self._vero, nome)
+
+
+class TestFB5PagamentoDuranteLaRipresaDelloSweeper(unittest.TestCase):
+    """FB5 (revisione Fable 10/11; modello TLA+ ScadenzaFB5: regole vecchie «PagatoHaSoldi
+    violated», nuove nessun errore). La ripresa V-e legge lo stato e POI agisce senza CAS: un
+    pagamento tardivo arrivato nel mezzo si vedeva cancellare il bonifico all'host e annullare
+    la garanzia. Il rimedio: da 'scaduto' col segno dello sweeper acceso il pagamento NON
+    conferma e risponde 503 (Stripe ritenta); confermera' a passi dello sweeper finiti."""
+    setUp = TestGaraSweeperConferma.setUp
+    tearDown = TestGaraSweeperConferma.tearDown
+    g = TestGaraSweeperConferma.g
+    _sweep_che_muore = TestGaraSweeperConferma._sweep_che_muore
+
+    def test_FB5_tardivo_durante_la_ripresa_non_perde_bonifico_ne_garanzia(self):
+        rif = "VE3"
+        e = self.sys.inventario.blocca("casa-race", CI, CO, idem_key="hold_" + rif)
+        self.assertTrue(e.ok, getattr(e, "errore", ""))
+        self.pp.registra(rif, alloggio_id="casa-race", check_in=CI, check_out=CO,
+                         idem_key="hold_" + rif, scadenza_ts=int(time.time()) - 10,
+                         corpo_json=json.dumps({"host_id": "h_race", "netto_host_cents": 8000,
+                                                "valuta": "EUR"}))
+        self._sweep_che_muore()                  # morto dopo il CAS 'scaduto': segno acceso
+        self.assertEqual(self.pp.info(rif)["stato"], "scaduto")                  # premessa
+        self.assertEqual([r["riferimento"] for r in self.pp.scaduti_da_finire()], [rif])
+        prima_risposta = []
+        self.sys.pagamenti_pendenti = _PPTrappolaSullaLettura(
+            self.pp, lambda: prima_risposta.append(self.r._conferma_pagamento(rif)))
+        sweep_hold_una_passata(self.sys, self.r)
+        self.sys.pagamenti_pendenti = self.pp
+        self.assertEqual(len(prima_risposta), 1, "PREMESSA: la trappola non e' scattata")
+        if prima_risposta[0] is False:            # 503: Stripe ritenta, a sweeper finito
+            self.r._conferma_pagamento(rif)
+        self.assertEqual(self.pp.info(rif)["stato"], "pagato")
+        self.assertIsNotNone(
+            self.sys.payout.info(rif),
+            "FB5: lo sweeper ha cancellato il bonifico 'maturato' del pagamento tardivo arrivato "
+            "fra la sua lettura e `_pd.rimuovi` (l'host non sara' mai pagato)")
+        self.assertEqual(self.sys.payout.info(rif)["minori"], 8000)
+        self.assertEqual((self.sys.garanzia.stato(rif) or {}).get("stato"), "in_garanzia",
+                         "FB5: lo sweeper ha annullato la garanzia aperta dal pagamento tardivo")
+        self.assertFalse(self.sys.inventario.blocca("casa-race", CI, CO,
+                                                    idem_key="ladroVE3").ok,
+                         "stanza di chi ha pagato liberata")
+        # Limite dichiarato: l'email «riprova» parte (lo sweeper la manda mentre il pagamento
+        # aspetta il 503); la conferma arriva dopo. Nessun soldo perso.
+        self.assertIs(prima_risposta[0], False, "il pagamento ha confermato a sweeper in corso")
+
+    def test_FB5_controllo_senza_segno_il_tardivo_conferma_subito(self):
+        """Controllo: sweeper che ha FINITO i suoi passi (segno spento) -> il pagamento tardivo
+        conferma al primo colpo, nessun 503 in piu'."""
+        rif = "VE4"
+        e = self.sys.inventario.blocca("casa-race", CI, CO, idem_key="hold_" + rif)
+        self.assertTrue(e.ok)
+        self.pp.registra(rif, alloggio_id="casa-race", check_in=CI, check_out=CO,
+                         idem_key="hold_" + rif, scadenza_ts=int(time.time()) - 10,
+                         corpo_json=json.dumps({"host_id": "h_race", "netto_host_cents": 8000,
+                                                "valuta": "EUR"}))
+        sweep_hold_una_passata(self.sys, self.r)
+        self.assertEqual(self.pp.scaduti_da_finire(), [], "PREMESSA: sweeper finito")
+        self.assertIsNot(self.r._conferma_pagamento(rif), False)
+        self.assertEqual(self.pp.info(rif)["stato"], "pagato")
 
 
 if __name__ == "__main__":
