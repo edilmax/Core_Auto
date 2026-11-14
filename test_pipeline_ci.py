@@ -8897,6 +8897,203 @@ class TestLaPuliziaDelRegistroDEVEESSEREVISIBILEACHIANALIZZA(unittest.TestCase):
                     "il riferimento ripulito supera i 64 caratteri dichiarati: %r" % (uscita,))
 
 
+class TestIlCodiceDellHostNonEntraNudoNelRegistro(unittest.TestCase):
+    """🔬 LA FAMIGLIA INTERA, NON LA RIGA CHE QUALCUNO HA VISTO.
+
+    **Il fatto, 2026-11-14 (PR #315, pezzo 3).** PROTON ha trovato un grido del registro che
+    scriveva l'host nudo; la revisione differenziale ne ha trovati altri tre poco sotto; il
+    variant-analysis ne ha contati 32 in sei moduli. Riparare le righe una alla volta, quando
+    qualcuno le nota, e' il modo in cui la famiglia torna: la prossima riga nuova nasce nuda.
+
+    ⛔ **L'host_id NON e' un dato nostro e basta** (PROTON, compito 25, verificato): con la
+    chiave dell'operatore `_host_pubblica` lo prende dal corpo della richiesta, e l'import degli
+    annunci (fase77) dal file, filtrato solo sui bordi. Un a-capo nel mezzo arriva nel
+    registro, dove il Guardiano (fase186) cerca i guasti sui soldi, e fabbrica una riga finta.
+
+    Qui si pretende, su TUTTI i file del prodotto: ogni argomento di una chiamata al registro
+    che nomina il codice di un host passa da un filtro (`_testo_per_registro`,
+    `_rif_per_registro`, `_riga_registro`, `_mascherato`) o da una `.replace("\\n", ...)`, la
+    forma che CodeQL riconosce (vedi la classe qui sopra). Guarda l'albero sintattico, non il
+    testo: un commento non la soddisfa (S6).
+    ⚠️ LIMITE DICHIARATO (D18 punto 3): riconosce l'host dal NOME (`host`, `host_id`, `hid`,
+    `_hid`, `referente_id`, anche come chiave o `getattr`). Un host passato con un altro nome
+    (`x`, `soggetto`) non lo vede; e non segue il dato fra funzioni.
+    """
+
+    NOMI_HOST = frozenset({"host", "host_id", "hid", "_hid", "referente_id"})
+    FILTRI = frozenset({"_testo_per_registro", "_rif_per_registro", "_riga_registro",
+                        "_mascherato"})
+    NUMERICI = frozenset({"len", "int", "float", "bool"})
+    LIVELLI = frozenset({"debug", "info", "warning", "warn", "error", "critical", "exception"})
+    A_CAPO = ("\n", "\r\n")
+    # (file, funzione, espressione) -> perche' quel nome NON e' il codice di un host.
+    # Ogni voce deve esistere ancora (test sotto): un'esclusione rimasta orfana e' una porta.
+    ESCLUSI = {
+        ("fase83_server.py", "servi", "host"):
+            "indirizzo di ascolto del server, dalla riga di comando, non un host_id",
+        ("fase83_server.py", "_admin_search", "out['totali']['host']"):
+            "un conteggio scritto con %d, non un identificativo",
+    }
+
+    @classmethod
+    def _file_del_prodotto(cls):
+        import glob
+        nomi = sorted(os.path.basename(p) for p in glob.glob(os.path.join(QUI, "fase*.py")))
+        return nomi + ["main_casavip.py"]
+
+    @classmethod
+    def _nudo(cls, n, pulite):
+        """True se l'espressione `n` porta nel registro il codice di un host senza filtro.
+        `pulite`: nomi assegnati nella funzione SOLO da espressioni filtrate."""
+        import ast
+        if isinstance(n, ast.Call):
+            f = n.func
+            nome = f.id if isinstance(f, ast.Name) else (f.attr if isinstance(f, ast.Attribute)
+                                                         else "")
+            if nome in cls.FILTRI or nome in cls.NUMERICI:
+                return False
+            primo = n.args[0] if n.args else None
+            if nome == "replace" and isinstance(primo, ast.Constant) and primo.value in cls.A_CAPO:
+                return False
+            if nome == "getattr" and len(n.args) >= 2 and isinstance(n.args[1], ast.Constant) \
+                    and n.args[1].value in cls.NOMI_HOST:
+                return True
+            if nome == "get" and isinstance(primo, ast.Constant) and primo.value in cls.NOMI_HOST:
+                return True
+        if isinstance(n, ast.Name) and n.id in cls.NOMI_HOST:
+            return n.id not in pulite
+        if isinstance(n, ast.Attribute) and n.attr in cls.NOMI_HOST:
+            return True
+        if isinstance(n, ast.Subscript):
+            # 3.8 avvolge la chiave in `Index`; dal 3.9 la chiave e' il nodo stesso (e un
+            # `Constant` ha anche lui un `.value`: non si legge con getattr alla cieca).
+            chiave = n.slice.value if type(n.slice).__name__ == "Index" else n.slice
+            if isinstance(chiave, ast.Constant) and chiave.value in cls.NOMI_HOST:
+                return True
+        return any(cls._nudo(c, pulite) for c in ast.iter_child_nodes(n))
+
+    @classmethod
+    def _filtrato(cls, v):
+        """True solo se il valore ESCE da un filtro: una chiamata a uno dei FILTRI o una
+        `.replace("\\n", ...)`, anche tagliata (`[:64]`) o seguita da altre `.replace`.
+        ⛔ «Non nomina l'host» non basta: `hid = self._host_id_da_token(h)` e
+        `host_id = str(soggetto).partition(":")[2]` sono host anche senza dirlo."""
+        import ast
+        while isinstance(v, ast.Subscript):
+            v = v.value
+        while isinstance(v, ast.Call) and isinstance(v.func, ast.Attribute):
+            primo = v.args[0] if v.args else None
+            if v.func.attr == "replace" and isinstance(primo, ast.Constant) \
+                    and primo.value in cls.A_CAPO:
+                return True
+            if v.func.attr in cls.FILTRI:
+                return True
+            v = v.func.value
+        return isinstance(v, ast.Call) and isinstance(v.func, ast.Name) \
+            and v.func.id in cls.FILTRI
+
+    @classmethod
+    def _scansiona(cls, sorgente, nome_file):
+        """-> (chiamate al registro viste, [(file, riga, funzione, espressione)] nude)."""
+        import ast
+        albero = ast.parse(sorgente, nome_file)
+        funzioni = [f for f in ast.walk(albero)
+                    if isinstance(f, (ast.FunctionDef, ast.AsyncFunctionDef))]
+        viste, nude = 0, []
+        for n in ast.walk(albero):
+            if not (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                    and n.func.attr in cls.LIVELLI
+                    and "log" in ast.unparse(n.func.value).lower()):
+                continue
+            viste += 1
+            dentro = [f for f in funzioni if f.lineno <= n.lineno <= f.end_lineno]
+            fz = min(dentro, key=lambda f: f.end_lineno - f.lineno) if dentro else None
+            assegnati = {}
+            for a in (ast.walk(fz) if fz else ()):
+                if isinstance(a, ast.Assign):
+                    for t in a.targets:
+                        if isinstance(t, ast.Name):
+                            assegnati.setdefault(t.id, []).append(a.value)
+            pulite = {k for k, vv in assegnati.items() if all(cls._filtrato(v) for v in vv)}
+            for arg in n.args[1:]:
+                if cls._nudo(arg, pulite):
+                    nude.append((nome_file, arg.lineno, fz.name if fz else "?",
+                                 ast.unparse(arg)))
+        return viste, nude
+
+    @classmethod
+    def setUpClass(cls):
+        cls.letti, cls.viste, cls.nude = 0, 0, []
+        for nome in cls._file_del_prodotto():
+            with io.open(os.path.join(QUI, nome), encoding="utf-8") as f:
+                v, nn = cls._scansiona(f.read(), nome)
+            cls.letti += 1
+            cls.viste += v
+            cls.nude.extend(nn)
+
+    def test_IL_CONTROLLO_HA_GUARDATO_DAVVERO(self):
+        """S1: un controllo che non ha letto niente non dice «pulito», dice «misura non valida»."""
+        self.assertGreater(self.letti, 100, "letti %d file del prodotto" % self.letti)
+        self.assertGreater(self.viste, 500, "viste %d chiamate al registro" % self.viste)
+
+    def test_IL_CONTROLLO_GRIDA_SU_UNA_RIGA_NUDA_E_TACE_SU_QUELLE_PULITE(self):
+        """D18 punto 2: provato nelle due direzioni su un sorgente scritto qui."""
+        nudo = ("def f(host_id, rec, e, out):\n"
+                "    logger.error('a %s', host_id)\n"
+                "    logger.info('b %s', rec.get('host_id'))\n"
+                "    logger.info('c %s', getattr(e, 'host_id', '?'))\n"
+                "    logger.info('d %s', out.get('referente_id'))\n"
+                "    hid = rec['host_id']\n"
+                "    logger.warning('e %s', hid)\n"
+                "def h(self, headers, soggetto):\n"
+                "    hid = self._host_id_da_token(headers)\n"
+                "    logger.info('f %s', hid)\n"
+                "    host_id = str(soggetto).partition(':')[2]\n"
+                "    logger.info('g %s', host_id)\n")
+        pulito = ("def g(host_id, rec):\n"
+                  "    logger.error('a %s', _testo_per_registro(host_id))\n"
+                  "    logger.info('b %s', str(host_id).replace('\\r\\n', '').replace('\\n', ''))\n"
+                  "    _hid = str(host_id).replace('\\n', '\\\\n')\n"
+                  "    logger.info('c %s', _hid)\n"
+                  "    logger.info('d %d', len(host_id))\n"
+                  "    logger.info('e host %s', 'testo fisso')\n")
+        self.assertEqual([r for _, r, _, _ in self._scansiona(nudo, "x.py")[1]],
+                         [2, 3, 4, 5, 7, 10, 12])
+        self.assertEqual(self._scansiona(pulito, "y.py")[1], [])
+
+    def test_I_FILTRI_DI_CUI_SI_FIDA_FILTRANO_DAVVERO(self):
+        """La scansione si fida dei FILTRI per nome: se uno di loro lascia passare un a-capo,
+        ogni riga che lo usa e' nuda e la scansione sopra e' verde per finta. `_mascherato`
+        (fase156) tiene i primi 3 e gli ultimi 2 caratteri: un a-capo li' restava."""
+        import fase156_erasure
+        import fase83_server
+        filtri = {"_testo_per_registro": fase83_server._testo_per_registro,
+                  "_rif_per_registro": fase83_server._rif_per_registro,
+                  "_riga_registro": fase83_server._riga_registro,
+                  "_mascherato": fase156_erasure._mascherato}
+        self.assertEqual(set(filtri), set(self.FILTRI), "un filtro nuovo va provato qui")
+        for nome, filtro in filtri.items():
+            for ingresso in ("a\nb_lungo_quanto_basta\nz", "\r\nh_id_abbastanza_lungo\r\n",
+                             "h\rx_id_abbastanza_lungo\r", "h_1\nRIGA FINTA"):
+                with self.subTest(filtro=nome, ingresso=repr(ingresso)):
+                    uscita = filtro(ingresso)
+                    self.assertNotIn("\n", uscita)
+                    self.assertNotIn("\r", uscita)
+
+    def test_OGNI_ESCLUSIONE_ESISTE_ANCORA(self):
+        viste = {(f, fz, e) for f, _, fz, e in self.nude}
+        for chiave, motivo in self.ESCLUSI.items():
+            with self.subTest(esclusione=chiave):
+                self.assertIn(chiave, viste, "esclusione orfana (%s): va tolta" % motivo)
+
+    def test_NESSUNA_RIGA_DEL_REGISTRO_SCRIVE_IL_CODICE_DELL_HOST_NUDO(self):
+        restano = sorted(x for x in self.nude if (x[0], x[2], x[3]) not in self.ESCLUSI)
+        self.assertEqual(
+            restano, [],
+            "%d righe del registro scrivono il codice di un host senza filtro:\n%s"
+            % (len(restano), "\n".join("  %s:%d %s() %s" % x for x in restano)))
+
+
 class TestLaListaDeiFileESCLUSIDaCodeQL(unittest.TestCase):
     """🚧 UN ELENCO DI ESCLUSIONI E' LA SCAPPATOIA PIU' COMODA CHE ESISTA: qui c'e' il suo
     guardiano.

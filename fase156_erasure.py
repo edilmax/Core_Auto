@@ -418,8 +418,11 @@ def cancella_attivita_host(sistema: Any, host_id: Any, *, forza: bool = False) -
 
 def _mascherato(host_id: Any) -> str:
     """Un identificativo sicuro da scrivere nel registro: il registro dell'oblio non deve
-    diventare il posto dove il dato sopravvive."""
-    t = str(host_id or "")
+    diventare il posto dove il dato sopravvive.
+    ⛔ E non puo' contenere a-capo: l'host_id arriva dal CORPO della richiesta (vedi
+    `ERASURE FORZATA` sopra), e i primi 3 e gli ultimi 2 caratteri tenuti in chiaro bastano a
+    fabbricare una riga finta (CodeQL #233 #234). Stessa forma riconosciuta di quella riga."""
+    t = str(host_id or "").replace("\r\n", "\\n").replace("\n", "\\n").replace("\r", "\\r")
     return (t[:3] + "***" + t[-2:]) if len(t) > 6 else "***"
 
 

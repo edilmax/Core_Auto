@@ -11,6 +11,7 @@ import datetime
 import http.client
 import io
 import json
+import logging
 import os
 import re
 import shutil
@@ -9044,6 +9045,95 @@ class TestPR315PezzoTreLeRigheCheIlGiudiceNonVedeva(unittest.TestCase):
         # di fallire: il guasto era preso per errore, non per asserzione.
         self.assertIsInstance(reg.records[0].exc_info, tuple, "il grido ha perso la sua causa")
         self.assertIs(reg.records[0].exc_info[0], _Guasto)
+
+    # ── la famiglia dell'host nel registro (14/11, «autorizzato tutta la famiglia») ─────
+    # La guardia di tutta la famiglia e' strutturale (test_pipeline_ci,
+    # TestIlCodiceDellHostNonEntraNudoNelRegistro). Qui i tre gridi che il giudice vede per
+    # le righe toccate: la causa (exc_info) e i «-» al posto dei campi vuoti.
+
+    class _GuastoVies(Exception):
+        pass
+
+    def _router_vies(self, vies):
+        registrati = []
+        r = RouterHTTP.__new__(RouterHTTP)
+        r._sys = types.SimpleNamespace(vies=vies, registro_host=types.SimpleNamespace(
+            info_host=lambda h: {"partita_iva": "IT01234567890", "paese": "IT"},
+            registra_verifica_piva=lambda *a: registrati.append(a)))
+        return r, registrati
+
+    def test_VIES_un_guasto_grida_con_la_sua_causa_e_la_riga_dice_cosa_manca(self):
+        def vies(numero, paese):
+            raise self._GuastoVies("VIES irraggiungibile")
+        r, registrati = self._router_vies(vies)
+        with self.assertLogs("core_auto", level="WARNING") as reg:
+            self.assertEqual(r._verifica_partita_iva("h_1\nRIGA FINTA"), "errore")
+        gridi = [x for x in reg.records if x.levelno == logging.ERROR]
+        self.assertEqual(len(gridi), 1, reg.output)
+        self.assertIsInstance(gridi[0].exc_info, tuple, "il grido del VIES ha perso la causa")
+        self.assertIs(gridi[0].exc_info[0], self._GuastoVies)
+        riga = [x.getMessage() for x in reg.records if "PARTITA IVA AL VIES" in x.getMessage()]
+        self.assertEqual(len(riga), 1, reg.output)
+        self.assertIn("| PROVA: - |", riga[0])
+        self.assertIn("| MOTIVO: eccezione", riga[0])
+        for m in [x.getMessage() for x in reg.records]:
+            self.assertNotIn("\n", m, "un a-capo dell'host e' arrivato nel registro")
+        self.assertIn("h_1\\nRIGA FINTA", riga[0])
+        self.assertEqual([a[2] for a in registrati], ["errore"])
+
+    def test_VIES_la_riga_scrive_la_prova_vera_e_il_trattino_al_posto_del_motivo_vuoto(self):
+        r, _ = self._router_vies(lambda n, p: {"esito": "valida", "prova": "N-42",
+                                               "nome": "B&B", "motivo": ""})
+        with self.assertLogs("core_auto", level="WARNING") as reg:
+            self.assertEqual(r._verifica_partita_iva("h_2"), "valida")
+        riga = [x.getMessage() for x in reg.records if "PARTITA IVA AL VIES" in x.getMessage()]
+        self.assertEqual(len(riga), 1, reg.output)
+        self.assertIn("| PROVA: N-42 |", riga[0])
+        self.assertTrue(riga[0].endswith("| MOTIVO: -"), riga[0])
+
+    def test_PREMIO_REFERRAL_un_guasto_grida_con_la_causa_e_un_premio_scrive_host_puliti(self):
+        cfg = types.SimpleNamespace(referral_soglia_prenotazioni=3, referral_premio_cents=4000)
+        pd = types.SimpleNamespace(conta_pagati=lambda h: 3)
+
+        def esplode(h, premio_cents):
+            raise self._GuastoVies("archivio referral illeggibile")
+        r = RouterHTTP.__new__(RouterHTTP)
+        r._sys = types.SimpleNamespace(viral=types.SimpleNamespace(qualifica_referee=esplode),
+                                       config=cfg)
+        with self.assertLogs("core_auto", level="ERROR") as reg:
+            r._forse_qualifica_referral("h_3\nRIGA FINTA", pd)
+        self.assertEqual(len(reg.records), 1, reg.output)
+        self.assertIsInstance(reg.records[0].exc_info, tuple, "il grido ha perso la causa")
+        self.assertIs(reg.records[0].exc_info[0], self._GuastoVies)
+        self.assertNotIn("\n", reg.records[0].getMessage())
+        r._sys.viral = types.SimpleNamespace(
+            qualifica_referee=lambda h, premio_cents: {"ok": True, "referente_id": "h_R\nFINTO"})
+        with self.assertLogs("core_auto", level="INFO") as reg:
+            r._forse_qualifica_referral("h_3\nRIGA FINTA", pd)
+        premi = [x.getMessage() for x in reg.records if "Referral qualificato" in x.getMessage()]
+        self.assertEqual(len(premi), 1, reg.output)
+        self.assertNotIn("\n", premi[0])
+        self.assertIn("h_3\\nRIGA FINTA", premi[0])
+        self.assertIn("h_R\\nFINTO", premi[0])
+
+    def test_REGISTRAZIONE_la_prova_dei_consensi_fallita_grida_con_la_sua_causa(self):
+        router = crea_router(_sistema(), host_key="operatore")
+        self.assertIsNotNone(getattr(router._sys, "accettazioni", None), "premessa")
+
+        def esplode(*a, **k):
+            raise self._GuastoVies("prova firmata non scrivibile")
+        router._registra_consensi = esplode
+        with self.assertLogs("core_auto", level="ERROR") as reg:
+            s, c = router.gestisci("POST", "/api/host/registrazione", body=json.dumps(
+                {"email": "consensi@bnb.it", "password": "passwordlunga",
+                 "accetta_termini": True, "accetta_clausole": True, "accetta_privacy": True,
+                 "ragione_sociale": "B&B Consensi"}))
+        self.assertEqual(s, 201, c)
+        gridi = [x for x in reg.records if "accettazione contratto FALLITA" in x.getMessage()]
+        self.assertEqual(len(gridi), 1, reg.output)
+        self.assertIsInstance(gridi[0].exc_info, tuple, "il grido ha perso la causa")
+        self.assertIs(gridi[0].exc_info[0], self._GuastoVies)
+        self.assertIn(c["host_id"], gridi[0].getMessage())
 
 
 if __name__ == "__main__":

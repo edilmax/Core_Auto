@@ -216,7 +216,8 @@ class RegistroHost:
         except Exception:
             logger.error("deposito impronte host FALLITO per %s: una ri-registrazione "
                          "riciclerebbe la promozione senza che nessuno lo sappia",
-                         host_id, exc_info=True)
+                         str(host_id).replace("\r\n", "\\n").replace("\n", "\\n")
+                         .replace("\r", "\\r"), exc_info=True)
             return 0
         finally:
             con.close()
@@ -271,7 +272,8 @@ class RegistroHost:
             logger.error("ANTI-RICICLO: rilettura impronte FALLITA per %s: una "
                          "ri-iscrizione sulla stessa struttura puo' aver riciclato i 90 "
                          "giorni a commissione zero senza che nessuno lo sappia",
-                         host_id, exc_info=True)
+                         str(host_id).replace("\r\n", "\\n").replace("\n", "\\n")
+                         .replace("\r", "\\r"), exc_info=True)
             return None
         finally:
             con.close()
