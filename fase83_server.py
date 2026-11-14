@@ -11477,7 +11477,7 @@ class RouterHTTP:
             if valore is None:
                 logger.warning("CREDITO REFERRAL | codice: cambio_non_disponibile | messaggio: "
                                "host %s, prenotazione %s: niente sconto, il credito resta intero",
-                               host_id, _rif_per_registro(ref))
+                               _testo_per_registro(host_id), _rif_per_registro(ref))
                 return 0
             res = viral.usa_credito(host_id, int(comm / valore))   # <- QUI il credito e' gia' COMMITTATO
             scalato = int(res.get("scontato_cents", 0)) if isinstance(res, dict) else 0
@@ -11503,11 +11503,11 @@ class RouterHTTP:
                     # servono l'host e i centesimi esatti.
                     logger.error("CREDITO REFERRAL PERSO: host %s, %d cent gia' scalati dal suo "
                                  "credito ma NON applicati alla commissione di %s -> "
-                                 "restituirglieli a mano", host_id, scalato,
+                                 "restituirglieli a mano", _testo_per_registro(host_id), scalato,
                                  _rif_per_registro(ref), exc_info=True)
                     return 0
                 logger.info("Credito referral scalato: host %s -%d di commissione su %s",
-                            host_id, used, _rif_per_registro(ref))
+                            _testo_per_registro(host_id), used, _rif_per_registro(ref))
             return used
         except Exception:
             logger.error("APPLICAZIONE CREDITO HOST FALLITA per %s su %s: l'host potrebbe non "

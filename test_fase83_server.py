@@ -9002,6 +9002,30 @@ class TestPR315PezzoTreLeRigheCheIlGiudiceNonVedeva(unittest.TestCase):
         self.assertIn("H-1\\nCREDITO FINTO", gridi[0], "l'host si deve ancora leggere")
         self.assertIn("VALUTA FINTA", gridi[0])
 
+    def test_RV3_lo_sconto_del_credito_non_scrive_righe_finte_nel_registro(self):
+        """Revisione differenziale del pezzo 3 (14/11), variante del grido qui sopra: in
+        `_applica_credito_host` l'host entrava nudo in tre righe del registro (niente cambio,
+        credito perso, credito scalato). L'host_id non nasce solo «h_» + esadecimale (fase88):
+        con la chiave dell'operatore `_host_pubblica` lo prende dal corpo della richiesta, e
+        l'import degli annunci (fase77) lo prende dal file (PROTON, compito 25): un a-capo nel
+        mezzo arriva fin qui. Qui lo si costruisce a mano, una riga alla volta."""
+        host = "h_1\nCREDITO FINTO"
+        for marca, valore, aumentato in (("cambio_non_disponibile", None, None),
+                                         ("CREDITO REFERRAL PERSO", 1, False),
+                                         ("Credito referral scalato", 1, True)):
+            with self.subTest(marca=marca):
+                r = RouterHTTP.__new__(RouterHTTP)
+                r._sys = types.SimpleNamespace(
+                    viral=types.SimpleNamespace(usa_credito=lambda h, c: {"scontato_cents": 50}),
+                    payout=types.SimpleNamespace(aumenta_payout=lambda rif, c, _a=aumentato: _a))
+                r._valore_del_credito = lambda corpo, _v=valore: _v
+                with self.assertLogs("core_auto", level="INFO") as reg:
+                    r._applica_credito_host("R-315H", host, 500, {})
+                gridi = [x.getMessage() for x in reg.records if marca in x.getMessage()]
+                self.assertEqual(len(gridi), 1, reg.output)
+                self.assertNotIn("\n", gridi[0], "un a-capo da fuori e' arrivato nel registro")
+                self.assertIn("h_1\\nCREDITO FINTO", gridi[0], "l'host si deve ancora leggere")
+
     def test_RV3_un_guasto_nel_rendere_il_credito_grida_con_la_sua_causa(self):
         r = RouterHTTP.__new__(RouterHTTP)
         r._sys = types.SimpleNamespace()
@@ -9016,6 +9040,9 @@ class TestPR315PezzoTreLeRigheCheIlGiudiceNonVedeva(unittest.TestCase):
         self.assertEqual(len(reg.records), 1, reg.output)
         self.assertIn("credito_non_reso", reg.records[0].getMessage())
         self.assertIsNotNone(reg.records[0].exc_info, "il grido ha perso la sua causa")
+        # PROTON (compito 25, G36): con exc_info=False la riga sotto esplodeva (TypeError) invece
+        # di fallire: il guasto era preso per errore, non per asserzione.
+        self.assertIsInstance(reg.records[0].exc_info, tuple, "il grido ha perso la sua causa")
         self.assertIs(reg.records[0].exc_info[0], _Guasto)
 
 
