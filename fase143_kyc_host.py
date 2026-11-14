@@ -187,7 +187,8 @@ def stripe_identity_crea(chiave: str, host_id: str, return_url: str, *,
             out = fetch("identity/verification_sessions", dati, chiave)
         sid, url = out.get("id", ""), out.get("url", "")
         if sid and url:
-            logger.info("Stripe Identity: sessione creata %s per host %s", sid, host_id)
+            logger.info("Stripe Identity: sessione creata %s per host %s", sid,
+                    str(host_id).replace("\r\n", "\\n").replace("\n", "\\n").replace("\r", "\\r"))
             return {"id": sid, "url": url}
     except Exception:
         logger.warning("Stripe Identity: creazione sessione fallita (ISOLATA)",
