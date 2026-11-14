@@ -265,7 +265,9 @@ def cancella_attivita_host(sistema: Any, host_id: Any, *, forza: bool = False) -
         # (D19: una difesa non deve dipendere dal comportamento di un altro). Sono due
         # chiamate, ed e' anche la forma che CodeQL riconosce come barriera
         # (`ReplaceLineBreaksSanitizer`, in `LogInjectionCustomizations.qll`).
-        _hid = str(host_id).replace("\r\n", "\\n").replace("\n", "\\n")[:64]
+        # (14/11) anche «\r»: i lettori del registro aprono il file in modo testo e dividono la
+        # riga anche li' (misurato da PROTON, compito 26).
+        _hid = str(host_id).replace("\r\n", "\\n").replace("\n", "\\n").replace("\r", "\\r")[:64]
         logger.critical("ERASURE FORZATA su host con obblighi: %s -> %s", _hid, obblighi)
 
     cat = getattr(sistema, "catalogo", None)

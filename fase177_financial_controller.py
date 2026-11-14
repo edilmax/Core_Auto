@@ -1273,7 +1273,8 @@ class FinancialController:
             logger.warning("PENALE_STORNATA | NOTA: %s | NC: %s | HOST: %s | IMPORTO: %s | "
                            "RISCOSSO_DA_RESTITUIRE: %s | MOTIVO: %s | EMITTENTE: %s",
                            nid, nc.get("nota_id"),
-                           host_id.replace("\r\n", "\\n").replace("\n", "\\n").replace("\r", "\\r"),
+                           str(host_id).replace("\r\n", "\\n").replace("\n", "\\n")
+                           .replace("\r", "\\r"),
                            _importo_per_registro(imp, val),
                            _importo_per_registro(riscosso, val), (motivo or "-")[:120], emittente)
         return {"nota_id": nid, "nc_id": nc.get("nota_id"),
