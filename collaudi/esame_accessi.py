@@ -726,6 +726,12 @@ def main(argv=None):
         return 2
 
     da_file = argv[argv.index("--da-file") + 1] if "--da-file" in argv else None
+    # ⛔ (14/11, PR #315) il sito vivo lo misurano SOLO «matrice» e «sonde»: «scrive» giudica
+    # il router locale. Chiederlo comunque fermava in CI (FERMO, uscita 2) una casella sana e
+    # misurava dalla CI la produzione invece del codice della PR (D23).
+    vivo_serve = any(s != "scrive" for s in scelte)
+    if not vivo_serve:
+        locale = True
     tutte_ok, righe = precondizioni(con_rete=(da_file is None and not locale),
                                     con_router=(da_file is None))
     print("PRIMA DI MISURARE, L'ESAME MISURA SE STESSO (D18 punto 1)")

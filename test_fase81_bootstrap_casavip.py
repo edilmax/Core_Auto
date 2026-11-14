@@ -98,6 +98,34 @@ class TestAccensione(unittest.TestCase):
                          s2.report["avvisi"])
 
 
+class TestLaDataDelBonifico(unittest.TestCase):
+    """PR #315 (pezzo 3), job `caselle` del 14/11 su bb014a7: il cablaggio `connect.da_quando`
+    (PR5, 8/11) aveva la sua prova solo in test_fase101, che il giudice non accende per questo
+    file. Il bonifico di una prenotazione si cerca da un giorno prima che lei nascesse; di una
+    prenotazione che non conosciamo, dall'inizio (0 meno il giorno di margine)."""
+
+    # Finta e senza rete: serve solo ad accendere il cablaggio Connect. Sta in un nome e non
+    # dentro la chiamata, cosi' bandit (B106) non la conta come segreto scritto a mano.
+    _CHIAVE_FINTA = "sk_test_xyz"
+
+    def test_PR315_il_bonifico_si_cerca_da_un_giorno_prima_della_prenotazione(self):
+        import os
+        import shutil
+        import tempfile
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        s = crea_sistema(ConfigCasaVIP(abilitato=True, segreto_hmac=SEG,
+                                       db_pendenti=os.path.join(d, "p.db"),
+                                       stripe_secret_key=self._CHIAVE_FINTA))
+        self.assertIsNotNone(s.connect, "premessa: con la chiave Connect e' cablato")
+        self.assertTrue(s.pagamenti_pendenti.registra(
+            "R-PR315", alloggio_id="casa", check_in="2027-01-01", check_out="2027-01-03"))
+        creato = s.pagamenti_pendenti.info("R-PR315")["creato_ts"]
+        self.assertGreater(creato, 86400, "premessa: data di nascita vera")
+        self.assertEqual(s.connect.da_quando("R-PR315"), creato - 86400)
+        self.assertEqual(s.connect.da_quando("R-SCONOSCIUTA"), -86400)
+
+
 class TestEndToEnd(unittest.TestCase):
     def test_stack_lavora_insieme(self):
         s = crea_sistema(ConfigCasaVIP(abilitato=True, segreto_hmac=SEG))

@@ -680,7 +680,9 @@ class RegistroAccettazioni:
             out["stato_kyc"] = str(stato_kyc or "")
             out["impronta_legame"] = out.get("doc_sha256")
             logger.info("LEGAME IDENTITA-CONTRATTO scritto | HOST: %s | SESSIONE: %s | "
-                        "VERSIONE: %s", host_id, ref, CONTRATTO_HOST_VERSIONE)
+                        "VERSIONE: %s",
+                        str(host_id).replace("\r\n", "\\n").replace("\n", "\\n")
+                        .replace("\r", "\\r"), ref, CONTRATTO_HOST_VERSIONE)
         return out
 
     def identita_legata(self, host_id: Any) -> Dict[str, Any]:
