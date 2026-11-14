@@ -8990,8 +8990,14 @@ class TestIlCodiceDellHostNonEntraNudoNelRegistro(unittest.TestCase):
         import ast
         tolti = set()
         while isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) \
-                and n.func.attr == "replace" and n.args \
+                and n.func.attr == "replace" and len(n.args) >= 2 \
                 and isinstance(n.args[0], ast.Constant) and isinstance(n.args[0].value, str):
+            messo = n.args[1]
+            # ⛔ conta anche CON COSA si sostituisce (PROTON, compito 27): `.replace("\n", "\r")`
+            # sposta l'a-capo, non lo toglie. Il sostituto dev'essere una costante senza a-capo.
+            if not (isinstance(messo, ast.Constant) and isinstance(messo.value, str)
+                    and "\n" not in messo.value and "\r" not in messo.value):
+                return False
             tolti.add(n.args[0].value)
             n = n.func.value
         return "\n" in tolti and "\r" in tolti
@@ -9011,12 +9017,41 @@ class TestIlCodiceDellHostNonEntraNudoNelRegistro(unittest.TestCase):
             and v.func.attr == "replace" and cls._catena_pulita(v)
 
     @classmethod
-    def _assegnazioni(cls, fz, prima_di):
+    def _blocchi_sul_cammino(cls, fz, chiamata):
+        """Gli id delle istruzioni che stanno DIRETTAMENTE in un blocco che contiene la
+        chiamata (il corpo della funzione, e il ramo dell'if/try/for dove la chiamata sta).
+        Un'assegnazione li' e' eseguita per forza prima della chiamata, se le sta sopra."""
+        import ast
+        padre = {}
+        for nodo in ast.walk(fz):
+            for figlio in ast.iter_child_nodes(nodo):
+                padre[id(figlio)] = nodo
+        cammino, n = [], chiamata
+        while n is not fz and id(n) in padre:
+            cammino.append(n)
+            n = padre[id(n)]
+        cammino.append(fz)
+        dentro = set()
+        for nodo in cammino:
+            for campo in ("body", "orelse", "finalbody"):
+                lista = getattr(nodo, campo, None)
+                if isinstance(lista, list) and any(x in cammino for x in lista):
+                    dentro.update(id(x) for x in lista)
+        return dentro
+
+    @classmethod
+    def _assegnazioni(cls, fz, prima_di, chiamata=None):
         """{nome: [valori]} assegnati nel corpo di `fz` PRIMA della riga `prima_di`, senza
         scendere nelle funzioni, lambda e classi annidate (hanno nomi loro). Un `for`, un
-        `with ... as`, un `+=` o un `:=` assegnano un valore che nessuno ha filtrato: None."""
+        `with ... as`, un `+=` o un `:=` assegnano un valore che nessuno ha filtrato: None.
+        ⛔ Un'assegnazione DENTRO un ramo (if, try, for, while, with) conta None anche se
+        filtrata (PROTON, compito 27): il ramo puo' non essere preso, e allora resta il valore
+        di prima. Vale solo quella scritta in un blocco che CONTIENE la chiamata (lo stesso
+        ramo, o uno che lo racchiude): quella e' eseguita per forza."""
         import ast
         visti = {}
+        diretti = (cls._blocchi_sul_cammino(fz, chiamata) if chiamata is not None
+                   else {id(s) for s in fz.body})
         da_fare = list(ast.iter_child_nodes(fz))
         while da_fare:
             a = da_fare.pop()
@@ -9027,9 +9062,9 @@ class TestIlCodiceDellHostNonEntraNudoNelRegistro(unittest.TestCase):
                 continue
             coppie = []
             if isinstance(a, ast.Assign):
-                coppie = [(t, a.value) for t in a.targets]
+                coppie = [(t, a.value if id(a) in diretti else None) for t in a.targets]
             elif isinstance(a, ast.AnnAssign):
-                coppie = [(a.target, a.value)]
+                coppie = [(a.target, a.value if id(a) in diretti else None)]
             elif isinstance(a, (ast.AugAssign, ast.For, ast.AsyncFor)):
                 coppie = [(a.target, None)]
             elif isinstance(a, ast.withitem) and a.optional_vars is not None:
@@ -9044,19 +9079,36 @@ class TestIlCodiceDellHostNonEntraNudoNelRegistro(unittest.TestCase):
     @classmethod
     def _registri(cls, albero):
         """I nomi che sono un registro: tutto cio' che ha «log» nel nome, piu' gli alias
-        (`L = logger`, `L = logging.getLogger(...)`), rifatti finche' ne compaiono di nuovi."""
+        rifatti finche' ne compaiono di nuovi. Un alias e' un nome O un attributo
+        (`self.registro`) assegnato, anche dentro una tupla (`A, B = logger, None`), da un
+        registro gia' noto, da `logging.root`, o da una chiamata a `getLogger` (anche
+        attraverso `getattr(logging, "getLogger")`). PROTON, compito 27.
+        ⚠️ Un registro passato come PARAMETRO (`def f(reg): reg.error(...)`) non lo vede."""
         import ast
         alias = set()
+
+        def e_registro(v):
+            testo = ast.unparse(v)
+            if isinstance(v, ast.Call):
+                return "getLogger" in testo
+            if isinstance(v, (ast.Name, ast.Attribute)):
+                return "log" in testo.lower() or testo in alias
+            return False
         while True:
             nuovi = set()
             for a in ast.walk(albero):
-                if isinstance(a, ast.Assign) and len(a.targets) == 1 \
-                        and isinstance(a.targets[0], ast.Name):
-                    v, nome = a.value, a.targets[0].id
-                    sorgente = ast.unparse(v.func if isinstance(v, ast.Call) else v)
-                    if nome not in alias and ("log" in sorgente.lower() or sorgente in alias) \
-                            and (isinstance(v, ast.Name) or sorgente.endswith("getLogger")):
-                        nuovi.add(nome)
+                if not isinstance(a, ast.Assign):
+                    continue
+                for t in a.targets:
+                    coppie = [(t, a.value)]
+                    if isinstance(t, (ast.Tuple, ast.List)) and isinstance(a.value, (ast.Tuple, ast.List)) \
+                            and len(t.elts) == len(a.value.elts):
+                        coppie = list(zip(t.elts, a.value.elts))
+                    for bersaglio, valore in coppie:
+                        if isinstance(bersaglio, (ast.Name, ast.Attribute)) and e_registro(valore):
+                            nome = ast.unparse(bersaglio)
+                            if nome not in alias:
+                                nuovi.add(nome)
             if not nuovi:
                 return alias
             alias |= nuovi
@@ -9080,7 +9132,7 @@ class TestIlCodiceDellHostNonEntraNudoNelRegistro(unittest.TestCase):
             viste += 1
             dentro = [f for f in funzioni if f.lineno <= n.lineno <= f.end_lineno]
             fz = min(dentro, key=lambda f: f.end_lineno - f.lineno) if dentro else None
-            assegnati = cls._assegnazioni(fz, n.lineno) if fz else {}
+            assegnati = cls._assegnazioni(fz, n.lineno, n) if fz else {}
             pulite = {k for k, vv in assegnati.items()
                       if vv and all(v is not None and cls._filtrato(v) for v in vv)}
             # ⛔ ANCHE il primo argomento: un messaggio composto sul posto («...» % host_id,
@@ -9144,6 +9196,20 @@ def k(hid):
 def j(righe):
     for host_id in righe:
         logger.info('t %s', host_id)  # NUDO
+def c27(host_id, ok, self):
+    logger.info('u %s', host_id.replace('\\r', '').replace('\\n', '\\r'))  # NUDO
+    logger.info('v %s', host_id.replace('\\n', '\\n').replace('\\r', '\\r'))  # NUDO
+    if ok:
+        host_id = _testo_per_registro(host_id)
+    logger.error('w %s', host_id)  # NUDO
+    self.registro = logger
+    self.registro.error('x %s', host_id)  # NUDO
+    R = logging.root
+    R.error('y %s', host_id)  # NUDO
+    A, B = logger, None
+    A.error('z %s', host_id)  # NUDO
+    G = getattr(logging, 'getLogger')('x')
+    G.error('k %s', host_id)  # NUDO
 '''
     _SORGENTE_PULITO = '''
 def g(host_id, rec):
@@ -9157,6 +9223,10 @@ def g(host_id, rec):
 def h(hid):
     hid = _testo_per_registro(hid)
     logger.error('g %s', hid)
+def i(hid, ok):
+    if ok:
+        hid = _testo_per_registro(hid)
+        logger.error('h %s', hid)
 '''
 
     def test_IL_CONTROLLO_GRIDA_SU_UNA_RIGA_NUDA_E_TACE_SU_QUELLE_PULITE(self):
@@ -9164,7 +9234,7 @@ def h(hid):
         dopo il compito 26 di PROTON ha la sua riga «# NUDO»."""
         attese = [i for i, r in enumerate(self._SORGENTE_NUDO.splitlines(), 1)
                   if r.endswith("# NUDO")]
-        self.assertEqual(len(attese), 18, "premessa: le righe NUDE del sorgente di prova")
+        self.assertEqual(len(attese), 25, "premessa: le righe NUDE del sorgente di prova")
         trovate = sorted({r for _, r, _, _ in self._scansiona(self._SORGENTE_NUDO, "x.py")[1]})
         self.assertEqual(trovate, attese)
         self.assertEqual(self._scansiona(self._SORGENTE_PULITO, "y.py")[1], [])
