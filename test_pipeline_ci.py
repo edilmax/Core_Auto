@@ -8917,7 +8917,8 @@ class TestIlCodiceDellHostNonEntraNudoNelRegistro(unittest.TestCase):
     testo: un commento non la soddisfa (S6).
     ⚠️ LIMITE DICHIARATO (D18 punto 3): riconosce l'host dal NOME (`host`, `host_id`, `hid`,
     `_hid`, `referente_id`, anche come chiave o `getattr`). Un host passato con un altro nome
-    (`x`, `soggetto`) non lo vede; e non segue il dato fra funzioni.
+    (`x`, `soggetto`) non lo vede; non segue il dato fra funzioni; e un messaggio composto in
+    una variabile PRIMA della chiamata (`m = "..." % host_id; logger.info(m)`) non lo vede.
     """
 
     NOMI_HOST = frozenset({"host", "host_id", "hid", "_hid", "referente_id"})
@@ -9015,7 +9016,9 @@ class TestIlCodiceDellHostNonEntraNudoNelRegistro(unittest.TestCase):
                         if isinstance(t, ast.Name):
                             assegnati.setdefault(t.id, []).append(a.value)
             pulite = {k for k, vv in assegnati.items() if all(cls._filtrato(v) for v in vv)}
-            for arg in n.args[1:]:
+            # ⛔ ANCHE il primo argomento: un messaggio composto sul posto («...» % host_id,
+            # f-string, .format) porta l'host dentro il testo; una costante non nomina niente.
+            for arg in n.args:
                 if cls._nudo(arg, pulite):
                     nude.append((nome_file, arg.lineno, fz.name if fz else "?",
                                  ast.unparse(arg)))
@@ -9049,7 +9052,10 @@ class TestIlCodiceDellHostNonEntraNudoNelRegistro(unittest.TestCase):
                 "    hid = self._host_id_da_token(headers)\n"
                 "    logger.info('f %s', hid)\n"
                 "    host_id = str(soggetto).partition(':')[2]\n"
-                "    logger.info('g %s', host_id)\n")
+                "    logger.info('g %s', host_id)\n"
+                "    logger.info('h %s' % host_id)\n"
+                "    logger.info(f'i {host_id}')\n"
+                "    logger.info('l {}'.format(hid))\n")
         pulito = ("def g(host_id, rec):\n"
                   "    logger.error('a %s', _testo_per_registro(host_id))\n"
                   "    logger.info('b %s', str(host_id).replace('\\r\\n', '').replace('\\n', ''))\n"
@@ -9058,7 +9064,7 @@ class TestIlCodiceDellHostNonEntraNudoNelRegistro(unittest.TestCase):
                   "    logger.info('d %d', len(host_id))\n"
                   "    logger.info('e host %s', 'testo fisso')\n")
         self.assertEqual([r for _, r, _, _ in self._scansiona(nudo, "x.py")[1]],
-                         [2, 3, 4, 5, 7, 10, 12])
+                         [2, 3, 4, 5, 7, 10, 12, 13, 14, 15])
         self.assertEqual(self._scansiona(pulito, "y.py")[1], [])
 
     def test_I_FILTRI_DI_CUI_SI_FIDA_FILTRANO_DAVVERO(self):
