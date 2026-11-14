@@ -11429,8 +11429,9 @@ class RouterHTTP:
             if valore is None or viral is None:
                 logger.error("CREDITO REFERRAL | codice: credito_non_reso | messaggio: host %s, "
                              "prenotazione %s rimborsata: sconto di %s da restituire A MANO come "
-                             "credito (cambio non disponibile)", host, _rif_per_registro(rif),
-                             self._fmt_importo(sconto, dj.get("valuta") or "EUR"))
+                             "credito (cambio non disponibile)", _testo_per_registro(host),
+                             _rif_per_registro(rif),
+                             _testo_per_registro(self._fmt_importo(sconto, dj.get("valuta") or "EUR")))
                 return
             viral.rendi_credito(host, int(sconto / valore), "reso:" + str(rif))
         except Exception:
