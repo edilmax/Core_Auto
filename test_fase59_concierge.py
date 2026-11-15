@@ -1722,5 +1722,37 @@ class TestConcorrenzaQuotaPrenota(unittest.TestCase):
                 shutil.rmtree(d, ignore_errors=True)
 
 
+class TestPR320UnBloccoSenzaIlSegnoDelDoppioClicSiLibera(unittest.TestCase):
+    """Pezzo 6 (PR #320), sopravvissuto del giudice a fase59:637 (`False` -> `True` nel
+    `getattr(esito, "idempotente", False)`): un inventario che non dice se il blocco e' un
+    doppio clic (esito senza il campo) ha preso un blocco NUOVO. Col link fallito quel blocco
+    si libera, o la stanza resta fuori mercato senza nessun pagamento in attesa."""
+
+    class _Esito:
+        ok = True
+        motivo = ""
+
+    def _prenota(self, esito):
+        inv = _InventarioFinto(esito=esito)
+        proto = ProtocolloConcierge(inv, FirmaQuote(SEGRETO), link_pagamento=lambda d: None)
+        token = proto.quota({"alloggio_id": "casa", "check_in": "2026-09-01",
+                             "check_out": "2026-09-03"}).corpo["quote_token"]
+        r = proto.prenota({"quote_token": token, "email": "g@x.it"})
+        return r, inv
+
+    def test_esito_senza_il_campo_il_blocco_si_libera(self):
+        r, inv = self._prenota(self._Esito())
+        self.assertEqual(r.status, 503)
+        self.assertEqual(inv.rilasci, 1, "blocco nuovo e link fallito: la stanza si libera")
+
+    def test_doppio_clic_dichiarato_il_blocco_resta(self):
+        """D18: la stessa misura dice anche «non si libera» (F2, il blocco della prima)."""
+        esito = self._Esito()
+        esito.idempotente = True
+        r, inv = self._prenota(esito)
+        self.assertEqual(r.status, 503)
+        self.assertEqual(inv.rilasci, 0)
+
+
 if __name__ == "__main__":
     unittest.main()

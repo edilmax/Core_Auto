@@ -183,5 +183,34 @@ class TestAuditConsole(unittest.TestCase):
         self.assertIn("EUR", json.dumps(d["payout"]))
 
 
+class TestPR320LaSchedaNonChiamaStripeSenzaChiaveEPagina(unittest.TestCase):
+    """Pezzo 6 (PR #320), sopravvissuto del giudice a fase181:47 (`and` -> `or`): la lettura
+    della sessione parte solo con la chiave E un numero di pagina vero. Con una sola delle due
+    non si va in rete: la scheda resta «non configurato», mai una chiamata con un indirizzo
+    costruito da un numero che non e' una pagina, o senza chiave."""
+
+    def test_con_una_sola_delle_due_non_si_chiama_stripe(self):
+        from unittest import mock
+        import fase181_audit_console as fa
+        for chiave, numero in (("sk_test_x", "pi_1"), ("sk_test_x", "cs_../customers"),
+                               ("", "cs_test_1"), ("", "")):
+            with self.subTest(chiave=chiave, numero=numero):
+                with mock.patch("urllib.request.urlopen",
+                                side_effect=AssertionError("chiamata a Stripe")) as rete:
+                    esito = fa.stripe_session_fetch(chiave, numero)
+                self.assertEqual(esito, {"ok": False, "motivo": "non_configurato"})
+                self.assertEqual(rete.call_count, 0)
+
+    def test_con_chiave_e_pagina_si_chiama_stripe(self):
+        """D18: la stessa misura sa dire anche «si chiama» (non e' sempre zero)."""
+        from unittest import mock
+        import fase181_audit_console as fa
+        with mock.patch("urllib.request.urlopen",
+                        side_effect=TimeoutError("rete finta")) as rete:
+            esito = fa.stripe_session_fetch("sk_test_x", "cs_test_1")
+        self.assertEqual(rete.call_count, 1)
+        self.assertEqual(esito, {"ok": False, "motivo": "TimeoutError"})
+
+
 if __name__ == "__main__":
     unittest.main()

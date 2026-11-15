@@ -3071,6 +3071,50 @@ class TestLaStanzaSiLiberaSoloAPaginaChiusa(_BancoDeiSoldiDelServer):
         stati = sorted(self.sis.pagamenti_pendenti.info(r)["stato"] for r in (self.rif, secondo))
         self.assertEqual(stati, ["in_attesa", "scaduto"], "il secondo si libera nello stesso giro")
 
+    def test_PR320_al_confine_esatto_del_tetto_il_blocco_si_guarda_ancora(self):
+        """Pezzo 6 (PR #320), sopravvissuto del giudice a fase83:14373 (`>` -> `>=`): il tetto
+        del giro rinvia solo chi lo SUPERA. Tre blocchi, Stripe a 30 secondi per pagina: il
+        terzo si guarda a 60 secondi esatti, cioe' al tetto e non oltre, e si chiude nello
+        stesso giro (la prova F10 qui sopra salta da 40 a 80 e il confine non lo tocca)."""
+        from fase83_server import _TETTO_GIRO_STRIPE_S
+        _deve(_TETTO_GIRO_STRIPE_S == 60, "PREMESSA: tetto di 60 secondi", _TETTO_GIRO_STRIPE_S)
+        rifs = [self.rif] + [self.prenota("casa-2m", g)["riferimento"] for g in (20, 30)]
+        orologio = [1000.0]
+        vero = self.sis.stripe._fetch
+
+        def lento(url, body, headers):
+            if url.endswith("/expire"):
+                orologio[0] += 30
+            return vero(url, body, headers)
+        self.sis.stripe._fetch = lento
+        with mock.patch("time.monotonic", side_effect=lambda: orologio[0]):
+            with self.ascolta() as righe:
+                self._spazza(1800 + 60)
+        self.assertEqual(orologio[0], 1090.0, "PREMESSA: Stripe chiamato per tutti e tre")
+        self.assertEqual([self.sis.pagamenti_pendenti.info(r)["stato"] for r in rifs],
+                         ["scaduto"] * 3, "al tetto esatto nessuno e' rinviato")
+        self.assertEqual(self.avvisi_con(righe, "giro_lungo"), [], "nessun rinvio, nessun grido")
+
+    def test_PR320_la_pagina_gia_pagata_dice_nel_registro_cosa_ha_letto(self):
+        """Pezzo 6 (PR #320), sopravvissuti del giudice a fase83:14333 (i due `or` -> `and`):
+        la riga «pagina_gia_pagata» scrive lo STATO del pagamento dietro la pagina; senza
+        stato, il MOTIVO per cui non si e' letto; senza niente, un trattino. Chi legge il
+        registro deve sapere se l'ospite ha pagato o se Stripe non ha risposto."""
+        self.risposta = self._Rifiuto400("Only Checkout Sessions with a status in [open] can "
+                                         "be expired")
+        self.riletta = {"id": "cs_1", "status": "complete", "payment_intent": "pi_1"}
+        for pag, atteso in (({"ok": True, "stato": "processing"}, "(processing)"),
+                            ({"ok": False, "stato": "", "motivo": "rete_giu"}, "(rete_giu)"),
+                            ({"ok": False}, "(-)")):
+            with self.subTest(pag=pag):
+                self.sis.stripe.pagamento_della_sessione = lambda cs, pag=pag: dict(pag)
+                with self.ascolta() as righe:
+                    self._spazza(1800 + 60)
+                self.assertEqual(self._stato(), "in_attesa", "nel dubbio la stanza resta tenuta")
+                trovate = self.avvisi_con(righe, "pagina_gia_pagata")
+                self.assertEqual(len(trovate), 1, righe)
+                self.assertIn(atteso, trovate[0])
+
 
 class TestLoSpazzinoChiudeLaPaginaCheLOspiteHaInMano(_BancoDeiSoldiDelServer):
     """PIANO DEI 2 MINUTI, pezzo 3, difetti A e B (11/11: trovati da silent-failure-hunter e
@@ -10647,6 +10691,96 @@ class TestPR317PezzoCinqueLeRigheCheIlGiudiceNonVedeva(unittest.TestCase):
         self.assertEqual(len(esploso), 1, log.output)
         self.assertIsInstance(esploso[0].exc_info, tuple, "il registro deve portare l'eccezione")
         self.assertIsInstance(esploso[0].exc_info[1], RuntimeError)
+
+
+class TestPR320PezzoSeiLeRigheCheIlGiudiceNonVedeva(_BancoDeiSoldiDelServer):
+    """Pezzo 6 (PR #320): i sopravvissuti del job caselle di 34bafe0 in fase83 (oltre ai due
+    dello spazzino, in TestLaStanzaSiLiberaSoloAPaginaChiusa), presi nel file che il giudice
+    accende. Nessuna riga di produzione toccata."""
+
+    def _mcp(self, msg, risposta=(201, {"stato": "in_attesa_pagamento"})):
+        _deve(self.sis.mcp is not None, "PREMESSA: MCP acceso nel banco")
+        with mock.patch.object(self.r, "_book", return_value=risposta) as book:
+            out = self.r._mcp(json.dumps(msg), {})
+        return out, book
+
+    def test_11741_11743_solo_un_tools_call_prenota_in_jsonrpc_2_passa_dal_sito(self):
+        """fase83:11742 (`and` -> `or`): basta UNA condizione falsa e il messaggio non e' una
+        prenotazione: va al protocollo MCP, non a `_book`."""
+        giusto = {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                  "params": {"name": "prenota", "arguments": {}}}
+        storti = (dict(giusto, jsonrpc="1.0"), dict(giusto, method="tools/list"),
+                  dict(giusto, params="prenota"), dict(giusto, params={"name": "cerca"}))
+        for msg in storti:
+            with self.subTest(msg=msg):
+                _out, book = self._mcp(msg)
+                self.assertEqual(book.call_count, 0, "non e' una prenotazione")
+        _out, book = self._mcp(giusto)
+        self.assertEqual(book.call_count, 1, "D18: la prenotazione vera passa da `_book`")
+
+    def test_11748_il_testo_della_risposta_tiene_gli_accenti(self):
+        """fase83:11748 (`ensure_ascii=False` -> `True`): l'agente legge «città», non
+        «citt\\u00e0»."""
+        (status, corpo), _book = self._mcp(
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+             "params": {"name": "prenota", "arguments": {}}},
+            risposta=(201, {"messaggio": "città"}))
+        self.assertEqual(status, 200)
+        testo = corpo["result"]["content"][0]["text"]
+        self.assertIn("città", testo)
+        self.assertNotIn("\\u00e0", testo)
+
+    def test_11749_un_400_e_un_errore_per_l_agente(self):
+        """fase83:11749 (`>=` -> `>`): il confine e' 400 compreso."""
+        msg = {"jsonrpc": "2.0", "id": 3, "method": "tools/call",
+               "params": {"name": "prenota", "arguments": {}}}
+        for stato, errore in ((399, False), (400, True), (409, True), (201, False)):
+            with self.subTest(stato=stato):
+                (_s, corpo), _book = self._mcp(msg, risposta=(stato, {"stato": "x"}))
+                self.assertIs(corpo["result"]["isError"], errore)
+
+    def test_11725_una_risposta_che_non_e_un_oggetto_passa_com_e(self):
+        """fase83:11725 (`and` -> `or`): il filtro del numero della pagina guarda solo dentro
+        un oggetto; una risposta vuota o di testo esce com'era, senza esplodere."""
+        from fase83_server import RouterHTTP
+        for corpo in (None, "c'e' stripe_cs nel testo", ["stripe_cs"]):
+            with self.subTest(corpo=corpo):
+                try:
+                    uscita = RouterHTTP._risposta_ospite(500, corpo)
+                except Exception as exc:
+                    self.fail("una risposta che non e' un oggetto deve uscire com'era, "
+                              "non esplodere: %r" % exc)
+                self.assertEqual(uscita, (500, corpo))
+        self.assertEqual(RouterHTTP._risposta_ospite(201, {"a": 1, "stripe_cs": "cs_1"}),
+                         (201, {"a": 1}), "D18: dentro un oggetto il numero si toglie")
+
+    def test_1810_la_pagina_della_recensione_mostra_il_titolo_salvato(self):
+        """fase83:1810 (`or` -> `and`): il titolo dell'annuncio salvato con la prenotazione si
+        mostra; solo senza titolo si ripiega sul codice dell'alloggio."""
+        from fase83_server import pagina_recensione_html
+        uscita = (datetime.date.today() + datetime.timedelta(days=10)).isoformat()
+
+        class _Firma:
+            def decodifica(self, token):
+                return {"tipo": "voucher", "riferimento": "r320", "alloggio_id": "attico-320",
+                        "check_out": uscita}
+
+        class _Recensioni:
+            def gia_recensita(self, rif):
+                return False
+
+        for corpo, atteso, assente in (({"titolo": "Attico Vista Colosseo"},
+                                         "Attico Vista Colosseo", "attico-320"),
+                                        ({}, "attico-320", "Attico Vista Colosseo")):
+            with self.subTest(corpo=corpo):
+                rec = {"riferimento": "r320", "stato": "pagato", "corpo_json": json.dumps(corpo)}
+                sistema = types.SimpleNamespace(
+                    firma=_Firma(), recensioni=_Recensioni(), emettitore_recensioni=object(),
+                    pagamenti_pendenti=types.SimpleNamespace(info=lambda rif, rec=rec: rec))
+                pagina = pagina_recensione_html(sistema, "tok", "it")
+                _deve(isinstance(pagina, str), "PREMESSA: la pagina si compone", pagina)
+                self.assertIn(atteso, pagina)
+                self.assertNotIn(assente, pagina)
 
 
 if __name__ == "__main__":
