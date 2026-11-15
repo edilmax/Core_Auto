@@ -3122,6 +3122,9 @@ class TestLaStanzaSiLiberaSoloAPaginaChiusa(_BancoDeiSoldiDelServer):
         self.riletta = {"id": "cs_1", "status": "complete", "payment_intent": "pi_1"}
         for pag, atteso in (({"ok": True, "stato": "processing"}, "(processing)"),
                             ({"ok": False, "stato": "", "motivo": "rete_giu"}, "(rete_giu)"),
+                            # r1 (revisore, 15/11): il «non lo so» nella forma VERA di fase85,
+                            # che porta sempre le chiavi, vuote
+                            ({"ok": False, "stato": "", "motivo": ""}, "(-)"),
                             ({"ok": False}, "(-)")):
             with self.subTest(pag=pag):
                 self.sis.stripe.pagamento_della_sessione = lambda cs, pag=pag: dict(pag)
@@ -11018,6 +11021,20 @@ class TestPR320PezzoSeiLeRigheCheIlGiudiceNonVedeva(_BancoDeiSoldiDelServer):
         _out, book = self._mcp(giusto)
         self.assertEqual(book.call_count, 1, "D18: la prenotazione vera passa da `_book`")
 
+    def test_11741_un_corpo_che_non_e_un_oggetto_non_e_una_prenotazione(self):
+        """r3 (revisore, 15/11): JSON non valido o una lista non passano da `_book` e non
+        fanno esplodere la rotta (`msg.get` e' protetto dall'`isinstance` sulla stessa riga)."""
+        _deve(self.sis.mcp is not None, "PREMESSA: MCP acceso nel banco")
+        for corpo in ("non e' json", "[1, 2]", "null", ""):
+            with self.subTest(corpo=corpo):
+                with mock.patch.object(self.r, "_book") as book:
+                    try:
+                        self.r._mcp(corpo, {})
+                    except Exception as exc:
+                        self.fail("un corpo che non e' un oggetto non deve far esplodere "
+                                  "la rotta: %r" % exc)
+                self.assertEqual(book.call_count, 0)
+
     def test_11748_il_testo_della_risposta_tiene_gli_accenti(self):
         """fase83:11748 (`ensure_ascii=False` -> `True`): l'agente legge «città», non
         «citt\\u00e0»."""
@@ -11081,6 +11098,38 @@ class TestPR320PezzoSeiLeRigheCheIlGiudiceNonVedeva(_BancoDeiSoldiDelServer):
                 _deve(isinstance(pagina, str), "PREMESSA: la pagina si compone", pagina)
                 self.assertIn(atteso, pagina)
                 self.assertNotIn(assente, pagina)
+
+    def test_1810_il_titolo_salvato_sta_anche_nella_pagina_col_modulo(self):
+        """r2 (revisore, 15/11): a soggiorno FINITO la pagina mostra il modulo del voto (non
+        «dopo il soggiorno»), e il titolo salvato deve esserci anche li'."""
+        from fase83_server import pagina_recensione_html
+        uscita = (datetime.date.today() - datetime.timedelta(days=2)).isoformat()
+        emessi = []
+
+        class _Firma:
+            def decodifica(self, token):
+                return {"tipo": "voucher", "riferimento": "r320", "alloggio_id": "attico-320",
+                        "check_out": uscita}
+
+        class _Recensioni:
+            def gia_recensita(self, rif):
+                return False
+
+        class _Emettitore:
+            def emetti(self, rif, allog, non_prima_ts=None):
+                emessi.append((rif, allog))
+                return "diritto-di-prova"
+
+        rec = {"riferimento": "r320", "stato": "pagato",
+               "corpo_json": json.dumps({"titolo": "Attico Vista Colosseo"})}
+        sistema = types.SimpleNamespace(
+            firma=_Firma(), recensioni=_Recensioni(), emettitore_recensioni=_Emettitore(),
+            pagamenti_pendenti=types.SimpleNamespace(info=lambda rif: rec))
+        pagina = pagina_recensione_html(sistema, "tok", "it")
+        _deve(isinstance(pagina, str), "PREMESSA: la pagina si compone", pagina)
+        self.assertEqual(emessi, [("r320", "attico-320")], "PREMESSA: e' la pagina col modulo")
+        self.assertIn("recBox", pagina, "PREMESSA: il modulo del voto c'e'")
+        self.assertIn("Attico Vista Colosseo", pagina)
 
 
 if __name__ == "__main__":
