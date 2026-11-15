@@ -32,8 +32,22 @@ COPY main_casavip.py ./
 COPY fase*.py ./
 COPY deploy ./deploy
 
-# Utente non-root + volume dati
-RUN useradd -r -u 10001 -m -d /home/app app \
+# L'immagine ripulita (15/11/2026, Trivy 0.76.1), poi utente non-root + volume dati.
+#  · `apt-get upgrade` porta i pacchetti di Debian GIA' presenti alle correzioni di
+#    sicurezza uscite dopo la base (misurato: zlib1g, corretto da Debian e non ancora in
+#    nessuna immagine python:3.11-slim). `upgrade` non aggiunge mai un pacchetto nuovo:
+#    l'immagine resta senza installazioni. Sta DOPO le COPY apposta: ogni rilascio cambia i
+#    file, quindi questo passo si rifa' e non riusa uno strato vecchio dalla cache.
+#  · pip, setuptools (col suo jaraco.context), wheel e packaging servono solo a INSTALLARE,
+#    e la produzione non installa niente: tolti, escono dieci falle note. Nessun fase*.py e
+#    nemmeno main_casavip.py li importa.
+#  Lo guarda Trivy nel job `immagine` della CI (test_parita_ambiente, classe Trivy).
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && python -m pip uninstall -y pip setuptools wheel packaging \
+    && useradd -r -u 10001 -m -d /home/app app \
     && mkdir -p /data \
     && chown -R app:app /app /data
 USER app

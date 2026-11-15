@@ -1134,6 +1134,33 @@ jobs:
       - uses: actions/checkout@v5
       - name: Costruisci l'immagine di produzione
         run: docker build -f Dockerfile.casavip -t casavip-app:ci .
+      # TRIVY SULL'IMMAGINE (15/11/2026). Nessuna falla che ha gia' una correzione arriva in
+      # produzione: il 14/11 l'immagine viva ne aveva tredici (zlib1g di Debian; pip,
+      # setuptools e wheel). Trivy si scarica a versione e impronta FISSATE e si controlla
+      # con sha256sum -c: niente azione di terzi (le etichette delle azioni di Trivy sono
+      # state manomesse a marzo 2026). Soglia d'uscita 2 e non 1, perche' Trivy esce 1 anche
+      # quando non riesce a guardare: i due rossi dicono due cose diverse e lo dicono a
+      # parole. Guardia: test_parita_ambiente.TestTrivyGuardaLImmagineDiProduzione.
+      - name: Scarica Trivy 0.76.1 e controllane l'impronta
+        run: |
+          curl -sSfL -o trivy.tar.gz https://github.com/aquasecurity/trivy/releases/download/v0.76.1/trivy_0.76.1_Linux-64bit.tar.gz
+          echo "c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0  trivy.tar.gz" | sha256sum -c -
+          tar -xzf trivy.tar.gz trivy
+          ./trivy --version
+      - name: Trivy - nessuna falla correggibile nell'immagine appena costruita
+        run: |
+          set +e
+          ./trivy image --scanners vuln --ignore-unfixed --timeout 15m --exit-code 2 casavip-app:ci
+          ESITO=$?
+          set -e
+          if [ "$ESITO" = "2" ]; then
+            echo "::error title=Falle correggibili nell'immagine::Trivy ha trovato falle che hanno gia' una correzione (tabella qui sopra). Si aggiorna l'immagine: base nuova o pacchetto aggiornato nel Dockerfile."
+            exit 1
+          fi
+          if [ "$ESITO" != "0" ]; then
+            echo "::error title=Trivy non ha guardato::Trivy e' uscito con $ESITO: la scansione NON e' avvenuta (rete, base dati delle falle, tempo). Non e' un verde e non e' una falla: si rilancia il job."
+            exit 1
+          fi
       - name: Avvia il container con l'ambiente minimo
         run: |
           docker run -d --name casavip_ci -p 18080:8080 \

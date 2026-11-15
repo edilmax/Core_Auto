@@ -28,8 +28,14 @@ COPY main_casavip.py ./
 COPY fase*.py ./
 COPY deploy ./deploy
 
-# Utente non-root + volume dati
-RUN useradd -r -u 10001 -m -d /home/app app \
+# L'immagine ripulita come nel gemello Dockerfile.casavip (il perche' e' scritto li'),
+# poi utente non-root + volume dati.
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && python -m pip uninstall -y pip setuptools wheel packaging \
+    && useradd -r -u 10001 -m -d /home/app app \
     && mkdir -p /data \
     && chown -R app:app /app /data
 USER app
