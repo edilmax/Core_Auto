@@ -1352,7 +1352,9 @@ EQUIVALENTI_DICHIARATI = {
         "osservabile nemmeno a valle.",
     },
 
-    ("fase85_pagamenti_stripe.py", "crea_link_anticipo",
+    # la funzione si chiama crea_sessione_anticipo dall'11/11 (difetto A dei 2 minuti): stesse
+    # righe, stessa dimostrazione; crea_link_anticipo ora la chiama e torna solo l'URL
+    ("fase85_pagamenti_stripe.py", "crea_sessione_anticipo",
      "and saldo >= 0) else 0", ">=", ">"): {
         "ancore": ["saldo = dati.get(\"saldo_cents\")\n"
                    "saldo = saldo if (isinstance(saldo, int) and not isinstance(saldo, bool)\n"

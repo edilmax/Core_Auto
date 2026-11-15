@@ -142,6 +142,13 @@ class ProviderStripe:
     def crea_link(self, dati: Dict[str, Any]) -> Optional[str]:
         """Da un dict prenotazione (prezzo_guest_cents, riferimento, email) -> URL di
         pagamento Stripe, o None (chiave/cents invalidi o Stripe non raggiungibile)."""
+        sessione = self.crea_sessione(dati)
+        return sessione["url"] if sessione else None
+
+    def crea_sessione(self, dati: Dict[str, Any]) -> Optional[Dict[str, str]]:
+        """Come `crea_link`, ma torna {'url', 'id'}: il NUMERO della pagina (`cs_...`) serve allo
+        spazzino per chiuderla quando scade il blocco della stanza (piano dei 2 minuti, 11/11).
+        Un numero che non e' di una sessione resta '' (chi lo legge non puo' chiuderla)."""
         try:
             if not isinstance(dati, dict):
                 return None
@@ -198,11 +205,49 @@ class ProviderStripe:
                        "Content-Type": "application/x-www-form-urlencoded"}
             resp = self._fetch(STRIPE_URL, body, headers)
             url = resp.get("url") if isinstance(resp, dict) else None
-            return url if isinstance(url, str) and url else None
+            if not (isinstance(url, str) and url):
+                return None
+            cs = resp.get("id")
+            return {"url": url,
+                    "id": cs if isinstance(cs, str) and cs.startswith("cs_") and len(cs) > 3
+                    else ""}
         except Exception:
             logger.warning("Stripe: creazione link fallita (ISOLATA -> None)",
                            exc_info=True)
             return None
+
+    def chiudi_sessione(self, sessione: Any) -> Dict[str, Any]:
+        """PIANO DEI 2 MINUTI, pezzo 3 (11/11): chiude la pagina di pagamento (POST .../expire)
+        prima che la stanza si liberi. {'ok', 'stato', 'motivo'}: 'expired' = chiusa, da li' non
+        puo' piu' arrivare un pagamento; 'complete' = l'ospite ha GIA' pagato; ok=False = NON LO
+        SO (rete, 5xx, risposta illeggibile). Misurato su Stripe di prova (11/11): una sessione
+        aperta risponde 200 'expired', una non aperta 400; dopo un rifiuto certo si rilegge la
+        sessione per sapere com'e'. Il corpo non e' vuoto apposta: vuoto, `_fetch` fa una GET."""
+        if not (isinstance(sessione, str) and sessione.startswith("cs_") and len(sessione) > 3):
+            return {"ok": False, "stato": "", "motivo": "sessione_assente"}
+        intestazione = {"Authorization": "Bearer " + self._key}
+        try:
+            try:
+                s = self._fetch(STRIPE_URL + "/" + sessione + "/expire",
+                                b"expand[]=payment_intent",
+                                dict(intestazione,
+                                     **{"Content-Type": "application/x-www-form-urlencoded"}))
+            except Exception as exc:
+                if _esito_sconosciuto(exc):
+                    raise
+                s = self._fetch(STRIPE_URL + "/" + sessione, None, intestazione)
+            if not (isinstance(s, dict) and s.get("id") == sessione
+                    and isinstance(s.get("status"), str) and s.get("status")):
+                return {"ok": False, "stato": "", "motivo": "risposta_inattesa: %r" % (s,)}
+            return {"ok": True, "stato": s["status"], "motivo": ""}
+        except Exception as exc:
+            motivo = _motivo_errore(exc)
+            # numero e motivo arrivano da fuori (pendente, testo di Stripe): un a-capo farebbe
+            # una riga finta nel registro (PR #317, come fase86:237)
+            logger.warning("Stripe: pagina di pagamento non chiusa cs=%s -> %s",
+                           *(str(x).replace("\r\n", "\\n").replace("\n", "\\n")
+                             .replace("\r", "\\r") for x in (sessione, motivo)))
+            return {"ok": False, "stato": "", "motivo": motivo}
 
     def pagamento_della_sessione(self, sessione: Any) -> Dict[str, Any]:
         """IL PAGAMENTO DIETRO UNA SESSIONE CHIUSA SENZA SOLDI DISPONIBILI (`unpaid`): e' BLOCCATO
@@ -618,12 +663,20 @@ class ProviderStripe:
             return dict(vuoto, motivo="%s: %s" % (exc.__class__.__name__, exc))
 
     def crea_link_anticipo(self, dati: Dict[str, Any]) -> Optional[str]:
+        """Come `crea_sessione_anticipo`, ma torna solo l'URL (o None)."""
+        sessione = self.crea_sessione_anticipo(dati)
+        return sessione["url"] if sessione else None
+
+    def crea_sessione_anticipo(self, dati: Dict[str, Any]) -> Optional[Dict[str, str]]:
         """PAGA IN STRUTTURA: Checkout Session che addebita SUBITO solo l'ANTICIPO
         (commissione + fee + copertura carta = tutto NOSTRO, fase188) E salva la carta per la
         penale no-show/tardiva (FASE 3). La carta va dall'ospite a Stripe, MAI da noi (hosted).
         Il SALDO **non** si incassa qui: lo paga l'ospite all'host DI PERSONA -> nessun escrow,
         nessun payout, nessun auto-rilascio. Il webhook riconosce la prenotazione dai metadata
-        (`modo=in_struttura`, `anticipo_cents`, `saldo_cents`). Ritorna l'URL hosted o None.
+        (`modo=in_struttura`, `anticipo_cents`, `saldo_cents`). Ritorna {'url', 'id'} o None:
+        il NUMERO e' quello della pagina che l'ospite ha in mano, ed e' questa che lo spazzino
+        chiude (piano dei 2 minuti, difetto A, 11/11); un numero che non e' di una sessione
+        resta '' come in `crea_sessione`.
 
         Deliberatamente SEPARATO da `crea_link` (flusso online LIVE): lo lasciamo intatto."""
         try:
@@ -676,7 +729,12 @@ class ProviderStripe:
                        "Content-Type": "application/x-www-form-urlencoded"}
             resp = self._fetch(STRIPE_URL, body, headers)
             url = resp.get("url") if isinstance(resp, dict) else None
-            return url if isinstance(url, str) and url else None
+            if not (isinstance(url, str) and url):
+                return None
+            cs = resp.get("id")
+            return {"url": url,
+                    "id": cs if isinstance(cs, str) and cs.startswith("cs_") and len(cs) > 3
+                    else ""}
         except Exception:
             logger.warning("Stripe: creazione link ANTICIPO fallita (ISOLATA -> None)",
                            exc_info=True)

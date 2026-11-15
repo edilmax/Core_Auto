@@ -923,14 +923,16 @@ class TestContrattoPayoutFase131(BaseContratto, unittest.TestCase):
     COLONNE = {
         "payout": ("prenotazione_id TEXT PK1", "host_id TEXT NOT NULL",
                    "minori INTEGER NOT NULL", "valuta TEXT NOT NULL",
-                   "stato TEXT NOT NULL", "ts INTEGER NOT NULL"),
+                   "stato TEXT NOT NULL", "ts INTEGER NOT NULL",
+                   # FB1 (11/11): la ritenuta gia' tolta da questo bonifico
+                   "ritenuta_cents INTEGER NOT NULL"),
     }
     INDICI = {"ix_payout_host": "CREATE INDEX ix_payout_host ON payout(host_id)"}
     UNICI = {"payout": ("pk(prenotazione_id)",)}
     CHECK = {"payout": ()}
     FK = {"payout": ()}
     TRIGGER = {}
-    DENARO = ("payout.minori",)
+    DENARO = ("payout.minori", "payout.ritenuta_cents")
 
     def costruisci(self, percorso):
         from fase131_payout_dashboard import crea_payout_dashboard

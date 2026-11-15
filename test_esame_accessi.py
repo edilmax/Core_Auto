@@ -171,6 +171,46 @@ class TestLEsameDegliAccessiNonPuoBARARE(unittest.TestCase):
             else:
                 os.environ["MARCA_TEMPORALE"] = prima
 
+    # ── la sonda Bunker con sessione FINTA si dichiara al Guardiano ───────────────────
+    def test_la_sonda_bunker_finta_DICHIARA_la_sua_finestra_e_solo_lei(self):
+        """15/11 («autorizzato Guardiano»): il 14/11 quattro giri di questo esame dal PC hanno
+        lasciato nel registro del server 4 righe CRITICAL «BUNKER: accesso NEGATO
+        azione=stato_sistema» (la sessione inventata) e il Guardiano le ha contate come
+        intrusioni, «6 stati anomali» e un Telegram ogni 10 minuti. `verifica_produzione` le sue
+        le dichiara (`_dichiara_le_sonde`); questo esame no. Si pretende: l'ora del server si
+        legge PRIMA della sonda Bunker, la finestra si dichiara DOPO, una volta sola, con lo
+        stesso scrittore del giudice -- e le sonde admin e host, che non scrivono righe Bunker,
+        restano fuori dalla finestra (larga quanto la sonda, non di piu')."""
+        import verifica_produzione as vp
+        eventi = []
+
+        def finto_vivo(metodo, path, testate=None, timeout=25):
+            eventi.append(("sonda", path, sorted(testate or {})))
+            return 403
+
+        def finta_ora():
+            eventi.append(("ora",))
+            return 1794700000
+
+        def finta_dichiara(inizio):
+            eventi.append(("dichiara", inizio))
+
+        for modulo, nome, finto in ((ea, "_chiedi_vivo", finto_vivo), (vp, "_ora_del_server", finta_ora),
+                                    (vp, "_dichiara_le_sonde", finta_dichiara),
+                                    (ea, "PAUSA_VIVO_SEC", 0)):
+            self.addCleanup(setattr, modulo, nome, getattr(modulo, nome))
+            setattr(modulo, nome, finto)
+        esatte = [("GET", "/api/admin/lettura", "g"), ("GET", "/api/bunker/stato", "g"),
+                  ("GET", "/api/host/lettura", "g")]
+        ea.letture_vive(esatte)
+        finta = ("sonda", "/api/bunker/stato", ["X-Bunker-Session"])
+        self.assertIn(finta, eventi, eventi)
+        i = eventi.index(finta)
+        self.assertEqual(eventi[i - 1], ("ora",), "l'ora del server va letta SUBITO prima: %s" % eventi)
+        self.assertEqual(eventi[i + 1], ("dichiara", 1794700000), "dichiarata SUBITO dopo: %s" % eventi)
+        self.assertEqual(sum(1 for e in eventi if e[0] == "dichiara"), 1, eventi)
+        self.assertEqual(sum(1 for e in eventi if e[0] == "ora"), 1, eventi)
+
 
 if __name__ == "__main__":
     unittest.main()

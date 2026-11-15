@@ -2576,6 +2576,278 @@ class _BancoDeiSoldiDelServer(unittest.TestCase):
         return [r for r in righe if r.startswith("WARNING:") and all(p in r for p in parole)]
 
 
+class TestIlNumeroDellaPaginaStripeSiSalvaQuandoNasce(_BancoDeiSoldiDelServer):
+    """PIANO DEI 2 MINUTI, pezzo 1 (11/11): a blocco scaduto lo spazzino deve chiudere la pagina
+    di Stripe PRIMA di liberare la stanza, e per chiuderla serve il suo numero. Prima arrivava
+    solo col webhook (`salva_stripe_session`), cioe' a pagamento gia' fatto: quando non serve."""
+
+    def test_la_prenotazione_salva_il_numero_della_sua_pagina(self):
+        self.pubblica("casa-cs")
+        b = self.prenota("casa-cs", 10)
+        rec = self.sis.pagamenti_pendenti.info(b["riferimento"])
+        self.assertIsNotNone(rec, "PREMESSA: il pagamento in attesa c'e'")
+        self.assertEqual(json.loads(rec["corpo_json"] or "{}").get("stripe_cs"), "cs_1",
+                         "il numero della pagina Stripe (cs_1, dal finto Stripe) deve stare nel "
+                         "pagamento in attesa dal momento della prenotazione")
+
+
+class TestLaStanzaSiLiberaSoloAPaginaChiusa(_BancoDeiSoldiDelServer):
+    """PIANO DEI 2 MINUTI, pezzo 3 (11/11): a blocco scaduto lo spazzino chiude la pagina di
+    Stripe PRIMA di liberare la stanza. Chiusa -> si libera; gia' pagata -> NON si libera (arriva
+    il webhook); Stripe muto -> si tiene e si riprova, finche' la pagina non puo' piu' essere
+    viva (una sessione Stripe dura al massimo un giorno)."""
+
+    def setUp(self):
+        super().setUp()
+        self.pubblica("casa-2m")
+        self.rif = self.prenota("casa-2m", 10)["riferimento"]
+        self.chiusure = []
+        self.risposta = {"id": "cs_1", "status": "expired"}
+        self.riletta = {"id": "cs_1", "status": "complete"}     # dopo un rifiuto certo
+
+        def fetch(url, body, headers):
+            if url.endswith("/cs_1/expire"):
+                # lo stato del pagamento in attesa NEL MOMENTO in cui si chiude la pagina
+                self.chiusure.append(self.sis.pagamenti_pendenti.info(self.rif)["stato"])
+                if isinstance(self.risposta, BaseException):
+                    raise self.risposta
+                return self.risposta
+            if not body and url.endswith("/cs_1"):
+                return self.riletta
+            return {"url": "https://checkout.stripe.test/cs", "id": "cs_1"}
+        self.sis.stripe._fetch = fetch
+
+    class _Rifiuto400(Exception):
+        """Il rifiuto certo di Stripe a chiudere una pagina che non e' piu' aperta."""
+        code = 400
+
+    def _spazza(self, dopo_secondi):
+        from fase83_server import sweep_hold_una_passata
+        with mock.patch("time.time", return_value=time.time() + dopo_secondi):
+            sweep_hold_una_passata(self.sis, self.r)
+
+    def _stato(self):
+        return self.sis.pagamenti_pendenti.info(self.rif)["stato"]
+
+    def _stanza_libera(self):
+        s, q = self.g("POST", "/api/concierge/quote", {"alloggio_id": "casa-2m",
+                                                       "check_in": _fra(10), "check_out": _fra(12),
+                                                       "party": 2})
+        if s != 200:
+            return False
+        s, _b = self.g("POST", "/api/concierge/book", {"quote_token": q["quote_token"],
+                                                       "email": "altro@banco.it"})
+        return s == 201
+
+    def test_la_pagina_si_chiude_prima_poi_la_stanza_si_libera(self):
+        self._spazza(1800 + 60)
+        self.assertEqual(self.chiusure, ["in_attesa"],
+                         "la pagina si chiude PRIMA, quando la stanza e' ancora tenuta")
+        self.assertEqual(self._stato(), "scaduto")
+        self.assertTrue(self._stanza_libera(), "a pagina chiusa la stanza torna in vendita")
+
+    def test_se_l_ospite_ha_gia_pagato_la_stanza_non_si_libera(self):
+        class _Rifiuto400(Exception):
+            code = 400
+        self.risposta = _Rifiuto400("Only Checkout Sessions with a status in [open] can be expired")
+        self._spazza(1800 + 60)
+        self.assertEqual(self.chiusure, ["in_attesa"])
+        self.assertEqual(self._stato(), "in_attesa", "ha pagato: il blocco non si scade")
+        self.assertFalse(self._stanza_libera(), "la stanza di chi ha pagato non si rivende")
+
+    def test_stripe_muto_la_stanza_resta_tenuta_e_si_riprova(self):
+        self.risposta = TimeoutError("Stripe non risponde")
+        self._spazza(1800 + 60)
+        self.assertEqual(self._stato(), "in_attesa")
+        self.assertFalse(self._stanza_libera(), "nel dubbio la stanza resta tenuta")
+        self.risposta = {"id": "cs_1", "status": "expired"}
+        self._spazza(1800 + 120)
+        self.assertEqual(self.chiusure, ["in_attesa", "in_attesa"])
+        self.assertEqual(self._stato(), "scaduto")
+        self.assertTrue(self._stanza_libera())
+
+    def test_dopo_un_giorno_senza_risposta_la_pagina_non_puo_essere_viva(self):
+        self.risposta = TimeoutError("Stripe non risponde")
+        with self.assertLogs("core_auto.server", level="ERROR") as log:
+            self._spazza(1800 + 86400 + 60)
+        self.assertTrue(any("pagina_non_chiusa" in r.getMessage() for r in log.records),
+                        log.output)
+        self.assertEqual(self._stato(), "scaduto")
+
+    def test_gia_pagata_resta_tenuta_anche_dopo_un_giorno_senza_allarme(self):
+        """Prova mancante 1 (pr-test-analyzer, 11/11): 'complete' si guarda PRIMA del confine
+        del giorno. Al contrario, dopo un giorno la stanza di chi ha pagato si rivenderebbe."""
+        self.risposta = self._Rifiuto400("Only Checkout Sessions with a status in [open] can "
+                                         "be expired")
+        with self.ascolta() as righe:
+            self._spazza(1800 + 86400 + 60)
+        self.assertEqual(self._stato(), "in_attesa", "ha pagato: il blocco non si scade mai")
+        self.assertEqual(self.errori_con(righe, "SPAZZINO"), [], "nessun allarme: ha pagato")
+        self.assertTrue(self.avvisi_con(righe, "pagina_gia_pagata"), righe)
+        self.assertFalse(self._stanza_libera())
+
+    def test_il_confine_del_giorno(self):
+        """Prova mancante 3: Stripe muto, la pagina si da' per morta solo DOPO un giorno intero
+        dalla fine del blocco (una sessione di Checkout vive al massimo un giorno)."""
+        from fase83_server import _pagina_stripe_chiusa
+        rec = dict(self.sis.pagamenti_pendenti.info(self.rif))
+        self.risposta = TimeoutError("Stripe non risponde")
+        scadenza = int(rec["scadenza_ts"])
+        with mock.patch("time.time", return_value=scadenza + 86400):
+            self.assertFalse(_pagina_stripe_chiusa(self.sis, rec), "al confine si tiene")
+        with mock.patch("time.time", return_value=scadenza + 86401):
+            self.assertTrue(_pagina_stripe_chiusa(self.sis, rec), "un secondo dopo si libera")
+        self.assertEqual(len(self.chiusure), 2, "PREMESSA: Stripe chiamato tutte e due le volte")
+
+    def test_un_blocco_gia_scaduto_da_finire_non_richiama_stripe(self):
+        """Prova mancante 4: uno spazzino morto DOPO il CAS (V-e) lascia un blocco 'scaduto' da
+        finire. La sua pagina e' gia' stata chiusa prima del CAS: il giro dopo finisce i passi
+        senza richiamare Stripe; con Stripe muto, richiamarlo terrebbe la stanza per un giorno."""
+        _deve(self.sis.pagamenti_pendenti.scadi(self.rif),
+              "PREMESSA: lo spazzino di prima e' morto dopo il CAS")
+        self.risposta = TimeoutError("Stripe non risponde")
+        self._spazza(1800 + 60)
+        self.assertEqual(self.chiusure, [], "la pagina di un blocco gia' scaduto non si richiude")
+        self.assertEqual(self.sis.pagamenti_pendenti.scaduti_da_finire(), [],
+                         "i passi del blocco scaduto si finiscono")
+        self.assertTrue(self._stanza_libera())
+
+    def test_senza_stripe_nel_sistema_si_libera_come_prima(self):
+        """Prova mancante 5: un sistema senza Stripe (sviluppo, prove) non ha pagine da chiudere."""
+        self.sis.stripe = None
+        self._spazza(1800 + 60)
+        self.assertEqual(self._stato(), "scaduto")
+        self.assertTrue(self._stanza_libera())
+
+    def test_stripe_dice_aperta_la_stanza_resta_tenuta(self):
+        """Prova mancante 6a: qualunque stato che non sia 'expired' o 'complete' = NON LO SO."""
+        self.risposta = {"id": "cs_1", "status": "open"}
+        self._spazza(1800 + 60)
+        self.assertEqual(self.chiusure, ["in_attesa"], "PREMESSA: Stripe e' stato chiamato")
+        self.assertEqual(self._stato(), "in_attesa")
+        self.assertFalse(self._stanza_libera())
+
+    def test_rifiuto_certo_poi_riletta_chiusa_si_libera(self):
+        """Prova mancante 6b: Stripe rifiuta di chiudere (gia' scaduta da sola) e la rilettura
+        dice 'expired': la pagina e' chiusa, la stanza torna in vendita."""
+        self.risposta = self._Rifiuto400("Only Checkout Sessions with a status in [open] can "
+                                         "be expired")
+        self.riletta = {"id": "cs_1", "status": "expired"}
+        self._spazza(1800 + 60)
+        self.assertEqual(self.chiusure, ["in_attesa"])
+        self.assertEqual(self._stato(), "scaduto")
+        self.assertTrue(self._stanza_libera())
+
+    def test_senza_numero_della_pagina_si_fa_come_prima(self):
+        import sqlite3
+        corpo = json.loads(self.sis.pagamenti_pendenti.info(self.rif)["corpo_json"])
+        self.assertEqual(corpo.get("stripe_cs"), "cs_1", "PREMESSA (prova mancante 8): il "
+                         "numero c'era, e la prova lo toglie davvero")
+        corpo.pop("stripe_cs")
+        con = sqlite3.connect(os.path.join(self.dir, "p.db"))
+        with con:
+            con.execute("UPDATE pendenti SET corpo_json=? WHERE riferimento=?",
+                        (json.dumps(corpo), self.rif))
+        con.close()
+        self._spazza(1800 + 60)
+        self.assertEqual(self.chiusure, [], "senza numero non si chiama Stripe")
+        self.assertEqual(self._stato(), "scaduto")
+
+
+class TestLoSpazzinoChiudeLaPaginaCheLOspiteHaInMano(_BancoDeiSoldiDelServer):
+    """PIANO DEI 2 MINUTI, pezzo 3, difetti A e B (11/11: trovati da silent-failure-hunter e
+    pr-test-analyzer, verificati sul codice). Il numero salvato col blocco deve essere quello
+    della pagina che l'ospite ha in mano: altrimenti lo spazzino chiude una pagina che nessuno
+    usa e libera la stanza mentre quella vera resta pagabile.
+    A) paga in struttura: la pagina dell'ANTICIPO prende il posto di quella del totale;
+    B) doppio clic: al secondo clic l'ospite riceve la STESSA pagina, non una nuova."""
+
+    SLUG = "casa-pagina-giusta"
+
+    def setUp(self):
+        self._flag = os.environ.get("PAGA_STRUTTURA_ATTIVO")
+        os.environ["PAGA_STRUTTURA_ATTIVO"] = "1"
+        super().setUp()
+        self.pubblica(self.SLUG)
+        self.nate = []           # le pagine create da Stripe, in ordine
+        self.chiuse = []         # le pagine che lo spazzino ha chiuso
+
+        def fetch(url, body, headers):
+            if url.endswith("/expire"):
+                cs = url.rsplit("/", 2)[-2]
+                self.chiuse.append(cs)
+                return {"id": cs, "status": "expired"}
+            if not body:
+                return {"id": url.rsplit("/", 1)[-1], "status": "open"}
+            tipo = "anticipo" if b"anticipo_paga_struttura" in body else "totale"
+            cs = "cs_%s_%d" % (tipo, len(self.nate) + 1)
+            self.nate.append(cs)
+            return {"url": "https://checkout.stripe.test/" + cs, "id": cs}
+        self.sis.stripe._fetch = fetch
+
+    def tearDown(self):
+        if self._flag is None:
+            os.environ.pop("PAGA_STRUTTURA_ATTIVO", None)
+        else:
+            os.environ["PAGA_STRUTTURA_ATTIVO"] = self._flag
+        super().tearDown()
+
+    def _preventivo(self):
+        s, q = self.g("POST", "/api/concierge/quote",
+                      {"alloggio_id": self.SLUG, "check_in": _fra(10), "check_out": _fra(13),
+                       "party": 2})
+        _deve(s == 200, s, q)
+        return q
+
+    def _book(self, q, **altro):
+        s, b = self.g("POST", "/api/concierge/book",
+                      dict({"quote_token": q["quote_token"], "email": "cli@banco.it"}, **altro))
+        _deve(s == 201 and b.get("payment_url"), "PREMESSA: prenotazione con pagina", s, b)
+        return b
+
+    def _spazza(self):
+        from fase83_server import sweep_hold_una_passata
+        with mock.patch("time.time", return_value=time.time() + 1800 + 60):
+            sweep_hold_una_passata(self.sis, self.r)
+
+    @staticmethod
+    def _pagine(*risposte):
+        return sorted({r["payment_url"].rsplit("/", 1)[-1] for r in risposte})
+
+    def test_A_paga_in_struttura_si_chiude_la_pagina_dell_anticipo(self):
+        b = self._book(self._preventivo(), modo_pagamento="in_struttura")
+        _deve(b.get("modo_pagamento") == "in_struttura", "PREMESSA: in struttura", b)
+        _deve(self._pagine(b)[0].startswith("cs_anticipo"),
+              "PREMESSA: l'ospite ha la pagina dell'anticipo", self.nate, b)
+        self._spazza()
+        self.assertEqual(self.chiuse, self._pagine(b),
+                         "lo spazzino deve chiudere la pagina dell'ANTICIPO, l'unica che l'ospite "
+                         "puo' pagare (pagine nate: %s)" % self.nate)
+
+    def test_B_doppio_clic_ogni_pagina_data_all_ospite_si_chiude(self):
+        q = self._preventivo()
+        b1, b2 = self._book(q), self._book(q)
+        _deve(b2.get("idempotente") and b2["riferimento"] == b1["riferimento"],
+              "PREMESSA: il secondo clic e' un doppio clic", b1, b2)
+        self._spazza()
+        self.assertEqual(self.chiuse, self._pagine(b1, b2),
+                         "ogni pagina data all'ospite (una scheda per clic) deve chiudersi prima "
+                         "che la stanza si liberi (pagine nate: %s)" % self.nate)
+
+    def test_B_doppio_clic_in_struttura_ogni_pagina_data_all_ospite_si_chiude(self):
+        q = self._preventivo()
+        b1 = self._book(q, modo_pagamento="in_struttura")
+        b2 = self._book(q, modo_pagamento="in_struttura")
+        _deve(b2.get("idempotente") and b2["riferimento"] == b1["riferimento"],
+              "PREMESSA: il secondo clic e' un doppio clic", b1, b2)
+        _deve(all(p.startswith("cs_anticipo") for p in self._pagine(b1, b2)),
+              "PREMESSA: solo pagine dell'anticipo all'ospite (VA1)", self.nate, b1, b2)
+        self._spazza()
+        self.assertEqual(self.chiuse, self._pagine(b1, b2),
+                         "ogni pagina data all'ospite deve chiudersi prima che la stanza si "
+                         "liberi (pagine nate: %s)" % self.nate)
+
+
 class TestLaPenaleNonDiventaUnBonificoPieno(_BancoDeiSoldiDelServer):
     """C53-B1-9 (busta 8): nella cancellazione con penale il registro dei bonifici si
     riallinea alla quota dell'host (`imposta_importo`) e poi parte il bonifico, che per
@@ -4354,6 +4626,132 @@ class TestFB2CancellazioneConPenaleMortaDopoLaGaranzia(_OraVeraPerIlPreventivo, 
         with mock.patch("time.time", return_value=dopo + 120):          # un terzo clic: niente
             s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
         self.assertEqual(self._conti(rif), atteso, "un terzo clic non cambia piu' niente: %r" % (c,))
+
+    def test_FB2_la_garanzia_divisa_per_UN_ALTRA_prenotazione_resta_chiusa(self):
+        """pr-test-analyzer (11/11): il motivo deve essere di QUESTA prenotazione. Con un
+        `startswith("cancellazione:")` qualunque garanzia divisa da una cancellazione riaprirebbe
+        la porta, e il clic rimborserebbe di nuovo."""
+        rif, vt, _tot = self.prenota("2027-04-10", "2027-04-12")
+        self._paga(rif, 3)
+        quota = int((self.sis.garanzia.stato(rif) or {}).get("importo_host_cents") or 0) // 2
+        esito = self.sis.garanzia.chiudi_proporzionale(
+            rif, quota, motivo="cancellazione:ALTRA|rimborso=1|trattenuto=1")
+        self.assertTrue(esito.get("ok"), "PREMESSA: garanzia divisa: %r" % (esito,))
+        dopo = time.time() + fase83_server.SECONDI_RIPENSAMENTO + 3600
+        with mock.patch("time.time", return_value=dopo):
+            s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
+        self.assertEqual((s, c.get("errore")), (409, "escrow_gia_liquidato"), c)
+        self.assertEqual(self.movimenti(rif, "rimborso"), [], "nessun rimborso scritto")
+
+
+class TestFB2bLaRipresaTieneLaDecisioneDelPrimoClic(_OraVeraPerIlPreventivo, _BancoDelBlocco):
+    """FB2b (silent-failure-hunter, 11/11): la cancellazione ripresa ricalcolava il rimborso con
+    i giorni del SECONDO clic, ma teneva la quota dell'host decisa al PRIMO. Politica «moderata»:
+    a 2 giorni dall'arrivo il 50% torna all'ospite, il giorno dell'arrivo niente. Morta a 2 giorni,
+    ripresa il giorno dell'arrivo: l'ospite riceveva solo la tassa e la differenza restava a noi
+    (vista ROSSA: rimborsi [800] invece di [10800]). ORACOLO: una gemella sullo stesso alloggio e
+    le stesse date, cancellata al primo clic senza morte."""
+
+    def _ts(self, giorno):
+        return datetime.datetime(giorno.year, giorno.month, giorno.day, 11, 0,
+                                 tzinfo=datetime.timezone.utc).timestamp()
+
+    def _il_giorno(self, giorno):
+        """Sposta orologio E calendario: `_cancella_prenotazione` conta i giorni all'arrivo con
+        `date.today()` / `datetime.now(fuso)` del modulo `datetime`, che `time.time` non muove."""
+        import contextlib
+        import sys as _sys
+        import types
+
+        class _D(datetime.date):
+            @classmethod
+            def today(cls):
+                return cls(giorno.year, giorno.month, giorno.day)
+
+        class _DT(datetime.datetime):
+            @classmethod
+            def now(cls, tz=None):
+                t = cls(giorno.year, giorno.month, giorno.day, 11, 0, tzinfo=datetime.timezone.utc)
+                return t.astimezone(tz) if tz is not None else t.replace(tzinfo=None)
+
+        finto = types.ModuleType("datetime")
+        finto.__dict__.update(datetime.__dict__)
+        finto.date, finto.datetime = _D, _DT
+        pila = contextlib.ExitStack()
+        pila.enter_context(mock.patch.dict(_sys.modules, {"datetime": finto}))
+        pila.enter_context(mock.patch("time.time", return_value=self._ts(giorno)))
+        return pila
+
+    def _prenota_m(self, ci, co, email):
+        s, q = self.g("POST", "/api/concierge/quote", {"alloggio_id": "casam", "check_in": ci,
+                                                       "check_out": co, "party": 2})
+        self.assertEqual(s, 200, q)
+        s, b = self.g("POST", "/api/concierge/book", {"quote_token": q["quote_token"],
+                                                      "email": email})
+        self.assertIn(s, (200, 201), b)
+        return b["riferimento"], b.get("voucher_token", "")
+
+    def _paga(self, rif, n):
+        cs, pi = "cs_fb2b_%d" % n, "pi_fb2b_%d" % n
+        self.stripe.sessioni[cs] = ("paid", pi)
+        self.stripe.pagamenti[pi] = "succeeded"
+        s, c = self.evento("evt_fb2b_%d" % n, "checkout.session.completed", rif, cs, pi)
+        self.assertEqual(s, 200, "PREMESSA: %r" % (c,))
+
+    def _conti(self, rif):
+        gz = self.sis.garanzia.stato(rif) or {}
+        po = self.sis.payout.info(rif) or {}
+        return {"pendente": self.stato(rif), "garanzia": gz.get("stato"),
+                "host_riceve": gz.get("host_riceve_cents"),
+                "bonifico": po.get("stato"), "bonifico_importo": po.get("minori"),
+                "rimborsi": [int(m["importo_cents"]) for m in self.movimenti(rif, "rimborso")]}
+
+    def test_FB2b_ripresa_il_giorno_dell_arrivo_rende_quanto_deciso_due_giorni_prima(self):
+        class _Morte(BaseException):
+            pass
+
+        oggi = datetime.date.today()
+        arrivo = oggi + datetime.timedelta(days=6)
+        ci, co = arrivo.isoformat(), (arrivo + datetime.timedelta(days=2)).isoformat()
+        self.g("POST", "/api/host/pubblica", {"host_id": "demo", "slug": "casam", "titolo": "M",
+               "citta": "Roma", "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
+               "servizi": [], "immagini": [], "tassa_pp_notte_cents": 200,
+               "politica_cancellazione": "moderata"}, _HK_BLOCCO)
+        self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": "casam",
+               "da": oggi.isoformat(), "a": (oggi + datetime.timedelta(days=40)).isoformat(),
+               "unita_totali": 2, "prezzo_netto_cents": 10000}, _HK_BLOCCO)
+        rif, vt = self._prenota_m(ci, co, "a@x.it")
+        rif_o, vt_o = self._prenota_m(ci, co, "b@x.it")
+        self._paga(rif, 1)
+        self._paga(rif_o, 2)
+        primo = arrivo - datetime.timedelta(days=2)               # 2 giorni prima: 50%
+
+        with self._il_giorno(primo):
+            s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": vt_o})
+        self.assertEqual(s, 200, "ORACOLO: %r" % (c,))
+        atteso = self._conti(rif_o)
+        self.assertGreater(atteso["host_riceve"] or 0, 0, "ORACOLO: c'e' una penale per l'host")
+
+        vero = self.r._trasferisci_all_host
+
+        def muore(*a, **k):
+            raise _Morte()
+        self.r._trasferisci_all_host = muore
+        try:
+            with self._il_giorno(primo):
+                with self.assertRaises(_Morte):
+                    self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
+        finally:
+            self.r._trasferisci_all_host = vero
+        self.assertEqual((self.sis.garanzia.stato(rif) or {}).get("stato"), "risolto",
+                         "PREMESSA: garanzia divisa al primo clic")
+
+        with self._il_giorno(arrivo):                             # il giorno dell'arrivo: 0%
+            s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": vt})
+        self.assertEqual(s, 200, "il clic del giorno dell'arrivo finisce la cancellazione: %r" % (c,))
+        self.assertEqual(self._conti(rif), atteso,
+                         "FB2b: ripresa il giorno dell'arrivo, l'ospite deve riavere quanto deciso "
+                         "al primo clic (2 giorni prima), non il rimborso di oggi")
 
 
 class TestIlRimborsoDellAdminColBloccoIncassatoDopo(_OraVeraPerIlPreventivo, _SpieDelBlocco):
@@ -8380,7 +8778,10 @@ class TestPR312PezzoUnoLeRigheCheIlGiudiceNonVedeva(unittest.TestCase):
         self.assertEqual((s, b), (503, {"errore": "pagamento_non_disponibile", "riprova": True}))
 
     def test_VA1_stripe_che_esplode_lascia_la_traccia_e_niente_link(self):
-        finto = types.SimpleNamespace(_sys=types.SimpleNamespace(stripe=types.SimpleNamespace(
+        # Il finto porta il vero aiutante statico `_pagina_anticipo` (dal pezzo 5 il link
+        # dell'anticipo passa da li'): senza, l'errore sarebbe un AttributeError del finto.
+        finto = types.SimpleNamespace(_pagina_anticipo=RouterHTTP._pagina_anticipo,
+                                      _sys=types.SimpleNamespace(stripe=types.SimpleNamespace(
             crea_link_anticipo=mock.Mock(side_effect=RuntimeError("stripe giu'")))))
         fuori = {"riferimento": "R-VA1", "payment_url": "https://totale"}
         with self.assertLogs("core_auto.server", level="ERROR") as reg:
@@ -8390,7 +8791,8 @@ class TestPR312PezzoUnoLeRigheCheIlGiudiceNonVedeva(unittest.TestCase):
         self.assertEqual(fuori["payment_url"], "https://totale")
 
     def test_VA1_il_link_rifatto_entra_nella_risposta(self):
-        finto = types.SimpleNamespace(_sys=types.SimpleNamespace(stripe=types.SimpleNamespace(
+        finto = types.SimpleNamespace(_pagina_anticipo=RouterHTTP._pagina_anticipo,
+                                      _sys=types.SimpleNamespace(stripe=types.SimpleNamespace(
             crea_link_anticipo=lambda d: "https://anticipo")))
         fuori = {"riferimento": "R-VA1", "payment_url": "https://totale"}
         self.assertIs(RouterHTTP._rifai_link_anticipo(finto, fuori, {}), True)
@@ -8611,42 +9013,40 @@ class TestPR314PezzoDueLeRigheCheIlGiudiceNonVedeva(unittest.TestCase):
                 if grida:
                     self.assertIn("riga_payout_non_scritta", err.call_args[0][0])
 
-    # ── VA4: la ritenuta scritta e il bonifico non ancora ridotto ───────────────────────
-    _RITENUTA = {"tipo": "ritenuta", "causale": "ritenuta d'acconto bonifico=8000",
-                 "importo_cents": 2000}
+    # ── VA4 + FB1: la ritenuta scritta nel giornale e non ancora tolta dal bonifico ─────
+    # (dal pezzo 5 lo dice il registro dei bonifici, `ritenuta_trattenuta`, non l'importo)
+    _RITENUTA = {"tipo": "ritenuta", "causale": "ritenuta d'acconto", "importo_cents": 2000}
 
-    def _ritenuta(self, movimenti, minori, esito_imposta=True):
-        imposti = []
+    def _ritenuta(self, movimenti, minori, esito_trattieni=True, gia_tolta=0):
+        tolte = []
 
-        def imposta_importo(rif, cents):
-            imposti.append((rif, cents))
-            return esito_imposta
+        def trattieni_ritenuta(rif, cents):
+            tolte.append((rif, cents))
+            return esito_trattieni
 
         fc = types.SimpleNamespace(movimenti=lambda rif: [dict(m) for m in movimenti])
         pd = types.SimpleNamespace(info=lambda rif: None if minori is None else {"minori": minori},
-                                   imposta_importo=imposta_importo)
+                                   ritenuta_trattenuta=lambda rif: gia_tolta,
+                                   trattieni_ritenuta=trattieni_ritenuta)
         RouterHTTP._completa_ritenuta(fc, pd, "R-VA4")
-        return imposti
+        return tolte
 
-    def test_VA4_il_bonifico_ancora_pieno_scende_alla_cifra_della_riga(self):
-        altra = {"tipo": "commissione", "causale": "commissione bonifico=1", "importo_cents": 9999}
-        self.assertEqual(self._ritenuta([altra, self._RITENUTA], 10000), [("R-VA4", 8000)])
+    def test_VA4_la_ritenuta_non_ancora_tolta_si_toglie_per_l_importo_della_riga(self):
+        altra = {"tipo": "commissione", "causale": "commissione", "importo_cents": 9999}
+        self.assertEqual(self._ritenuta([altra, self._RITENUTA], 10000), [("R-VA4", 2000)])
 
-    def test_VA4_il_bonifico_gia_ridotto_o_cambiato_non_si_tocca(self):
-        self.assertEqual(self._ritenuta([self._RITENUTA], 8000), [])
-        self.assertEqual(self._ritenuta([self._RITENUTA], 7000), [])
+    def test_VA4_la_ritenuta_gia_tolta_non_si_toglie_due_volte(self):
+        self.assertEqual(self._ritenuta([self._RITENUTA], 8000, gia_tolta=2000), [])
 
-    def test_VA4_senza_cifra_o_senza_bonifico_non_si_tocca_niente(self):
-        senza_cifra = dict(self._RITENUTA, causale="ritenuta d'acconto")
-        for nome, movimenti, minori in (("causale senza cifra", [senza_cifra], 10000),
-                                        ("bonifico assente", [self._RITENUTA], None),
+    def test_VA4_senza_riga_o_senza_bonifico_non_si_tocca_niente(self):
+        for nome, movimenti, minori in (("bonifico assente", [self._RITENUTA], None),
                                         ("nessuna riga", [], 10000)):
             with self.subTest(nome):
                 self.assertEqual(self._ritenuta(movimenti, minori), [])
 
     def test_VA4_il_registro_che_non_si_aggiorna_solleva(self):
         with self.assertRaises(RuntimeError):
-            self._ritenuta([self._RITENUTA], 10000, esito_imposta=False)
+            self._ritenuta([self._RITENUTA], 10000, esito_trattieni=False)
 
     # ── PR4: i debiti si riscuotono quando nessun bonifico e' forse partito ─────────────
     def test_PR4_senza_bonifici_partiti_il_debito_si_riscuote_prima_di_pagare(self):
@@ -9467,6 +9867,183 @@ class TestPR316IlTettoDiCassaDellaCancellazione(_BancoDeiSoldiDelServer):
                          "la ripresa deve finire coi conti di una cancellazione normale")
         self.assertEqual([], self.errori_con(righe, "RIMBORSO TAGLIATO"),
                          "la quota divisa da questa stessa cancellazione contata come uscita")
+
+
+class _GaranziaDelSubentro:
+    """Una garanzia aperta e scaduta, che si lascia contestare."""
+
+    def aperte(self):
+        return [{"sblocco_auto_ts": 1000, "prenotazione_id": "R-317"}]
+
+    def contesta(self, rif, motivo):
+        return {"ok": True}
+
+
+class _ChatDelSubentro:
+    """Ospite e host hanno scritto tutti e due dopo il check-in."""
+
+    def thread(self, rif, chi):
+        return [{"mittente": "ospite", "ts": 1000}, {"mittente": "demo", "ts": 1000}]
+
+
+class _BonificoDelSubentro:
+    """Il fermo del bonifico che risponde quello che gli si dice (o esplode)."""
+
+    def __init__(self, fermo, stato):
+        self._fermo, self._stato = fermo, stato
+
+    def aggiorna_stato(self, rif, stato):
+        if isinstance(self._fermo, Exception):
+            raise self._fermo
+        return self._fermo
+
+    def stato_di(self, rif):
+        return self._stato
+
+
+class TestPR317PezzoCinqueLeRigheCheIlGiudiceNonVedeva(unittest.TestCase):
+    """Pezzo 5 (PR #317), job `caselle` del 15/11 su 978969f: 14 righe cambiate in fase83 dove un
+    guasto passava inosservato, perche' le loro prove stanno in file che il giudice non accende
+    (test_fase160_escrow_garanzia per il subentro) o non c'erano: la ripresa della cancellazione
+    con numeri a meta' (:3286), il doppio clic con la pagina salvata vuota (:6728), la pagina
+    NUOVA dell'approvazione (:7243 :7256), la pagina Stripe non chiusa (:14252 :14257) e il fermo
+    del bonifico nel subentro (:14620-14626)."""
+
+    # ── :3286 la ripresa della cancellazione legge i numeri solo se ci sono TUTTI E DUE ─────
+    def _decisione(self, motivo):
+        r = crea_router(_sistema())
+        r._sys.garanzia = types.SimpleNamespace(
+            stato=lambda rif: {"stato": "risolto", "motivo": motivo})
+        return r._decisione_della_cancellazione("R-317")
+
+    def test_3286_un_numero_solo_o_non_numerico_vale_il_calcolo_di_oggi(self):
+        self.assertEqual(self._decisione("cancellazione:R-317|rimborso=500|trattenuto=200"),
+                         (500, 200), "PREMESSA: coi due numeri la decisione si legge")
+        for motivo in ("cancellazione:R-317|rimborso=500",
+                       "cancellazione:R-317|trattenuto=200",
+                       "cancellazione:R-317|rimborso=500|trattenuto=x",
+                       "cancellazione:R-317|rimborso=x|trattenuto=200"):
+            with self.subTest(motivo=motivo):
+                try:
+                    esito = self._decisione(motivo)
+                except ValueError as e:
+                    self.fail("un motivo con un numero solo o non numerico non deve "
+                              "esplodere, vale il calcolo di oggi: %r" % (e,))
+                self.assertIsNone(esito)
+
+    # ── :6728 il doppio clic non sostituisce il link con una pagina salvata VUOTA ───────────
+    def test_6728_una_pagina_salvata_vuota_non_cancella_il_link(self):
+        r = crea_router(_sistema())
+        r._sys.pagamenti_pendenti = _PendenteFinto(
+            {"riferimento": "R-317", "stato": "in_attesa", "email": "o@x.it",
+             "corpo_json": json.dumps({"payment_url": "", "stripe_cs": "cs_vecchia"})})
+        s, b = r._replay_prenotazione({"riferimento": "R-317", "payment_url": "https://totale"})
+        self.assertEqual(s, 201, b)
+        self.assertEqual(b["payment_url"], "https://totale", b)
+        self.assertNotIn("stripe_cs", b, "il numero di una pagina che non c'e'")
+        self.assertEqual(b["stato"], "in_attesa_pagamento", b)
+
+    # ── :7243 :7256 l'approvazione usa la pagina NUOVA e ne tiene il numero ────────────────
+    def _approva(self, stripe):
+        r = crea_router(_sistema())
+        rec = {"riferimento": "R-317", "stato": "in_attesa_host", "alloggio_id": "casa",
+               "email": "o@x.it", "check_in": "2027-01-10",
+               "corpo_json": json.dumps({"totale_cents": 20000, "prezzo_guest_cents": 20000,
+                                         "valuta": "EUR", "stripe_cs": "cs_della_richiesta"})}
+        r._sys.pagamenti_pendenti = types.SimpleNamespace(
+            info=lambda ref: dict(rec) if ref == "R-317" else None,
+            rimuovi_se_stato=lambda ref, stato: True)
+        r._sys.stripe = stripe
+        finiti = []
+
+        def finalizza(corpo, dati, hold_sec=None):
+            finiti.append((dict(corpo), hold_sec))
+            return corpo
+        r._finalizza_prenotazione = finalizza
+        return r._decidi_richiesta("R-317", None, True), finiti
+
+    def test_7243_7256_l_approvazione_tiene_il_numero_della_pagina_nuova(self):
+        chieste = []
+
+        def crea_sessione(d):
+            chieste.append(d)
+            return {"id": "cs_nuova", "url": "https://pagina-nuova"}
+        (s, b), finiti = self._approva(types.SimpleNamespace(crea_sessione=crea_sessione))
+        self.assertEqual(s, 200, b)
+        self.assertEqual([d["riferimento"] for d in chieste], ["R-317"])
+        self.assertEqual(len(finiti), 1, finiti)
+        corpo, hold = finiti[0]
+        self.assertEqual(corpo["payment_url"], "https://pagina-nuova")
+        self.assertEqual(corpo["stripe_cs"], "cs_nuova",
+                         "il numero della pagina da chiudere e' quello della pagina NUOVA")
+        self.assertEqual(hold, fase83_server.HOLD_APPROVAZIONE_SEC)
+
+    def test_7256_un_gateway_senza_numero_lascia_vuoto_mai_quello_della_richiesta(self):
+        for numero in (None, ""):
+            with self.subTest(numero=numero):
+                (s, b), finiti = self._approva(types.SimpleNamespace(
+                    crea_sessione=lambda d, numero=numero: {"id": numero, "url": "https://pagina-nuova"}))
+                self.assertEqual(s, 200, b)
+                self.assertEqual(finiti[0][0]["stripe_cs"], "")
+
+    # ── :14252 :14257 la pagina Stripe che non si chiude ─────────────────────────────────
+    def _chiusa(self, esito):
+        sis = types.SimpleNamespace(stripe=types.SimpleNamespace(chiudi_sessione=lambda cs: esito))
+        rec = {"riferimento": "R-317", "scadenza_ts": 0,
+               "corpo_json": json.dumps({"stripe_cs": "cs_317"})}
+        with self.assertLogs("core_auto.server", level="WARNING") as log:
+            libera = fase83_server._pagina_stripe_chiusa(sis, rec)
+        return libera, [r.getMessage() for r in log.records if r.levelname == "ERROR"], log
+
+    def test_14252_solo_complete_con_ok_vuol_dire_gia_pagata(self):
+        for esito in ({"ok": True, "stato": "open", "motivo": ""},
+                      {"ok": False, "stato": "complete", "motivo": "rilettura_fallita"}):
+            with self.subTest(esito=esito):
+                libera, errori, log = self._chiusa(esito)
+                self.assertIs(libera, True, "un giorno dopo la pagina non puo' essere viva")
+                self.assertTrue([m for m in errori if "un_giorno_senza_conferma" in m], log.output)
+                self.assertFalse([m for m in log.output if "pagina_gia_pagata" in m], log.output)
+
+    def test_14257_il_registro_dice_il_motivo_di_stripe_poi_lo_stato_poi_un_trattino(self):
+        for esito, atteso in (({"ok": False, "stato": "open", "motivo": "rete_giu"}, "(rete_giu)"),
+                              ({"ok": False, "stato": "open", "motivo": ""}, "(open)"),
+                              ({"ok": False, "stato": "", "motivo": ""}, "(-)")):
+            with self.subTest(esito=esito):
+                _libera, errori, log = self._chiusa(esito)
+                self.assertEqual(len(errori), 1, log.output)
+                self.assertIn(atteso, errori[0])
+
+    # ── :14620-14626 il subentro guarda se il bonifico si e' fermato davvero ──────────────
+    def _subentro(self, payout):
+        sis = types.SimpleNamespace(garanzia=_GaranziaDelSubentro(),
+                                    messaggistica=_ChatDelSubentro(), payout=payout)
+        with self.assertLogs("core_auto.server", level="WARNING") as log:
+            fatte = fase83_server._subentro_per_disaccordo(sis, ora_ts=5000)
+        self.assertEqual(fatte, ["R-317"], "PREMESSA: il subentro doveva scattare")
+        self.assertFalse([m for m in log.output if "giro fallito" in m], log.output)
+        allarmi = [r for r in log.records
+                   if r.levelname == "ERROR" and "bonifico_non_fermato" in r.getMessage()]
+        return allarmi, log
+
+    def test_14623_fermo_riuscito_l_allarme_tace(self):
+        for payout in (_BonificoDelSubentro(True, "pagabile"),
+                       _BonificoDelSubentro(False, "trattenuto"), None):
+            with self.subTest(payout=payout and (payout._fermo, payout._stato)):
+                allarmi, log = self._subentro(payout)
+                self.assertEqual(allarmi, [], log.output)
+
+    def test_14623_14624_fermo_non_riuscito_l_allarme_grida(self):
+        allarmi, log = self._subentro(_BonificoDelSubentro(False, "pagabile"))
+        self.assertEqual(len(allarmi), 1, log.output)
+        self.assertIn("R-317", allarmi[0].getMessage())
+
+    def test_14620_14626_fermo_esploso_l_allarme_grida_e_il_registro_porta_l_eccezione(self):
+        allarmi, log = self._subentro(_BonificoDelSubentro(RuntimeError("db giu'"), "pagabile"))
+        self.assertEqual(len(allarmi), 1, log.output)
+        esploso = [r for r in log.records if "blocco payout esploso" in r.getMessage()]
+        self.assertEqual(len(esploso), 1, log.output)
+        self.assertIsInstance(esploso[0].exc_info, tuple, "il registro deve portare l'eccezione")
+        self.assertIsInstance(esploso[0].exc_info[1], RuntimeError)
 
 
 if __name__ == "__main__":

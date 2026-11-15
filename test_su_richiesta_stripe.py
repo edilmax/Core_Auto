@@ -137,6 +137,41 @@ class TestSuRichiestaStripe(unittest.TestCase):
         self.assertGreater(delta, HOLD_APPROVAZIONE_SEC - 120)
         self.assertLessEqual(delta, 86400)           # dentro il massimo Stripe
 
+    def test_approva_salva_il_numero_della_pagina_NUOVA(self):
+        """Piano dei 2 minuti, pezzo 1 (11/11): lo spazzino chiude la pagina che l'ospite puo'
+        ancora pagare, cioe' quella creata all'approvazione, non quella della richiesta."""
+        ref = self._richiedi("2026-09-18", "2026-09-20")
+        s, esito = self.g("POST", "/api/host/richieste/approva", {"riferimento": ref},
+                          {"X-Host-Token": self.tok})
+        self.assertEqual(s, 200, esito)
+        self.assertEqual(len(self.sessioni), 2, "PREMESSA: una pagina alla richiesta, una dopo")
+        corpo = json.loads(self.sys.pagamenti_pendenti.info(ref)["corpo_json"] or "{}")
+        self.assertEqual(corpo.get("stripe_cs"), "cs_test_2")
+
+    def test_approva_con_gateway_che_da_solo_l_indirizzo_non_tiene_il_numero_vecchio(self):
+        """Prova mancante 7 e variante dei difetti A e B (11/11): un gateway che crea la pagina
+        e da' solo l'indirizzo. Il numero della pagina della RICHIESTA non deve restare: lo
+        spazzino chiuderebbe quella e libererebbe la stanza con la pagina nuova pagabile."""
+        ref = self._richiedi("2026-09-18", "2026-09-20")
+        prima = json.loads(self.sys.pagamenti_pendenti.info(ref)["corpo_json"] or "{}")
+        self.assertTrue(prima.get("stripe_cs"), "PREMESSA: la richiesta ha il numero della sua pagina")
+        vero = self.sys.stripe
+
+        class _SoloIndirizzo:
+            """Il gateway da' solo crea_link: tutto il resto passa a quello vero."""
+            def __getattr__(self, nome):
+                if nome == "crea_sessione":
+                    raise AttributeError(nome)
+                return getattr(vero, nome)
+        self.sys.stripe = _SoloIndirizzo()
+        s, esito = self.g("POST", "/api/host/richieste/approva", {"riferimento": ref},
+                          {"X-Host-Token": self.tok})
+        self.assertEqual(s, 200, esito)
+        self.assertEqual(len(self.sessioni), 2, "PREMESSA: una pagina nuova all'approvazione")
+        corpo = json.loads(self.sys.pagamenti_pendenti.info(ref)["corpo_json"] or "{}")
+        self.assertEqual(corpo.get("stripe_cs"), "",
+                         "senza il numero della pagina nuova non si tiene quello della vecchia")
+
     def test_hold_dura_24h_non_2_minuti(self):
         ref = self._richiedi("2026-09-14", "2026-09-16")
         s, _ = self.g("POST", "/api/host/richieste/approva", {"riferimento": ref},

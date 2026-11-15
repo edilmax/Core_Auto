@@ -247,7 +247,7 @@ def crea_sistema(config: Optional[ConfigCasaVIP] = None) -> SistemaCasaVIP:
     provider = crea_provider_stripe(cfg.stripe_secret_key, cfg.stripe_success_url,
                                     cfg.stripe_cancel_url, valuta=cfg.valuta.lower())
     if provider is not None:
-        link_pagamento = provider.crea_link
+        link_pagamento = provider.crea_sessione     # url + numero della pagina (fase59)
         componenti.append("stripe(85)")
     else:
         avvisi.append("Stripe non configurato -> nessun link di pagamento (gated)")

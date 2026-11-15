@@ -3267,8 +3267,25 @@ class RouterHTTP:
         if st is None:
             gz = getattr(self._sys, "garanzia", None)
             st = gz.stato(str(rif)) if gz is not None else None
+        prefisso = "cancellazione:" + str(rif)
+        motivo = str((st or {}).get("motivo") or "") if isinstance(st, dict) else ""
         return (isinstance(st, dict) and st.get("stato") == "risolto"
-                and st.get("motivo") == "cancellazione:" + str(rif))
+                and (motivo == prefisso or motivo.startswith(prefisso + "|")))
+
+    def _decisione_della_cancellazione(self, rif):
+        """FB2b (11/11): (rimborso, trattenuto) decisi dal primo clic di una cancellazione morta
+        dopo la divisione della garanzia, letti dal motivo `cancellazione:<rif>|rimborso=N|
+        trattenuto=M`. None se la garanzia non e' stata divisa da questa cancellazione o il motivo
+        non porta i numeri (allora vale il calcolo di oggi). Una garanzia illeggibile SOLLEVA."""
+        gz = getattr(self._sys, "garanzia", None)
+        st = gz.stato(str(rif)) if gz is not None else None
+        if not self._divisa_dalla_cancellazione(rif, st):
+            return None
+        campi = dict(p.split("=", 1) for p in str(st.get("motivo")).split("|")[1:] if "=" in p)
+        rimb, tratt = campi.get("rimborso", ""), campi.get("trattenuto", "")
+        if not (rimb.isdigit() and tratt.isdigit()):
+            return None
+        return int(rimb), int(tratt)
 
     def _garanzia_aperta(self, rif):
         """La garanzia di questa prenotazione NON e' ancora chiusa a favore dell'host
@@ -6704,17 +6721,36 @@ class RouterHTTP:
             fuori.pop("payment_url", None)
             fuori["stato"] = "in_attesa_host"
         else:
-            if (fuori.get("modo_pagamento") == "in_struttura"
+            # 2 minuti, difetto B (11/11): UNA pagina per prenotazione, quella salvata col blocco,
+            # che e' quella che lo spazzino chiude. Quella che fase59 ha appena rifatto resta qui:
+            # data all'ospite, sarebbe rimasta pagabile a stanza gia' liberata.
+            pagina = salvato.get("payment_url") if isinstance(salvato, dict) else None
+            if isinstance(pagina, str) and pagina:
+                fuori["payment_url"] = pagina
+                fuori["stripe_cs"] = salvato.get("stripe_cs", "")
+            elif (fuori.get("modo_pagamento") == "in_struttura"
                     and not self._rifai_link_anticipo(fuori, rec)):
                 return 503, {"errore": "pagamento_non_disponibile", "riprova": True}
             fuori["stato"] = "in_attesa_pagamento"
         return 201, fuori
 
+    @staticmethod
+    def _pagina_anticipo(stripe, dati):
+        """(url, numero) della pagina dell'ANTICIPO. Un gateway che da' solo l'URL lascia il
+        numero '': lo spazzino allora non chiude niente e il blocco dura quanto la pagina, come
+        prima; mai la pagina del totale, che l'ospite non ha (2 minuti, difetto A, 11/11)."""
+        crea = getattr(stripe, "crea_sessione_anticipo", None)
+        s = crea(dati) if crea is not None else stripe.crea_link_anticipo(dati)
+        if isinstance(s, dict):
+            return s.get("url"), s.get("id") or ""
+        return s, ""
+
     def _rifai_link_anticipo(self, fuori, rec):
         """VA1 (8/11): al doppio clic fase59 rifa' il link del TOTALE; chi paga in struttura deve
-        ricevere di nuovo quello dell'ANTICIPO. False se non si e' potuto: mai il totale."""
+        ricevere di nuovo quello dell'ANTICIPO. False se non si e' potuto: mai il totale. Serve
+        solo ai blocchi salvati senza la loro pagina (prima del difetto B, 11/11)."""
         try:
-            link = self._sys.stripe.crea_link_anticipo({
+            link, numero = self._pagina_anticipo(self._sys.stripe, {
                 "anticipo_cents": fuori.get("anticipo_online_cents"),
                 "saldo_cents": fuori.get("saldo_in_loco_cents"),
                 "valuta": fuori.get("valuta", "EUR"),
@@ -6727,6 +6763,7 @@ class RouterHTTP:
         if not link:
             return False
         fuori["payment_url"] = link
+        fuori["stripe_cs"] = numero
         return True
 
     def _modalita_alloggio(self, slug):
@@ -6824,7 +6861,7 @@ class RouterHTTP:
                 return False
             r = _ps.calcola(totale, notti, comm,
                             valuta_estera=self._valuta_estera(corpo), **soglie)
-            link = stripe.crea_link_anticipo({
+            link, numero = self._pagina_anticipo(stripe, {
                 "anticipo_cents": r["anticipo_online_cents"],
                 "saldo_cents": r["saldo_in_loco_cents"],
                 "valuta": corpo.get("valuta", "EUR"),
@@ -6834,6 +6871,7 @@ class RouterHTTP:
                 logger.warning("paga-struttura: link anticipo non creato -> resto ONLINE")
                 return False
             corpo["payment_url"] = link
+            corpo["stripe_cs"] = numero        # 2 minuti, difetto A: si chiude QUESTA pagina
             corpo["modo_pagamento"] = "in_struttura"
             corpo["anticipo_online_cents"] = r["anticipo_online_cents"]
             corpo["saldo_in_loco_cents"] = r["saldo_in_loco_cents"]
@@ -7200,7 +7238,9 @@ class RouterHTTP:
             if stripe is not None:
                 nuovo = None
                 try:
-                    nuovo = stripe.crea_link({
+                    # piano dei 2 minuti (11/11): anche il numero della pagina NUOVA, che e'
+                    # quella da chiudere (quella della richiesta e' un'altra)
+                    nuovo = (getattr(stripe, "crea_sessione", None) or stripe.crea_link)({
                         "totale_cents": corpo.get("totale_cents"),
                         "prezzo_guest_cents": corpo.get("prezzo_guest_cents"),
                         "valuta": corpo.get("valuta"),   # like-for-like anche sul su-richiesta approvato
@@ -7209,6 +7249,12 @@ class RouterHTTP:
                         "scade_secondi": HOLD_APPROVAZIONE_SEC})
                 except Exception:
                     nuovo = None
+                # mai il numero della pagina della RICHIESTA, che l'ospite non ha piu': un
+                # gateway che da' solo l'indirizzo lascia '' (variante dei difetti A e B, 11/11)
+                corpo["stripe_cs"] = ""
+                if isinstance(nuovo, dict):
+                    corpo["stripe_cs"] = nuovo.get("id") or ""
+                    nuovo = nuovo.get("url")
                 if not nuovo:
                     # FAIL-SAFE: niente conferma senza un link di pagamento valido. La
                     # richiesta RESTA in_attesa_host: l'host può ricliccare tra poco.
@@ -7297,6 +7343,11 @@ class RouterHTTP:
                                    "modo_pagamento": corpo.get("modo_pagamento", ""),
                                    "saldo_in_loco_cents": corpo.get("saldo_in_loco_cents", 0),
                                    "anticipo_online_cents": corpo.get("anticipo_online_cents", 0),
+                                   # piano dei 2 minuti (11/11): la pagina Stripe che lo
+                                   # spazzino chiude prima di liberare la stanza, e il suo
+                                   # indirizzo, che il doppio clic ridà (difetto B)
+                                   "stripe_cs": corpo.get("stripe_cs", ""),
+                                   "payment_url": corpo.get("payment_url", ""),
                                    "titolo": titolo})
             import time as _t83
             scad = (int(_t83.time()) + hold_sec) if isinstance(hold_sec, int) \
@@ -7749,7 +7800,8 @@ class RouterHTTP:
                                  % (base, notti, minori - ritenuta))
             if not fatto:
                 raise RuntimeError("giornale non scritto")
-            if not pd.imposta_importo(str(rif), minori - ritenuta):
+            # FB1 (11/11): riduzione e segno nella STESSA scrittura del registro dei bonifici
+            if not pd.trattieni_ritenuta(str(rif), ritenuta):
                 raise RuntimeError("registro dei bonifici non aggiornato")
             logger.warning("RITENUTA OPERATA | RIF: %s | HOST_ID: %s | BASE: %d | RITENUTA: %d "
                            "| BONIFICO: %d -> %d", _rif_per_registro(rif),
@@ -7765,16 +7817,15 @@ class RouterHTTP:
     @staticmethod
     def _completa_ritenuta(fc, pd, rif):
         """VA4 (8/11): riga di giornale scritta e bonifico non ancora ridotto (processo morto
-        in mezzo): si riduce. Solo se il bonifico e' ancora quello PIENO: una penale compensata
-        dopo l'ha cambiato legittimamente, e non va restituita."""
+        in mezzo): si riduce. FB1 (11/11): se e' gia' stata tolta lo dice il registro dei
+        bonifici (`ritenuta_trattenuta`), non l'importo: una penale compensata nel mezzo
+        cambiava l'importo e la ritenuta non si toglieva piu'. Una penale compensata DOPO la
+        riduzione resta presa: la ritenuta e' gia' segnata e non si tocca."""
         riga = next((m for m in fc.movimenti(rif) if m.get("tipo") == "ritenuta"), None)
-        obiettivo = str((riga or {}).get("causale") or "").rpartition("bonifico=")[2]
-        attuale = pd.info(rif)
-        if not obiettivo.isdigit() or attuale is None:
+        if riga is None or pd.info(rif) is None or pd.ritenuta_trattenuta(rif) > 0:
             return
-        if int(attuale["minori"]) == int(obiettivo) + int(riga["importo_cents"]):
-            if not pd.imposta_importo(rif, int(obiettivo)):
-                raise RuntimeError("registro dei bonifici non aggiornato")
+        if not pd.trattieni_ritenuta(rif, int(riga["importo_cents"])):
+            raise RuntimeError("registro dei bonifici non aggiornato")
 
     def _trasferisci_all_host(self, rif, importo_cents, penale=False, a_mano=False):
         """SOLDI ALL'HOST IN AUTOMATICO (strategia fondatore): allo sblocco dell'escrow
@@ -8849,6 +8900,11 @@ class RouterHTTP:
             from fase111_cancellazione import calcola_rimborso
             r = calcola_rimborso(pagato, giorni, politica=politica,
                                  entro_ripensamento=ripensamento)
+            # FB2b (11/11): una cancellazione ripresa tiene la decisione del PRIMO clic, scritta
+            # nella garanzia: ricalcolata coi giorni di oggi l'ospite perdeva la sua parte.
+            _decisa = self._decisione_della_cancellazione(rif)
+            if _decisa is not None:
+                r = dict(r, rimborso_cents=_decisa[0], trattenuto_cents=_decisa[1])
             idem = v.get("idem_key") or ("cancel_" + (rif or token[-16:]))
             e = self._sys.inventario.rilascia(allog, ci, co, idem_key=idem)
         except Exception:
@@ -8939,8 +8995,9 @@ class RouterHTTP:
                 if _divisa_qui:
                     host_tiene = int(st.get("host_riceve_cents", 0) or 0)
                 elif host_tiene > 0:
-                    esito_gz = gz.chiudi_proporzionale(rif, host_tiene,
-                                                       motivo="cancellazione:" + str(rif))
+                    esito_gz = gz.chiudi_proporzionale(
+                        rif, host_tiene, motivo="cancellazione:%s|rimborso=%d|trattenuto=%d" % (
+                            rif, int(r.get("rimborso_cents", 0)), int(tratt)))
                     if not (isinstance(esito_gz, dict) and esito_gz.get("ok")):
                         host_tiene = 0     # escrow gia' deciso altrove: non pagare due volte
                 else:
@@ -14168,6 +14225,48 @@ def corpo_richiesta_testo(grezzo: bytes) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 # Server HTTP stdlib (thin wrapper, NON testato - I/O)
 # ─────────────────────────────────────────────────────────────────────────────
+# Una sessione di Checkout vive al massimo un giorno (`expires_at`, docs.stripe.com/api/checkout/
+# sessions/create; fase85 la tiene dentro quel tetto): passato un giorno dalla fine del blocco la
+# pagina non puo' piu' essere viva, chiunque sia il motivo per cui Stripe non ha risposto.
+_VITA_MASSIMA_PAGINA_STRIPE_S = 86400
+
+
+def _pagina_stripe_chiusa(sistema: Any, rec: Dict[str, Any]) -> bool:
+    """PIANO DEI 2 MINUTI, pezzo 3 (11/11): la stanza di un blocco scaduto si libera SOLO a pagina
+    di pagamento chiusa; aperta, l'ospite potrebbe pagare una stanza gia' rivenduta. Senza numero
+    della pagina (prenotazioni di prima, gateway che non lo danno) il blocco dura gia' quanto la
+    pagina: True, come prima. 'complete' = ha gia' pagato: la stanza non si libera, arriva il
+    webhook. NON LO SO = si tiene e si riprova al giro dopo, finche' la pagina non puo' piu'
+    essere viva. Liberare il credito dell'ospite viene DOPO questa risposta (FB3)."""
+    import time as _t
+    try:
+        cs = (json.loads(rec.get("corpo_json") or "{}") or {}).get("stripe_cs")
+    except Exception:
+        cs = None
+    stripe = getattr(sistema, "stripe", None)
+    if not (isinstance(cs, str) and cs.startswith("cs_")) or stripe is None:
+        return True
+    esito = stripe.chiudi_sessione(cs)
+    if esito.get("ok") and esito.get("stato") == "expired":
+        return True
+    if esito.get("ok") and esito.get("stato") == "complete":
+        logger.warning("SPAZZINO | codice: pagina_gia_pagata | riferimento: %s | messaggio: blocco "
+                       "scaduto ma l'ospite ha pagato: la stanza NON si libera, arriva il webhook",
+                       _rif_per_registro(rec.get("riferimento")))
+        return False
+    perche = _testo_per_registro(esito.get("motivo") or esito.get("stato") or "-")
+    if int(_t.time()) > int(rec.get("scadenza_ts") or 0) + _VITA_MASSIMA_PAGINA_STRIPE_S:
+        logger.error("SPAZZINO | codice: pagina_non_chiusa | sottocodice: un_giorno_senza_conferma "
+                     "| riferimento: %s | messaggio: Stripe non ha confermato la chiusura (%s); la "
+                     "pagina non puo' piu' essere viva, la stanza si libera",
+                     _rif_per_registro(rec.get("riferimento")), perche)
+        return True
+    logger.warning("SPAZZINO | codice: pagina_non_chiusa | riferimento: %s | messaggio: %s; la "
+                   "stanza resta tenuta, si riprova al giro dopo",
+                   _rif_per_registro(rec.get("riferimento")), perche)
+    return False
+
+
 def sweep_hold_una_passata(sistema: Any, router: Any) -> None:
     """UNA passata dello sweeper hold (estratta dal thread per essere testabile).
     ORDINE ANTI-GARA (fail-safe): prima l'ACQUISIZIONE del record col CAS
@@ -14191,6 +14290,8 @@ def sweep_hold_una_passata(sistema: Any, router: Any) -> None:
             da_fare += [(r, False) for r in pp.scaduti_da_finire()]
         for rec, nuovo in da_fare:
             try:
+                if nuovo and not _pagina_stripe_chiusa(sistema, rec):
+                    continue          # 2 minuti: la stanza si libera solo a pagina Stripe chiusa
                 if nuovo and not pp.scadi(rec["riferimento"]):
                     continue          # pagata/cancellata nel frattempo: non è più roba nostra
                 if not nuovo and (pp.info(rec["riferimento"]) or {}).get("stato") != "scaduto":
@@ -14214,7 +14315,7 @@ def sweep_hold_una_passata(sistema: Any, router: Any) -> None:
             except Exception:
                 logger.warning("sweep hold singolo fallito (ignorato)", exc_info=True)
         try:
-            pp.pulisci_vecchi()          # housekeeping: via i record scaduti vecchi (>1h)
+            pp.pulisci_vecchi()          # via gli scaduti piu' vecchi di una pagina Stripe (fase162)
         except Exception:
             pass
         # STANZA FANTASMA: notti occupate nell'inventario SENZA un pendente (crash fra il blocco
@@ -14514,12 +14615,20 @@ def _subentro_per_disaccordo(sistema: Any, *, ora_ts: Any = None) -> List[str]:
             if not gz.contesta(rif, "disaccordo_in_chat").get("ok"):
                 continue
             subentrate.append(rif)
+            # CodeGraphContext (11/11): il ritorno si guarda, come nel pulsante dell'ospite (Busta
+            # A3, 28/10). `aggiorna_stato` su un errore del database torna False senza sollevare.
+            fermo = False
             try:
                 pd = getattr(sistema, "payout", None)
-                if pd is not None:
-                    pd.aggiorna_stato(rif, "trattenuto")
+                fermo = pd is None or (pd.aggiorna_stato(rif, "trattenuto") is True
+                                       or pd.stato_di(rif) == "trattenuto")
             except Exception:
-                logger.warning("subentro: blocco payout fallito (ignorato)", exc_info=True)
+                logger.warning("subentro: blocco payout esploso", exc_info=True)
+            if not fermo:
+                logger.error("SUBENTRO | codice: bonifico_non_fermato | riferimento: %s | "
+                             "messaggio: garanzia contestata da noi ma il bonifico all'host NON "
+                             "risulta trattenuto: non pagarlo a mano, decide l'arbitro",
+                             _rif_per_registro(rif))
             logger.warning("SUBENTRO | riferimento %s | host e ospite hanno scritto dopo il "
                            "check-in e nessun «tutto ok»: garanzia contestata, decide l'arbitro",
                            _rif_per_registro(rif))

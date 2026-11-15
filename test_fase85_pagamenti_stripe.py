@@ -811,5 +811,142 @@ class TestRimborsaDistingueRifiutoDaEsitoSconosciuto(unittest.TestCase):
                 self.assertIs(esito.get("sconosciuto"), False, esito)
 
 
+class TestLaPaginaStripeNasceColSuoNumero(unittest.TestCase):
+    """PIANO DEI 2 MINUTI, pezzo 1 (11/11): per chiudere la pagina di pagamento quando scade il
+    blocco della stanza serve il suo numero (`cs_...`) GIA' alla creazione. Prima `crea_link`
+    tornava solo l'indirizzo e il numero arrivava col webhook, a pagamento gia' fatto."""
+
+    def test_crea_sessione_porta_indirizzo_e_numero(self):
+        spy = FetchSpy(risposta={"url": "https://checkout.stripe.com/c/pay/cs_test_9",
+                                 "id": "cs_test_9"})
+        p = ProviderStripe("sk", "o", "k", fetch=spy)
+        self.assertEqual(p.crea_sessione(DATI), {"url": "https://checkout.stripe.com/c/pay/cs_test_9",
+                                                 "id": "cs_test_9"})
+        self.assertEqual(spy.url, STRIPE_URL)
+
+    def test_un_numero_che_non_e_di_una_sessione_resta_vuoto(self):
+        for numero in (None, "", "pi_1", 7, "cs_"):
+            with self.subTest(numero=numero):
+                p = ProviderStripe("sk", "o", "k",
+                                   fetch=FetchSpy(risposta={"url": "https://u", "id": numero}))
+                self.assertEqual(p.crea_sessione(DATI), {"url": "https://u", "id": ""})
+
+    def test_senza_indirizzo_niente_sessione_e_crea_link_resta_com_era(self):
+        p = ProviderStripe("sk", "o", "k", fetch=FetchSpy(risposta={"id": "cs_1"}))
+        self.assertIsNone(p.crea_sessione(DATI))
+        self.assertIsNone(ProviderStripe("sk", "o", "k",
+                                         fetch=FetchSpy(solleva=True)).crea_sessione(DATI))
+        p = ProviderStripe("sk", "o", "k", fetch=FetchSpy(risposta={"url": "https://u",
+                                                                     "id": "cs_1"}))
+        self.assertEqual(p.crea_link(DATI), "https://u")
+
+
+class TestChiudereLaPaginaStripe(unittest.TestCase):
+    """PIANO DEI 2 MINUTI, pezzo 3 (11/11): la stanza si libera solo a pagina di pagamento CHIUSA.
+    Misurato su Stripe di prova (11/11): expire su una sessione aperta -> 200 status=expired; su
+    una non aperta -> 400. Dopo un rifiuto certo si rilegge la sessione: 'complete' vuol dire che
+    l'ospite ha GIA' pagato. Rete o 5xx: NON LO SO, e chi chiama tiene la stanza."""
+
+    def test_pagina_aperta_si_chiude_con_una_scrittura(self):
+        f = FetchFinto({STRIPE_URL + "/cs_a/expire": {"id": "cs_a", "status": "expired"}})
+        self.assertEqual(_p(f).chiudi_sessione("cs_a"), {"ok": True, "stato": "expired", "motivo": ""})
+        self.assertEqual(len(f.chiamate), 1)
+        url, corpo, _h = f.chiamate[0]
+        self.assertEqual(url, STRIPE_URL + "/cs_a/expire")
+        self.assertTrue(corpo, "un corpo vuoto farebbe una LETTURA (GET), non la chiusura")
+
+    def test_rifiuto_certo_si_rilegge_e_complete_vuol_dire_gia_pagata(self):
+        chiamate = []
+
+        def fetch(url, body, headers):
+            chiamate.append((url, body))
+            if url.endswith("/expire"):
+                raise _ErroreHttp(400)
+            return {"id": "cs_a", "status": "complete"}
+        self.assertEqual(_p(fetch).chiudi_sessione("cs_a"),
+                         {"ok": True, "stato": "complete", "motivo": ""})
+        self.assertEqual([(u, b) for u, b in chiamate],
+                         [(STRIPE_URL + "/cs_a/expire", chiamate[0][1]), (STRIPE_URL + "/cs_a", None)])
+
+    def test_le_intestazioni_della_chiusura_e_della_rilettura(self):
+        """Prova mancante 2 (pr-test-analyzer, 11/11): senza la chiave Stripe risponde 401 (NON
+        LO SO, la stanza resta tenuta per un giorno); senza il tipo del corpo la chiusura non
+        si legge come modulo."""
+        chiamate = []
+
+        def fetch(url, body, headers):
+            chiamate.append((url, body, headers))
+            if url.endswith("/expire"):
+                raise _ErroreHttp(400)
+            return {"id": "cs_a", "status": "expired"}
+        self.assertEqual(_p(fetch).chiudi_sessione("cs_a")["stato"], "expired")
+        self.assertEqual([(u, b, h) for u, b, h in chiamate], [
+            (STRIPE_URL + "/cs_a/expire", b"expand[]=payment_intent",
+             {"Authorization": "Bearer sk_test_k",
+              "Content-Type": "application/x-www-form-urlencoded"}),
+            (STRIPE_URL + "/cs_a", None, {"Authorization": "Bearer sk_test_k"})])
+
+    def test_rete_o_5xx_e_NON_LO_SO_e_non_si_rilegge(self):
+        for errore in (_ErroreHttp(500), _ErroreHttp(409), TimeoutError("lento")):
+            with self.subTest(errore=errore):
+                f = FetchFinto(solleva=errore)
+                esito = _p(f).chiudi_sessione("cs_a")
+                self.assertIs(esito["ok"], False, esito)
+                self.assertTrue(esito["motivo"], esito)
+                self.assertEqual(len(f.chiamate), 1)
+
+    def test_risposte_assurde_e_numeri_che_non_sono_sessioni(self):
+        for risposta in ({}, {"id": "cs_altra", "status": "expired"}, {"id": "cs_a"},
+                         {"id": "cs_a", "status": ""}, None):
+            with self.subTest(risposta=risposta):
+                f = FetchFinto({STRIPE_URL: risposta})
+                self.assertIs(_p(f).chiudi_sessione("cs_a")["ok"], False)
+        for numero in (None, "", "cs_", "pi_1", 5):
+            with self.subTest(numero=numero):
+                f = FetchFinto({STRIPE_URL: {"id": numero, "status": "expired"}})
+                self.assertEqual(_p(f).chiudi_sessione(numero)["ok"], False)
+                self.assertEqual(f.chiamate, [])
+
+    def test_PR317_la_pagina_non_chiusa_non_scrive_righe_finte_nel_registro(self):
+        """Pezzo 5 (PR #317, «autorizzato» del fondatore 15/11): il numero della pagina e il
+        motivo dell'errore arrivano da fuori (il numero dal pendente, il motivo dal testo di
+        Stripe) e finivano nel registro cosi' com'erano: un a-capo fabbricava una riga finta
+        che il Guardiano e il watchdog leggono come vera (stessa famiglia di fase86:237)."""
+        for i, (fine, spezzo) in enumerate((("\n", "\n"), ("\r\n", "\r\n"), ("\r", "\r"))):
+            with self.subTest(a_capo=repr(fine)):
+                numero = "cs_%d%sRIGA FINTA" % (i, fine)
+                f = FetchFinto(solleva=TimeoutError("lento%sERROR FINTO" % spezzo))
+                with self.assertLogs("core_auto.pagamenti_stripe", level="WARNING") as reg:
+                    esito = _p(f).chiudi_sessione(numero)
+                self.assertIs(esito["ok"], False, "PREMESSA: la chiusura doveva fallire")
+                righe = [x.getMessage() for x in reg.records
+                         if "pagina di pagamento non chiusa" in x.getMessage()]
+                self.assertEqual(len(righe), 1, reg.output)
+                self.assertNotIn("\n", righe[0], "un a-capo da fuori e' arrivato nel registro")
+                self.assertNotIn("\r", righe[0], "un ritorno a capo da fuori nel registro")
+                self.assertIn("RIGA FINTA", righe[0], "il numero della pagina si deve leggere")
+                self.assertIn("ERROR FINTO", righe[0], "il motivo di Stripe si deve leggere")
+                self.assertIn("cs_%d" % i, righe[0])
+
+
+class TestPR317LaPaginaDellAnticipoNasceColSuoNumero(unittest.TestCase):
+    """Pezzo 5 (PR #317), sopravvissuto del giudice a fase85:736 (`>` -> `>=`): la pagina
+    dell'ANTICIPO (paga in struttura) tiene il numero solo se e' davvero di una sessione. La
+    prova del solo prefisso `cs_` c'era per `crea_sessione`, non per questa: con `>=` il numero
+    `cs_` passerebbe, e lo spazzino proverebbe a chiudere una pagina che non esiste."""
+
+    def test_un_numero_che_non_e_di_una_sessione_resta_vuoto_anche_sull_anticipo(self):
+        for numero in ("cs_", None, "", "pi_1", 7):
+            with self.subTest(numero=numero):
+                p = ProviderStripe("sk", "o", "k",
+                                   fetch=FetchSpy(risposta={"url": "https://u", "id": numero}))
+                self.assertEqual(p.crea_sessione_anticipo(ANT), {"url": "https://u", "id": ""})
+
+    def test_il_numero_piu_corto_che_e_di_una_sessione_si_tiene(self):
+        p = ProviderStripe("sk", "o", "k",
+                           fetch=FetchSpy(risposta={"url": "https://u", "id": "cs_9"}))
+        self.assertEqual(p.crea_sessione_anticipo(ANT), {"url": "https://u", "id": "cs_9"})
+
+
 if __name__ == "__main__":
     unittest.main()

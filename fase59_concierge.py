@@ -615,7 +615,7 @@ class ProtocolloConcierge:
         # l'ospite paga il TOTALE (soggiorno + tassa di soggiorno) -> la tassa viene incassata
         totale_charge = dati.get("totale_cents")
         totale_charge = totale_charge if _intero(totale_charge) and totale_charge > 0 else guest
-        payment_url = self._link_isolato({
+        payment_url, stripe_cs = self._link_isolato({
             "alloggio_id": alloggio, "check_in": ci, "check_out": co, "email": email,
             "prezzo_guest_cents": guest, "totale_cents": totale_charge,
             "valuta": dati.get("valuta", self._valuta),   # like-for-like: si addebita nella valuta dell'annuncio
@@ -661,6 +661,8 @@ class ProtocolloConcierge:
         }
         if payment_url:
             corpo["payment_url"] = payment_url
+        if stripe_cs:
+            corpo["stripe_cs"] = stripe_cs    # lo spazzino chiude QUESTA pagina (fase83)
         return RispostaConcierge(201, corpo)
 
     # ── tool agent-facing aggiuntivi (read-only, deterministici) ───────────────
@@ -700,15 +702,21 @@ class ProtocolloConcierge:
         ota = ota if isinstance(ota, str) else "booking"
         return RispostaConcierge(200, confronta_piattaforma(prezzo, ota).as_dict())
 
-    def _link_isolato(self, dati: Dict[str, Any]) -> Optional[str]:
+    def _link_isolato(self, dati: Dict[str, Any]) -> Tuple[Optional[str], str]:
+        """(indirizzo, numero della pagina). Il link puo' tornare l'indirizzo da solo (gateway
+        vecchi) o {'url', 'id'} (fase85 `crea_sessione`): il numero vuoto vuol dire «non so
+        quale pagina chiudere»."""
         if self._link is None:
-            return None
+            return None, ""
         try:
-            url = self._link(dati)
-            return url if isinstance(url, str) and url else None
+            r = self._link(dati)
+            url, cs = (r.get("url"), r.get("id")) if isinstance(r, dict) else (r, "")
+            if not (isinstance(url, str) and url):
+                return None, ""
+            return url, cs if isinstance(cs, str) else ""
         except Exception:
             logger.warning("link pagamento fallito (ignorato)", exc_info=True)
-            return None
+            return None, ""
 
 
 def crea_protocollo(inventario: Any, segreto: bytes, **kw: Any) -> ProtocolloConcierge:

@@ -397,8 +397,17 @@ def letture_vive(esatte=None):
             inventate.append({"metodo": "GET", "path": prefisso, "credenziali": list(testate)[0],
                               "stato": "NESSUNA ROTTA GET RISERVATA"})
             continue
+        # La sessione Bunker FINTA il server la scrive CRITICAL («BUNKER: accesso NEGATO»): il
+        # 14/11 quattro giri di questo esame sono diventati «6 stati anomali» del Guardiano. Si
+        # dichiara come `verifica_produzione` (stesso scrittore), larga quanto questa sonda sola.
+        bunker = prefisso == "/api/bunker/"
+        if bunker:
+            import verifica_produzione as vp
+            inizio = vp._ora_del_server()
         inventate.append({"metodo": "GET", "path": scelta[0], "credenziali": list(testate)[0],
                           "stato": _chiedi_vivo("GET", scelta[0], testate)})
+        if bunker:
+            vp._dichiara_le_sonde(inizio)
         time.sleep(PAUSA_VIVO_SEC)
     controllo = _chiedi_vivo("GET", CONTROLLO_404)
     return {"riservate": righe, "inventate": inventate, "controllo_404": controllo}
