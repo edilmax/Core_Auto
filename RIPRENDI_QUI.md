@@ -4192,8 +4192,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 978969f
+CONSEGNE AGGIORNATE A: b08e512
 
+- AGGIORNAMENTO 15/11 pomeriggio (sessione 26d98fdc): PEZZO 5 (PR #317), i 15 SOPRAVVISSUTI del job caselle di 978969f presi nei file DEDICATI, nessuna riga di produzione toccata: `test_fase83_server.TestPR317PezzoCinqueLeRigheCheIlGiudiceNonVedeva` (9 prove: :3286 la ripresa della cancellazione con un numero solo, :6728 la pagina salvata vuota nel doppio clic, :7243 :7256 la pagina NUOVA dell'approvazione e il suo numero, :14252 :14257 la pagina Stripe non chiusa e il motivo nel registro, :14620-14626 il fermo del bonifico nel subentro, le cui prove stavano in test_fase160 fuori dagli occhi del giudice) e `test_fase85_pagamenti_stripe.TestPR317LaPaginaDellAnticipoNasceColSuoNumero` (2 prove: :736 il numero `cs_` della pagina dell'anticipo). Copie guaste con le funzioni del giudice (genera_mutanti/applica_mutante): 15 su 15 prese.
 - AGGIORNAMENTO 15/11 mattina (sessione b3968b5b, «autorizzato Guardiano» solo se sicuro e preciso): il falso allarme «6 stati anomali» del Guardiano erano 5 nostre sonde con la sessione Bunker inventata (4 dal PC, 1 dalla CI gia' riparata nella #315) + 1 email vera non consegnata. `collaudi/esame_accessi.letture_vive` ora dichiara la finestra di quella sonda come `verifica_produzione`; Guardiano e watchdog NON toccati. Dettagli e misure nel REGISTRO (sezione delle finestre delle sonde, 28/9). Le righe vecchie escono da sole dalle 24 ore: il prossimo giro del Guardiano (circa 01:12Z del 16/11) le rilegge per l'ultima volta o non piu'; l'email delle 01:12:26Z del 15/11 era un guasto vero e conta finche' invecchia.
 - AGGIORNAMENTO 15/11 (sessione b3968b5b): PEZZO 4 (PR #316), i 20 SOPRAVVISSUTI del job caselle di 2bfa64b e il NON DETERMINABILE (fase86:259 `daemon=True`) presi nei file DEDICATI: `test_fase81_bootstrap_casavip.TestPR316LaCodaEmailSiCollegaSoloAUnArchivioVero` (fase81 :182 :189 x4 :612), `test_fase83_server.TestPR316LEmailFallitaDiceComeEFallitaESiSalva` (:153 x2 :168 :181), `TestPR316LaBancaHaChiusoLaContestazione` (:10660 :10666 x2 :10670 :10676 :10677 :10683 :10684), `TestPR316IlTettoDiCassaDellaCancellazione` (:8930 x2: il taglio con l'archivio dei pagamenti muto e la ripresa FB2 con penale parziale che NON taglia), `test_fase86_email.TestPR316IlGiroDellaCodaNonTieneVivoIlProcesso`. Il NON DETERMINABILE aveva una causa nelle prove: `test_email_tracciata.test_il_giro_in_sottofondo...` vedeva il guasto ma cadeva prima di fermare il giro, che col guasto non e' demone e teneva vivo il processo; ora la fermata e' registrata subito dopo l'avvio. Misura: 21/21 copie guaste fatte con `genera_mutanti`/`applica_mutante` del giudice prese; col guasto di fase86:259 gli 8 file accesi dal giudice finiscono (845 prove, 2 rosse, 436 s). Nessuna riga di produzione toccata.
 - AGGIORNAMENTO 14/11 (sessione a64cbf24): PEZZO 2 (PR #314) UNITO E IN PRODUZIONE, master = VPS = 22a9e74 (caselle 74/74, CodeQL 0 allarmi dopo la riparazione del registro in `_payout_per_penale`, D17 fatto). I pezzi dopo (3, 4, 5, poi 6) vanno uno alla volta, ognuno nel suo ramo pezzoN-soldi-20261113 e nella sua PR: quale e' unito lo dice master, il resto la consegna in cima al file dei rilievi.
@@ -6721,7 +6722,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 8038 test
+SUITE ATTUALE: Ran 8049 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

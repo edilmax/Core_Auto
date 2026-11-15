@@ -929,5 +929,24 @@ class TestChiudereLaPaginaStripe(unittest.TestCase):
                 self.assertIn("cs_%d" % i, righe[0])
 
 
+class TestPR317LaPaginaDellAnticipoNasceColSuoNumero(unittest.TestCase):
+    """Pezzo 5 (PR #317), sopravvissuto del giudice a fase85:736 (`>` -> `>=`): la pagina
+    dell'ANTICIPO (paga in struttura) tiene il numero solo se e' davvero di una sessione. La
+    prova del solo prefisso `cs_` c'era per `crea_sessione`, non per questa: con `>=` il numero
+    `cs_` passerebbe, e lo spazzino proverebbe a chiudere una pagina che non esiste."""
+
+    def test_un_numero_che_non_e_di_una_sessione_resta_vuoto_anche_sull_anticipo(self):
+        for numero in ("cs_", None, "", "pi_1", 7):
+            with self.subTest(numero=numero):
+                p = ProviderStripe("sk", "o", "k",
+                                   fetch=FetchSpy(risposta={"url": "https://u", "id": numero}))
+                self.assertEqual(p.crea_sessione_anticipo(ANT), {"url": "https://u", "id": ""})
+
+    def test_il_numero_piu_corto_che_e_di_una_sessione_si_tiene(self):
+        p = ProviderStripe("sk", "o", "k",
+                           fetch=FetchSpy(risposta={"url": "https://u", "id": "cs_9"}))
+        self.assertEqual(p.crea_sessione_anticipo(ANT), {"url": "https://u", "id": "cs_9"})
+
+
 if __name__ == "__main__":
     unittest.main()

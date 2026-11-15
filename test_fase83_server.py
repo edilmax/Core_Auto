@@ -9869,5 +9869,177 @@ class TestPR316IlTettoDiCassaDellaCancellazione(_BancoDeiSoldiDelServer):
                          "la quota divisa da questa stessa cancellazione contata come uscita")
 
 
+class _GaranziaDelSubentro:
+    """Una garanzia aperta e scaduta, che si lascia contestare."""
+
+    def aperte(self):
+        return [{"sblocco_auto_ts": 1000, "prenotazione_id": "R-317"}]
+
+    def contesta(self, rif, motivo):
+        return {"ok": True}
+
+
+class _ChatDelSubentro:
+    """Ospite e host hanno scritto tutti e due dopo il check-in."""
+
+    def thread(self, rif, chi):
+        return [{"mittente": "ospite", "ts": 1000}, {"mittente": "demo", "ts": 1000}]
+
+
+class _BonificoDelSubentro:
+    """Il fermo del bonifico che risponde quello che gli si dice (o esplode)."""
+
+    def __init__(self, fermo, stato):
+        self._fermo, self._stato = fermo, stato
+
+    def aggiorna_stato(self, rif, stato):
+        if isinstance(self._fermo, Exception):
+            raise self._fermo
+        return self._fermo
+
+    def stato_di(self, rif):
+        return self._stato
+
+
+class TestPR317PezzoCinqueLeRigheCheIlGiudiceNonVedeva(unittest.TestCase):
+    """Pezzo 5 (PR #317), job `caselle` del 15/11 su 978969f: 14 righe cambiate in fase83 dove un
+    guasto passava inosservato, perche' le loro prove stanno in file che il giudice non accende
+    (test_fase160_escrow_garanzia per il subentro) o non c'erano: la ripresa della cancellazione
+    con numeri a meta' (:3286), il doppio clic con la pagina salvata vuota (:6728), la pagina
+    NUOVA dell'approvazione (:7243 :7256), la pagina Stripe non chiusa (:14252 :14257) e il fermo
+    del bonifico nel subentro (:14620-14626)."""
+
+    # ── :3286 la ripresa della cancellazione legge i numeri solo se ci sono TUTTI E DUE ─────
+    def _decisione(self, motivo):
+        r = crea_router(_sistema())
+        r._sys.garanzia = types.SimpleNamespace(
+            stato=lambda rif: {"stato": "risolto", "motivo": motivo})
+        return r._decisione_della_cancellazione("R-317")
+
+    def test_3286_un_numero_solo_o_non_numerico_vale_il_calcolo_di_oggi(self):
+        self.assertEqual(self._decisione("cancellazione:R-317|rimborso=500|trattenuto=200"),
+                         (500, 200), "PREMESSA: coi due numeri la decisione si legge")
+        for motivo in ("cancellazione:R-317|rimborso=500",
+                       "cancellazione:R-317|trattenuto=200",
+                       "cancellazione:R-317|rimborso=500|trattenuto=x",
+                       "cancellazione:R-317|rimborso=x|trattenuto=200"):
+            with self.subTest(motivo=motivo):
+                self.assertIsNone(self._decisione(motivo))
+
+    # ── :6728 il doppio clic non sostituisce il link con una pagina salvata VUOTA ───────────
+    def test_6728_una_pagina_salvata_vuota_non_cancella_il_link(self):
+        r = crea_router(_sistema())
+        r._sys.pagamenti_pendenti = _PendenteFinto(
+            {"riferimento": "R-317", "stato": "in_attesa", "email": "o@x.it",
+             "corpo_json": json.dumps({"payment_url": "", "stripe_cs": "cs_vecchia"})})
+        s, b = r._replay_prenotazione({"riferimento": "R-317", "payment_url": "https://totale"})
+        self.assertEqual(s, 201, b)
+        self.assertEqual(b["payment_url"], "https://totale", b)
+        self.assertNotIn("stripe_cs", b, "il numero di una pagina che non c'e'")
+        self.assertEqual(b["stato"], "in_attesa_pagamento", b)
+
+    # ── :7243 :7256 l'approvazione usa la pagina NUOVA e ne tiene il numero ────────────────
+    def _approva(self, stripe):
+        r = crea_router(_sistema())
+        rec = {"riferimento": "R-317", "stato": "in_attesa_host", "alloggio_id": "casa",
+               "email": "o@x.it", "check_in": "2027-01-10",
+               "corpo_json": json.dumps({"totale_cents": 20000, "prezzo_guest_cents": 20000,
+                                         "valuta": "EUR", "stripe_cs": "cs_della_richiesta"})}
+        r._sys.pagamenti_pendenti = types.SimpleNamespace(
+            info=lambda ref: dict(rec) if ref == "R-317" else None,
+            rimuovi_se_stato=lambda ref, stato: True)
+        r._sys.stripe = stripe
+        finiti = []
+
+        def finalizza(corpo, dati, hold_sec=None):
+            finiti.append((dict(corpo), hold_sec))
+            return corpo
+        r._finalizza_prenotazione = finalizza
+        return r._decidi_richiesta("R-317", None, True), finiti
+
+    def test_7243_7256_l_approvazione_tiene_il_numero_della_pagina_nuova(self):
+        chieste = []
+
+        def crea_sessione(d):
+            chieste.append(d)
+            return {"id": "cs_nuova", "url": "https://pagina-nuova"}
+        (s, b), finiti = self._approva(types.SimpleNamespace(crea_sessione=crea_sessione))
+        self.assertEqual(s, 200, b)
+        self.assertEqual([d["riferimento"] for d in chieste], ["R-317"])
+        self.assertEqual(len(finiti), 1, finiti)
+        corpo, hold = finiti[0]
+        self.assertEqual(corpo["payment_url"], "https://pagina-nuova")
+        self.assertEqual(corpo["stripe_cs"], "cs_nuova",
+                         "il numero della pagina da chiudere e' quello della pagina NUOVA")
+        self.assertEqual(hold, fase83_server.HOLD_APPROVAZIONE_SEC)
+
+    def test_7256_un_gateway_senza_numero_lascia_vuoto_mai_quello_della_richiesta(self):
+        for numero in (None, ""):
+            with self.subTest(numero=numero):
+                (s, b), finiti = self._approva(types.SimpleNamespace(
+                    crea_sessione=lambda d: {"id": numero, "url": "https://pagina-nuova"}))
+                self.assertEqual(s, 200, b)
+                self.assertEqual(finiti[0][0]["stripe_cs"], "")
+
+    # ── :14252 :14257 la pagina Stripe che non si chiude ─────────────────────────────────
+    def _chiusa(self, esito):
+        sis = types.SimpleNamespace(stripe=types.SimpleNamespace(chiudi_sessione=lambda cs: esito))
+        rec = {"riferimento": "R-317", "scadenza_ts": 0,
+               "corpo_json": json.dumps({"stripe_cs": "cs_317"})}
+        with self.assertLogs("core_auto.server", level="WARNING") as log:
+            libera = fase83_server._pagina_stripe_chiusa(sis, rec)
+        return libera, [r.getMessage() for r in log.records if r.levelname == "ERROR"], log
+
+    def test_14252_solo_complete_con_ok_vuol_dire_gia_pagata(self):
+        for esito in ({"ok": True, "stato": "open", "motivo": ""},
+                      {"ok": False, "stato": "complete", "motivo": "rilettura_fallita"}):
+            with self.subTest(esito=esito):
+                libera, errori, log = self._chiusa(esito)
+                self.assertIs(libera, True, "un giorno dopo la pagina non puo' essere viva")
+                self.assertTrue([m for m in errori if "un_giorno_senza_conferma" in m], log.output)
+                self.assertFalse([m for m in log.output if "pagina_gia_pagata" in m], log.output)
+
+    def test_14257_il_registro_dice_il_motivo_di_stripe_poi_lo_stato_poi_un_trattino(self):
+        for esito, atteso in (({"ok": False, "stato": "open", "motivo": "rete_giu"}, "(rete_giu)"),
+                              ({"ok": False, "stato": "open", "motivo": ""}, "(open)"),
+                              ({"ok": False, "stato": "", "motivo": ""}, "(-)")):
+            with self.subTest(esito=esito):
+                _libera, errori, log = self._chiusa(esito)
+                self.assertEqual(len(errori), 1, log.output)
+                self.assertIn(atteso, errori[0])
+
+    # ── :14620-14626 il subentro guarda se il bonifico si e' fermato davvero ──────────────
+    def _subentro(self, payout):
+        sis = types.SimpleNamespace(garanzia=_GaranziaDelSubentro(),
+                                    messaggistica=_ChatDelSubentro(), payout=payout)
+        with self.assertLogs("core_auto.server", level="WARNING") as log:
+            fatte = fase83_server._subentro_per_disaccordo(sis, ora_ts=5000)
+        self.assertEqual(fatte, ["R-317"], "PREMESSA: il subentro doveva scattare")
+        self.assertFalse([m for m in log.output if "giro fallito" in m], log.output)
+        allarmi = [r for r in log.records
+                   if r.levelname == "ERROR" and "bonifico_non_fermato" in r.getMessage()]
+        return allarmi, log
+
+    def test_14623_fermo_riuscito_l_allarme_tace(self):
+        for payout in (_BonificoDelSubentro(True, "pagabile"),
+                       _BonificoDelSubentro(False, "trattenuto"), None):
+            with self.subTest(payout=payout and (payout._fermo, payout._stato)):
+                allarmi, log = self._subentro(payout)
+                self.assertEqual(allarmi, [], log.output)
+
+    def test_14623_14624_fermo_non_riuscito_l_allarme_grida(self):
+        allarmi, log = self._subentro(_BonificoDelSubentro(False, "pagabile"))
+        self.assertEqual(len(allarmi), 1, log.output)
+        self.assertIn("R-317", allarmi[0].getMessage())
+
+    def test_14620_14626_fermo_esploso_l_allarme_grida_e_il_registro_porta_l_eccezione(self):
+        allarmi, log = self._subentro(_BonificoDelSubentro(RuntimeError("db giu'"), "pagabile"))
+        self.assertEqual(len(allarmi), 1, log.output)
+        esploso = [r for r in log.records if "blocco payout esploso" in r.getMessage()]
+        self.assertEqual(len(esploso), 1, log.output)
+        self.assertIsNotNone(esploso[0].exc_info, "il registro deve portare l'eccezione")
+        self.assertIsInstance(esploso[0].exc_info[1], RuntimeError)
+
+
 if __name__ == "__main__":
     unittest.main()
