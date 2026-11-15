@@ -9,6 +9,7 @@ e i ripieghi di crea_link/crea_link_anticipo, nate dai 49 mutanti sopravvissuti 
 test dedicato.
 """
 import json
+import logging
 import unittest
 
 import fase85_pagamenti_stripe as _f85
@@ -699,6 +700,19 @@ class TestLaContestazioneDellaBanca(unittest.TestCase):
                                                {"Authorization": "Bearer sk_test_k"})],
                                  "una LETTURA sola: GET del pagamento con l'addebito espanso")
 
+    def test_un_addebito_illeggibile_non_porta_i_dati_dell_ospite_nel_motivo(self):
+        """security-reviewer (11/11), variante di F12: `addebito_senza_disputed: %r` copiava
+        nel motivo l'addebito intero, che porta i dati di fatturazione dell'ospite."""
+        f = FetchFinto({PAGAMENTI_URL: {"id": "pi_ok", "latest_charge": {
+            "id": "ch_1", "object": "charge", "billing_details": {
+                "email": "ospite@privato.it", "name": "Mario Rossi"}}}})
+        esito = _p(f).contestazione_di("pi_ok")
+        self.assertEqual((esito["ok"], esito["contestato"]), (False, False), esito)
+        self.assertTrue(esito["motivo"].startswith("addebito_senza_disputed: "), esito)
+        self.assertIn("ch_1", esito["motivo"], "resta COSA e' arrivato")
+        for privato in ("ospite@privato.it", "Mario Rossi"):
+            self.assertNotIn(privato, esito["motivo"])
+
     def test_senza_addebito_non_c_e_niente_da_contestare(self):
         f = FetchFinto({PAGAMENTI_URL: {"id": "pi_ok", "latest_charge": None}})
         self.assertEqual(_p(f).contestazione_di("pi_ok"),
@@ -831,6 +845,23 @@ class TestLaPaginaStripeNasceColSuoNumero(unittest.TestCase):
                                    fetch=FetchSpy(risposta={"url": "https://u", "id": numero}))
                 self.assertEqual(p.crea_sessione(DATI), {"url": "https://u", "id": ""})
 
+    def test_anticipo_il_numero_si_pulisce_come_per_il_totale(self):
+        """Prova mancante 2 (pr-test-analyzer, 11/11): la pagina dell'ANTICIPO porta il suo
+        numero (difetto A) con la stessa pulizia di `crea_sessione`; senza indirizzo, niente."""
+        ant = {"anticipo_cents": 4500, "saldo_cents": 19500, "riferimento": "ABC123"}
+        for numero in (None, "", "pi_1", 7, "cs_"):
+            with self.subTest(numero=numero):
+                p = ProviderStripe("sk", "o", "k",
+                                   fetch=FetchSpy(risposta={"url": "https://u", "id": numero}))
+                self.assertEqual(p.crea_sessione_anticipo(ant), {"url": "https://u", "id": ""})
+        p = ProviderStripe("sk", "o", "k", fetch=FetchSpy(risposta={"url": "https://u",
+                                                                     "id": "cs_a"}))
+        self.assertEqual((p.crea_sessione_anticipo(ant), p.crea_link_anticipo(ant)),
+                         ({"url": "https://u", "id": "cs_a"}, "https://u"))
+        p = ProviderStripe("sk", "o", "k", fetch=FetchSpy(risposta={"id": "cs_a"}))
+        self.assertEqual((p.crea_sessione_anticipo(ant), p.crea_link_anticipo(ant)),
+                         (None, None))
+
     def test_senza_indirizzo_niente_sessione_e_crea_link_resta_com_era(self):
         p = ProviderStripe("sk", "o", "k", fetch=FetchSpy(risposta={"id": "cs_1"}))
         self.assertIsNone(p.crea_sessione(DATI))
@@ -867,6 +898,18 @@ class TestChiudereLaPaginaStripe(unittest.TestCase):
                          {"ok": True, "stato": "complete", "motivo": ""})
         self.assertEqual([(u, b) for u, b in chiamate],
                          [(STRIPE_URL + "/cs_a/expire", chiamate[0][1]), (STRIPE_URL + "/cs_a", None)])
+
+    def test_F8_rifiuto_e_pagina_ancora_aperta_tiene_il_motivo_del_rifiuto(self):
+        """F8 (11/11, silent-failure-hunter): Stripe rifiuta di chiudere (403 chiave senza
+        permesso, 429 troppe richieste) e la rilettura dice 'open'. Prima il motivo si perdeva:
+        un giorno di «pagina_non_chiusa ... open» senza sapere che la chiave non puo' chiudere."""
+        def fetch(url, body, headers):
+            if url.endswith("/expire"):
+                raise _ErroreHttp(403)
+            return {"id": "cs_a", "status": "open"}
+        esito = _p(fetch).chiudi_sessione("cs_a")
+        self.assertEqual((esito["ok"], esito["stato"]), (True, "open"), esito)
+        self.assertIn("403", esito["motivo"], "il motivo del rifiuto deve restare")
 
     def test_le_intestazioni_della_chiusura_e_della_rilettura(self):
         """Prova mancante 2 (pr-test-analyzer, 11/11): senza la chiave Stripe risponde 401 (NON
@@ -907,26 +950,177 @@ class TestChiudereLaPaginaStripe(unittest.TestCase):
                 self.assertEqual(_p(f).chiudi_sessione(numero)["ok"], False)
                 self.assertEqual(f.chiamate, [])
 
+    def test_F9_chiave_senza_permesso_grida_subito_il_resto_tace(self):
+        """F9 (11/11, silent-failure-hunter): una chiave che non puo' chiudere le pagine (401,
+        403) non guarisce da sola, e ogni blocco scaduto resterebbe tenuto un giorno intero con
+        soli avvisi: ERROR subito, col codice. Un 429 (troppe richieste) o un 400 (pagina gia'
+        chiusa da sola) sono normali e non gridano (regola ferrea 10)."""
+        for codice, grida in ((403, True), (401, True), (429, False), (400, False)):
+            with self.subTest(codice=codice):
+                def fetch(url, body, headers, codice=codice):
+                    if url.endswith("/expire"):
+                        raise _ErroreHttp(codice)
+                    return {"id": "cs_a", "status": "open"}
+                with self.assertLogs("core_auto.pagamenti_stripe", level="DEBUG") as log:
+                    logging.getLogger("core_auto.pagamenti_stripe").debug("ascolto")
+                    _p(fetch).chiudi_sessione("cs_a")
+                errori = [r.getMessage() for r in log.records if r.levelname == "ERROR"]
+                self.assertEqual(bool(errori), grida, errori)
+                if grida:
+                    self.assertIn(str(codice), errori[0])
+
+    def test_PR320_la_chiave_senza_permesso_non_scrive_righe_finte_nel_registro(self):
+        """Pezzo 6 (PR #320, «autorizzato fase85» del fondatore 15/11; trovata col
+        variant-analysis sulle righe di registro nuove del pezzo): la riga ERROR di F9 scriveva
+        il motivo del rifiuto -- il testo d'errore di Stripe -- cosi' com'era. Un a-capo dentro
+        fabbricava una riga finta che il Guardiano conta (stessa famiglia della PR317)."""
+        for fine in ("\n", "\r\n", "\r"):
+            with self.subTest(a_capo=repr(fine)):
+                class _Negato(_ErroreHttp):
+                    def read(self, fine=fine):
+                        return json.dumps({"error": {"code": "permessi", "message":
+                                           "chiave limitata%sCRITICAL FINTO" % fine}}).encode()
+
+                def fetch(url, body, headers):
+                    if url.endswith("/expire"):
+                        raise _Negato(403)
+                    return {"id": "cs_a", "status": "open"}
+                with self.assertLogs("core_auto.pagamenti_stripe", level="ERROR") as log:
+                    _p(fetch).chiudi_sessione("cs_a")
+                errori = [r.getMessage() for r in log.records if r.levelname == "ERROR"]
+                self.assertEqual(len(errori), 1, log.output)
+                self.assertIn("chiusura_pagina_negata", errori[0])
+                self.assertNotIn("\n", errori[0], "un a-capo di Stripe e' arrivato nel registro")
+                self.assertNotIn("\r", errori[0], "un ritorno a capo di Stripe nel registro")
+                self.assertIn("CRITICAL FINTO", errori[0], "il messaggio di Stripe si deve leggere")
+                self.assertIn("403", errori[0])
+
+    def test_F12_una_risposta_inattesa_non_porta_i_dati_dell_ospite_nel_registro(self):
+        """F12 (11/11, security-reviewer): `risposta_inattesa: %r` metteva nel motivo -- che
+        finisce nel registro -- l'oggetto intero di Stripe, coi dati dell'ospite (email, nome,
+        indirizzo). Restano solo id, tipo e stato: bastano a capire cosa e' arrivato."""
+        strana = {"id": "cs_altra", "object": "checkout.session", "status": "open",
+                  "customer_details": {"email": "ospite@privato.it", "name": "Mario Rossi"}}
+        esiti = [
+            _p(FetchFinto({STRIPE_URL: strana})).chiudi_sessione("cs_a"),
+            _p(FetchFinto({STRIPE_URL: strana})).pagamento_della_sessione("cs_a"),
+        ]
+        for esito in esiti:
+            with self.subTest(esito=esito):
+                self.assertIn("risposta_inattesa", esito["motivo"])
+                self.assertIn("cs_altra", esito["motivo"])
+                self.assertNotIn("ospite@privato.it", esito["motivo"])
+                self.assertNotIn("Mario Rossi", esito["motivo"])
+        # variant-analysis (11/11): lo stesso %r stava in altri sette punti di fase85 (rimborsi,
+        # bonifici, saldo): nessuno deve restare
+        with open(_f85.__file__, encoding="utf-8") as fh:
+            self.assertNotIn("risposta_inattesa: %r", fh.read())
+
     def test_PR317_la_pagina_non_chiusa_non_scrive_righe_finte_nel_registro(self):
         """Pezzo 5 (PR #317, «autorizzato» del fondatore 15/11): il numero della pagina e il
         motivo dell'errore arrivano da fuori (il numero dal pendente, il motivo dal testo di
         Stripe) e finivano nel registro cosi' com'erano: un a-capo fabbricava una riga finta
-        che il Guardiano e il watchdog leggono come vera (stessa famiglia di fase86:237)."""
+        che il Guardiano e il watchdog leggono come vera (stessa famiglia di fase86:237).
+        Unione col pezzo 6 (15/11): `_e_una_pagina` rifiuta un numero con un a-capo PRIMA di
+        Stripe e del registro, quindi la prova guarda le due strade che restano: (a) un numero
+        vero con il motivo di Stripe che porta l'a-capo; (b) il numero con l'a-capo, che non
+        arriva ne' a Stripe ne' al registro."""
         for i, (fine, spezzo) in enumerate((("\n", "\n"), ("\r\n", "\r\n"), ("\r", "\r"))):
-            with self.subTest(a_capo=repr(fine)):
-                numero = "cs_%d%sRIGA FINTA" % (i, fine)
+            with self.subTest(strada="motivo", a_capo=repr(fine)):
                 f = FetchFinto(solleva=TimeoutError("lento%sERROR FINTO" % spezzo))
                 with self.assertLogs("core_auto.pagamenti_stripe", level="WARNING") as reg:
-                    esito = _p(f).chiudi_sessione(numero)
+                    esito = _p(f).chiudi_sessione("cs_%d" % i)
                 self.assertIs(esito["ok"], False, "PREMESSA: la chiusura doveva fallire")
                 righe = [x.getMessage() for x in reg.records
                          if "pagina di pagamento non chiusa" in x.getMessage()]
                 self.assertEqual(len(righe), 1, reg.output)
                 self.assertNotIn("\n", righe[0], "un a-capo da fuori e' arrivato nel registro")
                 self.assertNotIn("\r", righe[0], "un ritorno a capo da fuori nel registro")
-                self.assertIn("RIGA FINTA", righe[0], "il numero della pagina si deve leggere")
                 self.assertIn("ERROR FINTO", righe[0], "il motivo di Stripe si deve leggere")
-                self.assertIn("cs_%d" % i, righe[0])
+                self.assertIn("cs_%d" % i, righe[0], "il numero della pagina si deve leggere")
+            with self.subTest(strada="numero", a_capo=repr(fine)):
+                f = FetchFinto(solleva=TimeoutError("non doveva chiamare"))
+                with self.assertLogs("core_auto.pagamenti_stripe", level="DEBUG") as reg:
+                    _f85.logger.debug("ascolto")
+                    esito = _p(f).chiudi_sessione("cs_%d%sRIGA FINTA" % (i, fine))
+                self.assertEqual((esito["ok"], esito["motivo"]), (False, "sessione_assente"))
+                self.assertEqual(f.chiamate, [], "un numero con l'a-capo e' arrivato a Stripe")
+                self.assertFalse([r for r in reg.records if "RIGA FINTA" in r.getMessage()],
+                                 "un numero con l'a-capo e' arrivato nel registro")
+
+
+class TestIlNumeroDellaPaginaSiControllaInUnPostoSolo(unittest.TestCase):
+    """GRUPPO H (11/11), sopravvissuti S1 S2 S15 di Cosmic Ray e Mutatest: `len(x) > 3` -> `!= 3`
+    non si distingueva con una stringa vera, ma il controllo accetta ogni `str` (anche una
+    sottoclasse) e un ingresso che li distingue esiste: NON equivalenti (B6). Il controllo stava
+    in quattro copie; ora e' uno, scritto `len >= 4`: identico per ogni ingresso (len e' sempre
+    un intero) e senza mutanti equivalenti -- "cs_", "cs_a" e un numero lungo li distinguono."""
+
+    def test_cosa_e_una_pagina(self):
+        from fase85_pagamenti_stripe import _e_una_pagina
+        for numero, atteso in (("cs_a", True), ("cs_test_a1B2c3", True), ("cs_", False),
+                               ("cs", False), ("", False), ("pi_1", False), ("xcs_a", False),
+                               (None, False), (5, False), (b"cs_a", False), (["cs_a"], False),
+                               # security-reviewer (11/11): il numero va nell'indirizzo di
+                               # Stripe, con la nostra chiave: niente che cambi l'indirizzo
+                               ("cs_../../customers", False), ("cs_a/b", False),
+                               ("cs_a?x=1", False), ("cs_a#f", False), ("cs_a b", False),
+                               ("cs_a\n", False), ("cs_a%2F", False), ("cs_live_X9z", True)):
+            with self.subTest(numero=numero):
+                self.assertIs(_e_una_pagina(numero), atteso)
+
+    def test_il_numero_della_pagina_si_controlla_solo_qui(self):
+        """variant-analysis (11/11): sei punti controllavano il numero col solo
+        `startswith("cs_")` (fase83, fase85, fase162, fase181): ora passano tutti da qui."""
+        import ast
+        import glob
+        import os
+        radice = os.path.dirname(os.path.abspath(_f85.__file__))
+        sparsi = []
+        for percorso in sorted(glob.glob(os.path.join(radice, "fase*.py"))):
+            with open(percorso, encoding="utf-8") as fh:
+                albero = ast.parse(fh.read())
+            # le CHIAMATE `.startswith("cs_")` nel codice (un commento che lo nomina non conta)
+            for c in ast.walk(albero):
+                if (isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute)
+                        and c.func.attr == "startswith" and c.args
+                        and isinstance(c.args[0], ast.Constant) and c.args[0].value == "cs_"):
+                    sparsi.append("%s:%d" % (os.path.basename(percorso), c.lineno))
+        self.assertTrue(len(glob.glob(os.path.join(radice, "fase*.py"))) > 50,
+                        "PREMESSA: la guardia deve vedere i moduli di produzione")
+        self.assertEqual(sparsi, [], "il numero della pagina si controlla con `_e_una_pagina`")
+
+
+class TestUnaRispostaCheParlaDiUnAltroOggettoNonVale(unittest.TestCase):
+    """GRUPPO H (11/11), sopravvissuto S3 (`s.get("id") == sessione` -> `<=`) e le sue varianti
+    (variant-analysis: gli altri tre confronti dell'id in fase85): una risposta che porta l'id
+    di UN'ALTRA pagina o di un altro pagamento non vale, ne' minore ne' maggiore di quello
+    chiesto. La prova di prima aveva solo «cs_altra», maggiore di «cs_a»: `<=` passava. Il
+    motivo comincia sempre con «risposta_inattesa: » (un `+` mutato lo cambia in un TypeError)."""
+
+    def _guarda(self, esito, chiavi, attese):
+        self.assertEqual(tuple(esito[k] for k in chiavi), attese, esito)
+        self.assertTrue(esito["motivo"].startswith("risposta_inattesa: "), esito)
+
+    def test_id_minore_o_maggiore_di_quello_chiesto(self):
+        pi_buono = {"id": "pi_b", "status": "requires_capture", "amount_capturable": 100}
+        for altro in ("cs_a", "cs_c"):           # chiesta "cs_b": una minore e una maggiore
+            with self.subTest(funzione="chiudi_sessione", altro=altro):
+                f = FetchFinto({STRIPE_URL: {"id": altro, "status": "expired"}})
+                self._guarda(_p(f).chiudi_sessione("cs_b"), ("ok", "stato"), (False, ""))
+            with self.subTest(funzione="pagamento_della_sessione, pagina", altro=altro):
+                f = FetchFinto({STRIPE_URL: {"id": altro, "payment_intent": "pi_b"},
+                                PAGAMENTI_URL: pi_buono})
+                self._guarda(_p(f).pagamento_della_sessione("cs_b"), ("ok", "pi"), (False, ""))
+        for altro in ("pi_a", "pi_c"):           # chiesto "pi_b"
+            with self.subTest(funzione="pagamento_della_sessione, pagamento", altro=altro):
+                f = FetchFinto({STRIPE_URL: {"id": "cs_b", "payment_intent": "pi_b"},
+                                PAGAMENTI_URL: dict(pi_buono, id=altro)})
+                self._guarda(_p(f).pagamento_della_sessione("cs_b"),
+                             ("ok", "pi", "incassabile_cents"), (False, "", 0))
+            with self.subTest(funzione="stato_pagamento", altro=altro):
+                f = FetchFinto({PAGAMENTI_URL: {"id": altro, "status": "succeeded"}})
+                self._guarda(_p(f).stato_pagamento("pi_b"), ("ok", "stato"), (False, ""))
 
 
 class TestPR317LaPaginaDellAnticipoNasceColSuoNumero(unittest.TestCase):

@@ -705,5 +705,36 @@ class TestGliInvariantiGiranoOgniOra(_Archivi):
                          "scrive una riga che direbbe «verificato»")
 
 
+class TestF17IlControlloDegliInvariantiNonNascondeUnCorpoRotto(unittest.TestCase):
+    """F17 nel controllo degli invarianti (11/11, variant-analysis): `_corpo` trattava un corpo
+    salvato illeggibile come vuoto, in silenzio -- cioe' lo strumento che cerca i guasti nei
+    soldi li nascondeva. Ora lo dice (WARNING `corpo_illeggibile` col riferimento); il ripiego
+    {} resta quello di prima. Sul buono e sul vuoto tace (regola ferrea 10)."""
+
+    def _ascolta(self, p):
+        with self.assertLogs(A.logger.name, level="DEBUG") as log:
+            A.logger.debug("ascolto")
+            corpo = A._corpo(p)
+        return corpo, [r.getMessage() for r in log.records if r.levelname == "WARNING"]
+
+    def test_un_corpo_rotto_si_dice_e_resta_vuoto(self):
+        for testo, sotto in (("{rotto", "JSONDecodeError"), ("[1]", "non_oggetto"),
+                             (7, "TypeError")):
+            with self.subTest(corpo=testo):
+                # la forma VERA delle righe del caricatore: la chiave e' "rif" (code-reviewer,
+                # 11/11: con "riferimento" la prova passava e il registro diceva sempre «-»)
+                corpo, avvisi = self._ascolta({"rif": "R-F17", "corpo_json": testo})
+                self.assertEqual(corpo, {}, "il ripiego di prima")
+                self.assertTrue([a for a in avvisi if "corpo_illeggibile" in a and sotto in a
+                                 and "riferimento: R-F17" in a], avvisi)
+
+    def test_un_corpo_buono_o_vuoto_tace(self):
+        for testo, atteso in (('{"voucher_token": "v"}', {"voucher_token": "v"}), ("", {}),
+                              (None, {})):
+            with self.subTest(corpo=testo):
+                corpo, avvisi = self._ascolta({"riferimento": "R-ok", "corpo_json": testo})
+                self.assertEqual((corpo, avvisi), (atteso, []))
+
+
 if __name__ == "__main__":
     unittest.main()

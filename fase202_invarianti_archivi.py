@@ -63,6 +63,7 @@ import glob
 import json
 import logging
 import os
+import re
 import sqlite3
 import time
 from typing import Any, Dict, List, Optional, Tuple
@@ -257,11 +258,25 @@ def _giudica_i1(prenotazioni: List[Dict[str, Any]], inventario: List[Dict[str, A
 
 
 def _corpo(p: Dict[str, Any]) -> Dict[str, Any]:
+    """Il corpo salvato di una prenotazione; {} se manca o non si legge. F17 (11/11,
+    variant-analysis): un corpo rotto qui si trattava come vuoto IN SILENZIO -- lo strumento che
+    cerca i guasti nei soldi li nascondeva. Ora lo dice; il ripiego {} resta quello di prima.
+    Guardia: `test_fase202_invarianti_archivi.TestF17IlControlloDegliInvariantiNonNascondeUnCorpoRotto`."""
+    # le righe del caricatore hanno "rif" (code-reviewer, 11/11); pulito come _rif_per_registro
+    rif = re.sub(r"[^A-Za-z0-9:_.-]", "", str(p.get("rif", p.get("riferimento", "-"))))[:64]
+    rif = rif.replace("\r", "").replace("\n", "")      # la barriera che CodeQL riconosce
     try:
         d = json.loads(p.get("corpo_json") or "{}")
-        return d if isinstance(d, dict) else {}
-    except (TypeError, ValueError):
-        return {}
+    except (TypeError, ValueError) as exc:
+        sotto = type(exc).__name__
+    else:
+        if isinstance(d, dict):
+            return d
+        sotto = "non_oggetto"
+    logger.warning("INVARIANTI | codice: corpo_illeggibile | sottocodice: %s | riferimento: %s | "
+                   "messaggio: il corpo salvato della prenotazione non si legge, lo controllo "
+                   "come vuoto", sotto, rif)
+    return {}
 
 
 def _giudica_i2(prenotazioni: List[Dict[str, Any]], giornale: List[Dict[str, Any]],

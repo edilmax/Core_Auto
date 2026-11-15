@@ -30,6 +30,7 @@ import re
 from typing import Any, Callable, Dict, List, Optional
 
 from fase162_pagamenti_pendenti import blocco_della_carta
+from fase85_pagamenti_stripe import _e_una_pagina
 
 logger = logging.getLogger("core_auto.audit_console")
 
@@ -43,7 +44,7 @@ def stripe_session_fetch(secret_key: str, cs_id: str, *, timeout: float = 2.0
     """SHADOW-CHECK reale: legge la sessione checkout da Stripe (GET, read-only).
     Ritorna {'ok': True, 'payment_status': ...} o {'ok': False, 'motivo': ...}.
     Timeout CORTO (2s): la scheda non deve mai restare appesa per Stripe."""
-    if not (secret_key and isinstance(cs_id, str) and cs_id.startswith("cs_")):
+    if not (secret_key and _e_una_pagina(cs_id)):
         return {"ok": False, "motivo": "non_configurato"}
     try:
         from urllib.request import Request, urlopen

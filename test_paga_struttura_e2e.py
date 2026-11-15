@@ -194,8 +194,9 @@ class TestPagaStrutturaE2E(unittest.TestCase):
             chieste.append(d), {"url": "https://anticipo", "id": "cs_anticipo"})[1]
         s, b2 = self._ripeti_book(q)
         self.assertEqual(s, 201, b2)
-        self.assertEqual((b2.get("payment_url"), b2.get("stripe_cs")),
-                         ("https://anticipo", "cs_anticipo"), b2)
+        self.assertEqual(b2.get("payment_url"), "https://anticipo", b2)
+        # F3 (11/11): il numero della pagina e' roba del server, all'ospite non esce mai
+        self.assertNotIn("stripe_cs", b2)
         self.assertEqual([d["anticipo_cents"] for d in chieste], [b["anticipo_online_cents"]])
         self.assertEqual(chieste[0]["saldo_cents"], b["saldo_in_loco_cents"])
         self.assertEqual(chieste[0]["riferimento"], b["riferimento"])
