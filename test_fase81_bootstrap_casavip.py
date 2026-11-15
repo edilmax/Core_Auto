@@ -114,6 +114,34 @@ class TestAccensione(unittest.TestCase):
                          s2.report["avvisi"])
 
 
+class TestLaDataDelBonifico(unittest.TestCase):
+    """PR #315 (pezzo 3), job `caselle` del 14/11 su bb014a7: il cablaggio `connect.da_quando`
+    (PR5, 8/11) aveva la sua prova solo in test_fase101, che il giudice non accende per questo
+    file. Il bonifico di una prenotazione si cerca da un giorno prima che lei nascesse; di una
+    prenotazione che non conosciamo, dall'inizio (0 meno il giorno di margine)."""
+
+    # Finta e senza rete: serve solo ad accendere il cablaggio Connect. Sta in un nome e non
+    # dentro la chiamata, cosi' bandit (B106) non la conta come segreto scritto a mano.
+    _CHIAVE_FINTA = "sk_test_xyz"
+
+    def test_PR315_il_bonifico_si_cerca_da_un_giorno_prima_della_prenotazione(self):
+        import os
+        import shutil
+        import tempfile
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        s = crea_sistema(ConfigCasaVIP(abilitato=True, segreto_hmac=SEG,
+                                       db_pendenti=os.path.join(d, "p.db"),
+                                       stripe_secret_key=self._CHIAVE_FINTA))
+        self.assertIsNotNone(s.connect, "premessa: con la chiave Connect e' cablato")
+        self.assertTrue(s.pagamenti_pendenti.registra(
+            "R-PR315", alloggio_id="casa", check_in="2027-01-01", check_out="2027-01-03"))
+        creato = s.pagamenti_pendenti.info("R-PR315")["creato_ts"]
+        self.assertGreater(creato, 86400, "premessa: data di nascita vera")
+        self.assertEqual(s.connect.da_quando("R-PR315"), creato - 86400)
+        self.assertEqual(s.connect.da_quando("R-SCONOSCIUTA"), -86400)
+
+
 class TestEndToEnd(unittest.TestCase):
     def test_stack_lavora_insieme(self):
         s = crea_sistema(ConfigCasaVIP(abilitato=True, segreto_hmac=SEG))
@@ -161,6 +189,85 @@ class TestEndToEnd(unittest.TestCase):
                                               check_out="2026-09-02"))
         # nessun inventario caricato -> non disponibile (fail-closed via fase58)
         self.assertFalse(res["risultati"][0]["disponibile"])
+
+
+class TestPR316LaCodaEmailSiCollegaSoloAUnArchivioVero(unittest.TestCase):
+    """Pezzo 4 (PR #316): sopravvissuti del giudice sul diff (job caselle di 2bfa64b) su
+    `collega_coda_email` e sul suo uso in `crea_sistema` (:182 :189 :612). Le prove c'erano in
+    test_email_tracciata, che il giudice per fase81 non accende: qui stanno nel dedicato.
+    Le due direzioni: con provider e archivio su file la coda c'e', parte da sola col suo giro
+    e si dichiara fra i componenti; senza provider, senza archivio o in RAM non c'e' niente."""
+
+    class _Prov(object):
+        def __init__(self):
+            self.chiamate = []
+
+        def invia(self, destinatario, oggetto, corpo_html):
+            self.chiamate.append(destinatario)
+            return True
+
+    def setUp(self):
+        import os
+        import shutil
+        import tempfile
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
+        self.db = os.path.join(self.dir, "coda_email.db")
+
+    def _collega(self, prov, percorso, **k):
+        from fase81_bootstrap_casavip import collega_coda_email
+        coda = collega_coda_email(prov, percorso, **k)
+        if coda is not None:
+            self.addCleanup(coda.ferma)       # prima di ogni asserzione: un giro non resta vivo
+        return coda
+
+    def test_con_provider_e_archivio_su_file_la_coda_c_e_ed_e_del_provider(self):
+        import os
+        prov = self._Prov()
+        coda = self._collega(prov, self.db, avvia=False)
+        self.assertIsNotNone(coda, "provider e archivio su file, e nessuna coda: email perse")
+        self.assertIs(getattr(prov, "coda_email", None), coda,
+                      "la coda non e' appesa al provider: fase83 non la troverebbe")
+        self.assertEqual(os.path.abspath(coda.percorso), os.path.abspath(self.db))
+        self.assertTrue(os.path.exists(self.db), "l'archivio della coda non e' stato creato")
+        self.assertIsNone(getattr(coda, "_giro", None), "avvia=False e il giro e' partito")
+
+    def test_senza_archivio_o_in_RAM_niente_coda(self):
+        for percorso in ("", None, ":memory:"):
+            with self.subTest(percorso=percorso):
+                prov = self._Prov()
+                self.assertIsNone(self._collega(prov, percorso, avvia=False),
+                                  "una coda senza archivio su file morirebbe al riavvio")
+                self.assertFalse(hasattr(prov, "coda_email"), "coda appesa senza archivio")
+
+    def test_senza_provider_niente_coda_e_niente_archivio(self):
+        import os
+        self.assertIsNone(self._collega(None, self.db, avvia=False))
+        self.assertFalse(os.path.exists(self.db), "senza provider si e' creato un archivio")
+
+    def test_di_serie_il_giro_parte_da_solo_e_non_tiene_vivo_il_processo(self):
+        coda = self._collega(self._Prov(), self.db)
+        giro = getattr(coda, "_giro", None)
+        self.assertIsNotNone(giro, "di serie il giro della coda deve partire: nessuno ritenta")
+        self.assertTrue(giro.is_alive(), "il giro della coda non gira")
+        self.assertTrue(giro.daemon, "un giro non demone tiene vivo il processo all'uscita")
+
+    def test_crea_sistema_dichiara_la_coda_solo_quando_c_e(self):
+        s = crea_sistema(ConfigCasaVIP(abilitato=True, segreto_hmac=SEG,
+                                       smtp_host="smtp.invalid", db_coda_email=self.db))
+        coda = getattr(s.email_provider, "coda_email", None)
+        if coda is not None:
+            self.addCleanup(coda.ferma)
+        self.assertIsNotNone(coda, "SMTP acceso e archivio su file, e nessuna coda")
+        self.assertIn("email(86)", s.report["componenti"])
+        self.assertIn("coda_email(86)", s.report["componenti"],
+                      "la coda c'e' e il sistema non lo dichiara: %r" % (s.report["componenti"],))
+        s2 = crea_sistema(ConfigCasaVIP(abilitato=True, segreto_hmac=SEG,
+                                        smtp_host="smtp.invalid", db_coda_email=":memory:"))
+        self.assertIsNone(getattr(s2.email_provider, "coda_email", None))
+        self.assertIn("email(86)", s2.report["componenti"])
+        self.assertNotIn("coda_email(86)", s2.report["componenti"],
+                         "dichiarata una coda che non esiste: %r" % (s2.report["componenti"],))
 
 
 if __name__ == "__main__":

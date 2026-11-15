@@ -6,10 +6,12 @@ dettaglio/404, flusso concierge quote->book via HTTP, MCP JSON-RPC, host pubblic
 disponibilita' (auth X-Host-Key), errori (json invalido/rotta ignota/sistema spento),
 mai solleva. Usa un SistemaCasaVIP reale (fase81).
 """
+import contextlib
 import datetime
 import http.client
 import io
 import json
+import logging
 import os
 import re
 import shutil
@@ -18,6 +20,7 @@ import sqlite3
 import tempfile
 import threading
 import time
+import types
 import unittest
 import urllib.error
 from unittest import mock
@@ -34,6 +37,18 @@ from test_fase160_escrow_garanzia import nella_finestra
 from test_movimenti_giornale import _BancoDeiBonifici, _StripeDeiBonifici
 from test_ritenuta import _Base as _BancoDellaRitenuta
 from test_financial_controller import _BancoOffset, HK as _HK_FC, CI as _CI_FC, CO as _CO_FC
+import test_race_hold_conferma as _thc
+# PR #314: i banchi delle prove del pezzo 2, montati qui (solo il modulo: le loro classi non
+# entrano in questo file e non si eseguono due volte)
+import test_admin_rimborso_money as _tarm
+import test_bunker_scaglioni_prove as _tbs
+import test_debt_status as _tds
+import test_paga_struttura_e2e as _tps
+import test_regali_non_superano_la_commissione as _trg
+# PR #315: il banco delle prove del pezzo 3 sul blocco della carta (solo il modulo, come sopra)
+import test_blocco_carta as _tbc
+from decimal import Decimal
+from fase58_channel_manager import EsitoPrenotazione
 from fase83_server import (
     RouterHTTP, crea_router, percorso_statico_sicuro,
     jsonld_alloggio, pagina_alloggio_html, sitemap_xml, robots_txt, _importo,
@@ -9295,6 +9310,1343 @@ class TestF17IlCorpoIlleggibileSullaStradaDeiSoldiSiDice(unittest.TestCase):
         avvisi = [r.getMessage() for r in log.records if r.levelname == "WARNING"]
         self.assertTrue(any("corpo_illeggibile" in a and "BVIP-F17" in a for a in avvisi),
                         log.output)
+
+
+class _PendenteFinto:
+    """Il registro dei pendenti ridotto a una sola prenotazione, letta da `info`."""
+
+    def __init__(self, rec):
+        self._rec = rec
+
+    def info(self, ref):
+        return dict(self._rec) if ref == self._rec.get("riferimento") else None
+
+
+class _CreditiSpia:
+    """Il registro dei crediti che annota chi chiede di liberarli (e puo' esplodere)."""
+
+    def __init__(self, guasto=None):
+        self.liberati = []
+        self._guasto = guasto
+
+    def libera(self, cid, rif):
+        if self._guasto:
+            raise self._guasto
+        self.liberati.append((cid, rif))
+
+
+class TestPR312PezzoUnoLeRigheCheIlGiudiceNonVedeva(unittest.TestCase):
+    """PR #313 (pezzo 1 della #312), job `caselle` del 13/11 su 41f8d85: 16 righe cambiate in
+    fase83 dove un guasto passava inosservato, perche' le loro prove stanno in file che il
+    giudice non accende (test_paga_struttura_e2e, test_race_hold_conferma, test_fase199). Qui,
+    nel file dedicato, una prova per ognuna: il doppio clic di chi paga in struttura (VA1), il
+    credito restituito alla scadenza e ripreso al pagamento tardivo (EN1), il semaforo dei
+    controlli che non dice ok su un archivio illeggibile (EN4)."""
+
+    # ── VA1: il doppio clic di chi paga in struttura ridà il link dell'ANTICIPO ─────────
+    def _replay(self, modo, link_anticipo):
+        r = crea_router(_sistema())
+        corpo = {"modo_pagamento": modo} if modo else {}
+        r._sys.pagamenti_pendenti = _PendenteFinto(
+            {"riferimento": "R-VA1", "stato": "in_attesa", "email": "o@x.it",
+             "corpo_json": json.dumps(dict(corpo, anticipo_online_cents=4500,
+                                           saldo_in_loco_cents=19500))})
+        chieste = []
+
+        def crea_link_anticipo(d):
+            chieste.append(d)
+            if isinstance(link_anticipo, Exception):
+                raise link_anticipo
+            return link_anticipo
+
+        r._sys.stripe = types.SimpleNamespace(crea_link_anticipo=crea_link_anticipo)
+        esito = r._replay_prenotazione({"riferimento": "R-VA1", "payment_url": "https://totale"})
+        return esito, chieste
+
+    def test_VA1_in_struttura_il_doppio_clic_porta_il_link_dell_anticipo(self):
+        (s, b), chieste = self._replay("in_struttura", "https://anticipo")
+        self.assertEqual(s, 201, b)
+        self.assertEqual(b["payment_url"], "https://anticipo", b)
+        self.assertEqual([d["anticipo_cents"] for d in chieste], [4500])
+        self.assertEqual(b["stato"], "in_attesa_pagamento", b)
+
+    def test_VA1_online_il_doppio_clic_non_chiede_l_anticipo(self):
+        (s, b), chieste = self._replay("", RuntimeError("anticipo chiesto per un online"))
+        self.assertEqual(s, 201, b)
+        self.assertEqual(b["payment_url"], "https://totale", b)
+        self.assertEqual(chieste, [])
+
+    def test_VA1_senza_link_dell_anticipo_si_risponde_riprova_mai_il_totale(self):
+        (s, b), _ = self._replay("in_struttura", None)
+        self.assertEqual((s, b), (503, {"errore": "pagamento_non_disponibile", "riprova": True}))
+
+    def test_VA1_stripe_che_esplode_lascia_la_traccia_e_niente_link(self):
+        # Il finto porta il vero aiutante statico `_pagina_anticipo` (dal pezzo 5 il link
+        # dell'anticipo passa da li'): senza, l'errore sarebbe un AttributeError del finto.
+        finto = types.SimpleNamespace(_pagina_anticipo=RouterHTTP._pagina_anticipo,
+                                      _sys=types.SimpleNamespace(stripe=types.SimpleNamespace(
+            crea_link_anticipo=mock.Mock(side_effect=RuntimeError("stripe giu'")))))
+        fuori = {"riferimento": "R-VA1", "payment_url": "https://totale"}
+        with self.assertLogs("core_auto.server", level="ERROR") as reg:
+            self.assertIs(RouterHTTP._rifai_link_anticipo(finto, fuori, {}), False)
+        self.assertIsInstance(reg.records[0].exc_info, tuple, reg.output)
+        self.assertIs(reg.records[0].exc_info[0], RuntimeError)
+        self.assertEqual(fuori["payment_url"], "https://totale")
+
+    def test_VA1_il_link_rifatto_entra_nella_risposta(self):
+        finto = types.SimpleNamespace(_pagina_anticipo=RouterHTTP._pagina_anticipo,
+                                      _sys=types.SimpleNamespace(stripe=types.SimpleNamespace(
+            crea_link_anticipo=lambda d: "https://anticipo")))
+        fuori = {"riferimento": "R-VA1", "payment_url": "https://totale"}
+        self.assertIs(RouterHTTP._rifai_link_anticipo(finto, fuori, {}), True)
+        self.assertEqual(fuori["payment_url"], "https://anticipo")
+
+    # ── EN1: il credito torna all'ospite alla scadenza, si riprende al pagamento tardivo ──
+    def _libera(self, store, corpo):
+        r = crea_router(_sistema())
+        r._sys.credito_usati = store
+        r._libera_credito({"riferimento": "R-EN1", "corpo_json": json.dumps(corpo)})
+
+    def test_EN1_alla_scadenza_il_credito_di_quella_prenotazione_si_libera(self):
+        spia = _CreditiSpia()
+        self._libera(spia, {"credito_id": "CRED-1", "sconto_credito_cents": 500})
+        self.assertEqual(spia.liberati, [("CRED-1", "R-EN1")])
+
+    def test_EN1_un_credito_che_non_e_un_codice_non_si_libera(self):
+        for cid in (123, "", None):
+            with self.subTest(credito_id=cid):
+                spia = _CreditiSpia()
+                self._libera(spia, {"credito_id": cid})
+                self.assertEqual(spia.liberati, [])
+
+    def test_EN1_un_credito_non_liberato_si_vede_con_la_traccia(self):
+        spia = _CreditiSpia(guasto=RuntimeError("archivio crediti giu'"))
+        with self.assertLogs("core_auto.server", level="ERROR") as reg:
+            self._libera(spia, {"credito_id": "CRED-1"})
+        self.assertIn("credito_non_liberato", reg.output[0])
+        self.assertIsInstance(reg.records[0].exc_info, tuple, reg.output)
+
+    def _tardivo(self, rif, modo=""):
+        """Hold col credito, scaduto e liberato dallo sweeper (il banco di test_race_hold_conferma)."""
+        b = _thc.TestGaraSweeperConferma(methodName="setUp")
+        b.setUp()
+        self.addCleanup(b.tearDown)
+        b._hold_col_credito(rif, modo=modo)
+        _thc.sweep_hold_una_passata(b.sys, b.r)
+        self.assertFalse(b.reg.usato("CRED-1"))                         # premessa: restituito
+        return b
+
+    def test_EN1_tardivo_col_credito_speso_altrove_grida(self):
+        b = self._tardivo("EN1-ALTROVE")
+        self.assertEqual(b.reg.consuma("CRED-1", "ALTRA"), "nuovo")
+        with self.assertLogs("core_auto.server", level="ERROR") as reg:
+            b.r._conferma_pagamento("EN1-ALTROVE")
+        self.assertEqual(b.pp.info("EN1-ALTROVE")["stato"], "pagato")
+        self.assertTrue(any("credito_tardivo" in r for r in reg.output), reg.output)
+
+    def test_EN1_tardivo_senza_inventario_non_riprende_il_credito(self):
+        for modo in ("", "in_struttura"):
+            with self.subTest(modo=modo or "online"):
+                b = self._tardivo("EN1-INV-" + (modo or "online"), modo=modo)
+                with mock.patch.object(b.sys.inventario, "blocca",
+                                       side_effect=RuntimeError("inventario giu'")):
+                    b.r._conferma_pagamento("EN1-INV-" + (modo or "online"))
+                self.assertFalse(b.reg.usato("CRED-1"),
+                                 "stanza non ribloccata: il credito non va ripreso")
+
+    # ── EN4: il semaforo dei controlli non dice ok se un archivio non si legge ──────────
+    def test_EN4_ok_solo_senza_violazioni_e_senza_archivi_illeggibili(self):
+        import fase199_invarianti
+        finto = types.SimpleNamespace(_bunker_auth=lambda h, azione: True,
+                                      _data_dir=lambda: ".", _client_ip=lambda h: "x")
+        for viol, illeggibili, ok in (({}, ["rotto.db"], False), ({"x": [1]}, [], False),
+                                      ({}, [], True)):
+            with self.subTest(violazioni=viol, illeggibili=illeggibili):
+                rap = {"violazioni": viol, "prenotazioni_lette": 3, "db_illeggibili": illeggibili}
+                with mock.patch.object(fase199_invarianti, "scansiona_db", return_value=rap):
+                    s, c = RouterHTTP._bunker_invarianti(finto, {}, {})
+                self.assertEqual(s, 200, c)
+                self.assertIs(c["ok"], ok, c)
+
+
+class _InventarioDegliStati:
+    """L'inventario ridotto a `stato_blocco`, letto da un dizionario chiave -> stato."""
+
+    def __init__(self, stati):
+        self._stati = stati
+
+    def stato_blocco(self, chiave):
+        return self._stati.get(chiave, "assente")
+
+
+class _GaranziaCheChiede:
+    """La garanzia ridotta al giro orario: tiene la domanda «questa si salta?» e non rilascia."""
+
+    def __init__(self):
+        self.salta_se = None
+
+    def auto_rilascia(self, ora_ts=None, dettagli=False, salta_se=None):
+        self.salta_se = salta_se
+        return []
+
+
+class _ConnectDeiBonifici:
+    """Stripe Connect ridotto alla rilettura di un bonifico: rif -> risposta."""
+
+    def __init__(self, risposte=None):
+        self._risposte = risposte or {}
+
+    def bonifico_di(self, acct, rif):
+        return self._risposte.get(rif, {"ok": True, "bonifico": None})
+
+
+class _RigheMaturate:
+    """Il registro dei bonifici ridotto alle righe che `elenca` restituisce."""
+
+    def __init__(self, righe):
+        self._righe = list(righe)
+
+    def elenca(self, host_id, stato=None):
+        return [dict(r) for r in self._righe if stato is None or r.get("stato") == stato]
+
+
+class _TassiSpia:
+    """Il fornitore dei cambi che annota quale coppia di monete gli chiedono."""
+
+    def __init__(self, tasso, eta_ore=1.0):
+        self._tasso, self._eta, self.chiesti = tasso, eta_ore, []
+
+    def stato(self):
+        return {"eta_ore": self._eta}
+
+    def tasso(self, origine, dest):
+        self.chiesti.append((origine, dest))
+        return self._tasso
+
+
+class _ViralCheScala:
+    """Il registro del credito referral: scala quanto gli si dice."""
+
+    def __init__(self, scontato):
+        self._scontato = scontato
+
+    def usa_credito(self, host_id, cents):
+        return {"scontato_cents": self._scontato}
+
+
+def _rimetti_ambiente(nome, valore):
+    if valore is None:
+        os.environ.pop(nome, None)
+    else:
+        os.environ[nome] = valore
+
+
+class TestPR314PezzoDueLeRigheCheIlGiudiceNonVedeva(unittest.TestCase):
+    """PR #314 (pezzo 2 della #312), job `caselle` del 13/11 su eebc33e: 46 righe cambiate in
+    fase83 dove un guasto passava inosservato, perche' le loro prove stanno in file che il
+    giudice non accende (test_paga_struttura_e2e, test_regali_non_superano_la_commissione,
+    test_ritenuta, test_debt_status, test_bunker_scaglioni_prove). Qui, nel file dedicato, una
+    prova per ognuna; dove serve il sistema vero si monta il banco di quei file."""
+
+    def _banco_di(self, classe):
+        """Il banco di un altro file di prova, montato e smontato da questa prova."""
+        classe.setUpClass()
+        self.addCleanup(classe.tearDownClass)
+        b = classe(methodName="setUp")
+        self.addCleanup(b.doCleanups)
+        try:
+            b.setUp()
+        except BaseException:
+            # un banco montato a meta' (cartelle, variabili d'ambiente) non resta ai test dopo;
+            # l'errore che si vede e' quello del setUp, non quello della pulizia
+            with contextlib.suppress(Exception):
+                b.tearDown()
+            raise
+        self.addCleanup(b.tearDown)
+        return b
+
+    # ── DA4: nel dossier le altre monete hanno righe loro, gli euro restano in testa ────
+    def test_DA4_il_dossier_scrive_le_altre_monete_e_non_ripete_gli_euro(self):
+        self.addCleanup(_rimetti_ambiente, "UPLOAD_DIR", os.environ.get("UPLOAD_DIR"))
+        b = self._banco_di(_tbs.TestDossierLegale)
+        hid, _tk = b.host()
+        b.invecchia(hid, 0)
+        vero = b.sis.pagamenti_pendenti.aggrega_costi_tecnici
+
+        def con_due_monete():
+            out = vero()
+            out["per_valuta"] = {
+                "EUR": {"incassate_cents": 900, "perdite_cents": 0, "conteggio": 1},
+                "USD": {"incassate_cents": 1250, "perdite_cents": 40, "conteggio": 1}}
+            return out
+
+        b.sis.pagamenti_pendenti.aggrega_costi_tecnici = con_due_monete
+        s, d = b.g("GET", "/api/bunker/export_legale", None, b.bunker(), {"formato": "csv"})
+        self.assertEqual(s, 200, d)
+        righe = d["contenuto"].splitlines()
+        for voce, coda in (("tariffa_tecnica_incassata_USD", ",1250,12.50"),
+                           ("tariffa_tecnica_non_incassata_USD", ",40,0.40")):
+            with self.subTest(voce):
+                riga = [r for r in righe if r.startswith(voce + ",")]
+                self.assertEqual(len(riga), 1, "voce assente: %s" % voce)
+                self.assertTrue(riga[0].endswith(coda), riga[0])
+        self.assertEqual([r for r in righe if r.startswith("tariffa_tecnica_incassata_EUR")], [],
+                         "gli euro hanno gia' la loro riga in testa")
+
+    # ── VA3: la riga del rimborso disposto dall'admin porta la moneta della prenotazione ──
+    def test_VA3_la_riga_del_rimborso_admin_e_nella_moneta_della_prenotazione(self):
+        b = self._banco_di(_tarm.TestIlRimborsoARRIVADavveroAllOspite)
+        rif, idem = b._prenota_e_paga("2026-09-14", "2026-09-16")
+        vero = b.r._corpo_del_pendente
+        b.r._corpo_del_pendente = lambda rec: dict(vero(rec), valuta="USD")
+        s, res = b.g("POST", "/api/admin/rimborso",
+                     {"alloggio_id": "casa", "check_in": "2026-09-14", "check_out": "2026-09-16",
+                      "idem_key": idem}, {"X-Admin-Key": "ak"})
+        self.assertEqual(s, 200, res)
+        righe = [m for m in b.sys.finanza.movimenti(rif) if m["tipo"] == "rimborso"]
+        self.assertEqual([m["valuta"] for m in righe], ["USD"], righe)
+
+    # ── VA6 e SF1: la riga del bonifico dell'host che manca grida, quella scritta tace ──
+    def test_VA6_la_riga_del_bonifico_grida_solo_quando_non_e_scritta(self):
+        for esito, grida in ((False, True), (True, False), (None, False)):
+            with self.subTest(esito=esito):
+                with mock.patch.object(fase83_server.logger, "error") as err:
+                    RouterHTTP._riga_payout_scritta(esito, "R-VA6")
+                self.assertIs(err.called, grida)
+                if grida:
+                    self.assertIn("riga_payout_non_scritta", err.call_args[0][0])
+
+    # ── VA4 + FB1: la ritenuta scritta nel giornale e non ancora tolta dal bonifico ─────
+    # (dal pezzo 5 lo dice il registro dei bonifici, `ritenuta_trattenuta`, non l'importo)
+    _RITENUTA = {"tipo": "ritenuta", "causale": "ritenuta d'acconto", "importo_cents": 2000}
+
+    def _ritenuta(self, movimenti, minori, esito_trattieni=True, gia_tolta=0):
+        tolte = []
+
+        def trattieni_ritenuta(rif, cents):
+            tolte.append((rif, cents))
+            return esito_trattieni
+
+        fc = types.SimpleNamespace(movimenti=lambda rif: [dict(m) for m in movimenti])
+        pd = types.SimpleNamespace(info=lambda rif: None if minori is None else {"minori": minori},
+                                   ritenuta_trattenuta=lambda rif: gia_tolta,
+                                   trattieni_ritenuta=trattieni_ritenuta)
+        RouterHTTP._completa_ritenuta(fc, pd, "R-VA4")
+        return tolte
+
+    def test_VA4_la_ritenuta_non_ancora_tolta_si_toglie_per_l_importo_della_riga(self):
+        altra = {"tipo": "commissione", "causale": "commissione", "importo_cents": 9999}
+        self.assertEqual(self._ritenuta([altra, self._RITENUTA], 10000), [("R-VA4", 2000)])
+
+    def test_VA4_la_ritenuta_gia_tolta_non_si_toglie_due_volte(self):
+        self.assertEqual(self._ritenuta([self._RITENUTA], 8000, gia_tolta=2000), [])
+
+    def test_VA4_senza_riga_o_senza_bonifico_non_si_tocca_niente(self):
+        for nome, movimenti, minori in (("bonifico assente", [self._RITENUTA], None),
+                                        ("nessuna riga", [], 10000)):
+            with self.subTest(nome):
+                self.assertEqual(self._ritenuta(movimenti, minori), [])
+
+    def test_VA4_il_registro_che_non_si_aggiorna_solleva(self):
+        with self.assertRaises(RuntimeError):
+            self._ritenuta([self._RITENUTA], 10000, esito_trattieni=False)
+
+    # ── PR4: i debiti si riscuotono quando nessun bonifico e' forse partito ─────────────
+    def test_PR4_senza_bonifici_partiti_il_debito_si_riscuote_prima_di_pagare(self):
+        b = self._banco_di(_tds.TestDebtStatus)
+        b._pubblica("casa-a")
+        b._debito_diretto(cents=2550)
+        a = b._book_paga("casa-a", giorni=30)
+        netto = b.pd.info(a["riferimento"])["minori"]
+        with mock.patch.object(fase83_server.logger, "error") as err:
+            with nella_finestra(b.sis, a["voucher_token"]):
+                s, c = b.g("POST", "/api/garanzia/conferma", {"voucher_token": a["voucher_token"]})
+        self.assertEqual(s, 200, c)
+        self.assertEqual(b.fcn.transfers[-1][1], netto - 2550)
+        self.assertEqual(b.fc.debiti_host(b.hid, stato="aperto"), [])
+        self.assertNotIn("bonifico_forse_gia_partito", str(err.call_args_list))
+
+    def test_PR4_la_penale_dell_host_guarda_i_bonifici_dell_host_giusto(self):
+        b = self._banco_di(_tds.TestDebtStatus)
+        b._pubblica("casa-a")
+        b._pubblica("casa-b")
+        x = b._book_paga("casa-a", giorni=30)
+        y = b._book_paga("casa-b", giorni=40)
+        visti = []
+        vero = fase83_server._payout_per_penale
+
+        def spia(sistema, host_id):
+            visti.append(host_id)
+            return vero(sistema, host_id)
+
+        pp = b.sis.pagamenti_pendenti
+        with mock.patch.object(fase83_server, "_payout_per_penale", spia):
+            b.r._host_cancella_sotto_chiave(x["riferimento"], None, "H-DATO", pp)
+            b.r._host_cancella_sotto_chiave(y["riferimento"], None, "", pp)
+        self.assertEqual(visti, ["H-DATO", b.hid],
+                         "conta l'host passato; senza, quello della prenotazione")
+
+    # ── VA2: la cancellazione dell'ospite rimasta a meta' ───────────────────────────────
+    _PAGATA = {"riferimento": "R-VA2", "stato": "pagato", "idem_key": "idem-1"}
+
+    def _a_meta(self, rec, stati):
+        r = RouterHTTP.__new__(RouterHTTP)
+        r._sys = types.SimpleNamespace(pagamenti_pendenti=_PendenteFinto(rec),
+                                       inventario=_InventarioDegliStati(stati))
+        return r._cancellazione_ospite_a_meta("R-VA2")
+
+    def test_VA2_pagata_con_le_date_liberate_e_senza_reblock_e_a_meta(self):
+        for reblock in ("assente", "rilasciato"):
+            with self.subTest(reblock=reblock):
+                self.assertIs(self._a_meta(self._PAGATA, {"idem-1": "rilasciato",
+                                                          "reblock:R-VA2": reblock}), True)
+
+    def test_VA2_quando_non_e_una_cancellazione_a_meta(self):
+        liberate = {"idem-1": "rilasciato"}
+        casi = (("prenotazione assente", {"riferimento": "ALTRA"}, liberate),
+                ("gia' rimborsata", dict(self._PAGATA, stato="rimborsato"), liberate),
+                ("senza chiave del blocco", dict(self._PAGATA, idem_key=""), {"": "rilasciato"}),
+                ("date ancora prese", self._PAGATA, {"idem-1": "occupato"}),
+                ("date mai bloccate", self._PAGATA, {"idem-1": "assente"}),
+                ("pagamento tardivo col reblock vivo", self._PAGATA,
+                 dict(liberate, **{"reblock:R-VA2": "occupato"})))
+        for nome, rec, stati in casi:
+            with self.subTest(nome):
+                self.assertIs(self._a_meta(rec, stati), False)
+
+    def test_VA2_il_giro_orario_non_rilascia_la_garanzia_di_una_cancellazione_a_meta(self):
+        gz = _GaranziaCheChiede()
+        r = RouterHTTP.__new__(RouterHTTP)
+        r._sys = types.SimpleNamespace(garanzia=gz, pagamenti_pendenti=_PendenteFinto(self._PAGATA))
+        r._cancellazione_ospite_a_meta = lambda rif: True
+        r._sblocca_garanzie_scadute(ora_ts=0)
+        with self.assertLogs("core_auto.server", level="ERROR") as reg:
+            self.assertIs(gz.salta_se("R-VA2"), True)
+        self.assertIn("cancellazione_a_meta", reg.output[0])
+        r._cancellazione_ospite_a_meta = lambda rif: False
+        self.assertIs(gz.salta_se("R-VA2"), False)
+
+    def _cancellazione_con(self, esiti, pagata=True):
+        """Il banco della paga in struttura: una prenotazione online cancellata con l'inventario
+        che risponde `esiti` (uno per chiamata a `rilascia`). Torna la risposta, il `ripresa`
+        che la coda ha ricevuto e quante volte si e' chiesto di liberare le date."""
+        b = self._banco_di(_tps.TestPagaStrutturaE2E)
+        if pagata:
+            bk = b._online_pagata()
+        else:
+            oggi = datetime.date.today()
+            b.g("POST", "/api/host/disponibilita_range",
+                {"alloggio_id": "casa", "da": (oggi + datetime.timedelta(days=10)).isoformat(),
+                 "a": (oggi + datetime.timedelta(days=14)).isoformat(), "unita_totali": 2,
+                 "prezzo_netto_cents": 30000}, {"X-Host-Token": b.tok})
+            _, bk = b._prenota((oggi + datetime.timedelta(days=10)).isoformat(),
+                               (oggi + datetime.timedelta(days=12)).isoformat())
+        viste = []
+        coda = b.r._cancella_prenotazione_coda
+
+        def spia(v, rif, giorni, fatto):
+            viste.append(fatto["ripresa"])
+            return coda(v, rif, giorni, fatto)
+
+        b.r._cancella_prenotazione_coda = spia
+        with mock.patch.object(b.sys.inventario, "rilascia", side_effect=list(esiti)) as ril:
+            s, c = b._cancella(bk)
+        return s, c, viste, ril.call_count
+
+    _LIBERATE_ORA = EsitoPrenotazione(True, "")
+    _GIA_LIBERATE = EsitoPrenotazione(True, "", idempotente=True)
+
+    def test_VA2_la_cancellazione_normale_non_e_una_ripresa(self):
+        s, c, viste, chiamate = self._cancellazione_con([self._LIBERATE_ORA])
+        self.assertEqual((s, c["stato"]), (200, "cancellata"), c)
+        self.assertEqual((viste, chiamate), ([False], 1))
+
+    def test_VA2_un_esito_senza_il_segno_di_replay_non_e_un_replay(self):
+        for pagata in (True, False):
+            with self.subTest(pagata=pagata):
+                s, c, viste, chiamate = self._cancellazione_con(
+                    [types.SimpleNamespace(ok=True)], pagata=pagata)
+                self.assertEqual((s, c["stato"]), (200, "cancellata"), c)
+                self.assertEqual((viste, chiamate), ([False], 1))
+
+    def test_VA2_date_gia_liberate_su_una_pagata_si_finisce_come_ripresa(self):
+        casi = (("niente reblock da liberare", EsitoPrenotazione(False, "blocco_inesistente"), True),
+                ("reblock liberato adesso: pagamento tardivo", self._LIBERATE_ORA, False),
+                ("reblock gia' liberato", self._GIA_LIBERATE, True),
+                ("esito muto", types.SimpleNamespace(), True),
+                ("esito senza il segno di replay", types.SimpleNamespace(ok=True), False))
+        for nome, e2, ripresa in casi:
+            with self.subTest(nome):
+                s, c, viste, chiamate = self._cancellazione_con([self._GIA_LIBERATE, e2])
+                self.assertEqual((s, c["stato"]), (200, "cancellata"), c)
+                self.assertEqual((viste, chiamate), ([ripresa], 2))
+
+    def test_VA2_il_reblock_che_esplode_risponde_riprova_con_la_traccia(self):
+        with self.assertLogs("core_auto.server", level="ERROR") as reg:
+            s, c, viste, _ = self._cancellazione_con([self._GIA_LIBERATE,
+                                                      RuntimeError("inventario giu'")])
+        self.assertEqual((s, c), (503, {"errore": "service_unavailable"}))
+        self.assertEqual(viste, [])
+        rec = [x for x in reg.records if "rilascio reblock esploso" in x.getMessage()]
+        self.assertEqual(len(rec), 1, reg.output)
+        self.assertIsInstance(rec[0].exc_info, tuple)
+        self.assertIs(rec[0].exc_info[0], RuntimeError)
+
+    def _credito_della_coda(self, ripresa, senza_incasso):
+        r = RouterHTTP.__new__(RouterHTTP)
+        chiesti = []
+
+        def credito(trattenuto, valuta="EUR"):
+            chiesti.append(trattenuto)
+            return 0, ""
+
+        r._credito_anti_rimpianto = credito
+        fatto = {"r": {"rimborso_cents": 0, "trattenuto_cents": 1000, "politica": "moderata"},
+                 "pagato_davvero": False, "tassa": 0, "senza_incasso": senza_incasso,
+                 "tratt_originale": 1000, "rimborso_totale": 0, "ripresa": ripresa}
+        s, _c = r._cancella_prenotazione_coda({"valuta": "EUR"}, "R-VA2", 10, fatto)
+        self.assertEqual(s, 200)
+        return chiesti
+
+    def test_VA2_la_ripresa_non_conia_un_secondo_credito_viaggio(self):
+        for ripresa, senza_incasso, atteso in ((True, False, 0), (False, True, 0),
+                                               (False, False, 1000)):
+            with self.subTest(ripresa=ripresa, senza_incasso=senza_incasso):
+                self.assertEqual(self._credito_della_coda(ripresa, senza_incasso), [atteso])
+
+    # ── DA3: lo sconto della commissione si scrive nella moneta dell'annuncio ───────────
+    def test_DA3_lo_sconto_della_commissione_e_nella_moneta_dell_annuncio(self):
+        b = self._banco_di(_trg.TestIRegaliNonSuperanoLaCommissione)
+        fc = b._con_giornale()
+        b._annuncio_in_yen(1700, _trg._TassiFinti(170))
+        b._conferma()
+        self.assertEqual(b._sconti_scritti(fc), [(1700, "JPY")])
+
+    # ── DA2: il credito referral (in euro) vale al cambio buono ─────────────────────────
+    def _valore(self, tassi):
+        r = RouterHTTP.__new__(RouterHTTP)
+        r._sys = types.SimpleNamespace(tassi=tassi, config=types.SimpleNamespace(valuta="GBP"))
+        return r._valore_del_credito({"valuta": "USD"})
+
+    def test_DA2_il_credito_vale_al_cambio_dalla_moneta_d_incasso(self):
+        t = _TassiSpia(1.25)
+        self.assertEqual(self._valore(t), Decimal("1.25"))
+        self.assertEqual(t.chiesti, [("GBP", "USD")])
+
+    def test_DA2_il_cambio_di_48_ore_vale_quello_piu_vecchio_no(self):
+        self.assertEqual(self._valore(_TassiSpia(1.25, eta_ore=48)), Decimal("1.25"))
+        for eta in (None, 48.5, 49):
+            with self.subTest(eta=eta):
+                self.assertIsNone(self._valore(_TassiSpia(1.25, eta_ore=eta)))
+
+    def test_DA2_un_tasso_zero_non_e_un_cambio(self):
+        self.assertIsNone(self._valore(_TassiSpia(0)))
+
+    def _credito_host(self, scontato):
+        r = RouterHTTP.__new__(RouterHTTP)
+        payout = _trg._PayoutFinto()
+        r._sys = types.SimpleNamespace(viral=_ViralCheScala(scontato), payout=payout, config=None)
+        return r._applica_credito_host("R-DA2", "host1", 1000, {"valuta": "EUR"}), payout.aumenti
+
+    def test_DA2_il_credito_sull_annuncio_in_euro_si_scala_e_alza_il_bonifico(self):
+        self.assertEqual(self._credito_host(300), (300, [300]))
+
+    def test_DA2_niente_credito_scalato_niente_aumento(self):
+        self.assertEqual(self._credito_host(0), (0, []))
+
+    # ── PR4: la penale non si compensa su un bonifico forse gia' uscito ─────────────────
+    def test_PR4_un_bonifico_trovato_o_illeggibile_conta_come_partito(self):
+        pd = _RigheMaturate([{"prenotazione_id": "A", "stato": "maturato"}])
+        for risposta, partito in (({"ok": True, "bonifico": {"id": "tr_1"}}, True),
+                                  ({"ok": True, "bonifico": None}, False),
+                                  ({"ok": False, "motivo": "rete"}, True)):
+            with self.subTest(risposta=risposta):
+                self.assertIs(fase83_server._bonifici_forse_partiti(
+                    _ConnectDeiBonifici({"A": risposta}), "acct_1", "H", pd), partito)
+
+    def _sistema_della_penale(self, **parti):
+        sistema = types.SimpleNamespace(
+            payout=_RigheMaturate([{"prenotazione_id": "A", "stato": "maturato"}]),
+            connect=_ConnectDeiBonifici({"A": {"ok": True, "bonifico": {"id": "tr_1"}}}),
+            registro_host=types.SimpleNamespace(info_host=lambda h: {"stripe_account_id": "acct_1"}))
+        for nome, valore in parti.items():
+            setattr(sistema, nome, valore)
+        return sistema
+
+    def test_PR4_un_bonifico_forse_partito_mette_tutta_la_penale_a_debito(self):
+        with self.assertLogs("core_auto.server", level="ERROR") as reg:
+            out = fase83_server._payout_per_penale(self._sistema_della_penale(), "H")
+        self.assertIsInstance(out, fase83_server._NessunaRigaDaCompensare)
+        self.assertIn("bonifico_forse_gia_partito", reg.output[0])
+
+    def test_PR4_senza_bonifici_partiti_la_penale_compensa_sul_registro(self):
+        for nome, parti in (("nessun bonifico su Stripe", {"connect": _ConnectDeiBonifici()}),
+                            ("host senza conto", {"registro_host": types.SimpleNamespace(
+                                info_host=lambda h: None)})):
+            with self.subTest(nome):
+                s = self._sistema_della_penale(**parti)
+                self.assertIs(fase83_server._payout_per_penale(s, "H"), s.payout)
+
+    def test_PR4_senza_una_delle_tre_parti_si_torna_il_registro_com_e(self):
+        for nome in ("payout", "connect", "registro_host"):
+            with self.subTest(manca=nome):
+                s = self._sistema_della_penale(**{nome: None})
+                self.assertIs(fase83_server._payout_per_penale(s, "H"), s.payout)
+
+    def test_PR4_la_lettura_che_esplode_lascia_la_traccia_e_va_tutta_a_debito(self):
+        def esplode(acct, rif):
+            raise RuntimeError("stripe giu'")
+
+        s = self._sistema_della_penale(connect=types.SimpleNamespace(bonifico_di=esplode))
+        with self.assertLogs("core_auto.server", level="WARNING") as reg:
+            out = fase83_server._payout_per_penale(s, "H")
+        self.assertIsInstance(out, fase83_server._NessunaRigaDaCompensare)
+        avvisi = [x for x in reg.records if x.levelname == "WARNING"]
+        self.assertEqual(len(avvisi), 1, reg.output)
+        self.assertIsInstance(avvisi[0].exc_info, tuple)
+        self.assertIs(avvisi[0].exc_info[0], RuntimeError)
+
+    def test_PR4_l_host_della_penale_non_scrive_righe_finte_nel_registro(self):
+        """CodeQL py/log-injection sulla PR #314 (fase83 `_payout_per_penale`): l'host_id
+        finiva nel registro com'era, e un a-capo dentro inventava una riga nuova."""
+        finto = "H-7\nPENALE COMPENSATA | HOST_ID: nessuno"
+
+        def esplode(acct, rif):
+            raise RuntimeError("stripe giu'")
+
+        for nome, parti in (("bonifico forse partito", {}),
+                            ("lettura esplosa", {"connect": types.SimpleNamespace(bonifico_di=esplode)})):
+            with self.subTest(nome):
+                with self.assertLogs("core_auto.server", level="WARNING") as reg:
+                    fase83_server._payout_per_penale(self._sistema_della_penale(**parti), finto)
+                self.assertEqual([x.getMessage() for x in reg.records if "\n" in x.getMessage()],
+                                 [], "un a-capo dell'host_id e' arrivato nel registro")
+                self.assertTrue(all("H-7" in x.getMessage() for x in reg.records), reg.output)
+
+    def test_PR4_lo_sweeper_rilegge_i_bonifici_dell_host_della_prenotazione(self):
+        visti, penali = [], []
+
+        def processa_penale(**k):
+            penali.append(k)
+            return {"nota": "ND-1"}
+
+        def payout_per_penale(sistema, host_id):
+            visti.append(host_id)
+            return "REGISTRO"
+
+        sistema = types.SimpleNamespace(finanza=types.SimpleNamespace(processa_penale=processa_penale))
+        rec = {"riferimento": "R-PR4", "host_id": "H-7",
+               "corpo_json": json.dumps({"penale_host_cents": 1500, "totale_cents": 10000,
+                                         "valuta": "EUR"})}
+        with mock.patch.object(fase83_server, "_cancellazione_host_a_meta", return_value=False), \
+                mock.patch.object(fase83_server, "_penale_finita", return_value=False), \
+                mock.patch.object(fase83_server, "_payout_per_penale", payout_per_penale):
+            fase83_server._riprendi_cancellazione_host(sistema, None, rec)
+        self.assertEqual(visti, ["H-7"])
+        self.assertEqual([p["payout"] for p in penali], ["REGISTRO"])
+
+
+class TestPR315PezzoTreLeRigheCheIlGiudiceNonVedeva(unittest.TestCase):
+    """PR #315 (pezzo 3 della #312), job `caselle` del 14/11 su bb014a7: 35 righe cambiate in
+    fase83 dove un guasto passava inosservato, perche' le loro prove stanno in file che il
+    giudice non accende (test_blocco_carta, test_race_hold_conferma,
+    test_regali_non_superano_la_commissione). Qui, nel file dedicato: le stesse prove eseguite
+    sul loro banco (una sola fonte, nessuna copia che invecchia) e, dove nessuna prova guardava,
+    una prova nuova."""
+
+    _banco_di = TestPR314PezzoDueLeRigheCheIlGiudiceNonVedeva._banco_di
+
+    # ── i banchi degli altri file, con le loro prove ──────────────────────────────────────
+    def test_Vd_RV2_RV3_Vb_credito_e_premio_sul_blocco_della_carta(self):
+        for nome in ("test_Vd_rimborso_totale_il_credito_dell_ospite_torna",
+                     "test_Vb_il_premio_al_referente_scatta_all_incasso_del_blocco",
+                     "test_RV2_il_credito_non_si_scala_due_volte_se_il_giro_si_ripete",
+                     "test_RV3_rimborso_totale_il_credito_torna_una_volta_sola"):
+            with self.subTest(nome):
+                b = self._banco_di(_tbc.TestAFineFinestraSiIncassa)
+                getattr(b, nome)()
+
+    def test_PR6_Va_Ve_il_tardivo_interrotto_si_finisce(self):
+        for nome in ("test_PR6_pagamento_tardivo_interrotto_si_finisce_al_ritentativo",
+                     "test_PR6_in_struttura_interrotto_al_riblocco_si_finisce_al_ritentativo",
+                     "test_PR6_morto_dopo_il_bonifico_il_ritentativo_apre_la_garanzia",
+                     "test_PR6_il_ritentativo_non_riscrive_un_bonifico_gia_scritto",
+                     "test_Va_tardivo_col_blocco_sulla_carta_il_bonifico_resta_in_attesa",
+                     "test_Ve_sweeper_morto_dopo_scadi_il_giro_dopo_finisce",
+                     "test_Ve_un_tardivo_dopo_la_morte_dello_sweeper_non_viene_disfatto"):
+            with self.subTest(nome):
+                b = self._banco_di(_thc.TestGaraSweeperConferma)
+                getattr(b, nome)()
+
+    def test_RV3_il_credito_reso_torna_nella_sua_moneta(self):
+        self._banco_di(_trg.TestIRegaliNonSuperanoLaCommissione) \
+            .test_RV3_il_credito_reso_torna_nella_sua_moneta()
+
+    # ── prove nuove: righe che nessuna prova guardava ─────────────────────────────────────
+    def test_PR6_il_ritentativo_di_un_pagamento_in_tempo_non_rifa_il_giro_tardivo(self):
+        """Il segno del tardivo vale SOLO se acceso: un webhook ripetuto su un pagamento in
+        tempo non deve liberare il blocco della stanza per ribloccarla con un'altra chiave."""
+        b = self._banco_di(_thc.TestGaraSweeperConferma)
+        e = b.sys.inventario.blocca("casa-race", _thc.CI, _thc.CO, idem_key="hold_R315")
+        self.assertTrue(e.ok, getattr(e, "errore", ""))
+        b.pp.registra("R315", alloggio_id="casa-race", check_in=_thc.CI, check_out=_thc.CO,
+                      idem_key="hold_R315", scadenza_ts=int(time.time()) + 600)
+        b.r._conferma_pagamento("R315")
+        self.assertEqual(b.pp.info("R315")["stato"], "pagato")             # premessa
+        b.r._conferma_pagamento("R315")                                    # Stripe ritenta
+        self.assertEqual(b.pp.info("R315")["idem_key"], "hold_R315", "chiave della stanza cambiata")
+        self.assertEqual(b.sys.inventario.stato_blocco("hold_R315"), "occupato",
+                         "il ritentativo ha liberato la stanza di chi ha pagato in tempo")
+        self.assertIsNone(b._segno("R315"), "un pagamento in tempo trattato da tardivo")
+
+    def test_Va_tardivo_senza_niente_da_versare_non_scrive_un_bonifico_vuoto(self):
+        b = self._banco_di(_thc.TestGaraSweeperConferma)
+        b._scaduto_con_corpo("R315Z", {"host_id": "h_race", "netto_host_cents": 0,
+                                       "valuta": "EUR"})
+        b.r._conferma_pagamento("R315Z")
+        self.assertEqual(b.pp.info("R315Z")["stato"], "pagato")            # premessa
+        self.assertIsNone(b.sys.payout.info("R315Z"), "bonifico da zero scritto all'host")
+
+    class _Inv:
+        """Inventario finto: dice lo stato del blocco vecchio e annota cosa gli si chiede."""
+
+        def __init__(self, stato=None, guasto=False):
+            self.rilasci, self.blocchi, self._guasto = [], [], guasto
+            if stato is not None:
+                self.stato_blocco = lambda chiave: stato
+
+        def rilascia(self, alloggio_id, check_in, check_out, *, idem_key):
+            self.rilasci.append((alloggio_id, check_in, check_out, idem_key))
+
+        def blocca(self, alloggio_id, check_in, check_out, *, idem_key, origine):
+            if self._guasto:
+                raise RuntimeError("inventario guasto")
+            self.blocchi.append((alloggio_id, idem_key, origine))
+            return types.SimpleNamespace(ok=True)
+
+    def test_Ve_si_libera_solo_il_blocco_ancora_occupato_di_questa_prenotazione(self):
+        rec = {"alloggio_id": "casa", "check_in": "2027-01-01", "check_out": "2027-01-03"}
+        for vecchio, stato, liberato in (("hold_R", "occupato", True),
+                                         ("hold_R", "rilasciato", False),
+                                         ("hold_R", "assente", False),
+                                         ("hold_R", None, False),        # senza stato_blocco
+                                         ("", "occupato", False),
+                                         (None, "occupato", False),
+                                         ("reblock:R", "occupato", False)):  # e' gia' la nuova
+            with self.subTest(vecchio=vecchio, stato=stato):
+                inv = self._Inv(stato)
+                r = dict(rec) if vecchio is None else dict(rec, idem_key=vecchio)
+                esito = RouterHTTP._riblocca_tardivo(inv, r, "reblock:R", "pagamento_tardivo")
+                self.assertIs(getattr(esito, "ok", None), True)
+                self.assertEqual(inv.rilasci, [("casa", "2027-01-01", "2027-01-03", "hold_R")]
+                                 if liberato else [])
+                self.assertEqual(inv.blocchi, [("casa", "reblock:R", "pagamento_tardivo")])
+        self.assertIsNone(RouterHTTP._riblocca_tardivo(None, rec, "reblock:R", "x"))
+        self.assertIsNone(RouterHTTP._riblocca_tardivo(self._Inv("occupato", guasto=True),
+                                                       dict(rec, idem_key="hold_R"),
+                                                       "reblock:R", "x"))
+
+    def test_RV3_senza_cambio_il_grido_dice_quanto_e_in_che_moneta(self):
+        b = self._banco_di(_trg.TestIRegaliNonSuperanoLaCommissione)
+        fc = b._con_giornale()
+        b._annuncio_in_yen(1700, _trg._TassiFinti(170))
+        b._conferma()
+        b.sys.tassi = _trg._TassiFinti(None)
+        r = RouterHTTP.__new__(RouterHTTP)
+        r._sys = b.sys
+        yen, euro = r._fmt_importo(1700, "JPY"), r._fmt_importo(1700, "EUR")
+        self.assertNotEqual(yen, euro, "premessa: le due monete si scrivono diverse")
+        with self.assertLogs("core_auto", level="ERROR") as reg:
+            b._rendi_yen(fc)
+        gridi = [x.getMessage() for x in reg.records if "credito_non_reso" in x.getMessage()]
+        self.assertEqual(len(gridi), 1, reg.output)
+        self.assertIn("cambio non disponibile", gridi[0])
+        self.assertIn(yen, gridi[0], "lo sconto da rendere a mano va scritto nella sua moneta")
+
+    def test_RV2_la_riga_dello_sconto_gia_scritta_ferma_un_secondo_sconto(self):
+        """D19: la prima difesa contro lo sconto doppio e' la commissione gia' regalata
+        (`_commissione_regalabile`); la seconda e' la riga `sconto_commissione` gia' nel
+        giornale. Qui la prima si toglie a mano (regalabile sempre 500) e si guarda la seconda
+        da sola, nelle due direzioni: riga scritta -> nessuno sconto; riga assente o giornale
+        spento -> lo sconto si fa."""
+        for finanza, scritta, scontato in ((True, True, False), (True, False, True),
+                                           (False, None, True)):
+            with self.subTest(finanza=finanza, scritta=scritta):
+                r = RouterHTTP.__new__(RouterHTTP)
+                r._sys = types.SimpleNamespace(finanza=types.SimpleNamespace(
+                    esiste_evento=lambda e, s=scritta: s and e == "sconto_commissione:R-315S")
+                    if finanza else None)
+                applicati, righe = [], []
+                r._commissione_regalabile = lambda dj: 500
+                r._applica_credito_host = lambda *a, _a=applicati: _a.append(a) or 120
+                r._giornale = lambda _r=righe, **k: _r.append(k)
+                r._credito_host_al_pagamento("R-315S", {"host_id": "H-315", "corpo_json": "{}"})
+                self.assertEqual(len(applicati), 1 if scontato else 0, applicati)
+                self.assertEqual([(k["evento_id"], k["importo_cents"], k["soggetto"], k["valuta"])
+                                  for k in righe],
+                                 [("sconto_commissione:R-315S", 120, "host:H-315", "EUR")]
+                                 if scontato else [])
+
+    def test_RV3_il_grido_del_credito_non_reso_non_scrive_righe_finte_nel_registro(self):
+        """PROTON, compito 24 (14/11): nel grido «credito_non_reso» l'host (dal giornale) e la
+        moneta (dal corpo salvato della richiesta) entravano nudi nel registro, come l'host di
+        #236/#237 nel pezzo 2: un a-capo dentro fabbrica una riga nuova che il Guardiano legge."""
+        r = RouterHTTP.__new__(RouterHTTP)
+        r._sys = types.SimpleNamespace(
+            viral=None, pagamenti_pendenti=types.SimpleNamespace(
+                info=lambda rif: {"corpo_json": json.dumps({"valuta": "EUR\nVALUTA FINTA"})}))
+        fc = types.SimpleNamespace(movimenti=lambda rif: [
+            {"tipo": "sconto_commissione", "soggetto": "host:H-1\nCREDITO FINTO",
+             "importo_cents": 100}])
+        with self.assertLogs("core_auto", level="ERROR") as reg:
+            r._rendi_credito_referral("R-315L", fc)
+        gridi = [x.getMessage() for x in reg.records]
+        self.assertEqual(len(gridi), 1, reg.output)
+        self.assertIn("cambio non disponibile", gridi[0], "premessa: il ramo del grido col cambio")
+        self.assertNotIn("\n", gridi[0], "un a-capo da fuori e' arrivato nel registro")
+        self.assertIn("H-1\\nCREDITO FINTO", gridi[0], "l'host si deve ancora leggere")
+        self.assertIn("VALUTA FINTA", gridi[0])
+
+    def test_RV3_lo_sconto_del_credito_non_scrive_righe_finte_nel_registro(self):
+        """Revisione differenziale del pezzo 3 (14/11), variante del grido qui sopra: in
+        `_applica_credito_host` l'host entrava nudo in tre righe del registro (niente cambio,
+        credito perso, credito scalato). L'host_id non nasce solo «h_» + esadecimale (fase88):
+        con la chiave dell'operatore `_host_pubblica` lo prende dal corpo della richiesta, e
+        l'import degli annunci (fase77) lo prende dal file (PROTON, compito 25): un a-capo nel
+        mezzo arriva fin qui. Qui lo si costruisce a mano, una riga alla volta."""
+        host = "h_1\nCREDITO FINTO"
+        for marca, valore, aumentato in (("cambio_non_disponibile", None, None),
+                                         ("CREDITO REFERRAL PERSO", 1, False),
+                                         ("Credito referral scalato", 1, True)):
+            with self.subTest(marca=marca):
+                r = RouterHTTP.__new__(RouterHTTP)
+                r._sys = types.SimpleNamespace(
+                    viral=types.SimpleNamespace(usa_credito=lambda h, c: {"scontato_cents": 50}),
+                    payout=types.SimpleNamespace(aumenta_payout=lambda rif, c, _a=aumentato: _a))
+                r._valore_del_credito = lambda corpo, _v=valore: _v
+                with self.assertLogs("core_auto", level="INFO") as reg:
+                    r._applica_credito_host("R-315H", host, 500, {})
+                gridi = [x.getMessage() for x in reg.records if marca in x.getMessage()]
+                self.assertEqual(len(gridi), 1, reg.output)
+                self.assertNotIn("\n", gridi[0], "un a-capo da fuori e' arrivato nel registro")
+                self.assertIn("h_1\\nCREDITO FINTO", gridi[0], "l'host si deve ancora leggere")
+
+    def test_RV3_un_guasto_nel_rendere_il_credito_grida_con_la_sua_causa(self):
+        r = RouterHTTP.__new__(RouterHTTP)
+        r._sys = types.SimpleNamespace()
+
+        class _Guasto(Exception):
+            pass
+
+        def movimenti(rif):
+            raise _Guasto("giornale illeggibile")
+        with self.assertLogs("core_auto", level="ERROR") as reg:
+            r._rendi_credito_referral("R-315G", types.SimpleNamespace(movimenti=movimenti))
+        self.assertEqual(len(reg.records), 1, reg.output)
+        self.assertIn("credito_non_reso", reg.records[0].getMessage())
+        self.assertIsNotNone(reg.records[0].exc_info, "il grido ha perso la sua causa")
+        # PROTON (compito 25, G36): con exc_info=False la riga sotto esplodeva (TypeError) invece
+        # di fallire: il guasto era preso per errore, non per asserzione.
+        self.assertIsInstance(reg.records[0].exc_info, tuple, "il grido ha perso la sua causa")
+        self.assertIs(reg.records[0].exc_info[0], _Guasto)
+
+    # ── la famiglia dell'host nel registro (14/11, «autorizzato tutta la famiglia») ─────
+    # La guardia di tutta la famiglia e' strutturale (test_pipeline_ci,
+    # TestIlCodiceDellHostNonEntraNudoNelRegistro). Qui i tre gridi che il giudice vede per
+    # le righe toccate: la causa (exc_info) e i «-» al posto dei campi vuoti.
+
+    class _GuastoVies(Exception):
+        pass
+
+    def _router_vies(self, vies):
+        registrati = []
+        r = RouterHTTP.__new__(RouterHTTP)
+        r._sys = types.SimpleNamespace(vies=vies, registro_host=types.SimpleNamespace(
+            info_host=lambda h: {"partita_iva": "IT01234567890", "paese": "IT"},
+            registra_verifica_piva=lambda *a: registrati.append(a)))
+        return r, registrati
+
+    def test_VIES_un_guasto_grida_con_la_sua_causa_e_la_riga_dice_cosa_manca(self):
+        def vies(numero, paese):
+            raise self._GuastoVies("VIES irraggiungibile")
+        r, registrati = self._router_vies(vies)
+        with self.assertLogs("core_auto", level="WARNING") as reg:
+            self.assertEqual(r._verifica_partita_iva("h_1\nRIGA FINTA"), "errore")
+        gridi = [x for x in reg.records if x.levelno == logging.ERROR]
+        self.assertEqual(len(gridi), 1, reg.output)
+        self.assertIsInstance(gridi[0].exc_info, tuple, "il grido del VIES ha perso la causa")
+        self.assertIs(gridi[0].exc_info[0], self._GuastoVies)
+        riga = [x.getMessage() for x in reg.records if "PARTITA IVA AL VIES" in x.getMessage()]
+        self.assertEqual(len(riga), 1, reg.output)
+        self.assertIn("| PROVA: - |", riga[0])
+        self.assertIn("| MOTIVO: eccezione", riga[0])
+        for m in [x.getMessage() for x in reg.records]:
+            self.assertNotIn("\n", m, "un a-capo dell'host e' arrivato nel registro")
+        self.assertIn("h_1\\nRIGA FINTA", riga[0])
+        self.assertEqual([a[2] for a in registrati], ["errore"])
+
+    def test_VIES_la_riga_scrive_la_prova_vera_e_il_trattino_al_posto_del_motivo_vuoto(self):
+        r, _ = self._router_vies(lambda n, p: {"esito": "valida", "prova": "N-42",
+                                               "nome": "B&B", "motivo": ""})
+        with self.assertLogs("core_auto", level="WARNING") as reg:
+            self.assertEqual(r._verifica_partita_iva("h_2"), "valida")
+        riga = [x.getMessage() for x in reg.records if "PARTITA IVA AL VIES" in x.getMessage()]
+        self.assertEqual(len(riga), 1, reg.output)
+        self.assertIn("| PROVA: N-42 |", riga[0])
+        self.assertTrue(riga[0].endswith("| MOTIVO: -"), riga[0])
+
+    def test_PREMIO_REFERRAL_un_guasto_grida_con_la_causa_e_un_premio_scrive_host_puliti(self):
+        cfg = types.SimpleNamespace(referral_soglia_prenotazioni=3, referral_premio_cents=4000)
+        pd = types.SimpleNamespace(conta_pagati=lambda h: 3)
+
+        def esplode(h, premio_cents):
+            raise self._GuastoVies("archivio referral illeggibile")
+        r = RouterHTTP.__new__(RouterHTTP)
+        r._sys = types.SimpleNamespace(viral=types.SimpleNamespace(qualifica_referee=esplode),
+                                       config=cfg)
+        with self.assertLogs("core_auto", level="ERROR") as reg:
+            r._forse_qualifica_referral("h_3\nRIGA FINTA", pd)
+        self.assertEqual(len(reg.records), 1, reg.output)
+        self.assertIsInstance(reg.records[0].exc_info, tuple, "il grido ha perso la causa")
+        self.assertIs(reg.records[0].exc_info[0], self._GuastoVies)
+        self.assertNotIn("\n", reg.records[0].getMessage())
+        r._sys.viral = types.SimpleNamespace(
+            qualifica_referee=lambda h, premio_cents: {"ok": True, "referente_id": "h_R\nFINTO"})
+        with self.assertLogs("core_auto", level="INFO") as reg:
+            r._forse_qualifica_referral("h_3\nRIGA FINTA", pd)
+        premi = [x.getMessage() for x in reg.records if "Referral qualificato" in x.getMessage()]
+        self.assertEqual(len(premi), 1, reg.output)
+        self.assertNotIn("\n", premi[0])
+        self.assertIn("h_3\\nRIGA FINTA", premi[0])
+        self.assertIn("h_R\\nFINTO", premi[0])
+
+    def test_REGISTRAZIONE_la_prova_dei_consensi_fallita_grida_con_la_sua_causa(self):
+        router = crea_router(_sistema(), host_key="operatore")
+        self.assertIsNotNone(getattr(router._sys, "accettazioni", None), "premessa")
+
+        def esplode(*a, **k):
+            raise self._GuastoVies("prova firmata non scrivibile")
+        router._registra_consensi = esplode
+        with self.assertLogs("core_auto", level="ERROR") as reg:
+            s, c = router.gestisci("POST", "/api/host/registrazione", body=json.dumps(
+                {"email": "consensi@bnb.it", "password": "passwordlunga",
+                 "accetta_termini": True, "accetta_clausole": True, "accetta_privacy": True,
+                 "ragione_sociale": "B&B Consensi"}))
+        self.assertEqual(s, 201, c)
+        gridi = [x for x in reg.records if "accettazione contratto FALLITA" in x.getMessage()]
+        self.assertEqual(len(gridi), 1, reg.output)
+        self.assertIsInstance(gridi[0].exc_info, tuple, "il grido ha perso la causa")
+        self.assertIs(gridi[0].exc_info[0], self._GuastoVies)
+        self.assertIn(c["host_id"], gridi[0].getMessage())
+
+
+class TestPR316LEmailFallitaDiceComeEFallitaESiSalva(unittest.TestCase):
+    """Pezzo 4 (PR #316): sopravvissuti del giudice sul diff (job caselle di 2bfa64b) a fase83
+    :153 :168 :181 (`_invia_tracciato` e `_accoda_email`). Le prove c'erano in
+    test_email_tracciata, che il giudice per fase83 non accende."""
+
+    class _Guasto(Exception):
+        pass
+
+    class _Prov(object):
+        def __init__(self, esito=False, solleva=None, coda=None):
+            self.esito, self.solleva = esito, solleva
+            if coda is not None:
+                self.coda_email = coda
+
+        def invia(self, destinatario, oggetto, corpo_html):
+            if self.solleva is not None:
+                raise self.solleva
+            return self.esito
+
+    class _Coda(object):
+        def __init__(self, solleva=None):
+            self.solleva, self.accodate = solleva, []
+
+        def accoda(self, *a):
+            if self.solleva is not None:
+                raise self.solleva
+            self.accodate.append(a)
+            return True
+
+    def _manda(self, prov):
+        from fase83_server import _invia_tracciato
+        with self.assertLogs("core_auto.server", level="DEBUG") as reg:
+            esito = _invia_tracciato(prov, "ospite@example.com", "Voucher", "<p>v</p>",
+                                     "voucher", "REF-316")
+        self.assertFalse(esito)
+        return reg.records
+
+    def test_il_provider_che_risponde_NO_si_dice_una_volta(self):
+        righe = [r for r in self._manda(self._Prov(esito=False))
+                 if "il provider ha risposto NO" in r.getMessage()]
+        self.assertEqual(1, len(righe), "il NO del provider non e' stato detto (una volta)")
+        self.assertEqual("ERROR", righe[0].levelname)
+
+    def test_un_eccezione_del_provider_non_si_spaccia_per_un_NO(self):
+        scritte = [r.getMessage() for r in self._manda(self._Prov(solleva=self._Guasto("smtp")))]
+        self.assertTrue(any("eccezione ISOLATA" in m for m in scritte), scritte)
+        self.assertFalse(any("il provider ha risposto NO" in m for m in scritte),
+                         "un'eccezione detta come un NO del provider: %r" % (scritte,))
+
+    def test_con_la_coda_l_email_fallita_si_salva(self):
+        coda = self._Coda()
+        scritte = [r.getMessage() for r in self._manda(self._Prov(esito=False, coda=coda))]
+        self.assertEqual([("ospite@example.com", "Voucher", "<p>v</p>", "voucher", "REF-316")],
+                         coda.accodate, "email fallita e non salvata nella coda: persa")
+        self.assertTrue(any("EMAIL IN CODA" in m for m in scritte), scritte)
+
+    def test_senza_coda_non_grida_una_coda_rotta(self):
+        scritte = [r.getMessage() for r in self._manda(self._Prov(esito=False))]
+        self.assertFalse(any("EMAIL PERSA" in m for m in scritte),
+                         "senza coda si grida una coda rotta (falso allarme): %r" % (scritte,))
+
+    def test_la_coda_rotta_grida_con_la_sua_causa(self):
+        righe = [r for r in self._manda(self._Prov(esito=False,
+                                                   coda=self._Coda(solleva=self._Guasto("db"))))
+                 if "coda_non_scrivibile" in r.getMessage()]
+        self.assertEqual(1, len(righe))
+        self.assertEqual("ERROR", righe[0].levelname)
+        self.assertIsInstance(righe[0].exc_info, tuple, "il grido ha perso la causa")
+        self.assertIs(righe[0].exc_info[0], self._Guasto)
+
+
+class TestPR316LaBancaHaChiusoLaContestazione(_BancoDeiSoldiDelServer):
+    """Pezzo 4 (PR #316): sopravvissuti del giudice a fase83 :10660 :10666 :10670 (la riga di
+    `_contestazione_chiusa`) e :10676 :10677 :10683 :10684 (`_banca_ha_chiuso`). La prova ST3
+    guardava che la riga ci fosse, non COSA diceva; e `_banca_ha_chiuso` si guardava solo dal
+    pulsante dell'arbitro, mai nei suoi casi di confine."""
+
+    class _Guasto(Exception):
+        pass
+
+    def _chiusura(self, pi, dp, esito):
+        return self.evento("charge.dispute.closed",
+                           {"id": dp, "object": "dispute", "payment_intent": pi,
+                            "charge": "ch_banco", "amount": 20000, "currency": "eur",
+                            "status": esito}, evt_id="evt_chiusa_" + dp)
+
+    def _riga_di_chiusura(self, pi, dp, esito):
+        with self.ascolta() as righe:
+            s, c = self._chiusura(pi, dp, esito)
+        self.assertEqual(200, s, c)
+        trovate = self.errori_con(righe, "chargeback_chiuso", dp)
+        self.assertEqual(1, len(trovate), righe)
+        return trovate[0]
+
+    def test_PERSA_la_riga_nomina_la_prenotazione_e_dice_che_va_scritta_a_mano(self):
+        self.pubblica("casa-316a")
+        b = self.prenota("casa-316a", 5)
+        _deve(self.paga(b["riferimento"], "pi_316a")[0] == 200, "PREMESSA: pagata")
+        riga = self._riga_di_chiusura("pi_316a", "dp_316a", "lost")
+        self.assertIn("RIF: %s |" % fase83_server._rif_per_registro(b["riferimento"]), riga,
+                      "la riga non dice QUALE prenotazione ha perso la contestazione")
+        self.assertIn("PERSA: Stripe ha tenuto importo e commissione", riga)
+        self.assertNotIn("Vinta o chiusa", riga)
+
+    def test_VINTA_su_un_pagamento_sconosciuto_lo_dice(self):
+        riga = self._riga_di_chiusura("pi_316_ignoto", "dp_316b", "won")
+        self.assertIn("RIF: sconosciuto |", riga)
+        self.assertIn("Vinta o chiusa: i soldi tornano su Stripe", riga)
+        self.assertNotIn("PERSA", riga)
+
+    class _Archivio(object):
+        def __init__(self, risposta=True, solleva=None):
+            self.risposta, self.solleva, self.chieste = risposta, solleva, []
+
+        def fatto_gia_presente(self, **k):
+            self.chieste.append(k)
+            if self.solleva is not None:
+                raise self.solleva
+            return self.risposta
+
+    def _chiede(self, archivio, dp):
+        with mock.patch.object(self.sis, "eventi_stripe", archivio), self.ascolta() as righe:
+            esito = self.r._banca_ha_chiuso(dp)
+        return esito, righe
+
+    def test_senza_archivio_la_banca_NON_ha_chiuso_e_non_si_grida(self):
+        esito, righe = self._chiede(None, "dp_316c")
+        self.assertIs(False, esito, "senza l'archivio dei webhook si sblocca l'arbitro")
+        self.assertEqual([], [r for r in righe if r.startswith(("WARNING:", "ERROR:"))],
+                         "un archivio assente gridato come illeggibile (falso allarme)")
+
+    def test_senza_contestazione_la_banca_NON_ha_chiuso_anche_se_l_archivio_dice_si(self):
+        arch = self._Archivio(risposta=True)
+        self.assertIs(False, self._chiede(arch, "")[0])
+        self.assertEqual([], arch.chieste, "chiesto all'archivio senza una contestazione")
+        self.assertIs(True, self._chiede(arch, "dp_316d")[0], "PREMESSA: l'archivio dice si'")
+        self.assertEqual([{"tipo": "charge.dispute.closed", "oggetto_id": "dp_316d",
+                           "evt_id": "-"}], arch.chieste)
+
+    def test_archivio_illeggibile_la_banca_NON_ha_chiuso_e_si_dice_perche(self):
+        esito, righe = self._chiede(self._Archivio(solleva=self._Guasto("db")), "dp_316e")
+        self.assertIs(False, esito, "un archivio illeggibile sblocca l'arbitro")
+        avvisi = self.avvisi_con(righe, "archivio dei webhook illeggibile", "dp_316e")
+        self.assertEqual(1, len(avvisi), righe)
+        self.assertTrue(avvisi[0].endswith("|exc_info:_Guasto"), "l'avviso ha perso la causa: %r"
+                        % (avvisi[0],))
+
+
+class TestPR316IlTettoDiCassaDellaCancellazione(_BancoDeiSoldiDelServer):
+    """Pezzo 4 (PR #316): sopravvissuti del giudice a fase83 :8930 (`and` -> `or`, `in` ->
+    `not in`), la condizione che decide se la garanzia e' GIA' uscita. Le prove del taglio
+    stavano in test_escrow_gia_liquidato, fuori dagli occhi del giudice, e dal 2026-10-11 il
+    freno davanti (409 escrow_gia_liquidato) le ferma prima. Il taglio resta la seconda difesa
+    per quando l'archivio dei pagamenti non risponde: qui lo si prova in quella strada, e
+    dall'altro lato si prova che NON taglia la cancellazione morta a meta' e ripresa (FB2),
+    dove la garanzia l'ha divisa proprio lei."""
+
+    class _Morte(BaseException):          # come TestFB2...: il processo muore
+        pass
+
+    def test_garanzia_gia_dell_host_e_archivio_muto_il_rimborso_e_tagliato(self):
+        self.pubblica("casa-316t", "flessibile")
+        b = self.prenota("casa-316t", 20)
+        rif, pagato = b["riferimento"], int(b["prezzo_guest_cents"])
+        _deve(self.paga(rif, "pi_316t")[0] == 200, "PREMESSA: pagata")
+        with nella_finestra(self.sis, b["voucher_token"]):
+            s, c = self.g("POST", "/api/garanzia/conferma", {"voucher_token": b["voucher_token"]})
+        _deve(s == 200, "PREMESSA: «tutto ok»", s, c)
+        st = self.sis.garanzia.stato(rif)
+        gia_host = int(st["host_riceve_cents"])
+        _deve(st["stato"] == "rilasciato" and gia_host > 0, "PREMESSA: garanzia all'host", st)
+        guasto = mock.patch.object(self.sis.pagamenti_pendenti, "info",
+                                   side_effect=RuntimeError("archivio dei pagamenti muto"))
+        with guasto, self.ascolta() as righe:
+            s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": b["voucher_token"]})
+        self.assertEqual(200, s, "PREMESSA: con l'archivio muto il freno davanti non scatta: %r"
+                         % (c,))
+        self.assertEqual(pagato - gia_host, int(c["rimborso_soggiorno_cents"]),
+                         "PERDITA: rimborso promesso %r su %d incassati, %d gia' all'host"
+                         % (c.get("rimborso_soggiorno_cents"), pagato, gia_host))
+        self.assertEqual(1, len(self.errori_con(righe, "RIMBORSO TAGLIATO AL TETTO DI CASSA")),
+                         righe)
+
+    def _conti(self, rif):
+        gz = self.sis.garanzia.stato(rif) or {}
+        po = self.sis.payout.info(rif) or {}
+        return {"pendente": self.sis.pagamenti_pendenti.info(rif)["stato"],
+                "garanzia": gz.get("stato"), "host_riceve": gz.get("host_riceve_cents"),
+                "ospite_dalla_garanzia": gz.get("ospite_rimborso_cents"),
+                "bonifico": po.get("stato"), "bonifico_importo": po.get("minori"),
+                "rimborsi": [int(m["importo_cents"]) for m in self.sis.finanza.movimenti(rif)
+                             if m.get("tipo") == "rimborso"]}
+
+    def test_FB2_con_penale_parziale_la_ripresa_non_taglia_il_rimborso(self):
+        self.pubblica("casa-316o", "moderata")
+        self.pubblica("casa-316m", "moderata")
+        bo, bm = self.prenota("casa-316o", 2), self.prenota("casa-316m", 2)   # 50% all'ospite
+        _deve(self.paga(bo["riferimento"], "pi_316o")[0] == 200, "PREMESSA: pagata")
+        _deve(self.paga(bm["riferimento"], "pi_316m")[0] == 200, "PREMESSA: pagata")
+        s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": bo["voucher_token"]})
+        _deve(s == 200, "ORACOLO: la cancellazione normale riesce", s, c)
+        atteso = self._conti(bo["riferimento"])
+        _deve(atteso["garanzia"] == "risolto" and (atteso["host_riceve"] or 0) > 0,
+              "ORACOLO: penale parziale, garanzia divisa", atteso)
+        _deve(len(atteso["rimborsi"]) == 1 and atteso["rimborsi"][0] > 0
+              and atteso["rimborsi"][0] > int(bo["prezzo_guest_cents"]) - (
+                  int(atteso["host_riceve"]) + int(atteso["ospite_dalla_garanzia"])),
+              "PREMESSA NON VALIDA: il rimborso deve superare cio' che resterebbe in cassa se "
+              "la garanzia divisa contasse come gia' uscita", atteso, bo)
+
+        rif = bm["riferimento"]
+        vero = self.r._trasferisci_all_host
+
+        def muore(*a, **k):
+            raise self._Morte()
+        self.r._trasferisci_all_host = muore
+        try:
+            with self.assertRaises(self._Morte):              # premessa: arrivata al bonifico
+                self.g("POST", "/api/concierge/cancella", {"voucher_token": bm["voucher_token"]})
+        finally:
+            self.r._trasferisci_all_host = vero
+        _deve((self.sis.garanzia.stato(rif) or {}).get("stato") == "risolto",
+              "PREMESSA: la garanzia e' gia' stata divisa da questa cancellazione")
+        with self.ascolta() as righe:
+            s, c = self.g("POST", "/api/concierge/cancella", {"voucher_token": bm["voucher_token"]})
+        self.assertEqual(200, s, "il secondo clic deve finire la cancellazione: %r" % (c,))
+        self.assertEqual(atteso, self._conti(rif),
+                         "la ripresa deve finire coi conti di una cancellazione normale")
+        self.assertEqual([], self.errori_con(righe, "RIMBORSO TAGLIATO"),
+                         "la quota divisa da questa stessa cancellazione contata come uscita")
+
+
+class _GaranziaDelSubentro:
+    """Una garanzia aperta e scaduta, che si lascia contestare."""
+
+    def aperte(self):
+        return [{"sblocco_auto_ts": 1000, "prenotazione_id": "R-317"}]
+
+    def contesta(self, rif, motivo):
+        return {"ok": True}
+
+
+class _ChatDelSubentro:
+    """Ospite e host hanno scritto tutti e due dopo il check-in."""
+
+    def thread(self, rif, chi):
+        return [{"mittente": "ospite", "ts": 1000}, {"mittente": "demo", "ts": 1000}]
+
+
+class _BonificoDelSubentro:
+    """Il fermo del bonifico che risponde quello che gli si dice (o esplode)."""
+
+    def __init__(self, fermo, stato):
+        self._fermo, self._stato = fermo, stato
+
+    def aggiorna_stato(self, rif, stato):
+        if isinstance(self._fermo, Exception):
+            raise self._fermo
+        return self._fermo
+
+    def stato_di(self, rif):
+        return self._stato
+
+
+class TestPR317PezzoCinqueLeRigheCheIlGiudiceNonVedeva(unittest.TestCase):
+    """Pezzo 5 (PR #317), job `caselle` del 15/11 su 978969f: 14 righe cambiate in fase83 dove un
+    guasto passava inosservato, perche' le loro prove stanno in file che il giudice non accende
+    (test_fase160_escrow_garanzia per il subentro) o non c'erano: la ripresa della cancellazione
+    con numeri a meta' (:3286), il doppio clic con la pagina salvata vuota (:6728), la pagina
+    NUOVA dell'approvazione (:7243 :7256), la pagina Stripe non chiusa (:14252 :14257) e il fermo
+    del bonifico nel subentro (:14620-14626)."""
+
+    # ── :3286 la ripresa della cancellazione legge i numeri solo se ci sono TUTTI E DUE ─────
+    def _decisione(self, motivo):
+        r = crea_router(_sistema())
+        r._sys.garanzia = types.SimpleNamespace(
+            stato=lambda rif: {"stato": "risolto", "motivo": motivo})
+        return r._decisione_della_cancellazione("R-317")
+
+    def test_3286_un_numero_solo_o_non_numerico_vale_il_calcolo_di_oggi(self):
+        self.assertEqual(self._decisione("cancellazione:R-317|rimborso=500|trattenuto=200"),
+                         (500, 200), "PREMESSA: coi due numeri la decisione si legge")
+        for motivo in ("cancellazione:R-317|rimborso=500",
+                       "cancellazione:R-317|trattenuto=200",
+                       "cancellazione:R-317|rimborso=500|trattenuto=x",
+                       "cancellazione:R-317|rimborso=x|trattenuto=200"):
+            with self.subTest(motivo=motivo):
+                try:
+                    esito = self._decisione(motivo)
+                except ValueError as e:
+                    self.fail("un motivo con un numero solo o non numerico non deve "
+                              "esplodere, vale il calcolo di oggi: %r" % (e,))
+                self.assertIsNone(esito)
+
+    # ── :6728 il doppio clic non sostituisce il link con una pagina salvata VUOTA ───────────
+    def test_6728_una_pagina_salvata_vuota_non_cancella_il_link(self):
+        r = crea_router(_sistema())
+        r._sys.pagamenti_pendenti = _PendenteFinto(
+            {"riferimento": "R-317", "stato": "in_attesa", "email": "o@x.it",
+             "corpo_json": json.dumps({"payment_url": "", "stripe_cs": "cs_vecchia"})})
+        s, b = r._replay_prenotazione({"riferimento": "R-317", "payment_url": "https://totale"})
+        self.assertEqual(s, 201, b)
+        self.assertEqual(b["payment_url"], "https://totale", b)
+        self.assertNotIn("stripe_cs", b, "il numero di una pagina che non c'e'")
+        self.assertEqual(b["stato"], "in_attesa_pagamento", b)
+
+    # ── :7243 :7256 l'approvazione usa la pagina NUOVA e ne tiene il numero ────────────────
+    def _approva(self, stripe):
+        r = crea_router(_sistema())
+        rec = {"riferimento": "R-317", "stato": "in_attesa_host", "alloggio_id": "casa",
+               "email": "o@x.it", "check_in": "2027-01-10",
+               "corpo_json": json.dumps({"totale_cents": 20000, "prezzo_guest_cents": 20000,
+                                         "valuta": "EUR", "stripe_cs": "cs_della_richiesta"})}
+        r._sys.pagamenti_pendenti = types.SimpleNamespace(
+            info=lambda ref: dict(rec) if ref == "R-317" else None,
+            rimuovi_se_stato=lambda ref, stato: True)
+        r._sys.stripe = stripe
+        finiti = []
+
+        def finalizza(corpo, dati, hold_sec=None):
+            finiti.append((dict(corpo), hold_sec))
+            return corpo
+        r._finalizza_prenotazione = finalizza
+        return r._decidi_richiesta("R-317", None, True), finiti
+
+    def test_7243_7256_l_approvazione_tiene_il_numero_della_pagina_nuova(self):
+        chieste = []
+
+        def crea_sessione(d):
+            chieste.append(d)
+            return {"id": "cs_nuova", "url": "https://pagina-nuova"}
+        (s, b), finiti = self._approva(types.SimpleNamespace(crea_sessione=crea_sessione))
+        self.assertEqual(s, 200, b)
+        self.assertEqual([d["riferimento"] for d in chieste], ["R-317"])
+        self.assertEqual(len(finiti), 1, finiti)
+        corpo, hold = finiti[0]
+        self.assertEqual(corpo["payment_url"], "https://pagina-nuova")
+        self.assertEqual(corpo["stripe_cs"], "cs_nuova",
+                         "il numero della pagina da chiudere e' quello della pagina NUOVA")
+        self.assertEqual(hold, fase83_server.HOLD_APPROVAZIONE_SEC)
+
+    def test_7256_un_gateway_senza_numero_lascia_vuoto_mai_quello_della_richiesta(self):
+        for numero in (None, ""):
+            with self.subTest(numero=numero):
+                (s, b), finiti = self._approva(types.SimpleNamespace(
+                    crea_sessione=lambda d, numero=numero: {"id": numero, "url": "https://pagina-nuova"}))
+                self.assertEqual(s, 200, b)
+                self.assertEqual(finiti[0][0]["stripe_cs"], "")
+
+    # ── :14252 :14257 la pagina Stripe che non si chiude ─────────────────────────────────
+    def _chiusa(self, esito):
+        sis = types.SimpleNamespace(stripe=types.SimpleNamespace(chiudi_sessione=lambda cs: esito))
+        rec = {"riferimento": "R-317", "scadenza_ts": 0,
+               "corpo_json": json.dumps({"stripe_cs": "cs_317"})}
+        with self.assertLogs("core_auto.server", level="WARNING") as log:
+            libera = fase83_server._pagina_stripe_chiusa(sis, rec)
+        return libera, [r.getMessage() for r in log.records if r.levelname == "ERROR"], log
+
+    def test_14252_solo_complete_con_ok_vuol_dire_gia_pagata(self):
+        for esito in ({"ok": True, "stato": "open", "motivo": ""},
+                      {"ok": False, "stato": "complete", "motivo": "rilettura_fallita"}):
+            with self.subTest(esito=esito):
+                libera, errori, log = self._chiusa(esito)
+                self.assertIs(libera, True, "un giorno dopo la pagina non puo' essere viva")
+                self.assertTrue([m for m in errori if "un_giorno_senza_conferma" in m], log.output)
+                self.assertFalse([m for m in log.output if "pagina_gia_pagata" in m], log.output)
+
+    def test_14257_il_registro_dice_il_motivo_di_stripe_poi_lo_stato_poi_un_trattino(self):
+        for esito, atteso in (({"ok": False, "stato": "open", "motivo": "rete_giu"}, "(rete_giu)"),
+                              ({"ok": False, "stato": "open", "motivo": ""}, "(open)"),
+                              ({"ok": False, "stato": "", "motivo": ""}, "(-)")):
+            with self.subTest(esito=esito):
+                _libera, errori, log = self._chiusa(esito)
+                self.assertEqual(len(errori), 1, log.output)
+                self.assertIn(atteso, errori[0])
+
+    # ── :14620-14626 il subentro guarda se il bonifico si e' fermato davvero ──────────────
+    def _subentro(self, payout):
+        sis = types.SimpleNamespace(garanzia=_GaranziaDelSubentro(),
+                                    messaggistica=_ChatDelSubentro(), payout=payout)
+        with self.assertLogs("core_auto.server", level="WARNING") as log:
+            fatte = fase83_server._subentro_per_disaccordo(sis, ora_ts=5000)
+        self.assertEqual(fatte, ["R-317"], "PREMESSA: il subentro doveva scattare")
+        self.assertFalse([m for m in log.output if "giro fallito" in m], log.output)
+        allarmi = [r for r in log.records
+                   if r.levelname == "ERROR" and "bonifico_non_fermato" in r.getMessage()]
+        return allarmi, log
+
+    def test_14623_fermo_riuscito_l_allarme_tace(self):
+        for payout in (_BonificoDelSubentro(True, "pagabile"),
+                       _BonificoDelSubentro(False, "trattenuto"), None):
+            with self.subTest(payout=payout and (payout._fermo, payout._stato)):
+                allarmi, log = self._subentro(payout)
+                self.assertEqual(allarmi, [], log.output)
+
+    def test_14623_14624_fermo_non_riuscito_l_allarme_grida(self):
+        allarmi, log = self._subentro(_BonificoDelSubentro(False, "pagabile"))
+        self.assertEqual(len(allarmi), 1, log.output)
+        self.assertIn("R-317", allarmi[0].getMessage())
+
+    def test_14620_14626_fermo_esploso_l_allarme_grida_e_il_registro_porta_l_eccezione(self):
+        allarmi, log = self._subentro(_BonificoDelSubentro(RuntimeError("db giu'"), "pagabile"))
+        self.assertEqual(len(allarmi), 1, log.output)
+        esploso = [r for r in log.records if "blocco payout esploso" in r.getMessage()]
+        self.assertEqual(len(esploso), 1, log.output)
+        self.assertIsInstance(esploso[0].exc_info, tuple, "il registro deve portare l'eccezione")
+        self.assertIsInstance(esploso[0].exc_info[1], RuntimeError)
 
 
 if __name__ == "__main__":

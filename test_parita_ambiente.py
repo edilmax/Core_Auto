@@ -769,6 +769,202 @@ class TestJobImmagine(unittest.TestCase):
 
 
 # ===========================================================================
+#  TRIVY SULL'IMMAGINE — nessuna falla CORREGGIBILE arriva in produzione (15/11/2026)
+# ===========================================================================
+#  Misurato il 14-15/11 con Trivy 0.76.1 sull'immagine viva e sulla base fissata nel
+#  Dockerfile: zlib1g con tre falle che Debian ha gia' corretto (2 HIGH), e pip, setuptools
+#  (col suo jaraco.context) e wheel con dieci. Nessun job le vedeva: i test guardano i
+#  sorgenti, e i sorgenti non contengono l'immagine base. Da qui due cose, guardate qui:
+#  (1) il Dockerfile aggiorna i pacchetti di Debian gia' presenti e toglie gli strumenti che
+#      servono solo a installare; (2) il job `immagine` passa a Trivy l'immagine APPENA
+#      costruita e diventa rosso se trova una falla correggibile.
+#  Trivy si scarica a versione e impronta fissate e si verifica con `sha256sum -c`: niente
+#  azione di terzi, perche' a marzo 2026 le etichette delle azioni di Trivy sono state
+#  manomesse. La versione ha piu' di due settimane (uscita il 21/10/2026) e l'impronta
+#  coincide su tre fonti: il file `checksums.txt` della versione, il digest dell'allegato
+#  su GitHub e quella calcolata sul file scaricato.
+#  ⚠️ Trivy esce con 1 anche quando NON riesce a guardare (rete, base dati, tempo scaduto):
+#  se la soglia fosse 1, «non ho guardato» e «ho trovato falle» sarebbero lo stesso rosso,
+#  e un giorno uno dei due verrebbe preso per l'altro. Per questo la soglia non e' 1.
+#  NON guarda: le falle che Debian o PyPI non hanno ancora corretto (`--ignore-unfixed`:
+#  non c'e' niente da aggiornare, le vede il giro di Trivy del giorno che esce la
+#  correzione); l'immagine di nginx (e' di terzi, la guarda la voce 263 di RIPRENDI);
+#  l'immagine che gira sul VPS (si rifa' a mano dopo ogni D17: la CI ne costruisce una sua).
+TRIVY_VERSIONE = "0.76.1"
+TRIVY_IMPRONTA = "c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0"
+
+
+def scansioni_trivy(elenco_comandi):
+    """Per ogni `trivy image` dei comandi: il bersaglio e le opzioni che contano."""
+    trovate = []
+    for c in elenco_comandi:
+        for riga in c.splitlines():
+            pezzi = riga.split()
+            if "image" not in pezzi or not any(p.endswith("trivy") for p in pezzi):
+                continue
+            i = pezzi.index("image")
+            if i == 0 or not pezzi[i - 1].endswith("trivy"):
+                continue
+            uscita = None
+            for j, p in enumerate(pezzi):
+                if p == "--exit-code" and j + 1 < len(pezzi):
+                    uscita = pezzi[j + 1]
+                elif p.startswith("--exit-code="):
+                    uscita = p.split("=", 1)[1]
+            scanner = None
+            for j, p in enumerate(pezzi):
+                if p == "--scanners" and j + 1 < len(pezzi):
+                    scanner = pezzi[j + 1]
+            trovate.append({"bersaglio": pezzi[-1], "uscita": uscita, "scanner": scanner,
+                            "senza_correzione_esclusi": "--ignore-unfixed" in pezzi,
+                            "comando": c})
+    return trovate
+
+
+def trivy_scaricato_e_verificato(elenco_comandi):
+    """(versione, impronta) del Trivy scaricato E controllato con `sha256sum -c` nello
+    STESSO comando; None se non c'e' o se il controllo manca."""
+    for c in elenco_comandi:
+        url = re.search(r"releases/download/v([\d.]+)/trivy_([\d.]+)_Linux-64bit\.tar\.gz", c)
+        impronta = re.search(r"\b([0-9a-f]{64})\s+trivy[^\s\"']*\.tar\.gz\"?\s*\|\s*"
+                             r"sha256sum -c", c)
+        if url and impronta and url.group(1) == url.group(2):
+            return url.group(1), impronta.group(1)
+    return None
+
+
+def pulizie_del_dockerfile(testo_dockerfile):
+    """Dove stanno, contate in istruzioni, l'aggiornamento di Debian, la rimozione degli
+    strumenti d'installazione, l'ultima COPY e la USER. None per cio' che manca."""
+    istruzioni = []
+    corrente = ""
+    for riga in testo_dockerfile.splitlines():
+        nuda = riga.strip()
+        if not nuda or nuda.startswith("#"):
+            continue
+        corrente = (corrente + " " + nuda.rstrip("\\")) if corrente else nuda.rstrip("\\")
+        if not nuda.endswith("\\"):
+            istruzioni.append(corrente)
+            corrente = ""
+    esito = {"upgrade": None, "via_strumenti": None, "ultima_copy": None, "user": None,
+             "strumenti_tolti": []}
+    for i, istr in enumerate(istruzioni):
+        parola = istr.split()[0].upper()
+        if parola == "COPY":
+            esito["ultima_copy"] = i
+        if parola == "USER" and esito["user"] is None:
+            esito["user"] = i
+        if parola != "RUN":
+            continue
+        if re.search(r"\bapt-get\s+upgrade\b", istr):
+            esito["upgrade"] = i
+        tolti = re.search(r"\bpip\s+uninstall\s+-y\s+([\w\s-]+?)(?:&&|$)", istr)
+        if tolti:
+            esito["via_strumenti"] = i
+            esito["strumenti_tolti"] = sorted(tolti.group(1).split())
+    return esito
+
+
+class TestTrivyGuardaLImmagineDiProduzione(unittest.TestCase):
+
+    def setUp(self):
+        self.doc = _doc_ci()
+        self.job = self.doc["jobs"][JOB_IMMAGINE]
+        self.comandi = comandi(self.job)
+        self.dockerfile = _leggi(DOCKERFILE)
+
+    def test_il_job_passa_a_trivy_l_immagine_appena_costruita(self):
+        scansioni = scansioni_trivy(self.comandi)
+        self.assertEqual(len(scansioni), 1,
+                         "il job `immagine` deve passare a Trivy l'immagine UNA volta: "
+                         "trovate %d scansioni" % len(scansioni))
+        s = scansioni[0]
+        self.assertEqual([s["bersaglio"]], immagini_costruite(self.comandi),
+                         "Trivy guarda %r ma il job costruisce %r: si darebbe il voto a "
+                         "un'immagine diversa da quella provata"
+                         % (s["bersaglio"], immagini_costruite(self.comandi)))
+        self.assertTrue(s["senza_correzione_esclusi"],
+                        "senza --ignore-unfixed il job e' rosso anche per falle che "
+                        "nessuno puo' ancora correggere: un rosso fisso si spegne")
+        self.assertIn("vuln", (s["scanner"] or "").split(","),
+                      "la scansione deve cercare le falle note (scanner vuln)")
+        self.assertIsNotNone(s["uscita"], "senza --exit-code Trivy esce 0 anche con falle")
+        self.assertNotIn(s["uscita"], ("0", "1"),
+                         "con --exit-code %s «ho trovato falle» non si distingue da «non "
+                         "ho potuto guardare» (Trivy esce 1 sui suoi guasti)" % s["uscita"])
+        self.assertIn('"$ESITO" = "%s"' % s["uscita"], s["comando"],
+                      "il passo deve riconoscere l'uscita delle falle e dirlo a parole")
+        self.assertIn('"$ESITO" != "0"', s["comando"],
+                      "il passo deve fermarsi anche quando Trivy non ha finito")
+
+    def test_trivy_e_quello_fissato_per_impronta_e_nessuna_azione_di_terzi(self):
+        self.assertEqual(trivy_scaricato_e_verificato(self.comandi),
+                         (TRIVY_VERSIONE, TRIVY_IMPRONTA),
+                         "Trivy va scaricato alla versione %s e controllato con "
+                         "sha256sum -c contro la sua impronta, nello stesso passo"
+                         % TRIVY_VERSIONE)
+        for nome, job in self.doc["jobs"].items():
+            for passo in _passi(job):
+                self.assertNotIn("aquasecurity", str(passo.get("uses", "")).lower(),
+                                 "il job %s usa un'azione di Trivy: sono le etichette "
+                                 "manomesse a marzo 2026" % nome)
+
+    def test_il_dockerfile_aggiorna_debian_e_toglie_gli_strumenti_d_installazione(self):
+        p = pulizie_del_dockerfile(self.dockerfile)
+        self.assertIsNotNone(p["upgrade"],
+                             "Dockerfile.casavip non aggiorna i pacchetti di Debian: le "
+                             "falle gia' corrette nella base (zlib1g) restano dentro")
+        self.assertEqual(p["strumenti_tolti"],
+                         ["packaging", "pip", "setuptools", "wheel"],
+                         "pip, setuptools, wheel e packaging servono solo a installare, "
+                         "e la produzione non installa: devono uscire dall'immagine")
+        self.assertGreater(p["upgrade"], p["ultima_copy"],
+                           "l'aggiornamento va DOPO le COPY: cosi' ogni rilascio lo rifa' "
+                           "invece di riusare uno strato vecchio dalla cache del VPS")
+        self.assertLess(p["upgrade"], p["user"],
+                        "dopo USER app non si e' piu' root e apt-get non puo' aggiornare")
+        self.assertLess(p["via_strumenti"], p["user"])
+        self.assertEqual(pulizie_del_dockerfile(_leggi(DOCKERFILE_GEMELLO)), p,
+                         "Dockerfile e Dockerfile.casavip devono pulire l'immagine allo "
+                         "stesso modo: due gemelli diversi sono due produzioni diverse")
+
+    def test_i_lettori_si_vedono_gridare(self):
+        """Ognuno dei tre lettori, avvelenato con testi finti, deve vedere il guasto."""
+        buono = ['set +e\n./trivy image --scanners vuln --ignore-unfixed --exit-code 2 a:ci\n'
+                 'ESITO=$?\nif [ "$ESITO" = "2" ]; then exit 1; fi\n'
+                 'if [ "$ESITO" != "0" ]; then exit 1; fi']
+        self.assertEqual(scansioni_trivy(buono)[0]["uscita"], "2")
+        self.assertEqual(scansioni_trivy(buono)[0]["bersaglio"], "a:ci")
+        self.assertEqual(scansioni_trivy(["./trivy fs ."]), [], "fs non e' l'immagine")
+        self.assertFalse(scansioni_trivy(
+            ["trivy image --exit-code 1 a:ci"])[0]["senza_correzione_esclusi"])
+        url = ("curl -sSfL -o trivy.tar.gz https://github.com/aquasecurity/trivy/releases/"
+               "download/v0.76.1/trivy_0.76.1_Linux-64bit.tar.gz\n")
+        prova = 'echo "%s  trivy.tar.gz" | sha256sum -c -' % TRIVY_IMPRONTA
+        self.assertEqual(trivy_scaricato_e_verificato([url + prova]),
+                         ("0.76.1", TRIVY_IMPRONTA))
+        self.assertIsNone(trivy_scaricato_e_verificato([url]),
+                          "scaricato ma mai controllato non e' verificato")
+        self.assertIsNone(trivy_scaricato_e_verificato([url, prova]),
+                          "il controllo deve stare nello stesso passo dello scaricamento")
+        df = ("FROM python:3.11-slim\nCOPY a ./\n"
+              "RUN apt-get update \\\n    && apt-get upgrade -y \\\n"
+              "    && python -m pip uninstall -y pip setuptools wheel packaging \\\n"
+              "    && useradd app\nUSER app\n")
+        p = pulizie_del_dockerfile(df)
+        self.assertEqual((p["ultima_copy"], p["upgrade"], p["via_strumenti"], p["user"]),
+                         (1, 2, 2, 3))
+        self.assertEqual(p["strumenti_tolti"], ["packaging", "pip", "setuptools", "wheel"])
+        prima = pulizie_del_dockerfile(df.replace("COPY a ./\n", "").replace(
+            "USER app\n", "COPY a ./\nUSER app\n"))
+        self.assertGreater(prima["ultima_copy"], prima["upgrade"],
+                           "il lettore deve vedere un aggiornamento messo PRIMA delle COPY")
+        self.assertIsNone(pulizie_del_dockerfile(
+            "FROM python\n# RUN apt-get upgrade -y\n")["upgrade"],
+            "una riga di commento non e' un aggiornamento")
+
+
+# ===========================================================================
 #  BUCO 2 — la CI gira sul Python della produzione, o lo dichiara
 # ===========================================================================
 class TestParitaVersionePython(unittest.TestCase):

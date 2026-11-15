@@ -156,6 +156,17 @@ class TestProviderTassi(unittest.TestCase):
             raise RuntimeError("oxr giu")
         self.assertIsNone(crea_provider_tassi("KEY", fetch=boom).tasso("USD", "EUR"))
 
+    def test_PR312_lo_scarico_fallito_dei_tassi_lascia_la_traccia_dell_errore(self):
+        """PR #313 (pezzo 1), job `caselle` del 13/11: il registro del cambio fallito porta la
+        traccia (exc_info), altrimenti resta un avviso senza causa."""
+        def boom(url):
+            raise RuntimeError("oxr giu")
+        with self.assertLogs("core_auto.cambi", level="WARNING") as reg:
+            self.assertIs(crea_provider_tassi("KEY", fetch=boom).aggiorna(), False)
+        self.assertIn("tassi_non_aggiornati", reg.output[0])
+        self.assertIsInstance(reg.records[0].exc_info, tuple, reg.output)
+        self.assertIs(reg.records[0].exc_info[0], RuntimeError)
+
 
 if __name__ == "__main__":
     unittest.main()

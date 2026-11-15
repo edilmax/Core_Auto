@@ -1179,5 +1179,29 @@ class TestIlCancellamiVEDEancheIlProgrammaInvitiSuFILE(unittest.TestCase):
                             % (rep.get("sporchi_non_dichiarati"),))
 
 
+class TestIlCodiceMascheratoNonFabbricaRigheNelRegistro(unittest.TestCase):
+    """CodeQL #233 #234 (py/log-injection, aperti su master dal 24/10) e PR #315 (14/11):
+    `_mascherato` tiene in chiaro i primi 3 e gli ultimi 2 caratteri dell'host_id, che qui
+    arriva dal CORPO della richiesta di cancellazione: un a-capo li' fabbricava una riga."""
+
+    def test_un_a_capo_resta_visibile_e_non_spezza_la_riga(self):
+        from fase156_erasure import _mascherato
+        for ingresso in ("a\nb_lungo_quanto_basta\nz", "\r\nh_id_abbastanza_lungo\r\n",
+                         "h\rx_id_abbastanza_lungo\r"):
+            with self.subTest(ingresso=repr(ingresso)):
+                uscita = _mascherato(ingresso)
+                self.assertNotIn("\n", uscita)
+                self.assertNotIn("\r", uscita)
+                self.assertIn("***", uscita)
+        self.assertEqual(_mascherato("a\nb_lungo_quanto_basta\nz"), "a\\n***nz")
+
+    def test_un_codice_normale_si_maschera_come_prima(self):
+        from fase156_erasure import _mascherato
+        self.assertEqual(_mascherato("h_9a0ddbaf6209e3e5"), "h_9***e5")
+        self.assertEqual(_mascherato("h_1234"), "***")
+        self.assertEqual(_mascherato(None), "***")
+        self.assertEqual(_mascherato(""), "***")
+
+
 if __name__ == "__main__":
     unittest.main()

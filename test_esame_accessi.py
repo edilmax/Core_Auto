@@ -131,6 +131,28 @@ class TestLEsameDegliAccessiNonPuoBARARE(unittest.TestCase):
         self.assertEqual(codice, 2, uscita.getvalue()[-400:])
         self.assertIn("FERMO", uscita.getvalue())
 
+    # ── la casella «scrive» misura il CODICE: il sito vivo non le serve ───────────────
+    def test_la_casella_scrive_misura_anche_col_sito_vivo_irraggiungibile_e_non_lo_tocca(self):
+        """PR #315 (14/11), job `caselle` di c2f73f6: «scrive» rifatta in CI usciva 2 (FERMO
+        sulla precondizione del sito vivo che risponde 404) mentre sul PC era verde. Il suo
+        giudizio (`giudica_scrive`) legge solo il router locale: interrogare la produzione dalla
+        CI misurava un'ALTRA cosa (D23) e fermava il gate per un motivo che non era della PR.
+        Qui il sito vivo non risponde mai, e nessuno deve nemmeno chiederglielo."""
+        chiamate = []
+
+        def irraggiungibile(metodo, path, testate=None, timeout=25):
+            chiamate.append((metodo, path))
+            return None
+        vero = ea._chiedi_vivo
+        ea._chiedi_vivo = irraggiungibile
+        self.addCleanup(setattr, ea, "_chiedi_vivo", vero)
+        uscita = io.StringIO()
+        with contextlib.redirect_stdout(uscita):
+            codice = ea.main(["--casella", "scrive"])
+        self.assertEqual(codice, 0, uscita.getvalue()[-900:])
+        self.assertEqual(chiamate, [], "la casella «scrive» ha interrogato il sito vivo")
+        self.assertIn("VERDETTO: ✅ VERDE", uscita.getvalue())
+
     # ── il sistema locale NON lascia l'ambiente sporco ────────────────────────────────
     def test_il_sistema_locale_rimette_MARCA_TEMPORALE_com_era(self):
         """Nella suite intera tutto gira in UN processo: un attrezzo che spegne la marca
@@ -148,6 +170,46 @@ class TestLEsameDegliAccessiNonPuoBARARE(unittest.TestCase):
                 os.environ.pop("MARCA_TEMPORALE", None)
             else:
                 os.environ["MARCA_TEMPORALE"] = prima
+
+    # ── la sonda Bunker con sessione FINTA si dichiara al Guardiano ───────────────────
+    def test_la_sonda_bunker_finta_DICHIARA_la_sua_finestra_e_solo_lei(self):
+        """15/11 («autorizzato Guardiano»): il 14/11 quattro giri di questo esame dal PC hanno
+        lasciato nel registro del server 4 righe CRITICAL «BUNKER: accesso NEGATO
+        azione=stato_sistema» (la sessione inventata) e il Guardiano le ha contate come
+        intrusioni, «6 stati anomali» e un Telegram ogni 10 minuti. `verifica_produzione` le sue
+        le dichiara (`_dichiara_le_sonde`); questo esame no. Si pretende: l'ora del server si
+        legge PRIMA della sonda Bunker, la finestra si dichiara DOPO, una volta sola, con lo
+        stesso scrittore del giudice -- e le sonde admin e host, che non scrivono righe Bunker,
+        restano fuori dalla finestra (larga quanto la sonda, non di piu')."""
+        import verifica_produzione as vp
+        eventi = []
+
+        def finto_vivo(metodo, path, testate=None, timeout=25):
+            eventi.append(("sonda", path, sorted(testate or {})))
+            return 403
+
+        def finta_ora():
+            eventi.append(("ora",))
+            return 1794700000
+
+        def finta_dichiara(inizio):
+            eventi.append(("dichiara", inizio))
+
+        for modulo, nome, finto in ((ea, "_chiedi_vivo", finto_vivo), (vp, "_ora_del_server", finta_ora),
+                                    (vp, "_dichiara_le_sonde", finta_dichiara),
+                                    (ea, "PAUSA_VIVO_SEC", 0)):
+            self.addCleanup(setattr, modulo, nome, getattr(modulo, nome))
+            setattr(modulo, nome, finto)
+        esatte = [("GET", "/api/admin/lettura", "g"), ("GET", "/api/bunker/stato", "g"),
+                  ("GET", "/api/host/lettura", "g")]
+        ea.letture_vive(esatte)
+        finta = ("sonda", "/api/bunker/stato", ["X-Bunker-Session"])
+        self.assertIn(finta, eventi, eventi)
+        i = eventi.index(finta)
+        self.assertEqual(eventi[i - 1], ("ora",), "l'ora del server va letta SUBITO prima: %s" % eventi)
+        self.assertEqual(eventi[i + 1], ("dichiara", 1794700000), "dichiarata SUBITO dopo: %s" % eventi)
+        self.assertEqual(sum(1 for e in eventi if e[0] == "dichiara"), 1, eventi)
+        self.assertEqual(sum(1 for e in eventi if e[0] == "ora"), 1, eventi)
 
 
 if __name__ == "__main__":

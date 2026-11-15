@@ -1061,5 +1061,36 @@ class TestIlPrezzoBaseSeguitoDaiGiorni(unittest.TestCase):
                          "UN GUASTO HA LASCIATO META' DEI GIORNI COL PREZZO NUOVO")
 
 
+class TestStatoDelBlocco(unittest.TestCase):
+    """VA2 (8/11), PR #314 (pezzo 2 della #312): `stato_blocco` dice al server se le date di una
+    prenotazione sono ancora prese, gia' liberate o mai bloccate. Le sue prove stavano in
+    test_paga_struttura_e2e, che il giudice non accende: qui, nel file dedicato, i tre esiti."""
+
+    def setUp(self):
+        self.cm = _cm()
+        _carica(self.cm, unita=1)
+
+    def _blocca(self, chiave):
+        return self.cm.blocca("a", "2026-07-01", "2026-07-02", idem_key=chiave)
+
+    def test_il_blocco_vivo_e_occupato(self):
+        self.assertTrue(self._blocca("k1").ok)
+        self.assertEqual(self.cm.stato_blocco("k1"), "occupato")
+
+    def test_il_blocco_liberato_e_rilasciato(self):
+        self.assertTrue(self._blocca("k1").ok)
+        self.assertTrue(self.cm.rilascia("a", "2026-07-01", "2026-07-02", idem_key="k1").ok)
+        self.assertEqual(self.cm.stato_blocco("k1"), "rilasciato")
+
+    def test_una_chiave_mai_vista_e_assente(self):
+        self.assertEqual(self.cm.stato_blocco("mai-vista"), "assente")
+
+    def test_un_blocco_rifiutato_non_tiene_le_date(self):
+        self.assertTrue(self._blocca("k1").ok)
+        self.assertFalse(self._blocca("k2").ok)                     # premessa: pieno
+        self.assertEqual(self.cm.stato_blocco("k2"), "assente")
+        self.assertEqual(self.cm.stato_blocco("k1"), "occupato")
+
+
 if __name__ == "__main__":
     unittest.main()
