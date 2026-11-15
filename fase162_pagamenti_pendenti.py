@@ -470,6 +470,15 @@ class PagamentiPendenti:
                     return None
                 if r["stato"] not in _AMMESSI["pagato"]:
                     return self._riga(r)      # pagato/cancellata/...: nessuna scrittura
+                if r["stato"] == "scaduto" and "scadenza_da_finire" in r.keys() \
+                        and int(r["scadenza_da_finire"] or 0) == 1:
+                    # FB5 (10/11): lo sweeper sta ancora facendo i passi della scadenza (annulla
+                    # garanzia, toglie il bonifico): confermare adesso glieli farebbe cancellare
+                    # al pagamento appena arrivato. Nessuna scrittura: il chiamante risponde 503
+                    # e Stripe ritenta a passi finiti. Modello TLA+ ScadenzaFB5.
+                    fuori = self._riga(r)
+                    fuori["attendi_sweeper"] = True
+                    return fuori
                 corpo = r["corpo_json"]
                 if r["stato"] == "scaduto":
                     # PR6 (8/11): pagamento TARDIVO. Il segno nasce nella STESSA scrittura di

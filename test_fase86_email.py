@@ -149,5 +149,61 @@ class TestIlPannelloHostDiceGliStessiTempiDellaMail(unittest.TestCase):
             self.assertIn(frase_mail, pannello[lingua], lingua)
 
 
+class TestLaCodaNonScriveRigheFinteNelRegistro(unittest.TestCase):
+    """PROTON, compiti 24 e 29 (14/11): «EMAIL NON CONSEGNABILE» scriveva il riferimento letto
+    dalla coda cosi' com'era, e `accoda` lo salva senza filtro (in fase83 template e
+    riferimento «arrivano da dati di richiesta»). Un a-capo dentro fabbrica una riga nuova nel
+    registro, dove il Guardiano cerca i guasti: qui lo si mette a mano, nelle tre forme."""
+
+    def test_il_riferimento_non_spezza_la_riga_e_si_legge_ancora(self):
+        import os
+        import shutil
+        import tempfile
+        from fase86_email import CodaEmail
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        for i, rif in enumerate(("R-1\nRIGA FINTA", "R-2\r\nRIGA FINTA", "R-3\rRIGA FINTA")):
+            with self.subTest(rif=repr(rif)):
+                coda = CodaEmail(os.path.join(d, "coda%d.db" % i), lambda a, o, h: False,
+                                 tentativi=1, ora=lambda: 1_000_000.0)
+                self.assertTrue(coda.accoda("a@b.it", "o", "<p>x</p>", riferimento=rif))
+                with self.assertLogs("core_auto.email", level="CRITICAL") as reg:
+                    coda.un_giro()
+                gridi = [x.getMessage() for x in reg.records
+                         if "EMAIL NON CONSEGNABILE" in x.getMessage()]
+                self.assertEqual(len(gridi), 1, reg.output)
+                self.assertNotIn("\n", gridi[0], "un a-capo da fuori e' arrivato nel registro")
+                self.assertNotIn("\r", gridi[0], "un ritorno a capo da fuori nel registro")
+                self.assertIn("RIGA FINTA", gridi[0], "il riferimento si deve ancora leggere")
+                self.assertIn("R-%d" % (i + 1), gridi[0])
+
+
+class TestPR316IlGiroDellaCodaNonTieneVivoIlProcesso(unittest.TestCase):
+    """Pezzo 4 (PR #316): `daemon=True` di `CodaEmail.avvia` (:259) era «non determinabile» per
+    il giudice: col guasto la prova di test_email_tracciata cadeva prima di fermare il giro, il
+    processo non finiva e il giro andava oltre il tempo. Qui la fermata e' registrata PRIMA
+    delle asserzioni, e la prova sta nel dedicato."""
+
+    def test_il_giro_e_un_filo_demone_e_si_ferma_davvero(self):
+        import os
+        import shutil
+        import tempfile
+        from fase86_email import CodaEmail
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        coda = CodaEmail(os.path.join(d, "coda.db"), lambda a, o, h: True)
+        coda.inizializza_schema()
+        coda.avvia(ogni_s=3600)
+        self.addCleanup(coda.ferma)
+        giro = coda._giro
+        self.assertIsNotNone(giro, "avvia non ha acceso il giro")
+        self.assertEqual("coda-email", giro.name)
+        self.assertTrue(giro.daemon, "un giro non demone tiene vivo il processo all'uscita")
+        coda.ferma()
+        giro.join(5)
+        self.assertFalse(giro.is_alive(), "ferma() non ha fermato il giro")
+        self.assertIsNone(coda._giro)
+
+
 if __name__ == "__main__":
     unittest.main()

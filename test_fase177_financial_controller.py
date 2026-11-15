@@ -57,6 +57,54 @@ class TestStornoDellaPenale(unittest.TestCase):
         self.assertIs(self.fc.storna_penale(nota_id=nota, payout=_Registro(restituisce=True))["a_meta"],
                       False)
 
+    # ── pezzo 4 della PR #312 (13/11): FB4, la penale presa dalla CARTA conta ────────────
+
+    def _penale_presa_dalla_carta(self):
+        nota = self._penale(_Registro())["nota_id"]          # niente bonifici: tutta a debito
+
+        class _CartaCheRiesce:
+            def addebita(self, **kw):
+                return {"stato": "riuscito", "pi": "pi_test_1"}
+
+        self.fc.riscuoti_da_carta(host_id="h1", provider_carta=_CartaCheRiesce(),
+                                  customer="cus_1", payment_method="pm_1")
+        incassi = [m["importo_cents"] for m in self.fc.movimenti("R1")
+                   if m["tipo"] == "penale_incassata"]
+        self.assertEqual(incassi, [3000])                      # premessa: presa dalla carta
+        return nota
+
+    def test_PR312_ripetere_la_penale_dopo_la_carta_non_la_prende_due_volte(self):
+        # La riga «penale_incassata» della carta e' gia' riscosso: ripetendo la penale non
+        # si compensa di nuovo sul bonifico dell'host (doppio prelievo dei suoi soldi).
+        self._penale_presa_dalla_carta()
+        bonifici = _Registro([("P9", 5000)])
+        esito = self._penale(bonifici)
+        self.assertEqual(esito["residuo_cents"], 0)
+        self.assertEqual(bonifici.righe, {"P9": 5000})
+        self.assertNotIn("penale_offset", self._tipi("R1"))
+
+    def test_PR312_la_carta_di_un_altra_nota_non_sconta_questa_penale(self):
+        # Gemello trovato da PROTON (variant-analysis, 13/11): in processa_penale una riga
+        # «penale_incassata» di un'ALTRA nota sullo stesso riferimento non e' riscosso di questa.
+        self._penale(_Registro())                                # tutta a debito
+        self.assertIsNotNone(self.fc.registra(
+            evento_id="carta:ND-ALTRA:700", tipo="penale_incassata", riferimento="R1",
+            soggetto="host:h1", conto_dare="cassa_piattaforma", conto_avere="crediti_vs_host",
+            importo_cents=700, valuta="EUR", causale="altra nota", emittente="sistema"))
+        bonifici = _Registro([("P9", 5000)])
+        self._penale(bonifici)
+        self.assertEqual(bonifici.righe, {"P9": 2000})
+
+    def test_PR312_lo_storno_restituisce_la_penale_presa_dalla_carta(self):
+        nota = self._penale_presa_dalla_carta()
+        # una riga di un'ALTRA nota sullo stesso riferimento: non e' di questa penale
+        self.assertIsNotNone(self.fc.registra(
+            evento_id="carta:ND-ALTRA:700", tipo="penale_incassata", riferimento="R1",
+            soggetto="host:h1", conto_dare="cassa_piattaforma", conto_avere="crediti_vs_host",
+            importo_cents=700, valuta="EUR", causale="altra nota", emittente="sistema"))
+        out = self.fc.storna_penale(nota_id=nota, payout=_Registro(restituisce=True))
+        self.assertEqual((out["riscosso_cents"], out["restituito_in_da_pagare"]), (3000, 3000))
+
     def _prenotazione_incassata(self, rif):
         for tipo, importo in (("incasso", 10000), ("commissione", 1000)):
             self.assertIsNotNone(self.fc.movimento(tipo=tipo, riferimento=rif, soggetto="host:h1",

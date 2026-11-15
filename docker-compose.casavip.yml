@@ -43,6 +43,7 @@ services:
       DB_MARCHE: /data/marche.db                 # marche temporali RFC 3161 (durevole = valore legale: senza questa riga i token finirebbero in /app/data, cancellata a OGNI deploy)
       DB_RECENSIONI: /data/recensioni.db       # voti degli ospiti (durevole) - ERA MANCANTE -> le recensioni sparivano a ogni deploy
       DB_CREDITO_USATI: /data/credito_usati.db # crediti gia' spesi (durevole) - ERA MANCANTE -> un credito era rispendibile dopo un riavvio
+      DB_CODA_EMAIL: /data/coda_email.db       # email fallite da ritentare (fondatore 10/11): in /app si perderebbero al deploy
       DB_FINANZA: /data/finanza.db             # libro giornale immutabile (durevole = valore legale e fiscale)
       DB_KYC: /data/kyc.db                     # esiti verifica identita' (durevole, mai documenti)
       DB_CHECKIN: /data/checkin.db             # check-in digitale (durevole)

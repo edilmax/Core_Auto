@@ -15586,6 +15586,8 @@ class TestOgniCancellazioneDichiaraSeAzzeraIByte(unittest.TestCase):
                                                  "di una prenotazione: nessun contatto"),
         "fase131_payout_dashboard.py": (False, "identificativo dell'host e un importo, senza "
                                                "nessun contatto: pseudonimo, non anagrafica"),
+        "fase86_email.py": (True, "la coda delle email fallite: indirizzo, oggetto e testo "
+                                  "dell'email (voucher, PIN di check-in, link)"),
     }
 
     def _censimento(self):

@@ -116,7 +116,9 @@ if [ -s "$TMP/scelti.txt" ]; then
     sed 's/^/     /' "$TMP/scelti.txt" >&2
     strappi=$((strappi+1))
   else
-    verde "   tutti dallo stesso istante: $istanti"
+    # PR7 (8/11): lo stesso GIRO, non lo stesso istante: gli archivi si fotografano uno dopo
+    # l'altro, a secondi di distanza. La persona che ripristina confronta comunque con Stripe.
+    verde "   tutti dallo stesso giro di backup ($istanti), fotografati uno dopo l'altro"
   fi
 else
   rosso "   nessun archivio ricostruito: il pacchetto non conteneva nessun .db.gz"

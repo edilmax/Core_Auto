@@ -153,9 +153,12 @@ class EscrowGaranzia:
             return {"ok": False, "motivo": "id_non_valido"}
         return self._muta(prenotazione_id, ("in_garanzia", "contestato"), "annullato")
 
-    def chiudi_proporzionale(self, prenotazione_id: Any, host_tiene_cents: Any) -> Dict[str, Any]:
+    def chiudi_proporzionale(self, prenotazione_id: Any, host_tiene_cents: Any,
+                             motivo: str = "") -> Dict[str, Any]:
         """Cancellazione CON penale: l'host TIENE la sua quota (tutela host), il resto torna
-        all'ospite. Conservazione esatta. Dal solo stato 'in_garanzia'."""
+        all'ospite. Conservazione esatta. Dal solo stato 'in_garanzia'. FB2 (11/11): `motivo`
+        dice CHI l'ha divisa (la cancellazione scrive `cancellazione:<rif>`), cosi' una
+        cancellazione morta a meta' si riconosce e si finisce."""
         if not isinstance(prenotazione_id, str):
             return {"ok": False, "motivo": "id_non_valido"}
         imp = self._importo(prenotazione_id)
@@ -163,7 +166,7 @@ class EscrowGaranzia:
             return {"ok": False, "motivo": "non_trovata"}
         host = max(0, min(_cent(host_tiene_cents), imp))
         return self._muta(prenotazione_id, ("in_garanzia",), "risolto",
-                          host=host, rimborso=imp - host)
+                          host=host, rimborso=imp - host, motivo=str(motivo or ""))
 
     def risolvi(self, prenotazione_id: Any, *, rimborso_ospite_cents: Any) -> Dict[str, Any]:
         """Risoluzione (admin/giudice): rimborsa N all'ospite, il resto all'host. Conservazione

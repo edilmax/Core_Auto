@@ -763,6 +763,7 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
         self.assertIsNotNone(rec, "setup: il pendente deve esistere")
         # lo sweeper: attesa scaduta -> 'scaduto', e le date tornano libere
         pp.scadi(rif)
+        pp.scadenza_finita(rif)    # FB5: lo sweeper vero finisce i passi nello stesso giro
         self.sys.inventario.rilascia("casa", ci, co,
                                      idem_key=(rec.get("idem_key") or ("hold_" + rif)))
         # un altro cliente si prende la stanza, e ne ha pieno diritto
@@ -877,6 +878,7 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
             rec = pp.info(rif)
             self.assertIsNotNone(rec, "setup: il pendente deve esistere")
             pp.scadi(rif)
+            pp.scadenza_finita(rif)    # FB5: lo sweeper vero finisce i passi nello stesso giro
             self.sys.inventario.rilascia("casa", ci, co,
                                          idem_key=(rec.get("idem_key") or ("hold_" + rif)))
             ladro = self.sys.inventario.blocca("casa", ci, co, idem_key="veloce_ps_" + rif)
@@ -1173,6 +1175,7 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
         pp = self.sys.pagamenti_pendenti
         rec = pp.info(rif5)
         pp.scadi(rif5)
+        pp.scadenza_finita(rif5)    # FB5: lo sweeper vero finisce i passi nello stesso giro
         self.sys.inventario.rilascia("casa-usd", ci, co,
                                      idem_key=(rec.get("idem_key") or ("hold_" + rif5)))
         ladro = self.sys.inventario.blocca("casa-usd", ci, co, idem_key="veloce_usd")
@@ -1226,6 +1229,7 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
             rif6 = b6["riferimento"]
             rec6 = pp.info(rif6)
             pp.scadi(rif6)
+            pp.scadenza_finita(rif6)    # FB5: lo sweeper vero finisce i passi nello stesso giro
             self.sys.inventario.rilascia("casa-usd", ci6, co6,
                                          idem_key=(rec6.get("idem_key") or ("hold_" + rif6)))
             l6 = self.sys.inventario.blocca("casa-usd", ci6, co6, idem_key="veloce_usd_6")
@@ -1273,6 +1277,7 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
                           "setup: `totale_cents` doveva essere sparito dal record")
         # ── e adesso la strada 5: pagamento tardivo su stanza ripresa ──
         pp.scadi(rif)
+        pp.scadenza_finita(rif)    # FB5: lo sweeper vero finisce i passi nello stesso giro
         self.sys.inventario.rilascia("casa", ci, co,
                                      idem_key=(rec.get("idem_key") or ("hold_" + rif)))
         ladro = self.sys.inventario.blocca("casa", ci, co, idem_key="veloce_legacy")

@@ -392,6 +392,21 @@ class TestBuchiDiMutazione(unittest.TestCase):
                       "il corpo e' stato riscritto con gli accenti in codice (\\uXXXX): il "
                       "contenuto e' lo stesso ma chi legge il record a mano non lo capisce")
 
+    def test_PR312_FB5_il_pagamento_aspetta_lo_sweeper_che_sta_finendo_la_scadenza(self):
+        # Con la scadenza ancora «da finire» la conferma NON scrive: dice al chiamante di
+        # aspettare (503, Stripe ritenta). Scrivere adesso farebbe cancellare allo sweeper la
+        # garanzia e il bonifico di un pagamento appena arrivato.
+        self._grezzo(riferimento="R_FB5", stato="scaduto")
+        con = self.p._apri()
+        try:
+            with con:
+                con.execute("UPDATE pendenti SET scadenza_da_finire=1 WHERE riferimento='R_FB5'")
+        finally:
+            con.close()
+        esito = self.p.conferma("R_FB5")
+        self.assertIs(True, esito.get("attendi_sweeper"))
+        self.assertEqual("scaduto", self.p.info("R_FB5")["stato"])
+
     # ── pezzo 3 della PR #312 (13/11): i quattro sopravvissuti del giudice sul diff ──────
 
     def test_PR312_l_ora_di_nascita_del_record_si_rilegge_VERA(self):

@@ -116,6 +116,7 @@ def config_da_ambiente() -> ConfigCasaVIP:
         # deploy, cioe' denaro vero). Guardia: test_db_persistenti.py.
         db_recensioni=os.environ.get("DB_RECENSIONI", "data/recensioni.db"),
         db_credito_usati=os.environ.get("DB_CREDITO_USATI", "data/credito_usati.db"),
+        db_coda_email=os.environ.get("DB_CODA_EMAIL", "data/coda_email.db"),
         db_marche=os.environ.get("DB_MARCHE", "data/marche.db"),
         db_geocache=os.environ.get("DB_GEOCACHE", "data/geocache.db"),
         db_checkin=os.environ.get("DB_CHECKIN", "data/checkin.db"),
