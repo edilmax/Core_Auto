@@ -9924,7 +9924,12 @@ class TestPR317PezzoCinqueLeRigheCheIlGiudiceNonVedeva(unittest.TestCase):
                        "cancellazione:R-317|rimborso=500|trattenuto=x",
                        "cancellazione:R-317|rimborso=x|trattenuto=200"):
             with self.subTest(motivo=motivo):
-                self.assertIsNone(self._decisione(motivo))
+                try:
+                    esito = self._decisione(motivo)
+                except ValueError as e:
+                    self.fail("un motivo con un numero solo o non numerico non deve "
+                              "esplodere, vale il calcolo di oggi: %r" % (e,))
+                self.assertIsNone(esito)
 
     # ── :6728 il doppio clic non sostituisce il link con una pagina salvata VUOTA ───────────
     def test_6728_una_pagina_salvata_vuota_non_cancella_il_link(self):
@@ -10037,7 +10042,7 @@ class TestPR317PezzoCinqueLeRigheCheIlGiudiceNonVedeva(unittest.TestCase):
         self.assertEqual(len(allarmi), 1, log.output)
         esploso = [r for r in log.records if "blocco payout esploso" in r.getMessage()]
         self.assertEqual(len(esploso), 1, log.output)
-        self.assertIsNotNone(esploso[0].exc_info, "il registro deve portare l'eccezione")
+        self.assertIsInstance(esploso[0].exc_info, tuple, "il registro deve portare l'eccezione")
         self.assertIsInstance(esploso[0].exc_info[1], RuntimeError)
 
 
