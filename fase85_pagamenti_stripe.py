@@ -270,7 +270,8 @@ class ProviderStripe:
                     logger.error("Stripe | codice: chiusura_pagina_negata | sottocodice: %s | "
                                  "messaggio: la chiave non puo' chiudere le pagine di pagamento, le "
                                  "stanze scadute restano tenute fino a un giorno -> %s",
-                                 exc.code, rifiuto)
+                                 exc.code, rifiuto.replace("\r\n", "\\n").replace("\n", "\\n")
+                                 .replace("\r", "\\r"))   # testo di Stripe: PR #320, come PR #317
                 s = self._fetch(STRIPE_URL + "/" + sessione, None, intestazione)
             if not (isinstance(s, dict) and s.get("id") == sessione
                     and isinstance(s.get("status"), str) and s.get("status")):

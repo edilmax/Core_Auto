@@ -969,6 +969,32 @@ class TestChiudereLaPaginaStripe(unittest.TestCase):
                 if grida:
                     self.assertIn(str(codice), errori[0])
 
+    def test_PR320_la_chiave_senza_permesso_non_scrive_righe_finte_nel_registro(self):
+        """Pezzo 6 (PR #320, «autorizzato fase85» del fondatore 15/11; trovata col
+        variant-analysis sulle righe di registro nuove del pezzo): la riga ERROR di F9 scriveva
+        il motivo del rifiuto -- il testo d'errore di Stripe -- cosi' com'era. Un a-capo dentro
+        fabbricava una riga finta che il Guardiano conta (stessa famiglia della PR317)."""
+        for fine in ("\n", "\r\n", "\r"):
+            with self.subTest(a_capo=repr(fine)):
+                class _Negato(_ErroreHttp):
+                    def read(self, fine=fine):
+                        return json.dumps({"error": {"code": "permessi", "message":
+                                           "chiave limitata%sCRITICAL FINTO" % fine}}).encode()
+
+                def fetch(url, body, headers):
+                    if url.endswith("/expire"):
+                        raise _Negato(403)
+                    return {"id": "cs_a", "status": "open"}
+                with self.assertLogs("core_auto.pagamenti_stripe", level="ERROR") as log:
+                    _p(fetch).chiudi_sessione("cs_a")
+                errori = [r.getMessage() for r in log.records if r.levelname == "ERROR"]
+                self.assertEqual(len(errori), 1, log.output)
+                self.assertIn("chiusura_pagina_negata", errori[0])
+                self.assertNotIn("\n", errori[0], "un a-capo di Stripe e' arrivato nel registro")
+                self.assertNotIn("\r", errori[0], "un ritorno a capo di Stripe nel registro")
+                self.assertIn("CRITICAL FINTO", errori[0], "il messaggio di Stripe si deve leggere")
+                self.assertIn("403", errori[0])
+
     def test_F12_una_risposta_inattesa_non_porta_i_dati_dell_ospite_nel_registro(self):
         """F12 (11/11, security-reviewer): `risposta_inattesa: %r` metteva nel motivo -- che
         finisce nel registro -- l'oggetto intero di Stripe, coi dati dell'ospite (email, nome,
