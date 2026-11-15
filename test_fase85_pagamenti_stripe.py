@@ -907,6 +907,27 @@ class TestChiudereLaPaginaStripe(unittest.TestCase):
                 self.assertEqual(_p(f).chiudi_sessione(numero)["ok"], False)
                 self.assertEqual(f.chiamate, [])
 
+    def test_PR317_la_pagina_non_chiusa_non_scrive_righe_finte_nel_registro(self):
+        """Pezzo 5 (PR #317, «autorizzato» del fondatore 15/11): il numero della pagina e il
+        motivo dell'errore arrivano da fuori (il numero dal pendente, il motivo dal testo di
+        Stripe) e finivano nel registro cosi' com'erano: un a-capo fabbricava una riga finta
+        che il Guardiano e il watchdog leggono come vera (stessa famiglia di fase86:237)."""
+        for i, (fine, spezzo) in enumerate((("\n", "\n"), ("\r\n", "\r\n"), ("\r", "\r"))):
+            with self.subTest(a_capo=repr(fine)):
+                numero = "cs_%d%sRIGA FINTA" % (i, fine)
+                f = FetchFinto(solleva=TimeoutError("lento%sERROR FINTO" % spezzo))
+                with self.assertLogs("core_auto.pagamenti_stripe", level="WARNING") as reg:
+                    esito = _p(f).chiudi_sessione(numero)
+                self.assertIs(esito["ok"], False, "PREMESSA: la chiusura doveva fallire")
+                righe = [x.getMessage() for x in reg.records
+                         if "pagina di pagamento non chiusa" in x.getMessage()]
+                self.assertEqual(len(righe), 1, reg.output)
+                self.assertNotIn("\n", righe[0], "un a-capo da fuori e' arrivato nel registro")
+                self.assertNotIn("\r", righe[0], "un ritorno a capo da fuori nel registro")
+                self.assertIn("RIGA FINTA", righe[0], "il numero della pagina si deve leggere")
+                self.assertIn("ERROR FINTO", righe[0], "il motivo di Stripe si deve leggere")
+                self.assertIn("cs_%d" % i, righe[0])
+
 
 if __name__ == "__main__":
     unittest.main()

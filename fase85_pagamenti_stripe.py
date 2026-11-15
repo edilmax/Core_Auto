@@ -242,7 +242,11 @@ class ProviderStripe:
             return {"ok": True, "stato": s["status"], "motivo": ""}
         except Exception as exc:
             motivo = _motivo_errore(exc)
-            logger.warning("Stripe: pagina di pagamento non chiusa cs=%s -> %s", sessione, motivo)
+            # numero e motivo arrivano da fuori (pendente, testo di Stripe): un a-capo farebbe
+            # una riga finta nel registro (PR #317, come fase86:237)
+            logger.warning("Stripe: pagina di pagamento non chiusa cs=%s -> %s",
+                           *(str(x).replace("\r\n", "\\n").replace("\n", "\\n")
+                             .replace("\r", "\\r") for x in (sessione, motivo)))
             return {"ok": False, "stato": "", "motivo": motivo}
 
     def pagamento_della_sessione(self, sessione: Any) -> Dict[str, Any]:
