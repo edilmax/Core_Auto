@@ -178,5 +178,32 @@ class TestLaCodaNonScriveRigheFinteNelRegistro(unittest.TestCase):
                 self.assertIn("R-%d" % (i + 1), gridi[0])
 
 
+class TestPR316IlGiroDellaCodaNonTieneVivoIlProcesso(unittest.TestCase):
+    """Pezzo 4 (PR #316): `daemon=True` di `CodaEmail.avvia` (:259) era «non determinabile» per
+    il giudice: col guasto la prova di test_email_tracciata cadeva prima di fermare il giro, il
+    processo non finiva e il giro andava oltre il tempo. Qui la fermata e' registrata PRIMA
+    delle asserzioni, e la prova sta nel dedicato."""
+
+    def test_il_giro_e_un_filo_demone_e_si_ferma_davvero(self):
+        import os
+        import shutil
+        import tempfile
+        from fase86_email import CodaEmail
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        coda = CodaEmail(os.path.join(d, "coda.db"), lambda a, o, h: True)
+        coda.inizializza_schema()
+        coda.avvia(ogni_s=3600)
+        self.addCleanup(coda.ferma)
+        giro = coda._giro
+        self.assertIsNotNone(giro, "avvia non ha acceso il giro")
+        self.assertEqual("coda-email", giro.name)
+        self.assertTrue(giro.daemon, "un giro non demone tiene vivo il processo all'uscita")
+        coda.ferma()
+        giro.join(5)
+        self.assertFalse(giro.is_alive(), "ferma() non ha fermato il giro")
+        self.assertIsNone(coda._giro)
+
+
 if __name__ == "__main__":
     unittest.main()
