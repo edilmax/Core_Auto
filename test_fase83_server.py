@@ -9977,7 +9977,7 @@ class TestPR317PezzoCinqueLeRigheCheIlGiudiceNonVedeva(unittest.TestCase):
         for numero in (None, ""):
             with self.subTest(numero=numero):
                 (s, b), finiti = self._approva(types.SimpleNamespace(
-                    crea_sessione=lambda d: {"id": numero, "url": "https://pagina-nuova"}))
+                    crea_sessione=lambda d, numero=numero: {"id": numero, "url": "https://pagina-nuova"}))
                 self.assertEqual(s, 200, b)
                 self.assertEqual(finiti[0][0]["stripe_cs"], "")
 
