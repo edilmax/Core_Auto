@@ -11020,6 +11020,24 @@ class RouterHTTP:
         return str(esito.get("stato") or "") if isinstance(esito, dict) and esito.get("ok") \
             else ""
 
+    def _registra_incasso_del_blocco(self, rif, pi):
+        """Stripe ha INCASSATO il blocco: si scrivono i conti (`_riasserisci_incasso`).
+        M1 (revisione del pezzo 7, «autorizzato M1» del fondatore il 16/11): col corpo salvato
+        illeggibile il libro non scrive niente, e solo qui si sa che i soldi sono GIA' entrati:
+        lo si dice col suo nome. Il False del bonifico rimasto fermo a corpo sano ha gia' la sua
+        riga, e qui tace."""
+        rec = self._sys.pagamenti_pendenti.info(rif)
+        if self._riasserisci_incasso(rec, rif) is not False or not isinstance(rec, dict):
+            return
+        try:
+            _leggi_corpo(rec, "incasso_del_blocco")
+        except Exception:
+            logger.error("INCASSATO MA NON REGISTRATO | codice: incassato_non_registrato | "
+                         "sottocodice: corpo_illeggibile | riferimento: %s | pi: %s | messaggio: "
+                         "Stripe ha incassato i soldi dell'ospite ma il libro non ha scritto ne' "
+                         "l'incasso ne' la tassa ne' il bonifico dell'host: vanno registrati a "
+                         "mano", _rif_per_registro(rif), pi)
+
     def _incassa_blocco(self, rif, pi):
         """INCASSA il blocco e, solo dopo, scrive i conti. -> 'incassato' | 'annullato' |
         'fallito'. Se Stripe rifiuta si RILEGGE il pagamento: `succeeded` = incassato davvero
@@ -11035,7 +11053,7 @@ class RouterHTTP:
         stato = "succeeded" if ok else self._stato_pi(pi)
         if stato == "succeeded":
             pp.segna_blocco(rif, blocco_incassato_ts=int(_t.time()))
-            self._riasserisci_incasso(pp.info(rif), rif)
+            self._registra_incasso_del_blocco(rif, pi)
             self._credito_host_al_pagamento(rif, pp.info(rif))
             # V-b (10/11): il bonifico e' appena diventato 'maturato': solo ora conta per il premio
             self._forse_qualifica_referral((pp.info(rif) or {}).get("host_id"),
@@ -11095,7 +11113,7 @@ class RouterHTTP:
             return "annullato"
         if stato == "succeeded":
             pp.segna_blocco(rif, blocco_incassato_ts=int(_t.time()))
-            self._riasserisci_incasso(pp.info(rif), rif)
+            self._registra_incasso_del_blocco(rif, pi)
             logger.warning("BLOCCO SULLA CARTA | gia' INCASSATO quando si e' chiesto l'annullo "
                            "| rif %s | pi %s: si restituisce col rimborso di sempre",
                            _rif_per_registro(rif), pi)
