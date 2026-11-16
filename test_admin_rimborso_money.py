@@ -119,6 +119,179 @@ class TestAdminRimborsoMoney(unittest.TestCase):
         ril = self.sys.garanzia.auto_rilascia(ora_ts=int(time.time()) + 10**9, dettagli=True)
         self.assertEqual(ril, [], "REGRESSIONE: l'host viene pagato su prenotazione rimborsata")
 
+    def _pagata_col_corpo(self, ci, co, corpo):
+        """Una prenotazione PAGATA il cui corpo salvato poi si rompe (o non e' un oggetto)."""
+        import sqlite3
+        s, q = self.g("POST", "/api/concierge/quote",
+                      {"alloggio_id": "casa", "check_in": ci, "check_out": co, "party": 2})
+        s, b = self.g("POST", "/api/concierge/book",
+                      {"quote_token": q["quote_token"], "email": "cli@ar.it"})
+        rif = b["riferimento"]
+        pl = json.dumps({"type": "checkout.session.completed",
+                         "data": {"object": {"id": "cs_" + rif, "payment_intent": "pi_" + rif,
+                                             "metadata": {"riferimento": rif}}}})
+        self.r.gestisci("POST", "/api/payments/webhook", {}, pl,
+                        {"Stripe-Signature": firma_di_test(pl, WH, int(time.time()))})
+        self.assertEqual(self.sys.pagamenti_pendenti.info(rif).get("stato"), "pagato",
+                         "premessa: pagata")
+        con = sqlite3.connect(self.dir + "/p.db")
+        with con:
+            con.execute("UPDATE pendenti SET corpo_json=? WHERE riferimento=?", (corpo, rif))
+        con.close()
+        return rif
+
+    def test_I9_corpo_rotto_rimborso_admin_e_cancellazione_host_si_fermano(self):
+        """I9 (decisione A del fondatore, 12/11): col corpo illeggibile il rimborso admin
+        restituiva 0 senza debito e la cancellazione dell'host chiudeva con penale 0 e
+        rimborso 0; con un JSON che non e' un oggetto (I8) cadevano in 500. Ora si fermano
+        con 503 «corpo_illeggibile» PRIMA di toccare date e soldi, e lo gridano."""
+        pp = self.sys.pagamenti_pendenti
+        casi = (("{rotto", "admin", "2026-09-05", "2026-09-08"),
+                ("[1]", "admin", "2026-09-10", "2026-09-12"),
+                ("{rotto", "host", "2026-09-14", "2026-09-16"),
+                ("[1]", "host", "2026-09-18", "2026-09-20"))
+        for corpo, chi, ci, co in casi:
+            with self.subTest(corpo=corpo, chi=chi):
+                rif = self._pagata_col_corpo(ci, co, corpo)
+                maturato = self._maturato()
+                with self.assertLogs("core_auto.server", level="ERROR") as log:
+                    if chi == "admin":
+                        s, res = self.g("POST", "/api/admin/rimborso",
+                                        {"alloggio_id": "casa", "check_in": ci, "check_out": co,
+                                         "idem_key": pp.info(rif)["idem_key"]},
+                                        {"X-Admin-Key": "ak"})
+                    else:
+                        s, res = self.g("POST", "/api/host/cancella", {"riferimento": rif},
+                                        {"X-Host-Token": self.tok})
+                self.assertEqual((s, res.get("errore")), (503, "corpo_illeggibile"), res)
+                info = pp.info(rif)
+                self.assertEqual((info["stato"], info["corpo_json"]), ("pagato", corpo),
+                                 "su un corpo rotto qualcosa e' cambiato")
+                self.assertEqual(self._maturato(), maturato, "il bonifico dell'host e' cambiato")
+                self.assertTrue(any("corpo_illeggibile" in r.getMessage() for r in log.records
+                                    if r.levelname == "ERROR"), log.output)
+
+    def test_I9_corpo_rotto_il_webhook_di_pagamento_fa_ritentare_stripe(self):
+        """I9 (decisione A): col corpo rotto la conferma del pagamento passava a 'pagato' e poi
+        calcolava bonifico, garanzia e rimborsi dovuti su {} (0, niente host). Ora risponde
+        5xx PRIMA di cambiare stato: Stripe ritenta, e il giro dei webhook pendenti avvisa."""
+        import sqlite3
+        pp = self.sys.pagamenti_pendenti
+        for corpo, ci, co in (("{rotto", "2026-09-05", "2026-09-08"),
+                              ("[1]", "2026-09-10", "2026-09-12")):
+            with self.subTest(corpo=corpo):
+                s, q = self.g("POST", "/api/concierge/quote",
+                              {"alloggio_id": "casa", "check_in": ci, "check_out": co,
+                               "party": 2})
+                s, b = self.g("POST", "/api/concierge/book",
+                              {"quote_token": q["quote_token"], "email": "cli@ar.it"})
+                rif = b["riferimento"]
+                con = sqlite3.connect(self.dir + "/p.db")
+                with con:
+                    con.execute("UPDATE pendenti SET corpo_json=? WHERE riferimento=?",
+                                (corpo, rif))
+                con.close()
+                pl = json.dumps({"type": "checkout.session.completed",
+                                 "data": {"object": {"id": "cs_" + rif,
+                                                     "payment_intent": "pi_" + rif,
+                                                     "metadata": {"riferimento": rif}}}})
+                with self.assertLogs("core_auto.server", level="ERROR") as log:
+                    s, _r = self.r.gestisci("POST", "/api/payments/webhook", {}, pl,
+                                            {"Stripe-Signature":
+                                             firma_di_test(pl, WH, int(time.time()))})
+                self.assertGreaterEqual(s, 500, "Stripe deve ritentare: %r" % (_r,))
+                info = pp.info(rif)
+                self.assertEqual((info["stato"], info["corpo_json"]), ("in_attesa", corpo))
+                self.assertTrue(any("corpo_illeggibile" in r.getMessage()
+                                    for r in log.records if r.levelname == "ERROR"), log.output)
+
+    def test_I9_corpo_rotto_il_blocco_sulla_carta_non_si_segna_da_incassare_subito(self):
+        """I9 parte 3: col corpo rotto la fine della finestra diventava «adesso» (l'ospite
+        perdeva le 48 ore di ripensamento). Ora il blocco non si segna e lo si grida."""
+        pp = self.sys.pagamenti_pendenti
+        rec = {"riferimento": "BVIP-I9B", "stato": "pagato", "corpo_json": "{rotto"}
+        with mock.patch.object(pp, "info", return_value=rec), \
+                mock.patch.object(pp, "segna_blocco") as segna, \
+                self.assertLogs("core_auto.server", level="ERROR") as log:
+            self.assertIs(self.r._segna_blocco_aperto("BVIP-I9B", "pi_1"), False)
+        segna.assert_not_called()
+        self.assertTrue(any("corpo illeggibile" in r.getMessage() for r in log.records
+                            if r.levelname == "ERROR"), log.output)
+
+    def test_I9_corpo_rotto_la_cancellazione_host_a_meta_non_si_chiude_come_non_pagata(self):
+        """I9 parte 3: la ripresa di una 'cancellata_host' a meta' leggeva {} -> «non pagata»:
+        niente rimborso all'ospite e niente penale. Ora non riprende e lo grida."""
+        import fase83_server
+        rec = {"riferimento": "BVIP-I9C", "stato": "cancellata_host", "corpo_json": "[1]"}
+        sistema, router = mock.Mock(), mock.Mock()
+        with self.assertLogs("core_auto.server", level="ERROR") as log:
+            fase83_server._riprendi_cancellazione_host(sistema, router, rec)
+        self.assertEqual(sistema.mock_calls + router.mock_calls, [],
+                         "su un corpo rotto la ripresa ha toccato qualcosa")
+        self.assertTrue(any("corpo_illeggibile" in r.getMessage() for r in log.records
+                            if r.levelname == "ERROR"), log.output)
+
+    def test_I9_corpo_rotto_approvazione_e_arbitro_si_fermano(self):
+        rec = {"riferimento": "BVIP-I9", "stato": "in_attesa_host", "alloggio_id": "casa",
+               "host_id": self.hid}
+        # (e) e (g) di PROTON (12/11): il rosso deve cadere sull'asserzione, non su un int(Mock)
+        # o su un 503 qualunque perche' Stripe nella prova non c'e'. L'arbitro e Stripe sono
+        # spie che GRIDANO se vengono chiamati; la rimozione dal registro idem.
+        arbitro = mock.Mock()
+        arbitro.risolvi.side_effect = AssertionError("arbitro chiamato su un corpo rotto")
+        stripe = mock.Mock()
+        stripe.crea_sessione.side_effect = AssertionError("pagamento creato su un corpo rotto")
+        stripe.crea_link.side_effect = AssertionError("pagamento creato su un corpo rotto")
+        for corpo in ("{rotto", "[1]"):
+            with self.subTest(corpo=corpo), mock.patch.object(
+                    self.sys.pagamenti_pendenti, "info", return_value=dict(rec, corpo_json=corpo)), \
+                    mock.patch.object(self.sys, "stripe", stripe), \
+                    mock.patch.object(self.sys.pagamenti_pendenti, "rimuovi_se_stato") as rimuovi:
+                with self.assertLogs("core_auto.server", level="ERROR"):
+                    self.assertEqual(self.r._decidi_richiesta("BVIP-I9", None, True),
+                                     (503, {"errore": "corpo_illeggibile"}))
+                stripe.crea_sessione.assert_not_called()
+                stripe.crea_link.assert_not_called()
+                rimuovi.assert_not_called()
+                with self.assertLogs("core_auto.server", level="ERROR"):
+                    s, res = self.r._admin_controversia_risolvi_sotto_chiave(
+                        "BVIP-I9", arbitro, 1000, 1000, {})
+                self.assertEqual((s, res), (503, {"errore": "corpo_illeggibile"}))
+                arbitro.risolvi.assert_not_called()
+
+    def test_I6_pagata_senza_pi_non_chiede_il_rimborso_a_stripe_e_grida(self):
+        """I6 (V1 di Proton, 11/11): rimborso admin di una prenotazione PAGATA senza
+        `stripe_pi`. Il ramo «da restituire A MANO» + ERROR c'era, ma nessuna prova lo
+        pretendeva: togliendolo si chiamava `rimborsa("")` e il messaggio cambiava."""
+        s, q = self.g("POST", "/api/concierge/quote",
+                      {"alloggio_id": "casa", "check_in": "2026-09-05",
+                       "check_out": "2026-09-08", "party": 2})
+        s, b = self.g("POST", "/api/concierge/book",
+                      {"quote_token": q["quote_token"], "email": "cli@ar.it"})
+        rif = b["riferimento"]
+        pl = json.dumps({"type": "checkout.session.completed",
+                         "data": {"object": {"id": "cs_" + rif, "metadata": {"riferimento": rif}}}})
+        self.r.gestisci("POST", "/api/payments/webhook", {}, pl,
+                        {"Stripe-Signature": firma_di_test(pl, WH, int(time.time()))})
+        self.assertEqual(self.sys.pagamenti_pendenti.info(rif).get("stato"), "pagato",
+                         "premessa: pagata")
+        s, adm = self.g("GET", "/api/admin/prenotazioni", None, {"X-Admin-Key": "ak"})
+        idem = adm["prenotazioni"][0]["idem_key"]
+        with mock.patch.object(self.sys.stripe, "rimborsa") as rimborsa, \
+                self.assertLogs("core_auto.server", level="ERROR") as log:
+            s, res = self.g("POST", "/api/admin/rimborso",
+                            {"alloggio_id": "casa", "check_in": "2026-09-05",
+                             "check_out": "2026-09-08", "idem_key": idem}, {"X-Admin-Key": "ak"})
+        self.assertEqual(s, 200, res)
+        rimborsa.assert_not_called()
+        self.assertTrue(str(res.get("rimborso_stripe")).startswith(
+            "PAGATA ma pagamento non identificabile"), res)
+        self.assertTrue(any("senza stripe_pi" in r.getMessage() for r in log.records),
+                        log.output)
+        # buco I6-2 di PROTON (12/11): senza questo la risposta poteva dire «nessun passo
+        # fallito» mentre i soldi all'ospite non sono partiti.
+        self.assertIn("soldi_restituiti", res.get("passi_falliti") or [], res)
+
     def test_se_un_passo_di_sicurezza_FALLISCE_la_risposta_NON_dice_fatto(self):
         """IL RIMBORSO NON PUO' DICHIARARE COSE CHE NON SONO AVVENUTE.
 
@@ -748,6 +921,39 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
             if r.get("riferimento") == rif:
                 return r
         return None
+
+    def test_I5_una_pagata_senza_pi_non_spegne_il_bottone_di_tutti(self):
+        """I5 (b3 di Proton, 11/11): nel giro degli allarmi una prenotazione PAGATA e viva
+        senza `stripe_pi` si salta. Senza quel salto si chiedeva a Stripe `rimborsi_di("")`,
+        la risposta «non lo so» rendeva la lista non controllabile, e il bottone si spegneva
+        su TUTTE le righe: nessun ospite rimborsabile. Nessuna prova lo vedeva."""
+        # buco I5-2 di PROTON (12/11): «continue» -> «break» restava verde. Serve una pagata
+        # CON pi_ esaminata DOPO quella senza: Stripe dice di averla rimborsata e l'allarme
+        # deve comparire. `pagati_recenti` va dal piu' nuovo (creato_ts DESC): la pagata senza
+        # pi_ si fa piu' nuova di proposito, cosi' l'ordine non dipende dal secondo dell'orologio.
+        rif_dopo, _ = self._prenota_e_paga("2026-09-24", "2026-09-26", "pi_b3_dopo")
+        STRIPE_FINTO["rimborsi_per_pi"]["pi_b3_dopo"] = [
+            {"id": "re_b3", "status": "succeeded", "amount": 30000}]
+        rif_senza, _ = self._prenota_e_paga("2026-09-20", "2026-09-22", "")
+        con = self.sys.pagamenti_pendenti._apri()
+        try:
+            con.execute("UPDATE pendenti SET creato_ts = creato_ts + 1000 WHERE riferimento=?",
+                        (rif_senza,))
+            con.commit()
+        finally:
+            con.close()
+        ordine = [r.get("riferimento") for r in self.sys.pagamenti_pendenti.pagati_recenti()]
+        self.assertLess(ordine.index(rif_senza), ordine.index(rif_dopo),
+                        "premessa: la pagata senza pi_ va esaminata per prima: %r" % (ordine,))
+        rif = self._paga_tardi_su_stanza_rubata("2026-09-18", "2026-09-20", "pi_b3_1")
+        corpo = self._lista()
+        self.assertIs(corpo.get("controllabile"), True,
+                      "una pagata senza pi_ rende la lista non controllabile: %r" % (corpo,))
+        self.assertTrue((self._riga(corpo, rif) or {}).get("bottone"),
+                        "il bottone dell'ospite da rimborsare si e' spento: %r" % (corpo,))
+        self.assertIn(rif_dopo, [a.get("riferimento") for a in corpo.get("allarmi") or []],
+                      "dopo una pagata senza pi_ il giro degli allarmi si e' fermato: %r"
+                      % (corpo,))
 
     def _paga_tardi_su_stanza_rubata(self, ci, co, pi_id):
         """STRADA 5: il cliente prenota, l'attesa scade, un ALTRO si prende la stanza, e solo
