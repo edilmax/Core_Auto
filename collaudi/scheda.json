@@ -1012,10 +1012,10 @@
  "d70ecb7a31cc": {
   "blocco": 1,
   "comando": "python collaudi/esame_rimborsi.py --scrivi",
-  "commit": "98928c4",
+  "commit": "82be7c0",
   "condizione": "i soldi tornano DAVVERO all'ospite da OGNI strada che porta a un rimborso, non solo da quella che qualcuno si e' ricordato di provare (il 2026-08-16 le strade erano due e ne funzionava una). ⛔ L'AUTOMATICO NON e' la riga d'arrivo di questo blocco: e' una decisione del fondatore, e si accende dopo -- prima si guadagna la fiducia, poi si toglie il dito",
   "denominatore": 41,
-  "esito": false,
+  "esito": true,
   "impronta": "d37de61a5833",
   "impronte_moduli": {
    "fase101_stripe_connect": "39dfb5137d9a",
@@ -1045,8 +1045,8 @@
    "fase87_stripe_webhook": "c77544db5a33",
    "fase99_multicurrency": "3bb03f7179ab"
   },
-  "motivo": "scritture fuori censimento: prova, rimborso di prova",
-  "quando": "2026-11-15T22:44:01"
+  "motivo": "",
+  "quando": "2026-11-16T13:47:13"
  },
  "df0678e71e35": {
   "blocco": 9,

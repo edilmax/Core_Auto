@@ -122,6 +122,10 @@ NON_GUARDA = (
     "piu' accende una guardia in piu', mai una catena in piu' -- la catena la provano solo gli "
     "eventi osservati in un collaudo verde; un collaudo che guida il server senza importarlo "
     "(importlib, un altro modulo) non viene acceso",
+    "una riga di rimborso scritta da una PROVA che chiama `_giornale` a mano (il chiamante sta "
+    "in un `test_*.py`) prepara la situazione e non e' una strada: si elenca a parte e non "
+    "conta, in nessun verso -- non fa tornare una strada censita e non ne accusa una nuova (S-e, "
+    "16/11)",
     "le altre cinque caselle del blocco: non le tocca",
 )
 
@@ -204,7 +208,8 @@ def installa_osservatore():
             EVENTI.append({"tipo": "scrittura", "test": CORRENTE["test"],
                            "handler": _handler_corrente(), "causale": k.get("causale"),
                            "rif": str(k.get("riferimento")), "importo": k.get("importo_cents"),
-                           "funzione": f.f_code.co_name, "riga": f.f_lineno})
+                           "funzione": f.f_code.co_name, "riga": f.f_lineno,
+                           "file": f.f_code.co_filename})
         return vero_giornale(self, *a, **k)
 
     vera_lista = cls._admin_rimborsi_dovuti
@@ -454,6 +459,17 @@ _FORZA = {TORNA_DIRETTA: 5, TORNA_PULSANTE: 5, MANUALE: 4, NON_ESCE: 3, NON_IN_L
           NON_MISURATA: 1}
 
 
+# S-e (16/11): le righe di rimborso che una PROVA scrive chiamando `_giornale` a mano, per
+# preparare la situazione da controllare. Non sono strade del prodotto (il censimento legge solo
+# il prodotto): si elencano a parte e non accusano niente. Le riempie `misura`.
+SCRITTE_DALLE_PROVE = set()
+
+
+def _scritta_da_una_prova(evento):
+    """True se chi ha chiamato `_giornale` sta in un file di prova (`test_*.py`)."""
+    return os.path.basename(str(evento.get("file") or "")).startswith("test_")
+
+
 def misura():
     """Per ogni strada censita, lo stato migliore raggiunto in un collaudo VERDE."""
     mappa = strade()
@@ -462,8 +478,12 @@ def misura():
     esiti = {c: {"stato": NON_MISURATA, "dettaglio": "", "collaudo": None, "funzione": None}
              for c in mappa}
     fuori_censimento = set()
+    SCRITTE_DALLE_PROVE.clear()
     for e in EVENTI:
         if e["tipo"] != "scrittura" or e["test"] not in verdi:
+            continue
+        if _scritta_da_una_prova(e):
+            SCRITTE_DALLE_PROVE.add(str(e["causale"]))
             continue
         causale = _quale_strada(e["causale"], mappa)
         if causale is None:
@@ -633,6 +653,8 @@ def main(argv=None):
     for c in fuori:
         print("  ⚠️ scrittura con causale FUORI censimento: %r (una strada nuova? il censimento "
               "deve gridare per primo)" % c)
+    for c in sorted(SCRITTE_DALLE_PROVE):
+        print("  · scritta a mano da una PROVA (non e' una strada, non conta): %r" % c)
     print("STRADE_TORNANO=%d/%d" % (tornano, len(esiti)))
 
     print("")
