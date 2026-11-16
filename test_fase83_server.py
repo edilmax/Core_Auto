@@ -3135,6 +3135,27 @@ class TestLaStanzaSiLiberaSoloAPaginaChiusa(_BancoDeiSoldiDelServer):
                 self.assertEqual(len(trovate), 1, righe)
                 self.assertIn(atteso, trovate[0])
 
+    def test_PR321_col_corpo_rotto_al_secondo_esatto_del_giorno_la_stanza_resta(self):
+        """Pezzo 7 (PR #321), sopravvissuto del giudice a fase83:14401 (`>` -> `>=`): col corpo
+        rotto la stanza di chi e' 'in_attesa' si tiene finche' la pagina puo' essere viva. Al
+        secondo esatto di scadenza + un giorno si tiene ancora (WARNING); un secondo dopo si
+        libera (ERROR). La prova F7 qui sopra salta a 600 secondi oltre e il confine non lo
+        tocca."""
+        from fase83_server import _pagina_stripe_chiusa, _VITA_MASSIMA_PAGINA_STRIPE_S
+        rec = dict(self.sis.pagamenti_pendenti.info(self.rif))
+        _deve(rec.get("stato") == "in_attesa", "PREMESSA: blocco in attesa", rec)
+        rec["corpo_json"] = "{rotto"
+        confine = int(rec["scadenza_ts"]) + _VITA_MASSIMA_PAGINA_STRIPE_S
+        for ora, liberata, livello in ((confine, False, "WARNING:"), (confine + 1, True, "ERROR:")):
+            with self.subTest(ora=ora - confine):
+                with mock.patch("time.time", return_value=ora), self.ascolta() as righe:
+                    esito = _pagina_stripe_chiusa(self.sis, rec)
+                self.assertIs(esito, liberata)
+                self.assertEqual(len([r for r in righe if r.startswith(livello)
+                                      and "SPAZZINO" in r and "corpo_illeggibile" in r]), 1,
+                                 righe)
+        self.assertEqual(self.chiusure, [], "senza numero di pagina Stripe non si chiama")
+
 
 class TestLoSpazzinoChiudeLaPaginaCheLOspiteHaInMano(_BancoDeiSoldiDelServer):
     """PIANO DEI 2 MINUTI, pezzo 3, difetti A e B (11/11: trovati da silent-failure-hunter e
@@ -10821,6 +10842,30 @@ class TestI9IlBonificoAspettaSeIlCorpoERotto(_BancoDeiBonifici):
         self.assertIs(esito, False, "il webhook deve rispondere 503 perche' Stripe ritenti")
         riasserisci.assert_not_called()
         email.assert_not_called()
+
+    def test_PR321_col_corpo_rotto_la_conferma_dice_False_e_non_scrive_pagato(self):
+        """Pezzo 7 (PR #321), sopravvissuto del giudice a fase83:11355 (`return False` ->
+        `return True`): col corpo rotto la conferma si ferma PRIMA di 'pagato' e risponde
+        False, cioe' 503 a Stripe, che ritenta. Con True Stripe riceverebbe «ricevuto» e non
+        ritenterebbe piu': un pagamento vero rimasto 'in_attesa' per sempre."""
+        from test_movimenti_giornale import CI, CO
+        _, q = self.g("POST", "/api/concierge/quote", {"alloggio_id": "casa",
+                      "check_in": CI, "check_out": CO, "party": 2})
+        _, b = self.g("POST", "/api/concierge/book",
+                      {"quote_token": q["quote_token"], "email": "o@collaudo.invalid"})
+        rif = b["riferimento"]
+        pp = self.sis.pagamenti_pendenti
+        self.assertEqual(pp.info(rif)["stato"], "in_attesa", "premessa: non ancora pagata")
+        con = sqlite3.connect(self.dir + "/p.db")
+        with con:
+            con.execute("UPDATE pendenti SET corpo_json=? WHERE riferimento=?", ("{rotto", rif))
+        con.close()
+        with mock.patch.object(pp, "conferma", wraps=pp.conferma) as conferma, \
+                self.assertLogs("core_auto.server", level="ERROR"):
+            esito = self.r._conferma_pagamento(rif)
+        self.assertIs(esito, False, "il webhook deve rispondere 503 perche' Stripe ritenti")
+        conferma.assert_not_called()
+        self.assertEqual(pp.info(rif)["stato"], "in_attesa", "'pagato' scritto su un corpo rotto")
 
     def test_a_corpo_sano_l_incasso_si_riasserisce(self):
         rif = self._prenota_paga()

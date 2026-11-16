@@ -4194,7 +4194,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 89e2708
+CONSEGNE AGGIORNATE A: a8aac1d
+
+- AGGIORNAMENTO 16/11 notte (sessione a5ee80fe): PEZZO 7 = PR #321, CI di a8aac1d: 16 controlli verdi, `caselle` ROSSO con 2 SOPRAVVISSUTI su 36 (uccisi 34, scoperti 0), cricchetto «nessuna casella persa». Presi nel file che il giudice accende, nessuna riga di produzione toccata: `TestI9IlBonificoAspettaSeIlCorpoERotto.test_PR321_col_corpo_rotto_la_conferma_dice_False_e_non_scrive_pagato` (fase83:11355, col corpo rotto la conferma risponde False = 503 e Stripe ritenta; con True il pagamento resterebbe 'in_attesa' per sempre) e `TestLaStanzaSiLiberaSoloAPaginaChiusa.test_PR321_col_corpo_rotto_al_secondo_esatto_del_giorno_la_stanza_resta` (fase83:14401, il confine esatto di scadenza + un giorno). Copie guaste con genera_mutanti/applica_mutante: 2 su 2 prese per asserzione. Revisore code-reviewer sul diff di produzione del pezzo 7: APPROVE, 0 critici/alti; i punti medi (M1 cattura riuscita e corpo rotto senza una riga dedicata «incassato ma non registrato», serve «autorizzato»; M2 lo sconto «una carta» saltato col corpo rotto, eccezione decisa dal fondatore il 12/11; M3 stanza tenuta un giorno con solo WARNING prima; basso: `_riprendi_cancellazione_host` ERROR a ogni giro col corpo rotto) vanno nell'elenco col loro posto (D27): dopo il pezzo 7, coi difetti degli strumenti S-a..S-e. Caricatore 8154.
 
 - AGGIORNAMENTO 16/11 notte (sessione a5ee80fe): PEZZO 6 (PR #320) UNITO E IN PRODUZIONE, master = GitHub = VPS = ea0e61c. CI di 56e14ac: 17 controlli, gate success, caselle «provati 56 · uccisi 56 · SOPRAVVISSUTI 0», CodeQL 0 allarmi aperti nella PR e check-run «No new alerts». Unione dall'API vincolata allo sha 56e14ac. D17: prima (punto di ritorno 3997f1e riletto, :prec riagganciato a 94c22e75, salvataggio gzip integro e SQLite), scambio (immagine nuova a15b978f, sana, money_path_pronto True, avvisi []), dopo (/ 200, /api/health 200, /api/bunker/invarianti 403, giudice 190 controlli 0 violazioni, commit dentro il contenitore ea0e61c): uscita 0 tutte e tre. Trivy 0.76.1 sull'immagine VIVA (docker save, sha256 2633acfd... uguale sul VPS e sul PC, copia tolta dal VPS): 0 falle correggibili, uscita 0 (NON guardate: le falle senza correzione, `--ignore-unfixed`, e l'immagine di nginx). esame_produzione: 8 su 9, l'unico rosso e' il Guardiano che conta ancora l'email vera non consegnata del 15/11 01:12:26Z (Hostinger sospesa, pagata il 15/11): esce dalla finestra di 24 ore alle 01:12Z del 16/11. Pezzo 7: unito master ea0e61c nel ramo (89e2708, senza conflitti).
 
@@ -6740,7 +6742,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 8152 test
+SUITE ATTUALE: Ran 8154 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo
