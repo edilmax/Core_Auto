@@ -476,7 +476,8 @@ _TITOLI = {
 
 
 def riassunto_html(report: Dict[str, Any]) -> str:
-    """Corpo dell'email di allarme (XSS-safe). Solo se il report NON e' pulito."""
+    """Corpo dell'email del Guardiano (XSS-safe): l'allarme se il report NON e' pulito, il
+    rapporto del giorno se lo e' (parte ogni giorno, fase83)."""
     e = _html.escape
     an = report.get("anomalie") or {}
     righe = []
@@ -507,6 +508,19 @@ def riassunto_html(report: Dict[str, Any]) -> str:
             "nulla perche' non hanno potuto guardare. Su questi fronti non sappiamo.<br>%s"
             "</div></div>"
             % (len(ne), "<br>".join(e(str(x)[:180]) for x in ne)))
+    if report.get("pulito") and not an:
+        # 16/11 («autorizzato» del fondatore, che ha visto la mail): dal 14/9 il rapporto parte
+        # OGNI giorno anche quando tutto quadra (fase83, giro quotidiano), ma questo corpo era
+        # rimasto l'allarme: titolo rosso «0 stato/i anomalo/i» e «non ricevi nulla», falso.
+        # Con controlli non eseguiti non si dice «tutto quadra»: non hanno guardato.
+        testa = ("<h2 style=\"color:#1e7e34\">&#10004; Il Guardiano: tutto quadra</h2>" if not ne
+                 else "<h2 style=\"color:#b8860b\">Il Guardiano: nessuno stato anomalo, ma %d "
+                      "controllo/i NON eseguito/i</h2>" % len(ne))
+        return (
+            "<div style=\"font-family:sans-serif;max-width:640px\">%s%s"
+            "<p style=\"color:#5e6f8d;font-size:.8rem\">Guardiano automatico (fase186) - questo "
+            "rapporto arriva ogni giorno: se un giorno non arriva, e' quello l'allarme.</p></div>"
+        ) % (testa, "".join(righe))
     return (
         "<div style=\"font-family:sans-serif;max-width:640px\">"
         "<h2 style=\"color:#c0392b\">&#9888; Il Guardiano ha trovato %d stato/i anomalo/i</h2>"
