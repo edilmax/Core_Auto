@@ -672,6 +672,39 @@ class TestRiassuntoEmail(_Base):
         self.assertNotIn("<script>x", html, "il riassunto non e' XSS-safe")
         self.assertIn("&lt;script&gt;", html)
 
+    def test_il_rapporto_pulito_non_dice_allarme_e_non_mente_sul_silenzio(self):
+        """16/11, mail vista dal fondatore («autorizzato»): dal 14/9 il rapporto parte OGNI
+        giorno anche quando tutto quadra (fase83, giro quotidiano), ma il corpo era rimasto
+        quello dell'allarme: titolo rosso «&#9888; Il Guardiano ha trovato 0 stato/i
+        anomalo/i» e «Se questo elenco e' vuoto non ricevi nulla», falso perche' la mail
+        arrivava. Un allarme che grida a vuoto insegna a ignorarlo (regola ferrea 10)."""
+        html = G.riassunto_html({"conta": 0, "pulito": True, "anomalie": {},
+                                 "non_eseguiti": []})
+        for falso in ("&#9888;", "stato/i anomalo/i", "non ricevi nulla",
+                      "non dovrebbero poter esistere", "#c0392b"):
+            self.assertNotIn(falso, html, "il rapporto PULITO dice ancora %r" % falso)
+        self.assertIn("tutto quadra", html)
+        self.assertIn("ogni giorno", html, "non dice che il silenzio e' l'allarme")
+
+    def test_l_allarme_vero_resta_rosso(self):
+        # anche lo stato impossibile (D19): «pulito» con anomalie dentro resta un allarme
+        for pulito in (False, True):
+            with self.subTest(pulito=pulito):
+                html = G.riassunto_html({"conta": 1, "pulito": pulito,
+                                         "anomalie": {"payout_orfano": [{"host_id": "h"}]}})
+                self.assertIn("&#9888; Il Guardiano ha trovato 1 stato/i anomalo/i", html)
+                self.assertIn("#c0392b", html)
+                self.assertNotIn("tutto quadra", html)
+
+    def test_pulito_con_controlli_non_eseguiti_non_dice_tutto_controllato(self):
+        html = G.riassunto_html({"conta": 0, "pulito": True, "anomalie": {},
+                                 "non_eseguiti": ["stripe: chiave assente"]})
+        self.assertNotIn("&#9888; Il Guardiano ha trovato", html)
+        self.assertIn("Controlli NON ESEGUITI (1)", html)
+        self.assertIn("stripe: chiave assente", html)
+        self.assertNotIn("tutto quadra", html,
+                         "«tutto quadra» con un controllo che non ha guardato e' un verde finto")
+
 
 class TestEndpointManuale(_Base):
     """La rotta a richiesta `/api/bunker/guardiano`: stesso controllo del giro giornaliero,
