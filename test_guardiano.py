@@ -705,6 +705,21 @@ class TestRiassuntoEmail(_Base):
         self.assertNotIn("tutto quadra", html,
                          "«tutto quadra» con un controllo che non ha guardato e' un verde finto")
 
+    def test_un_elenco_lungo_dice_quanti_ne_ha_lasciati_fuori(self):
+        """Revisione della M3 (16/11): la mail mostra le prime 5 voci di ogni elenco e taceva
+        sulle altre -- con 8 prenotazioni rotte ne nominava 5. Il taglio resta (la mail e' un
+        avviso, non il registro), ma si dice; e a 5 voci esatte non c'e' niente da dire."""
+        for n, coda in ((7, "e altri 2 non mostrati qui"), (5, None)):
+            with self.subTest(n=n):
+                html = G.riassunto_html({"conta": n, "pulito": False,
+                                         "anomalie": {"x": ["R-%d" % i for i in range(n)]}})
+                self.assertIn("R-4", html)
+                self.assertNotIn("R-5", html)
+                if coda:
+                    self.assertIn(coda, html, "la mail ha tagliato l'elenco senza dirlo")
+                else:
+                    self.assertNotIn("non mostrati", html)
+
 
 class TestEndpointManuale(_Base):
     """La rotta a richiesta `/api/bunker/guardiano`: stesso controllo del giro giornaliero,

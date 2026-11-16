@@ -472,6 +472,9 @@ _TITOLI = {
     "guasti_isolati": "Errori nel registro nelle ultime 24h: guasti ingoiati che nessuno leggerebbe",
     "controversia_aperta": "Controversie aperte (non un guasto): il bonifico all'host resta fermo "
                            "finche' l'arbitro non decide dal pannello admin",
+    # M3 (16/11): la chiave la scrive fase202 (`CHIAVE_CORPO_ILLEGGIBILE`), una guardia le tiene insieme
+    "corpo_illeggibile": "Prenotazioni coi dati salvati illeggibili: i loro passi sui soldi sono "
+                         "fermi e vanno sistemate a mano",
 }
 
 
@@ -488,6 +491,8 @@ def riassunto_html(report: Dict[str, Any]) -> str:
         campione = ""
         if isinstance(contenuto, list) and contenuto:
             campione = "<br>".join(e(str(x)[:180]) for x in contenuto[:5])
+            if len(contenuto) > 5:      # revisione M3 (16/11): il taglio si dice
+                campione += "<br>... e altri %d non mostrati qui" % (len(contenuto) - 5)
         elif isinstance(contenuto, dict):
             campione = "<br>".join("%s: %s" % (e(str(k)), e(str(v)[:180]))
                                    for k, v in contenuto.items())
