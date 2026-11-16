@@ -324,6 +324,67 @@ class TestIlRapportoDelGuardiano(_Archivi):
         self.assertTrue(any(m.startswith("invarianti_archivi") for m in rap["non_eseguiti"]),
                         rap["non_eseguiti"])
 
+    # -- M3 (revisione del pezzo 7, «autorizzato» del fondatore 16/11): un corpo rotto non
+    #    entrava nel rapporto. Lo spazzino tiene la stanza di chi e' 'in_attesa' fino a un giorno
+    #    scrivendo solo WARNING, il Guardiano legge solo ERROR: la mail diceva «tutto quadra».
+    def _rompi(self, rif, testo):
+        self._sql("p.db", "UPDATE pendenti SET corpo_json=? WHERE riferimento=?", (testo, rif))
+
+    def test_M3_un_corpo_rotto_entra_fra_le_anomalie_una_riga_per_prenotazione(self):
+        self._notti("villa", ["2027-05-01", "2027-05-02"])
+        self._pagata("R-SANA")
+        self._incasso("R-SANA", 30000)
+        self._pagata("R-M3B", ci="2027-06-01", co="2027-06-02")
+        self.assertTrue(self.sys.pagamenti_pendenti.registra(
+            "R-M3A", alloggio_id="villa", check_in="2027-07-01", check_out="2027-07-02",
+            idem_key="idem-R-M3A", corpo_json=json.dumps({"totale_cents": 9000}),
+            scadenza_ts=1_800_000_000))
+        self._rompi("R-M3A", "{rotto")
+        self._rompi("R-M3B", "[1]")
+        rap = A.con_invarianti(self._rapporto_pulito(), self.d)
+        self.assertEqual(rap["anomalie"].get("corpo_illeggibile"),
+                         ["R-M3A (JSONDecodeError, stato in_attesa)",
+                          "R-M3B (non_oggetto, stato pagato)"],
+                         "la mail del Guardiano non dice quali prenotazioni hanno il corpo rotto")
+        self.assertFalse(rap["pulito"], "un corpo rotto e la mail dice «tutto quadra»")
+        self.assertGreaterEqual(rap["conta"], 2)
+
+    def test_M3_la_mail_nomina_la_prenotazione_con_un_titolo_che_si_capisce(self):
+        """Revisione della M3: le prove guardavano il rapporto, non la mail che il fondatore
+        legge; e senza titolo la mail mostrava la chiave tecnica «corpo_illeggibile»."""
+        from fase186_guardiano import _TITOLI, riassunto_html
+        self._notti("villa", ["2027-05-01", "2027-05-02"])
+        self._pagata("R-M3M")
+        self._rompi("R-M3M", "{rotto")
+        html = riassunto_html(A.con_invarianti(self._rapporto_pulito(), self.d))
+        titolo = _TITOLI.get(A.CHIAVE_CORPO_ILLEGGIBILE)
+        self.assertTrue(titolo, "nessun titolo in italiano per i corpi illeggibili")
+        self.assertIn(titolo.replace("'", "&#x27;"), html)
+        self.assertIn("R-M3M (JSONDecodeError, stato pagato)", html)
+        self.assertIn("&#9888; Il Guardiano ha trovato", html)
+
+    def test_M3_un_corpo_annidato_all_infinito_e_illeggibile_non_fa_esplodere_il_giro(self):
+        """Revisione della M3: `json.loads` su migliaia di parentesi alza RecursionError, che
+        non e' un ValueError: il giro dei cinque invarianti esplodeva invece di dirlo."""
+        self._notti("villa", ["2027-05-01", "2027-05-02"])
+        self._pagata("R-M3R")
+        self._rompi("R-M3R", "[" * 100000)
+        rap = A.con_invarianti(self._rapporto_pulito(), self.d)
+        self.assertEqual(rap["anomalie"].get("corpo_illeggibile"),
+                         ["R-M3R (RecursionError, stato pagato)"])
+        self.assertEqual(rap["invarianti"]["verificati"], list(A.CODICI))
+
+    def test_M3_coi_corpi_buoni_o_vuoti_nessuna_anomalia_del_corpo(self):
+        self._notti("villa", ["2027-05-01", "2027-05-02"])
+        self._pagata("R-SANA")
+        self._incasso("R-SANA", 30000)
+        self.assertTrue(self.sys.pagamenti_pendenti.registra(
+            "R-VUOTO", alloggio_id="villa", check_in="2027-07-01", check_out="2027-07-02",
+            idem_key="idem-R-VUOTO", corpo_json="", scadenza_ts=1_800_000_000))
+        rap = A.con_invarianti(self._rapporto_pulito(), self.d)
+        self.assertNotIn("corpo_illeggibile", rap["anomalie"])
+        self.assertTrue(rap["pulito"], rap["anomalie"])
+
     def test_la_riga_del_registro_ha_UNA_forma_sola(self):
         r = {"verificati": ["I1", "I2"], "letti": {"archivi": 3, "notti": 2},
              "violazioni": {"I1": [1, 2]}, "non_eseguiti": ["x"], "ciechi": []}

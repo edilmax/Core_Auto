@@ -83,6 +83,8 @@ CODICI = ("I1", "I2", "I3", "I4", "I5")
 # La chiave sotto cui le violazioni entrano nel rapporto del Guardiano (`anomalie`): il
 # riassunto dell'email la stampa cosi' com'e' (fase186 non la conosce per nome).
 CHIAVE_ANOMALIA = "invarianti_violati"
+# M3 (16/11): le prenotazioni col corpo salvato illeggibile, una riga ciascuna nell'email
+CHIAVE_CORPO_ILLEGGIBILE = "corpo_illeggibile"
 TIMEOUT_SQLITE = 30          # standard del progetto (bug #36): sotto contesa aspetta, mai 'locked'
 # IL BLOCCO SULLA CARTA: quanto dopo la fine della finestra un blocco non incassato e' ancora
 # un ritardo e non un incasso mancato. Il giro che incassa gira ogni ORA: la grazia copre
@@ -262,21 +264,27 @@ def _corpo(p: Dict[str, Any]) -> Dict[str, Any]:
     variant-analysis): un corpo rotto qui si trattava come vuoto IN SILENZIO -- lo strumento che
     cerca i guasti nei soldi li nascondeva. Ora lo dice; il ripiego {} resta quello di prima.
     Guardia: `test_fase202_invarianti_archivi.TestF17IlControlloDegliInvariantiNonNascondeUnCorpoRotto`."""
+    d, sotto = _guasto_del_corpo(p)
+    if sotto:
+        logger.warning("INVARIANTI | codice: corpo_illeggibile | sottocodice: %s | riferimento: "
+                       "%s | messaggio: il corpo salvato della prenotazione non si legge, lo "
+                       "controllo come vuoto", sotto, _rif_pulito(p))
+    return d
+
+
+def _rif_pulito(p: Dict[str, Any]) -> str:
     # le righe del caricatore hanno "rif" (code-reviewer, 11/11); pulito come _rif_per_registro
     rif = re.sub(r"[^A-Za-z0-9:_.-]", "", str(p.get("rif", p.get("riferimento", "-"))))[:64]
-    rif = rif.replace("\r", "").replace("\n", "")      # la barriera che CodeQL riconosce
+    return rif.replace("\r", "").replace("\n", "")      # la barriera che CodeQL riconosce
+
+
+def _guasto_del_corpo(p: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
+    """(corpo, sottocodice del guasto): '' se il corpo si legge o manca, {} se non si legge."""
     try:
         d = json.loads(p.get("corpo_json") or "{}")
-    except (TypeError, ValueError) as exc:
-        sotto = type(exc).__name__
-    else:
-        if isinstance(d, dict):
-            return d
-        sotto = "non_oggetto"
-    logger.warning("INVARIANTI | codice: corpo_illeggibile | sottocodice: %s | riferimento: %s | "
-                   "messaggio: il corpo salvato della prenotazione non si legge, lo controllo "
-                   "come vuoto", sotto, rif)
-    return {}
+    except (TypeError, ValueError, RecursionError) as exc:   # migliaia di parentesi: RecursionError
+        return {}, type(exc).__name__
+    return (d, "") if isinstance(d, dict) else ({}, "non_oggetto")
 
 
 def _giudica_i2(prenotazioni: List[Dict[str, Any]], giornale: List[Dict[str, Any]],
@@ -352,9 +360,16 @@ def _giudica_i5(garanzie: List[Dict[str, Any]], prenotazioni: List[Dict[str, Any
 
 def scansiona_archivi(dir_dati: str, *, ora: Any = None) -> Dict[str, Any]:
     """Il giro: legge, giudica coi cinque invarianti, GRIDA nel registro. Non solleva mai.
-    Ritorna {violazioni, verificati, non_eseguiti, letti, ciechi, ts}."""
+    Ritorna {violazioni, verificati, non_eseguiti, letti, ciechi, corpi_illeggibili, ts}."""
     ora_ts = int((ora or time.time)())
     dati = leggi_archivi(dir_dati)
+    # M3 (16/11): un corpo che non si legge ferma i punti dei soldi di quella prenotazione e lo
+    # spazzino ne tiene la stanza; i giudizi lo contano come vuoto. Si nomina, uno per riga.
+    corpi_illeggibili = []
+    for p in dati["prenotazioni"]:
+        sotto = _guasto_del_corpo(p)[1]
+        if sotto:
+            corpi_illeggibili.append("%s (%s, stato %s)" % (_rif_pulito(p), sotto, p.get("stato")))
     violazioni: Dict[str, List[Any]] = {}
     verificati: List[str] = []
     non_eseguiti: List[str] = []
@@ -386,7 +401,8 @@ def scansiona_archivi(dir_dati: str, *, ora: Any = None) -> Dict[str, Any]:
              "payout": len(dati["payout"]), "giornale": len(dati["giornale"]),
              "importi": len(dati["importi"])}
     rapporto = {"violazioni": violazioni, "verificati": verificati, "non_eseguiti": non_eseguiti,
-                "letti": letti, "ciechi": list(dati["ciechi"]), "ts": ora_ts}
+                "letti": letti, "ciechi": list(dati["ciechi"]),
+                "corpi_illeggibili": sorted(corpi_illeggibili), "ts": ora_ts}
     riga = formatta_riga(rapporto)
     if violazioni:
         logger.error("%s -> VIOLATI: %r", riga, {k: len(v) for k, v in violazioni.items()})
@@ -424,6 +440,9 @@ def con_invarianti(rapporto: Dict[str, Any], dir_dati: str) -> Dict[str, Any]:
     if inv["ciechi"]:
         an.setdefault("controllo_cieco", []).extend("invarianti_archivi:" + c for c in inv["ciechi"])
         aggiunte += len(inv["ciechi"])
+    if inv.get("corpi_illeggibili"):
+        an[CHIAVE_CORPO_ILLEGGIBILE] = list(inv["corpi_illeggibili"])
+        aggiunte += len(inv["corpi_illeggibili"])
     ne.extend("invarianti_archivi: " + m for m in inv["non_eseguiti"])
     if aggiunte:
         rapporto["conta"] = int(rapporto.get("conta") or 0) + aggiunte
