@@ -7032,6 +7032,109 @@ class TestIlBonificoFermatoDalBloccoRiparteAllIncasso(_BancoDelBonificoLegato):
                                         "|exc_info:OperationalError"), "%r" % (righe,))
 
 
+class TestM1IncassatoMaNonRegistratoSiDiceColSuoNome(_BancoDelBonificoLegato):
+    """M1 della revisione indipendente del pezzo 7 («autorizzato M1» del fondatore, 16/11).
+    Stripe INCASSA il blocco sulla carta, ma il corpo salvato della prenotazione non si legge:
+    il nostro libro non scrive ne' l'incasso ne' la tassa ne' il bonifico dell'host. Il
+    registro diceva solo il generico «SOLDI FERMI» di `_riasserisci_incasso`, che non sa se i
+    soldi siano entrati davvero. Qui chi lo sa (Stripe ha risposto `succeeded`) lo dice col suo
+    nome: soldi dell'ospite gia' presi, e nessuna riga che li racconti.
+    Le due direzioni (regola ferrea 10): grida sulle due strade che incassano (`_incassa_blocco`
+    e `_annulla_blocco` che trova gia' incassato) e TACE col corpo sano -- anche quando il
+    bonifico resta fermo, che e' un altro guasto e ha gia' la sua riga."""
+
+    def rompi_il_corpo(self, rif, corpo="{rotto"):
+        con = sqlite3.connect(os.path.join(self.dir, "p.db"))
+        with con:
+            con.execute("UPDATE pendenti SET corpo_json=? WHERE riferimento=?", (corpo, rif))
+        con.close()
+
+    def la_riga(self, righe):
+        return self.errori_con(righe, "INCASSATO MA NON REGISTRATO")
+
+    def guarda_la_riga(self, righe, rif, pi):
+        trovate = self.la_riga(righe)
+        self.assertEqual(1, len(trovate), "STRIPE HA INCASSATO E IL REGISTRO NON LO DICE COL SUO "
+                                          "NOME: %r" % (righe,))
+        for pezzo in ("codice: incassato_non_registrato",
+                      "riferimento: " + fase83_server._rif_per_registro(rif), "pi: " + pi):
+            self.assertIn(pezzo, trovate[0])
+
+    def test_M1_incasso_riuscito_col_corpo_rotto_si_grida(self):
+        rif = self.pagata("casa-m1a", "pi_m1a", bloccata=True)["riferimento"]
+        self.rompi_il_corpo(rif)
+        with self.ascolta() as righe:
+            esito = self.r._incassa_blocco(rif, "pi_m1a")
+        _deve(self.stripe.pagamenti["pi_m1a"] == "succeeded", "PREMESSA: Stripe ha incassato",
+              self.stripe.pagamenti)
+        _deve(self.incassi(rif) == [], "PREMESSA: col corpo rotto il libro non scrive l'incasso",
+              self.incassi(rif))
+        self.assertEqual("incassato", esito)
+        self.guarda_la_riga(righe, rif, "pi_m1a")
+
+    def test_M1_annullo_che_trova_gia_incassato_col_corpo_rotto_si_grida(self):
+        rif = self.pagata("casa-m1b", "pi_m1b", bloccata=True)["riferimento"]
+        self.stripe.pagamenti["pi_m1b"] = "succeeded"   # il giro orario ha incassato un istante prima
+        self.rompi_il_corpo(rif)
+        with self.ascolta() as righe:
+            esito = self.r._annulla_blocco(rif, "pi_m1b")
+        _deve(self.incassi(rif) == [], "PREMESSA: col corpo rotto il libro non scrive l'incasso",
+              self.incassi(rif))
+        self.assertEqual("incassato", esito)
+        self.guarda_la_riga(righe, rif, "pi_m1b")
+
+    def test_M1_un_corpo_che_e_json_ma_non_un_oggetto_grida_uguale(self):
+        # revisione del M1: `_leggi_corpo` lo rifiuta con un errore diverso da quello del
+        # JSON rotto, e anche li' i soldi sono entrati senza riga
+        rif = self.pagata("casa-m1f", "pi_m1f", bloccata=True)["riferimento"]
+        self.rompi_il_corpo(rif, "[1, 2]")
+        with self.ascolta() as righe:
+            esito = self.r._incassa_blocco(rif, "pi_m1f")
+        _deve(self.incassi(rif) == [], "PREMESSA: il libro non scrive l'incasso",
+              self.incassi(rif))
+        self.assertEqual("incassato", esito)
+        self.guarda_la_riga(righe, rif, "pi_m1f")
+
+    def test_M1_senza_la_prenotazione_non_si_accusa_il_corpo(self):
+        # revisione del M1: la riga sparita fra due letture non e' un corpo illeggibile; dire
+        # «corpo_illeggibile» manderebbe a cercare il guasto nel posto sbagliato
+        rif = self.pagata("casa-m1g", "pi_m1g", bloccata=True)["riferimento"]
+        pp = self.sis.pagamenti_pendenti
+        with mock.patch.object(pp, "info", return_value=None), \
+                mock.patch.object(self.sis.payout, "aggiorna_stato"), self.ascolta() as righe:
+            esito = self.r._incassa_blocco(rif, "pi_m1g")
+        self.assertEqual("incassato", esito)
+        _deve(self.errori_con(righe, "bonifico_non_maturato"),
+              "PREMESSA: `_riasserisci_incasso` ha risposto False", righe)
+        self.assertEqual([], self.la_riga(righe), "corpo accusato senza una prenotazione")
+
+    def test_M1_col_corpo_sano_le_due_strade_tacciono(self):
+        for strada, pi in (("_incassa_blocco", "pi_m1c"), ("_annulla_blocco", "pi_m1d")):
+            with self.subTest(strada=strada):
+                rif = self.pagata("casa-" + pi[3:], pi, bloccata=True)["riferimento"]
+                if strada == "_annulla_blocco":
+                    self.stripe.pagamenti[pi] = "succeeded"
+                with self.ascolta() as righe:
+                    esito = getattr(self.r, strada)(rif, pi)
+                self.assertEqual("incassato", esito)
+                _deve(len(self.incassi(rif)) == 1, "PREMESSA: a corpo sano l'incasso si scrive",
+                      self.incassi(rif))
+                self.assertEqual([], self.la_riga(righe), "FALSO ALLARME a corpo sano")
+
+    def test_M1_col_bonifico_fermo_a_corpo_sano_grida_l_altra_riga_non_questa(self):
+        # `_riasserisci_incasso` risponde False anche qui, ma l'incasso e' nel libro: dire
+        # «non registrato» sarebbe falso (regola ferrea 10)
+        rif = self.pagata("casa-m1e", "pi_m1e", bloccata=True)["riferimento"]
+        with mock.patch.object(self.sis.payout, "aggiorna_stato"), self.ascolta() as righe:
+            esito = self.r._incassa_blocco(rif, "pi_m1e")
+        self.assertEqual("incassato", esito)
+        _deve(len(self.incassi(rif)) == 1, "PREMESSA: l'incasso e' nel libro", self.incassi(rif))
+        _deve(self.errori_con(righe, "bonifico_non_maturato"),
+              "PREMESSA: il bonifico fermo ha la sua riga", righe)
+        self.assertEqual([], self.la_riga(righe),
+                         "«NON REGISTRATO» detto di un incasso che il libro ha scritto")
+
+
 class TestIlBonificoParteDaiSoldiDellOspite(_BancoDelBonificoLegato):
     """COMPITO 41 (busta 4 di GML, 4/10). Il bonifico all'host usciva dal saldo DISPONIBILE della
     piattaforma: il 4/10 era -0,27 EUR, i soldi appena incassati ci entrano solo dopo giorni e
