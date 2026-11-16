@@ -13,12 +13,14 @@ FIX blindato qui:
 - sweeper (fase83.sweep_hold_una_passata) = CAS-first: date/garanzia/payout/email
   SOLO se `scadi` riesce; se il pagamento ha vinto, non tocca niente.
 """
+import itertools
 import json
 import shutil
 import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 
 from fase81_bootstrap_casavip import ConfigCasaVIP, crea_sistema
 from fase83_server import crea_router, sweep_hold_una_passata
@@ -26,6 +28,7 @@ from fase162_pagamenti_pendenti import crea_pagamenti_pendenti
 from fase163_accettazioni import doc_sha256, CONTRATTO_HOST_VERSIONE
 
 CI, CO = "2026-09-01", "2026-09-02"
+_SONDE = itertools.count(1)
 
 
 class TestCasFase162(unittest.TestCase):
@@ -163,12 +166,29 @@ class TestGaraSweeperConferma(unittest.TestCase):
                          idem_key="hold_" + rif, scadenza_ts=int(time.time()) - 10)
 
     def _date_libere(self):
-        e = self.sys.inventario.blocca("casa-race", CI, CO, idem_key="sonda_" + str(time.time()))
-        if e.ok:   # la sonda ha preso la stanza: era libera -> la rilascio subito
-            self.sys.inventario.rilascia("casa-race", CI, CO,
-                                         idem_key=e.idem_key if hasattr(e, "idem_key") else "")
+        # un nome NUOVO a ogni sonda, mai dall'orologio: due sonde nello stesso scatto avevano la
+        # stessa chiave e la seconda riceveva il rifiuto della prima (16/11, guardia qui sotto)
+        chiave = "sonda_%d" % next(_SONDE)
+        e = self.sys.inventario.blocca("casa-race", CI, CO, idem_key=chiave)
+        if e.ok:   # la sonda ha preso la stanza: era libera -> la rilascio subito, con la SUA chiave
+            self.assertTrue(self.sys.inventario.rilascia("casa-race", CI, CO, idem_key=chiave).ok,
+                            "la sonda non si e' liberata")
             return True
         return False
+
+    def test_la_sonda_non_prende_il_nome_dall_orologio(self):
+        """Prova instabile del 16/11 (V-e, rossa 1 giro su 3 dell'esame dei rimborsi): la sonda
+        si chiamava come l'ora, e due sonde nello stesso scatto dell'orologio di Windows avevano
+        la stessa chiave. La seconda riceveva come replay il rifiuto della prima: stanza libera
+        vista occupata. E il rilascio usava una chiave vuota: la sonda non liberava mai."""
+        e = self.sys.inventario.blocca("casa-race", CI, CO, idem_key="hold_SONDA")
+        self.assertTrue(e.ok, getattr(e, "errore", ""))
+        with mock.patch("time.time", return_value=time.time()):           # orologio fermo
+            self.assertFalse(self._date_libere(), "premessa: stanza occupata")
+            self.sys.inventario.rilascia("casa-race", CI, CO, idem_key="hold_SONDA")
+            self.assertTrue(self._date_libere(),
+                            "stanza libera vista occupata: la sonda ha ripreso il rifiuto di prima")
+            self.assertTrue(self._date_libere(), "la sonda ha preso la stanza e non l'ha liberata")
 
     def test_pagamento_durante_lo_sweep_non_perde_la_stanza(self):
         # IL CASO DEL BUG: il webhook arriva tra lo snapshot dello sweeper e la sua azione.
