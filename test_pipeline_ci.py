@@ -12397,6 +12397,39 @@ class TestLEsameDeiRimborsiNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
                         "l'esame non dichiara piu' cosa NON ha esaminato")
         self.assertTrue(all(isinstance(r, str) and r.strip() for r in esame.NON_GUARDA))
 
+    def test_UNA_RIGA_SCRITTA_A_MANO_DA_UNA_PROVA_NON_E_UNA_STRADA_NUOVA(self):
+        """S-e (16/11, «punto 1» del fondatore): la casella era ROSSA per «scritture fuori
+        censimento: prova, rimborso di prova». Le scrivevano DUE PROVE (test_blocco_carta
+        `_rimborso`, test_regali_non_superano_la_commissione `_rendi_yen`) chiamando
+        `_giornale` a mano per preparare la situazione: nessuna strada del prodotto. Chi scrive
+        si legge dal file del chiamante. Le due direzioni: la riga della prova si DICHIARA a
+        parte e non accusa niente; una causale ignota scritta dal PRODOTTO resta fuori
+        censimento, cioe' rossa."""
+        esame = self._esame()
+        vere_strade, vero_giro = esame.strade, esame.giro
+
+        def _scrittura(test, causale, file):
+            return {"tipo": "scrittura", "test": test, "handler": None, "causale": causale,
+                    "rif": "R-" + test, "importo": 100, "funzione": "f", "riga": 1,
+                    "file": os.path.join(QUI, file)}
+        try:
+            esame.strade = lambda: {"rimborso censito": re.compile("^rimborso censito$")}
+            esame.giro = lambda: {"verdi": {"t.prova", "t.prodotto"}}
+            del esame.EVENTI[:]
+            esame.EVENTI.extend([_scrittura("t.prova", "rimborso di prova", "test_blocco_carta.py"),
+                                 _scrittura("t.prodotto", "strada mai censita",
+                                            "fase83_server.py")])
+            _esiti, fuori = esame.misura()
+            dalle_prove = sorted(getattr(esame, "SCRITTE_DALLE_PROVE", ()))
+        finally:
+            esame.strade, esame.giro = vere_strade, vero_giro
+            del esame.EVENTI[:]
+        self.assertEqual(["strada mai censita"], fuori,
+                         "la riga scritta a mano da una prova accusa il prodotto, o una strada "
+                         "ignota del prodotto e' sparita dal rosso")
+        self.assertEqual(["rimborso di prova"], dalle_prove,
+                         "la riga scritta da una prova non e' dichiarata (D18 punto 3)")
+
     def test_L_ESAME_SA_PROVARSI_NELLE_DUE_DIREZIONI(self):
         esame = self._esame()
         for pezzo in ("autoprova", "inietta_il_guasto"):
