@@ -337,8 +337,8 @@ class TestIlRapportoDelGuardiano(_Archivi):
         self._pagata("R-M3B", ci="2027-06-01", co="2027-06-02")
         self.assertTrue(self.sys.pagamenti_pendenti.registra(
             "R-M3A", alloggio_id="villa", check_in="2027-07-01", check_out="2027-07-02",
-            idem_key="idem-R-M3A", quote_token="quote-firmato",
-            corpo_json=json.dumps({"totale_cents": 9000}), scadenza_ts=1_800_000_000))
+            idem_key="idem-R-M3A", corpo_json=json.dumps({"totale_cents": 9000}),
+            scadenza_ts=1_800_000_000))
         self._rompi("R-M3A", "{rotto")
         self._rompi("R-M3B", "[1]")
         rap = A.con_invarianti(self._rapporto_pulito(), self.d)
