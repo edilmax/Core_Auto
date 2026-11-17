@@ -7272,12 +7272,147 @@ class TestM1bcdLeAltreStradeDellIncassoNonRegistrato(_BancoDelBonificoLegato):
             self.r._incassa_blocco(rif, "pi_m1l")
         self.assertEqual([], self.errori_con(righe, "totale_sconosciuto"),
                          "FALSO ALLARME: zero e' un importo scritto, non un importo che manca")
+        # M1-e (mutazione `totale > 0` -> `>=`): un totale zero non ha una riga da cercare
+        self.assertEqual([], self.errori_con(righe, "incasso_non_scritto")
+                         + self.errori_con(righe, "passo_esploso"),
+                         "FALSO ALLARME: col totale zero si cerca nel libro un incasso che non "
+                         "c'e' da scrivere: %r" % (righe,))
 
     def test_M1d_senza_la_prenotazione_non_si_accusa_il_totale(self):
         # revisione: la riga sparita fra due letture non e' un corpo senza totale
         with self.ascolta() as righe:
             self.r._riasserisci_incasso(None, "R-SPARITA")
         self.assertEqual([], self.errori_con(righe, "totale_sconosciuto"))
+
+
+class TestM1eIlLibroCheNonScriveLIncasso(_BancoDelBonificoLegato):
+    """M1-e (revisione silent-failure-hunter del diff M1-b/c/d, 17/11, «autorizzato» del
+    fondatore): se il libro non scrive (archivio bloccato, disco pieno) `fase177.registra` dice
+    solo «giornale: registrazione fallita», senza codice ne' riferimento, e torna None;
+    `_giornale` non guarda il ritorno e `_riasserisci_incasso` risponde «fatto»: il webhook
+    risponde 200, Stripe non ritenta e il libro resta senza l'incasso dell'ospite."""
+
+    def _libro_in_sola_lettura(self):
+        """Lo stato vero (D19), non un ritorno finto: l'archivio del libro non si lascia scrivere
+        e `fase177` fallisce da se' («attempt to write a readonly database»)."""
+        import contextlib
+        import stat
+
+        @contextlib.contextmanager
+        def _cm():
+            file = [os.path.join(self.dir, n) for n in os.listdir(self.dir)
+                    if n.startswith("fin.db")]
+            _deve(file, "PREMESSA: il libro ha il suo archivio", os.listdir(self.dir))
+            for f in file:
+                os.chmod(f, stat.S_IREAD)
+            try:
+                yield
+            finally:
+                for f in file:
+                    os.chmod(f, stat.S_IREAD | stat.S_IWRITE)
+        return _cm()
+
+    def _prenotata(self, slug, pi):
+        self.pubblica(slug)
+        rif = self.prenota(slug, 20)["riferimento"]
+        self.sis.stripe = self.stripe
+        self.stripe.sessioni["cs_" + pi] = ("paid", pi)
+        self.stripe.pagamenti[pi] = "succeeded"
+        return rif
+
+    def _tipi(self, rif):
+        return sorted(m.get("tipo") for m in self.sis.finanza.movimenti(rif))
+
+    def _riga(self, righe, rif):
+        trovate = self.errori_con(righe, "codice: incasso_non_scritto")
+        self.assertEqual(1, len(trovate), "NESSUN ERROR 'incasso_non_scritto': %r" % (righe,))
+        self.assertIn("riferimento: " + fase83_server._rif_per_registro(rif), trovate[0])
+        return trovate[0]
+
+    def test_M1e_il_libro_che_non_scrive_grida_e_Stripe_ritenta(self):
+        rif = self._prenotata("casa-m1e", "pi_m1e")
+        with self._libro_in_sola_lettura(), self.ascolta() as righe:
+            s, c = self.paga(rif, "pi_m1e")
+        _deve(self.incassi(rif) == [], "PREMESSA: col libro in sola lettura l'incasso non c'e'",
+              self._tipi(rif))
+        self.assertNotEqual(200, s, "il libro non ha scritto l'incasso e il webhook risponde "
+                                    "«fatto»: Stripe non ritenta piu' (%r)" % (c,))
+        riga = self._riga(righe, rif)
+        self.assertIn("incasso", riga.split("mancano:")[1].split("|")[0], riga)
+        # Stripe ritenta col libro di nuovo sano: l'incasso si scrive, una volta
+        with self.ascolta() as righe:
+            s2, c2 = self.paga(rif, "pi_m1e")
+        self.assertEqual(200, s2, "il ritentativo col libro sano non dice «fatto»: %r" % (c2,))
+        self.assertEqual(["commissione", "incasso"], [t for t in self._tipi(rif)
+                                                      if t in ("commissione", "incasso")])
+        self.assertEqual([], self.errori_con(righe, "incasso_non_scritto"))
+
+    def _libro_che_salta(self, tipo):
+        """Il libro che non scrive UNA sola riga: con l'archivio intero in sola lettura non si
+        distingue quale riga si guarda."""
+        fc = self.sis.finanza
+        vero = fc.movimento
+        return mock.patch.object(fc, "movimento", side_effect=lambda **k: (
+            None if k.get("tipo") == tipo else vero(**k)))
+
+    def test_M1e_la_commissione_che_non_si_scrive_grida(self):
+        rif = self._prenotata("casa-m1f", "pi_m1f")
+        with self._libro_che_salta("commissione"), self.ascolta() as righe:
+            s, c = self.paga(rif, "pi_m1f")
+        _deve("incasso" in self._tipi(rif) and "commissione" not in self._tipi(rif),
+              "PREMESSA: l'incasso c'e', la commissione no", self._tipi(rif))
+        self.assertNotEqual(200, s, "commissione non scritta e il webhook dice «fatto»")
+        riga = self._riga(righe, rif)
+        self.assertEqual("commissione", riga.split("mancano:")[1].split("|")[0].strip(), riga)
+
+    def test_M1e_la_tassa_che_non_si_scrive_grida(self):
+        rif = self._prenotata("casa-m1g", "pi_m1g")
+        s, c = self.paga(rif, "pi_m1g")
+        _deve(s == 200 and "tassa_incassata" not in self._tipi(rif),
+              "PREMESSA: pagata, e nessuna tassa ancora nel libro", s, c, self._tipi(rif))
+        rec = dict(self.sis.pagamenti_pendenti.info(rif), tassa_cents=250, comune="Roma")
+        with self._libro_che_salta("tassa_incassata"), self.ascolta() as righe:
+            esito = self.r._riasserisci_incasso(rec, rif)
+        self.assertIs(esito, False, "la tassa trattenuta non e' nel libro e si dice «fatto»")
+        riga = self._riga(righe, rif)
+        self.assertEqual("tassa_incassata", riga.split("mancano:")[1].split("|")[0].strip(), riga)
+
+    def test_M1e_una_commissione_netta_zero_non_si_cerca(self):
+        # mutazione `_comm_netta > 0` -> `>=`: la commissione netta zero (credito che copre
+        # tutto) non si scrive, e cercarla nel libro griderebbe a vuoto
+        rif = self.pagata("casa-m1q", "pi_m1q", bloccata=True)["riferimento"]
+        con = sqlite3.connect(os.path.join(self.dir, "p.db"))
+        corpo = json.loads(con.execute("SELECT corpo_json FROM pendenti WHERE riferimento=?",
+                                       (rif,)).fetchone()[0])
+        corpo.update(commissione_cents=0, costo_pagamento_cents=0, sconto_credito_cents=0)
+        with con:
+            con.execute("UPDATE pendenti SET corpo_json=? WHERE riferimento=?",
+                        (json.dumps(corpo), rif))
+        con.close()
+        with self.ascolta() as righe:
+            esito = self.r._incassa_blocco(rif, "pi_m1q")
+        _deve(esito == "incassato" and self._tipi(rif).count("incasso") == 1
+              and "commissione" not in self._tipi(rif),
+              "PREMESSA: incassato, incasso scritto, nessuna commissione", esito, self._tipi(rif))
+        self.assertEqual([], self.errori_con(righe, "incasso_non_scritto"),
+                         "FALSO ALLARME: una commissione zero non e' una riga mancante: %r"
+                         % (righe,))
+
+    def test_M1e_col_libro_sano_l_allarme_tace(self):
+        # l'altra direzione (ferrea 10): anche al ritentativo, con le righe gia' scritte
+        rif = self._prenotata("casa-m1h2", "pi_m1h2")
+        with self.ascolta() as righe:
+            s, c = self.paga(rif, "pi_m1h2")
+            s2, c2 = self.paga(rif, "pi_m1h2")
+            rec = dict(self.sis.pagamenti_pendenti.info(rif), tassa_cents=250, comune="Roma")
+            esito = self.r._riasserisci_incasso(rec, rif)
+        _deve(s == 200 and s2 == 200, "PREMESSA: pagata e ritentata", s, c, s2, c2)
+        self.assertIs(esito, True)
+        self.assertEqual(["commissione", "incasso", "tassa_incassata"],
+                         [t for t in self._tipi(rif)
+                          if t in ("commissione", "incasso", "tassa_incassata")])
+        self.assertEqual([], self.errori_con(righe, "incasso_non_scritto"),
+                         "FALSO ALLARME col libro sano: %r" % (righe,))
 
 
 class TestIlBonificoParteDaiSoldiDellOspite(_BancoDelBonificoLegato):

@@ -11364,6 +11364,23 @@ class RouterHTTP:
                                soggetto="comune:" + str(rec.get("comune", "")),
                                importo_cents=int(rec["tassa_cents"]), valuta=val,
                                causale="tassa di soggiorno trattenuta")
+            # M1-e (17/11): `_giornale` si tiene i guasti del libro e fase177 torna None con un
+            # ERROR senza riferimento: si rilegge il libro, come per i rimborsi (voce 147)
+            fc = getattr(self._sys, "finanza", None)
+            attese = (["incasso"] + (["commissione"] if _comm_netta > 0 else [])
+                      if totale > 0 else [])
+            if isinstance(rec, dict) and int(rec.get("tassa_cents", 0) or 0) > 0:
+                attese.append("tassa_incassata")
+            mancano = [t for t in attese if fc is not None
+                       and not fc.esiste_evento("%s:%s" % (t, rif))]
+            if mancano:
+                logger.error("INCASSO NON NEL LIBRO | codice: incasso_non_scritto | riferimento: "
+                             "%s | mancano: %s | messaggio: i soldi dell'ospite sono entrati e il "
+                             "libro non ha scritto queste righe (archivio bloccato o pieno?). Il "
+                             "webhook risponde 503 e Stripe ritenta (righe ripetibili); sul giro "
+                             "del blocco sulla carta nessuno ritenta, va completato a mano",
+                             _rif_per_registro(rif), ", ".join(mancano))
+                return False
         except Exception:
             # M1-c (17/11): era un WARNING «ignorato» e la risposta diceva «fatto»
             logger.error("INCASSO A META' | codice: passo_esploso | riferimento: %s | messaggio: "
