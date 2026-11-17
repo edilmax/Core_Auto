@@ -7298,17 +7298,21 @@ class TestM1eIlLibroCheNonScriveLIncasso(_BancoDelBonificoLegato):
         import contextlib
         import stat
 
+        def _file():
+            return [os.path.join(self.dir, n) for n in os.listdir(self.dir)
+                    if n.startswith("fin.db")]
+
         @contextlib.contextmanager
         def _cm():
-            file = [os.path.join(self.dir, n) for n in os.listdir(self.dir)
-                    if n.startswith("fin.db")]
-            _deve(file, "PREMESSA: il libro ha il suo archivio", os.listdir(self.dir))
-            for f in file:
+            _deve(_file(), "PREMESSA: il libro ha il suo archivio", os.listdir(self.dir))
+            for f in _file():
                 os.chmod(f, stat.S_IREAD)
             try:
                 yield
             finally:
-                for f in file:
+                # l'elenco si RILEGGE: su Linux, in WAL, SQLite crea `-shm` e `-wal` coi permessi
+                # del db (sola lettura) e il ritentativo restava bloccato (CI della #328, 17/11)
+                for f in _file():
                     os.chmod(f, stat.S_IREAD | stat.S_IWRITE)
         return _cm()
 
