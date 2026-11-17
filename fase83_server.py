@@ -11020,13 +11020,31 @@ class RouterHTTP:
         return str(esito.get("stato") or "") if isinstance(esito, dict) and esito.get("ok") \
             else ""
 
-    def _registra_incasso_del_blocco(self, rif, pi):
+    def _registra_incasso_del_blocco(self, rif, pi, segnato):
         """Stripe ha INCASSATO il blocco: si scrivono i conti (`_riasserisci_incasso`).
         M1 (revisione del pezzo 7, «autorizzato M1» del fondatore il 16/11): col corpo salvato
         illeggibile il libro non scrive niente, e solo qui si sa che i soldi sono GIA' entrati:
         lo si dice col suo nome. Il False del bonifico rimasto fermo a corpo sano ha gia' la sua
-        riga, e qui tace."""
+        riga, e qui tace. M1-b (17/11): `segnato` e' il ritorno di `segna_blocco`; se la scrittura
+        e' fallita il blocco risulterebbe «aperto» e il libro non scriverebbe niente, con un INFO.
+        I soldi CI SONO: il libro si scrive ADESSO, nell'ordine di sempre -- prima che chi chiama
+        scriva un rimborso, il cui storno legge la commissione dal libro -- e il segno lo ritenta
+        il giro orario, che rilegge il pagamento. I passi sono ripetibili: niente doppioni."""
         rec = self._sys.pagamenti_pendenti.info(rif)
+        if segnato is False and isinstance(rec, dict):
+            try:
+                dj = _leggi_corpo(rec, "blocco_non_segnato")
+            except Exception:
+                dj = None   # corpo rotto: anche la scrittura fallisce, e' il caso M1 qui sotto
+            if dj is not None:
+                logger.error("BLOCCO NON SEGNATO | codice: blocco_non_segnato | riferimento: %s | "
+                             "pi: %s | messaggio: Stripe ha incassato i soldi dell'ospite e il "
+                             "libro li registra adesso, ma la prenotazione non si e' potuta "
+                             "segnare come incassata: il giro orario la rilegge e ritenta",
+                             _rif_per_registro(rif), pi)
+                import time as _t
+                dj["blocco_incassato_ts"] = int(_t.time())
+                rec = dict(rec, corpo_json=json.dumps(dj))
         if self._riasserisci_incasso(rec, rif) is not False or not isinstance(rec, dict):
             return
         try:
@@ -11052,8 +11070,8 @@ class RouterHTTP:
         ok = isinstance(esito, dict) and esito.get("ok")
         stato = "succeeded" if ok else self._stato_pi(pi)
         if stato == "succeeded":
-            pp.segna_blocco(rif, blocco_incassato_ts=int(_t.time()))
-            self._registra_incasso_del_blocco(rif, pi)
+            self._registra_incasso_del_blocco(
+                rif, pi, pp.segna_blocco(rif, blocco_incassato_ts=int(_t.time())))
             self._credito_host_al_pagamento(rif, pp.info(rif))
             # V-b (10/11): il bonifico e' appena diventato 'maturato': solo ora conta per il premio
             self._forse_qualifica_referral((pp.info(rif) or {}).get("host_id"),
@@ -11112,8 +11130,8 @@ class RouterHTTP:
                         "nessun rimborso, nessuna commissione", _rif_per_registro(rif), pi)
             return "annullato"
         if stato == "succeeded":
-            pp.segna_blocco(rif, blocco_incassato_ts=int(_t.time()))
-            self._registra_incasso_del_blocco(rif, pi)
+            self._registra_incasso_del_blocco(
+                rif, pi, pp.segna_blocco(rif, blocco_incassato_ts=int(_t.time())))
             logger.warning("BLOCCO SULLA CARTA | gia' INCASSATO quando si e' chiesto l'annullo "
                            "| rif %s | pi %s: si restituisce col rimborso di sempre",
                            _rif_per_registro(rif), pi)
@@ -11293,7 +11311,7 @@ class RouterHTTP:
                         "(si registra all'incasso)", _rif_per_registro(rif))
             return
         try:
-            if isinstance(rec, dict) and rec.get("tassa_cents", 0) > 0:
+            if isinstance(rec, dict) and int(rec.get("tassa_cents", 0) or 0) > 0:
                 led = getattr(self._sys, "tassa_comunale", None)
                 if led is not None:
                     led.registra_riscossione(rif, rec.get("comune", ""), rec["tassa_cents"])
@@ -11334,13 +11352,26 @@ class RouterHTTP:
                 # risponde NON si scrive niente e resta il buco dichiarato -- il prospetto lo
                 # conta fra gli «sconosciuti» invece di riempirlo con una cifra inventata.
                 self._costo_gateway_dal_gestore(rif, dj, hid, val)
+            elif isinstance(rec, dict) and not any(
+                    type(dj.get(k)) is int for k in ("totale_cents", "prezzo_guest_cents")):
+                # M1-d (17/11): un totale che MANCA non e' un totale zero
+                logger.error("INCASSO | codice: totale_sconosciuto | riferimento: %s | messaggio: "
+                             "i soldi dell'ospite sono entrati ma il corpo non dice quanto ha "
+                             "pagato: incasso e commissione NON scritti nel libro, registrarli a "
+                             "mano", _rif_per_registro(rif))
             if isinstance(rec, dict) and int(rec.get("tassa_cents", 0) or 0) > 0:
                 self._giornale(tipo="tassa_incassata", riferimento=rif,
                                soggetto="comune:" + str(rec.get("comune", "")),
                                importo_cents=int(rec["tassa_cents"]), valuta=val,
                                causale="tassa di soggiorno trattenuta")
         except Exception:
-            logger.warning("riasserisci incasso fallito (ignorato)", exc_info=True)
+            # M1-c (17/11): era un WARNING «ignorato» e la risposta diceva «fatto»
+            logger.error("INCASSO A META' | codice: passo_esploso | riferimento: %s | messaggio: "
+                         "un passo della registrazione dell'incasso e' esploso: libro, tassa o "
+                         "bonifico possono essere a meta'. Il webhook risponde 503 e Stripe "
+                         "ritenta (passi ripetibili); sul giro del blocco sulla carta nessuno "
+                         "ritenta, va completato a mano", _rif_per_registro(rif), exc_info=True)
+            return False
         # C53-B1-5: se il bonifico dell'host e' rimasto 'in_attesa' (archivio bloccato) il
         # webhook non puo' dire «gestito»: Stripe non ritenterebbe MAI e il Guardiano cerca i
         # bonifici fermi solo fra i 'maturato'. False -> 503, e il ritentativo lo matura.

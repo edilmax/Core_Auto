@@ -7135,6 +7135,151 @@ class TestM1IncassatoMaNonRegistratoSiDiceColSuoNome(_BancoDelBonificoLegato):
                          "«NON REGISTRATO» detto di un incasso che il libro ha scritto")
 
 
+class TestM1bcdLeAltreStradeDellIncassoNonRegistrato(_BancoDelBonificoLegato):
+    """M1-b, M1-c, M1-d (revisione indipendente del pezzo 7, «autorizzato M1-b/c/d» del
+    fondatore il 17/11): Stripe ha incassato, a corpo SANO, e il libro restava senza la riga
+    dell'incasso senza un ERROR. (b) la scrittura del blocco fallisce: il blocco resta «aperto»
+    e `_riasserisci_incasso` esce con un INFO; (c) un passo dell'incasso esplode: WARNING e la
+    risposta dice «fatto», cosi' il webhook risponde 200 e Stripe non ritenta; (d) il corpo non
+    dice quanto ha pagato l'ospite: incasso e commissione saltati senza una riga."""
+
+    def _riga(self, righe, codice, rif):
+        trovate = self.errori_con(righe, "codice: " + codice)
+        self.assertEqual(1, len(trovate), "NESSUN ERROR %r: %r" % (codice, righe))
+        self.assertIn("riferimento: " + fase83_server._rif_per_registro(rif), trovate[0])
+        return trovate[0]
+
+    def test_M1b_la_scrittura_del_blocco_fallisce_si_grida_e_il_giro_dopo_registra(self):
+        rif = self.pagata("casa-m1h", "pi_m1h", bloccata=True)["riferimento"]
+        pp = self.sis.pagamenti_pendenti
+        with mock.patch.object(pp, "segna_blocco", return_value=False), self.ascolta() as righe:
+            esito = self.r._incassa_blocco(rif, "pi_m1h")
+        _deve(self.stripe.pagamenti["pi_m1h"] == "succeeded", "PREMESSA: Stripe ha incassato",
+              self.stripe.pagamenti)
+        _deve(fase83_server._blocco(pp.info(rif))["stato"] == "aperto",
+              "PREMESSA: il segno non e' stato scritto", pp.info(rif))
+        self.assertEqual("incassato", esito)
+        self._riga(righe, "blocco_non_segnato", rif)
+        self.assertEqual(1, len(self.incassi(rif)), "i soldi ci sono e il libro non li ha scritti")
+        # il giro dopo, con l'archivio di nuovo sano: Stripe ha gia' incassato, si rilegge
+        # `succeeded`, il segno si scrive e il libro NON raddoppia (era «NON provato»)
+        self.r._incassa_blocchi(ora_ts=self.dopo_la_finestra())
+        self.assertEqual("incassato", fase83_server._blocco(pp.info(rif))["stato"],
+                         "il giro dopo non ha segnato il blocco")
+        self.assertEqual(1, len(self.incassi(rif)), "il giro dopo ha raddoppiato l'incasso")
+
+    def test_M1b_l_annullo_che_trova_incassato_scrive_il_libro_PRIMA_del_rimborso(self):
+        """Revisione di M1-b: rimandare l'incasso al giro dopo lo scriveva DOPO il rimborso che
+        chi chiama scrive subito, e lo storno (che legge la commissione dal libro) non la
+        trovava: commissione incassata su una prenotazione rimborsata."""
+        rif = self.pagata("casa-m1k", "pi_m1k", bloccata=True)["riferimento"]
+        self.stripe.pagamenti["pi_m1k"] = "succeeded"
+        with mock.patch.object(self.sis.pagamenti_pendenti, "segna_blocco", return_value=False), \
+                self.ascolta() as righe:
+            esito = self.r._annulla_blocco(rif, "pi_m1k")
+        self.assertEqual("incassato", esito)
+        self._riga(righe, "blocco_non_segnato", rif)
+        self.assertEqual(1, len(self.incassi(rif)),
+                         "l'incasso non e' nel libro quando chi chiama scrive il rimborso")
+
+    def test_M1c_un_passo_dell_incasso_che_esplode_si_grida_e_non_dice_fatto(self):
+        rif = self.pagata("casa-m1i", "pi_m1i", bloccata=False)["riferimento"]
+        rec = self.sis.pagamenti_pendenti.info(rif)
+        with self.ascolta() as righe:
+            sano = self.r._riasserisci_incasso(rec, rif)
+        _deve(sano is True, "PREMESSA: a macchina sana risponde True", sano)
+        self.assertEqual([], self.errori_con(righe, "passo_esploso"), "FALSO ALLARME a macchina sana")
+        # un passo che esplode davvero (revisione: `_costo_gateway_dal_gestore` gli errori se li
+        # tiene da se'): l'archivio dei bonifici bloccato
+        with mock.patch.object(self.sis.payout, "aggiorna_stato",
+                               side_effect=sqlite3.OperationalError("database is locked")), \
+                self.ascolta() as righe:
+            esito = self.r._riasserisci_incasso(rec, rif)
+        self.assertIs(esito, False, "un passo esploso e la risposta dice «fatto»: Stripe non "
+                                    "ritenta piu'")
+        riga = self._riga(righe, "passo_esploso", rif)
+        # mutazione del diff 17/11 (riga di `exc_info`): senza la traccia l'allarme non dice
+        # QUALE passo e' esploso, e il messaggio lo promette (libro, tassa o bonifico)
+        self.assertIn("|exc_info:OperationalError", riga,
+                      "l'allarme non porta la traccia del passo esploso: %r" % riga)
+
+    def test_M1b_a_segno_riuscito_l_allarme_tace(self):
+        # l'altra direzione (ferrea 10): il segno scritto e' il caso di ogni giorno
+        rif = self.pagata("casa-m1m", "pi_m1m", bloccata=True)["riferimento"]
+        with self.ascolta() as righe:
+            esito = self.r._incassa_blocco(rif, "pi_m1m")
+        _deve(esito == "incassato" and len(self.incassi(rif)) == 1,
+              "PREMESSA: incassato e scritto nel libro", esito, self.incassi(rif))
+        self.assertEqual("incassato", fase83_server._blocco(
+            self.sis.pagamenti_pendenti.info(rif))["stato"], "PREMESSA: il segno e' scritto")
+        self.assertEqual([], self.errori_con(righe, "blocco_non_segnato"),
+                         "FALSO ALLARME: il segno e' scritto e si grida «BLOCCO NON SEGNATO»")
+
+    def _spia_della_tassa(self):
+        led = self.sis.tassa_comunale
+        _deve(led is not None, "PREMESSA: il banco ha il registro della tassa", led)
+        return mock.patch.object(led, "registra_riscossione", wraps=led.registra_riscossione)
+
+    def test_M1_la_tassa_riscossa_si_scrive_una_volta_col_suo_importo(self):
+        rif = self.pagata("casa-m1n", "pi_m1n", bloccata=False)["riferimento"]
+        rec = dict(self.sis.pagamenti_pendenti.info(rif), tassa_cents=250, comune="Roma")
+        with self._spia_della_tassa() as spia:
+            esito = self.r._riasserisci_incasso(rec, rif)
+        _deve(esito is True, "PREMESSA: a macchina sana risponde True", esito)
+        self.assertEqual([mock.call(rif, "Roma", 250)], spia.call_args_list,
+                         "la tassa di soggiorno incassata non e' arrivata al registro del comune")
+
+    def test_M1_una_tassa_zero_o_mancante_non_si_scrive(self):
+        rif = self.pagata("casa-m1o", "pi_m1o", bloccata=False)["riferimento"]
+        for tassa in (0, None):
+            with self.subTest(tassa_cents=tassa):
+                rec = dict(self.sis.pagamenti_pendenti.info(rif), tassa_cents=tassa,
+                           comune="Roma")
+                with self._spia_della_tassa() as spia, self.ascolta() as righe:
+                    esito = self.r._riasserisci_incasso(rec, rif)
+                self.assertIs(esito, True, "una tassa %r fa esplodere l'incasso: %r"
+                              % (tassa, righe))
+                self.assertEqual([], spia.call_args_list,
+                                 "una riscossione di tassa %r scritta nel registro del comune"
+                                 % (tassa,))
+
+    def _senza_totale(self, rif, **resto):
+        con = sqlite3.connect(os.path.join(self.dir, "p.db"))
+        corpo = json.loads(con.execute("SELECT corpo_json FROM pendenti WHERE riferimento=?",
+                                       (rif,)).fetchone()[0])
+        corpo.pop("totale_cents", None)
+        corpo.pop("prezzo_guest_cents", None)
+        corpo.update(resto)
+        with con:
+            con.execute("UPDATE pendenti SET corpo_json=? WHERE riferimento=?",
+                        (json.dumps(corpo), rif))
+        con.close()
+
+    def test_M1d_senza_il_totale_l_incasso_non_si_salta_in_silenzio(self):
+        rif = self.pagata("casa-m1j", "pi_m1j", bloccata=True)["riferimento"]
+        self._senza_totale(rif)
+        with self.ascolta() as righe:
+            esito = self.r._incassa_blocco(rif, "pi_m1j")
+        _deve(self.incassi(rif) == [], "PREMESSA: senza totale l'incasso non si scrive",
+              self.incassi(rif))
+        self.assertEqual("incassato", esito)
+        self._riga(righe, "totale_sconosciuto", rif)
+
+    def test_M1d_un_totale_zero_scritto_tace(self):
+        rif = self.pagata("casa-m1l", "pi_m1l", bloccata=True)["riferimento"]
+        self._senza_totale(rif, totale_cents=0)
+        with self.ascolta() as righe:
+            self.r._incassa_blocco(rif, "pi_m1l")
+        self.assertEqual([], self.errori_con(righe, "totale_sconosciuto"),
+                         "FALSO ALLARME: zero e' un importo scritto, non un importo che manca")
+
+    def test_M1d_senza_la_prenotazione_non_si_accusa_il_totale(self):
+        # revisione: la riga sparita fra due letture non e' un corpo senza totale
+        with self.ascolta() as righe:
+            self.r._riasserisci_incasso(None, "R-SPARITA")
+        self.assertEqual([], self.errori_con(righe, "totale_sconosciuto"))
+
+
 class TestIlBonificoParteDaiSoldiDellOspite(_BancoDelBonificoLegato):
     """COMPITO 41 (busta 4 di GML, 4/10). Il bonifico all'host usciva dal saldo DISPONIBILE della
     piattaforma: il 4/10 era -0,27 EUR, i soldi appena incassati ci entrano solo dopo giorni e
