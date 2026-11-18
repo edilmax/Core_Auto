@@ -168,10 +168,10 @@
  "224ae0884a0b": {
   "blocco": 1,
   "comando": "python collaudi/esame_orologi.py --scrivi",
-  "commit": "5fb887f",
+  "commit": "e620114",
   "condizione": "hold, payout e penale scadono davvero in un giro contro Stripe di PROVA con l'orologio NOSTRO spostato, e i tre esiti si rileggono da Stripe (rimborso dell'hold, bonifico all'host, penale addebitata)",
-  "denominatore": 25,
-  "esito": false,
+  "denominatore": 34,
+  "esito": true,
   "impronta": "12be9bb1b662",
   "impronte_moduli": {
    "fase101_stripe_connect": "39dfb5137d9a",
@@ -201,8 +201,8 @@
    "fase87_stripe_webhook": "c77544db5a33",
    "fase99_multicurrency": "3bb03f7179ab"
   },
-  "motivo": "[payout] il conto Connect di prova dell'host (come quelli veri) riceve bonifici ( il conto acct_1UYrEuJ6d non riceve bonifici (transfers=inactive): la registrazione sulle pagine di Stripe non e' finita; un link nuovo lo da' `--prepara-conto`)",
-  "quando": "2026-11-16T23:51:50"
+  "motivo": "",
+  "quando": "2026-11-18T18:46:53"
  },
  "227c35ec4353": {
   "blocco": 1,
