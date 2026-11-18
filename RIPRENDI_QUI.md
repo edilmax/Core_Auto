@@ -4194,7 +4194,7 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: 71c3285
+CONSEGNE AGGIORNATE A: 0217cad
 
 - AGGIORNAMENTO 18/11 SERA (sessione 6c5754e4, contesto 63% letto dal fondatore): ALLOGGIO SENZA PAESE IN PRODUZIONE (la riga qui sotto «RIPARATO SUL PC» e' superata, S10): master = GitHub = VPS = e620114 (PR #329; CI 16 success + zap skipped, gate success; D17 prima/scambio/dopo uscita 0, contenitore e620114, giudice 190/0; Trivy immagine viva 0 correggibili). BLOCCO 1 = 15 SU 15 (`python collaudi/scheda.py --blocco 1`): la casella OROLOGI e' VERDE (`esame_orologi.py --scrivi` su e620114, 34 passi 0 rossi, conto Connect di prova transfers=active), dopo che il fondatore ha compilato la pagina di Stripe del conto di prova. ⛔ DA SISTEMARE: sul conto di PROVA acct_1UYrEuJ6d il nome registrato e' «Massimo Foti» e non «Prova Host» (letto via API in sola lettura); domanda al fondatore se e' un dato vero, aperta. SICUREZZA CHIUSA: le 8 copie vecchie del file dei segreti spostate (non cancellate) in /root/segreti_vecchi_20261118 sul VPS; nginx non serve la cartella del progetto e nega i file col punto. APERTI: la gara `_host_stato` lettura-poi-scrittura (BASSO, legge, prima del lancio); cartelle Core_Auto_wt_rimisura e Core_Auto_wt_orologi_1811 da togliere quando questa PR e' unita. PROSSIMO: blocco 2, col via del fondatore.
 
