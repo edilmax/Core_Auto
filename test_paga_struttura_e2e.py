@@ -93,6 +93,7 @@ class TestPagaStrutturaE2E(unittest.TestCase):
         self.tok, self.hid = c["token"], c["host_id"]
         self.g("POST", "/api/host/pubblica",
                {"slug": "casa", "titolo": "Casa", "citta": "Roma",
+                "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                 "prezzo_notte_cents": 30000, "capacita": 4,
                 "politica_cancellazione": "flessibile"}, {"X-Host-Token": self.tok})
         self.g("POST", "/api/host/disponibilita_range",
@@ -333,6 +334,7 @@ class TestPagaStrutturaE2E(unittest.TestCase):
         # l'HOST in loco) + l'incasso del totale. La guardia deve renderlo un NO-OP.
         self.g("POST", "/api/host/pubblica",
                {"slug": "casatax", "titolo": "CasaTax", "citta": "Roma",
+                "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                 "prezzo_notte_cents": 30000, "capacita": 4, "tassa_pp_notte_cents": 200,
                 "politica_cancellazione": "flessibile"}, {"X-Host-Token": self.tok})
         self.g("POST", "/api/host/disponibilita_range",
@@ -532,6 +534,7 @@ class TestPagaStrutturaE2E(unittest.TestCase):
         d_out = (oggi + datetime.timedelta(days=3)).isoformat()
         self.g("POST", "/api/host/pubblica",
                {"slug": "casatassa", "titolo": "CasaTassa", "citta": "Roma",
+                "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                 "prezzo_notte_cents": 30000, "capacita": 4, "tassa_pp_notte_cents": 200,
                 "politica_cancellazione": "flessibile"}, {"X-Host-Token": self.tok})
         self.g("POST", "/api/host/disponibilita_range",
@@ -584,6 +587,7 @@ class TestPagaStrutturaE2E(unittest.TestCase):
         d_out = (oggi + datetime.timedelta(days=3)).isoformat()
         self.g("POST", "/api/host/pubblica",
                {"slug": "casanr", "titolo": "CasaNR", "citta": "Roma",
+                "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                 "prezzo_notte_cents": 30000, "capacita": 4, "tassa_pp_notte_cents": 200,
                 "politica_cancellazione": "non_rimborsabile"}, {"X-Host-Token": self.tok})
         self.g("POST", "/api/host/disponibilita_range",
@@ -690,6 +694,7 @@ class TestPenaleStrutturaFase3(unittest.TestCase):
         oggi = datetime.date.today()
         self.g("POST", "/api/host/pubblica",
                {"slug": "casa", "titolo": "Casa", "citta": "Roma", "prezzo_notte_cents": 30000,
+                "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                 "capacita": 4, "politica_cancellazione": "flessibile"}, {"X-Host-Token": self.tok})
         self.g("POST", "/api/host/disponibilita_range",
                {"alloggio_id": "casa", "da": oggi.isoformat(),

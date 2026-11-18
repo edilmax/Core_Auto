@@ -67,7 +67,7 @@ class TestHostUX(unittest.TestCase):
 
     def _pubblica(self, **extra):
         corpo = {"titolo": "Casa a Roma", "citta": "Roma", "prezzo_notte_cents": 9500,
-                 "capacita": 4}
+                 "paese": "IT", "cin": "IT012034B4ABC1DEFG", "capacita": 4}
         corpo.update(extra)
         return self.r.gestisci("POST", "/api/host/pubblica", headers=self.h,
                                body=json.dumps(corpo))

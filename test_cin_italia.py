@@ -118,9 +118,105 @@ class TestPolicyItalia(unittest.TestCase):
         self.assertEqual(s, 201, o)
 
     def test_estero_senza_cin_ammesso(self):
-        for paese in ("ES", "FR", "US", ""):
-            s, o = self._pub(paese=paese, slug="casa-%s" % (paese.lower() or "x"))
+        # il paese VUOTO non e' «estero»: e' un paese che manca (17/11, sotto)
+        for paese in ("ES", "FR", "US"):
+            s, o = self._pub(paese=paese, slug="casa-%s" % paese.lower())
             self.assertEqual(s, 201, (paese, o))
+
+    def test_senza_paese_un_annuncio_non_va_online(self):
+        """17/11, misurato in produzione: «casa-test», citta' Roma, paese «XX» (la voce «—» del
+        pannello), senza CIN e PUBBLICATA. Per il codice una casa a Roma «non e' in Italia»:
+        online senza CIN (Reg. UE 2024/1028) e senza la ritenuta sugli affitti brevi al
+        pagamento (`_in_italia`, `opera_ritenuta`). Dove sta la casa lo deve dire l'host."""
+        for paese in ("", "XX", " xx ", None):
+            with self.subTest(paese=paese):
+                extra = {} if paese is None else {"paese": paese}
+                s, o = self._pub(slug="casa-np-%d" % (len(paese) if paese else 0), **extra)
+                self.assertEqual((422, "paese_obbligatorio"), (s, o.get("errore")),
+                                 "un annuncio senza paese va online: %r" % (o,))
+        # la regola da sola, con quello che puo' arrivare dall'archivio o da una chiamata storta
+        from fase83_server import _manca_per_pubblicare as regola
+        for paese, cin, atteso in ((" xx ", CIN_OK, "paese_obbligatorio"),
+                                   ("\tXX\n", "", "paese_obbligatorio"),
+                                   (" ", CIN_OK, "paese_obbligatorio"),
+                                   (None, CIN_OK, "paese_obbligatorio"),
+                                   (42, CIN_OK, "paese_obbligatorio"),
+                                   (" it ", "", "cin_obbligatorio_italia"),
+                                   ("Italia", "   ", "cin_obbligatorio_italia"),
+                                   ("IT", None, "cin_obbligatorio_italia"),
+                                   (" it ", CIN_OK, None), ("ES", "", None), ("JP", None, None)):
+            with self.subTest(regola=(paese, cin)):
+                self.assertEqual(atteso, regola(paese, cin))
+
+    def test_un_annuncio_importato_arriva_come_bozza(self):
+        """17/11, variante: `/api/host/importa` (fase77) costruiva la scheda senza paese ne' CIN
+        con lo stato di serie «pubblicato», e non passava da nessun controllo: una casa a Roma
+        importata da Booking andava online subito, senza CIN. Arriva in bozza: l'host sceglie il
+        paese (e il CIN in Italia) e pubblica dal pannello, coi controlli di tutti."""
+        s, r = self.g("POST", "/api/host/importa",
+                      {"sorgente": "canonico", "dati": {"titolo": "Importata", "citta": "Roma",
+                                                        "prezzo_notte": "80.00", "capacita": 2}},
+                      self.tk)
+        _slug = (r.get("risultati") or [{}])[0].get("slug")
+        self.assertTrue(s == 200 and r.get("importati") == 1 and _slug, (s, r))
+        self.assertEqual("bozza", self.sis.catalogo.dettaglio_owner(_slug).get("stato"),
+                         "un annuncio importato va online senza paese ne' CIN")
+        s, det = self.g("GET", "/api/catalogo/" + _slug)
+        self.assertNotEqual(200, s, "l'annuncio importato e' gia' in vetrina: %r" % (det,))
+
+    def test_senza_paese_la_bozza_si_salva(self):
+        # l'altra direzione: come per il CIN, la bozza resta salvabile
+        s, o = self._pub(paese="XX", stato="bozza", slug="casa-np-bozza")
+        self.assertEqual(201, s, o)
+
+    def _bozza_poi_stato(self, rotta, headers, paese, cin=""):
+        """Bozza salvata (ammessa anche senza CIN o senza paese), poi «Pubblica» dalla lista."""
+        slug = self._slug_st(rotta, paese, cin)
+        s, o = self._pub(paese=paese, cin=cin, stato="bozza", slug=slug)
+        self.assertEqual(201, s, o)
+        s, o = self.g("POST", rotta, {"slug": slug, "stato": "pubblicato"}, headers)
+        return s, o, self.sis.catalogo.dettaglio_owner(slug).get("stato")
+
+    @staticmethod
+    def _slug_st(rotta, paese, cin):
+        return "casa-%s-%s-%s" % ("adm" if "admin" in rotta else "host",
+                                  (paese or "vuoto").lower(), "cin" if cin else "nocin")
+
+    def test_il_pulsante_pubblica_non_scavalca_cin_e_paese(self):
+        """18/11, terza variante: `/api/host/stato` (pulsante «Pubblica» di «I miei alloggi»)
+        metteva online QUALUNQUE bozza, senza guardare ne' paese ne' CIN. E la quarta: la stessa
+        cosa dal pannello admin (`/api/admin/alloggio_stato`, «ripubblica»). La regola e' una
+        sola per tutte le strade."""
+        for rotta, h in (("/api/host/stato", self.tk),
+                         ("/api/admin/alloggio_stato", {"X-Admin-Key": "ak"})):
+            for paese, atteso in (("IT", "cin_obbligatorio_italia"), ("XX", "paese_obbligatorio"),
+                                  ("", "paese_obbligatorio")):
+                with self.subTest(rotta=rotta, paese=paese):
+                    s, o, stato = self._bozza_poi_stato(rotta, h, paese)
+                    self.assertEqual((422, atteso, "bozza"), (s, o.get("errore"), stato),
+                                     "una bozza senza i dati di legge va online: %r" % (o,))
+                    # SOSPENDERE resta sempre possibile, anche senza CIN ne' paese: e' come il
+                    # fondatore ha tolto `casa-test` dalla vetrina il 18/11
+                    slug = self._slug_st(rotta, paese, "")
+                    s, o = self.g("POST", rotta, {"slug": slug, "stato": "sospeso"}, h)
+                    self.assertEqual((200, "sospeso"), (
+                        s, self.sis.catalogo.dettaglio_owner(slug).get("stato")), o)
+            # un annuncio che non c'e': «rifiutato» come prima, non un errore del server
+            s, o = self.g("POST", rotta, {"slug": "casa-che-non-esiste", "stato": "pubblicato"}, h)
+            self.assertEqual((422, "rifiutato"), (s, o.get("stato")), o)
+
+    def test_il_pulsante_pubblica_funziona_coi_dati_giusti(self):
+        # l'altra direzione: con il CIN in Italia, o all'estero, «Pubblica» va online
+        for rotta, h in (("/api/host/stato", self.tk),
+                         ("/api/admin/alloggio_stato", {"X-Admin-Key": "ak"})):
+            for paese, cin in (("IT", CIN_OK), ("ES", "")):
+                with self.subTest(rotta=rotta, paese=paese):
+                    s, o, stato = self._bozza_poi_stato(rotta, h, paese, cin)
+                    self.assertEqual((200, "pubblicato"), (s, stato), o)
+                    # sospendere resta sempre possibile (anche senza CIN: e' il modo di uscire)
+                    s, o = self.g("POST", rotta, {"slug": self._slug_st(rotta, paese, cin),
+                                                  "stato": "sospeso"}, h)
+                    self.assertEqual(200, s, o)
 
     def test_cin_storpio_422(self):
         s, o = self._pub(paese="IT", cin="cattivo!")

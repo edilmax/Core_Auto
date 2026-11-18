@@ -104,6 +104,7 @@ def main():
     # H3 pubblica
     s, _p = g("POST", "/api/host/pubblica", {
         "slug": "casa-e2e", "titolo": "Attico E2E", "citta": "Roma",
+        "paese": "IT", "cin": "IT012034B4ABC1DEFG",
         "prezzo_notte_cents": 20000, "capacita": 4}, tk)
     passo("Pubblica alloggio", s in (200, 201), "status %s (%s)" % (s, _p))
 

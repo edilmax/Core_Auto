@@ -119,6 +119,7 @@ class TestScontoLungo(unittest.TestCase):
         tok = c["token"]
         s, _ = self.r.gestisci("POST", "/api/host/pubblica", {}, json.dumps(
             {"slug": "casa-ep", "titolo": "EP", "citta": "Roma", "prezzo_notte_cents": 10000,
+             "paese": "IT", "cin": "IT012034B4ABC1DEFG",
              "capacita": 2, "sconto_settimana_bps": 1500, "sconto_mese_bps": 3000}),
             {"X-Host-Token": tok})
         self.assertEqual(s, 201)

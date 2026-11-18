@@ -1193,6 +1193,32 @@ def _in_italia(d: Any) -> bool:
         str(d.get("paese") or "").strip().upper() in PAESI_ITALIA or bool(d.get("cin")))
 
 
+def _manca_per_pubblicare(paese: Any, cin: Any) -> Optional[str]:
+    """LA REGOLA UNICA PER ANDARE ONLINE (difetto vivo del 17-18/11): un annuncio
+    'pubblicato' dice DOVE sta, e in Italia ha il CIN (Reg. UE 2024/1028 + DL 145/2023). Senza
+    paese il codice lo credeva «estero»: online senza CIN e, al pagamento, senza la ritenuta
+    sugli affitti brevi. 'XX' e' la voce «—» del pannello. La usano TUTTE le strade che mettono
+    un annuncio in vetrina: `_host_pubblica`, `_host_stato`, `_admin_alloggio_stato`
+    (l'importazione arriva in bozza, fase77). None = si puo'; altrimenti il codice d'errore.
+    Guardie: `test_cin_italia.TestPolicyItalia`."""
+    p = paese.strip().upper() if isinstance(paese, str) else ""
+    if p in ("", "XX"):
+        return "paese_obbligatorio"
+    if p in PAESI_ITALIA and not (isinstance(cin, str) and cin.strip()):
+        return "cin_obbligatorio_italia"
+    return None
+
+
+def _manca_per_ripubblicare(catalogo: Any, slug: str, stato: str) -> Optional[str]:
+    """La stessa regola per i pulsanti che cambiano solo lo STATO di un annuncio salvato."""
+    if stato != "pubblicato":
+        return None   # sospendere o mettere in bozza e' sempre permesso: e' il modo di uscire
+    a = catalogo.dettaglio_owner(slug)
+    if a is None:
+        return None   # annuncio che non c'e': `imposta_stato` risponde gia' «rifiutato»
+    return _manca_per_pubblicare(a.get("paese"), a.get("cin"))
+
+
 _JS_CHECKIN_QUESTURA = r"""(function(){
 var tk=decodeURIComponent((location.pathname.split('/voucher/')[1]||''));
 var IT='100000100',os=[],comuni={};
@@ -3845,7 +3871,9 @@ class RouterHTTP:
         slug, stato = dati.get("slug"), dati.get("stato")
         if not (isinstance(slug, str) and slug and isinstance(stato, str)):
             return 422, {"errore": "campi_non_validi"}
-        ok = self._sys.catalogo.imposta_stato(slug, stato)
+        # «ripubblica» dell'admin: la legge vale anche per noi (variante del 18/11)
+        manca = _manca_per_ripubblicare(self._sys.catalogo, slug, stato)
+        ok = manca is None and self._sys.catalogo.imposta_stato(slug, stato)
         # TRACCIA DEL GESTO (difetto vivo trovato il 2026-09-10 percorrendo la catena del pannello
         # admin, `collaudi/esame_catene_admin.py` anello [traccia]): sospendere un annuncio non
         # lasciava NESSUNA riga, mentre *guardare* l'elenco ne lascia una. La riga del bunker dice
@@ -3854,6 +3882,8 @@ class RouterHTTP:
         logger.warning("ADMIN_ACTION | OGGETTO: %s | AZIONE: Stato->%s | ESITO: %s | IP: %s",
                        _rif_per_registro(slug), _testo_per_registro(stato),
                        "eseguito" if ok else "rifiutato", self._client_ip(headers))
+        if manca is not None:
+            return 422, {"stato": "rifiutato", "errore": manca}
         return (200 if ok else 422), {"stato": stato if ok else "rifiutato"}
 
     # ── BUNKER (super-admin, fase180): 2FA + sessione blindata ──────────────
@@ -12614,10 +12644,12 @@ class RouterHTTP:
         # CIN OBBLIGATORIO per gli annunci ITALIANI (Reg. UE 2024/1028 + DL 145/2023,
         # vincolante per le piattaforme dal 20/05/2026: raccogliere ED esporre il codice,
         # multe 500-5.000EUR per annuncio senza). Policy del marketplace, il motore fase57
-        # resta neutro. Vale solo per stato 'pubblicato': la bozza si puo' salvare.
-        if (scheda.stato == "pubblicato" and not scheda.cin
-                and scheda.paese.strip().upper() in PAESI_ITALIA):
-            return 422, {"errore": "cin_obbligatorio_italia"}
+        # resta neutro. Vale solo per stato 'pubblicato': la bozza si puo' salvare. E prima del
+        # CIN il PAESE: senza, una casa a Roma era «estero» (regola unica `_manca_per_pubblicare`).
+        manca = _manca_per_pubblicare(scheda.paese, scheda.cin) \
+            if scheda.stato == "pubblicato" else None
+        if manca is not None:
+            return 422, {"errore": manca}
         # SOLO una vera lista: `get("immagini", [])` difende dalla chiave MANCANTE ma non
         # da un valore avvelenato (None/numero/bool -> enumerate esplodeva in 500; una
         # STRINGA veniva iterata carattere per carattere = immagini-spazzatura). BUG
@@ -13974,6 +14006,10 @@ class RouterHTTP:
             return 422, {"errore": "campi_non_validi"}
         if not self._verifica_proprieta(headers, slug):
             return 403, {"errore": "non_tuo"}
+        # «Pubblica» di «I miei alloggi»: stessa regola del salvataggio (variante del 18/11)
+        manca = _manca_per_ripubblicare(self._sys.catalogo, slug, stato)
+        if manca is not None:
+            return 422, {"errore": manca}
         ok = self._sys.catalogo.imposta_stato(slug, stato)
         return (200 if ok else 422), {"stato": stato if ok else "rifiutato"}
 

@@ -183,7 +183,8 @@ class TestReportConNotti(unittest.TestCase):
         # La risposta non e' il salto: e' `_banda`, che i due anni non li separa mai.
         g = lambda m, p, b: self.r.gestisci(m, p, {}, json.dumps(b), hk)
         g("POST", "/api/host/pubblica", {"host_id": self.hid, "slug": "casa", "titolo": "Villa",
-          "citta": "Roma", "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
+          "citta": "Roma", "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+          "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
           "servizi": [], "immagini": []})
         # la finestra copre la banda ANCHE quando guarda indietro, altrimenti a dicembre
         # il preventivo non troverebbe le date e il rosso sarebbe dell'apparecchio

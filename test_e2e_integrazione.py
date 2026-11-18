@@ -130,6 +130,7 @@ class TestEmailTransazionale(unittest.TestCase):
         r = crea_router(sis, host_key="hk", base_url="https://bookinvip.com")
         r.gestisci("POST", "/api/host/pubblica", {}, json.dumps({
             "host_id": "demo", "slug": "casa", "titolo": "Casa", "citta": "Roma",
+            "paese": "IT", "cin": "IT012034B4ABC1DEFG",
             "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
             "servizi": [], "immagini": []}), HK)
         r.gestisci("POST", "/api/host/disponibilita_range", {}, json.dumps({

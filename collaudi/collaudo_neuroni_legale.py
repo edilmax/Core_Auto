@@ -98,6 +98,7 @@ def crea_host(g, email, slug=None):
         oggi = datetime.date.today()
         g("POST", "/api/host/pubblica",
           {"slug": slug, "titolo": "Casa", "citta": "Roma",
+           "paese": "IT", "cin": "IT012034B4ABC1DEFG",
            "prezzo_notte_cents": PREZZO, "capacita": 4}, tk)
         g("POST", "/api/host/disponibilita_range",
           {"alloggio_id": slug, "da": oggi.isoformat(),

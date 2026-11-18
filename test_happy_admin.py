@@ -228,6 +228,7 @@ class HappyAdmin(unittest.TestCase):
         st, out = self.g("POST", "/api/host/pubblica",
                          {"slug": self.slug, "titolo": "Villa Happy Admin",
                           "citta": "Roma", "prezzo_notte_cents": PREZZO_NOTTE,
+                          "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                           "capacita": 4, "politica_cancellazione": "flessibile"}, self.HT)
         self.assertEqual(st, 201, out)
         st, out = self.g("POST", "/api/host/disponibilita_range",

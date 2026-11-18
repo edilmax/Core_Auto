@@ -636,6 +636,7 @@ class TestI3SullaProvaFirmataVera(unittest.TestCase):
         h = {"X-Host-Token": c["token"]}
         s, _ = self._g("POST", "/api/host/pubblica",
                        {"slug": "villa-202", "titolo": "Villa 202", "citta": "Roma",
+                        "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                         "prezzo_notte_cents": 10000, "capacita": 2}, h)
         self.assertIn(s, (200, 201))
         s, _ = self._g("POST", "/api/host/disponibilita_range",

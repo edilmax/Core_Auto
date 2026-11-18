@@ -103,6 +103,7 @@ class TestAutoGeocodeEMappa(unittest.TestCase):
 
     def _pubblica(self, slug, titolo, citta="Roma", extra=None):
         b = {"slug": slug, "titolo": titolo, "citta": citta,
+             "paese": "IT", "cin": "IT012034B4ABC1DEFG",
              "prezzo_notte_cents": 9000, "capacita": 2}
         if extra:
             b.update(extra)
@@ -192,6 +193,7 @@ class TestAutoGeocodeEMappa(unittest.TestCase):
         # ri-pubblico (edit) stesso slug con le coordinate, senza indirizzo
         s, _ = self.g("POST", "/api/host/pubblica",
                       {"slug": "mod", "titolo": "Mod 2", "citta": "Roma",
+                       "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                        "prezzo_notte_cents": 9000, "capacita": 2,
                        "lat_micro": 41894560, "lon_micro": 12482500}, {"X-Host-Token": self.tok})
         self.assertEqual(s, 201)

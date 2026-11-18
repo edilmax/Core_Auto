@@ -74,6 +74,7 @@ class TestQuoteCoerenza(unittest.TestCase):
                 slug = "casa%d" % i
                 g("POST", "/api/host/pubblica",
                   {"slug": slug, "titolo": "C%d" % i, "citta": "Roma",
+                   "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                    "prezzo_notte_cents": rnd.choice([700, 4900, 10000, 55000, 240000]),
                    "capacita": rnd.randint(1, 8), "valuta": val[i % 3],
                    "politica_cancellazione": pol[i % 4],

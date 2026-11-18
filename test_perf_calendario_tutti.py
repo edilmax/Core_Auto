@@ -64,6 +64,7 @@ class TestPerfCalendarioTutti(unittest.TestCase):
         for sl in slugs:
             g("POST", "/api/host/pubblica",
               {"slug": sl, "titolo": "P " + sl, "citta": "Roma",
+               "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                "prezzo_notte_cents": 10000, "capacita": 2}, H)
             g("POST", "/api/host/disponibilita_range",
               {"alloggio_id": sl, "da": self.da, "a": self.a,

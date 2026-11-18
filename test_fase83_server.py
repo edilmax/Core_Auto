@@ -757,6 +757,7 @@ class TestHost(unittest.TestCase):
         h = {"X-Host-Key": "segreto-host"}
         s, c = self.r.gestisci("POST", "/api/host/pubblica", body=json.dumps(
             {"host_id": "h1", "slug": "nuovo", "titolo": "Nuovo", "citta": "Milano",
+             "paese": "IT", "cin": "IT012034B4ABC1DEFG",
              "prezzo_notte_cents": 12000, "capacita": 2}), headers=h)
         self.assertEqual(s, 201)
         s2, c2 = self.r.gestisci("POST", "/api/host/disponibilita", body=json.dumps(
@@ -881,7 +882,8 @@ class TestSelfServiceHost(unittest.TestCase):
         # col token pubblica: host_id forzato al suo anche se ne passa un altro
         s2, _ = self.r.gestisci("POST", "/api/host/pubblica", headers=h, body=json.dumps(
             {"host_id": "IMPOSTORE", "slug": "casa-mario", "titolo": "Casa Mario",
-             "citta": "Bari", "prezzo_notte_cents": 8000, "capacita": 2}))
+             "citta": "Bari", "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+             "prezzo_notte_cents": 8000, "capacita": 2}))
         self.assertEqual(s2, 201)
         _, miei = self.r.gestisci("GET", "/api/host/alloggi", {"host_id": hid}, headers=h)
         self.assertEqual({a["slug"] for a in miei["alloggi"]}, {"casa-mario"})
@@ -988,6 +990,7 @@ class TestOnboarding(unittest.TestCase):
         # `422 scheda_non_valida / host_id_non_valido` e l'annuncio non nasce.
         st, _c = self.r.gestisci("POST", "/api/host/pubblica", headers=self.h, body=json.dumps(
             {"slug": "casa", "titolo": "Casa", "citta": "Roma", "host_id": "h_onboarding0001",
+             "paese": "IT", "cin": "IT012034B4ABC1DEFG",
              "prezzo_notte_cents": 9000, "capacita": 2}))
         self.assertIn(st, (200, 201), _c)   # premessa del banco: senza annuncio non si misura
 
@@ -1745,6 +1748,7 @@ class TestAprireIlLinkNonDecideNiente(unittest.TestCase):
         cls.hid, tok = c["host_id"], c["token"]
         s, p = cls._g("POST", "/api/host/pubblica",
                       {"slug": "casa-get", "titolo": "Casa GET", "citta": "Roma",
+                       "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                        "prezzo_notte_cents": 10000, "capacita": 2,
                        "modalita_prenotazione": "su_richiesta"}, {"X-Host-Token": tok})
         _deve(s == 201, s, p)
@@ -2496,6 +2500,7 @@ class _BancoDeiSoldiDelServer(unittest.TestCase):
 
     def pubblica(self, slug, politica="flessibile", **altro):
         annuncio = {"slug": slug, "titolo": "Casa", "citta": "Roma", "prezzo_notte_cents": 10000,
+                    "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                     "capacita": 2, "politica_cancellazione": politica}
         annuncio.update(altro)
         self.g("POST", "/api/host/pubblica", annuncio, {"X-Host-Token": self.tok})
@@ -5125,7 +5130,8 @@ class TestIlBloccoIncassatoSuUnaCancellazioneDellOspiteSiRestituisce(_OraVeraPer
         # fase83 :8542): non rimborsabile, dopo le 48 ore e senza tassa di soggiorno all'ospite
         # non spetta niente, e nel blocco non si segna un importo dovuto di zero
         self.g("POST", "/api/host/pubblica", {"host_id": "demo", "slug": "casa0", "titolo": "C0",
-               "citta": "Roma", "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
+               "citta": "Roma", "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+               "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
                "servizi": [], "immagini": [], "politica_cancellazione": "non_rimborsabile"},
                _HK_BLOCCO)
         self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": "casa0",
@@ -5305,7 +5311,8 @@ class TestFB2bLaRipresaTieneLaDecisioneDelPrimoClic(_OraVeraPerIlPreventivo, _Ba
         arrivo = oggi + datetime.timedelta(days=6)
         ci, co = arrivo.isoformat(), (arrivo + datetime.timedelta(days=2)).isoformat()
         self.g("POST", "/api/host/pubblica", {"host_id": "demo", "slug": "casam", "titolo": "M",
-               "citta": "Roma", "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
+               "citta": "Roma", "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+               "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
                "servizi": [], "immagini": [], "tassa_pp_notte_cents": 200,
                "politica_cancellazione": "moderata"}, _HK_BLOCCO)
         self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": "casam",
@@ -8440,7 +8447,8 @@ class TestR1IlGiroDeiBlocchiNonIncassaUnaPrenotazioneGiaChiusa(_OraVeraPerIlPrev
         # flessibile e arrivo lontano: dopo le 48 ore all'ospite torna tutto, quindi il blocco si
         # ANNULLA (niente da trattenere) invece di incassarsi
         self.g("POST", "/api/host/pubblica", {"host_id": "demo", "slug": slug, "titolo": "F",
-               "citta": "Roma", "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
+               "citta": "Roma", "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+               "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
                "servizi": [], "immagini": [], "politica_cancellazione": "flessibile"},
                _HK_BLOCCO)
         self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": slug,
@@ -8927,7 +8935,8 @@ class TestF5NienteDaRestituireNonEUnImportoSconosciuto(_OraVeraPerIlPreventivo, 
 
     def test_F5_all_ospite_non_spetta_niente_e_il_giro_tace(self):
         self.g("POST", "/api/host/pubblica", {"host_id": "demo", "slug": "casa-f5", "titolo": "C0",
-               "citta": "Roma", "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
+               "citta": "Roma", "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+               "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
                "servizi": [], "immagini": [], "politica_cancellazione": "non_rimborsabile"},
                _HK_BLOCCO)
         self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": "casa-f5",
@@ -9172,6 +9181,7 @@ class TestIlPrezzoCambiatoDallHostNonTornaQuelloVecchio(_BancoDeiSoldiDelServer)
     def modifica(self, prezzo):
         return self.g("POST", "/api/host/pubblica",
                       {"slug": self.SLUG, "titolo": "Casa", "citta": "Roma",
+                       "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                        "prezzo_notte_cents": prezzo, "capacita": 2,
                        "politica_cancellazione": "flessibile"}, {"X-Host-Token": self.tok})
 
@@ -9350,6 +9360,7 @@ class TestIlPrezzoCambiatoDallHostNonTornaQuelloVecchio(_BancoDeiSoldiDelServer)
         # euro e yen (code-review 30/10). Senza prenotazioni il cambio e' permesso.
         s, c = self.g("POST", "/api/host/pubblica",
                       {"slug": self.SLUG, "titolo": "Casa", "citta": "Roma", "valuta": "USD",
+                       "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                        "prezzo_notte_cents": 12500, "capacita": 2,
                        "politica_cancellazione": "flessibile"}, {"X-Host-Token": self.tok})
         _deve(s == 201, s, c)

@@ -86,6 +86,7 @@ class TestCancellazioneMoney(unittest.TestCase):
         self.hid, self.tok = c["host_id"], c["token"]
         s, _ = self.g("POST", "/api/host/pubblica",
                       {"slug": "casa-cm", "titolo": "Casa CM", "citta": "Roma",
+                       "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                        "prezzo_notte_cents": 10000, "capacita": 2,
                        "politica_cancellazione": "flessibile"}, {"X-Host-Token": self.tok})
         self.assertEqual(s, 201)
@@ -226,6 +227,7 @@ class TestCancellazioneMoney(unittest.TestCase):
         # trattenuto>0 -> il Credito Viaggio viene coniato (condizione per esporre il bug).
         s, _ = self.g("POST", "/api/host/pubblica",
                       {"slug": "casa-rig", "titolo": "Casa Rig", "citta": "Roma",
+                       "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                        "prezzo_notte_cents": 10000, "capacita": 2,
                        "politica_cancellazione": "rigida"}, {"X-Host-Token": self.tok})
         self.assertEqual(s, 201)

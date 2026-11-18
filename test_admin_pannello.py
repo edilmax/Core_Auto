@@ -36,7 +36,8 @@ class TestAdminPannello(unittest.TestCase):
              "versione": CONTRATTO_HOST_VERSIONE}))
         self.assertEqual(s, 201, c)
         tok, hid = c["token"], c["host_id"]
-        corpo = {"titolo": titolo, "citta": "Roma", "prezzo_notte_cents": 9000, "capacita": 2}
+        corpo = {"titolo": titolo, "citta": "Roma", "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+                 "prezzo_notte_cents": 9000, "capacita": 2}
         corpo.update(extra)
         s, p = self.r.gestisci("POST", "/api/host/pubblica",
                                headers={"X-Host-Token": tok}, body=json.dumps(corpo))

@@ -67,7 +67,9 @@ class TestCheckinRamo(unittest.TestCase):
         self.tok = c["token"]
         oggi = datetime.date.today()
         self.g("POST", "/api/host/pubblica",
-               {"slug": "casa-ck", "titolo": "Casa CK", "citta": "Roma",
+               # all'ESTERO: qui si prova il ramo del check-in, non la schedina della Questura
+               # (in Italia pretende i dati dell'art. 109 TULPS: `test_checkin_questura*`)
+               {"slug": "casa-ck", "titolo": "Casa CK", "citta": "Madrid", "paese": "ES",
                 "prezzo_notte_cents": 10000, "capacita": 2}, {"X-Host-Token": self.tok})
         self.g("POST", "/api/host/disponibilita_range",
                {"alloggio_id": "casa-ck", "da": oggi.isoformat(),

@@ -44,7 +44,8 @@ class TestAdminSearch(unittest.TestCase):
         # annunci: uno pubblicato, uno SOSPESO
         for slug, tit in (("villa-mare", "Villa sul Mare"), ("baita-neve", "Baita Neve")):
             self.g("POST", "/api/host/pubblica", {"host_id": self.hid, "slug": slug,
-                   "titolo": tit, "citta": "Rimini", "descrizione": "x",
+                   "titolo": tit, "citta": "Rimini", "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+                   "descrizione": "x",
                    "prezzo_notte_cents": 9000, "capacita": 2, "servizi": [],
                    "immagini": []}, HK)
         self.sis.catalogo.imposta_stato("baita-neve", "sospeso")
@@ -119,7 +120,8 @@ class TestAdminSearch(unittest.TestCase):
         for i in range(25):
             self.g("POST", "/api/host/pubblica", {"host_id": self.hid,
                    "slug": "casa-pag-%02d" % i, "titolo": "CasaPag %d" % i,
-                   "citta": "Paginopoli", "descrizione": "x", "prezzo_notte_cents": 5000,
+                   "citta": "Paginopoli", "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+                   "descrizione": "x", "prezzo_notte_cents": 5000,
                    "capacita": 2, "servizi": [], "immagini": []}, HK)
         s, d = self.cerca("CasaPag", page=1)
         self.assertEqual(len(d["annunci"]), 10)

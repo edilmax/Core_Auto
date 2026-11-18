@@ -83,6 +83,8 @@ class TestFantasmiTerminali(unittest.TestCase):
             sl = "gt-%d" % k
             g("POST", "/api/host/pubblica",
               {"slug": sl, "titolo": "Casa %d" % k, "citta": citta, "valuta": val,
+               "paese": {"Roma": "IT", "New York": "US", "Tokyo": "JP"}[citta],
+               "cin": "IT012034B4ABC1DEFG" if citta == "Roma" else "",
                "prezzo_notte_cents": 20000 + k * 1111, "capacita": 4}, {"X-Host-Token": tok})
             g("POST", "/api/host/disponibilita_range",
               {"alloggio_id": sl, "da": oggi.isoformat(),

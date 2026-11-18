@@ -49,7 +49,8 @@ class TestSuRichiesta(unittest.TestCase):
 
     def _pubblica(self, slug, modalita):
         self.g("POST", "/api/host/pubblica", {"host_id": "demo", "slug": slug, "titolo": "C",
-               "citta": "Roma", "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
+               "citta": "Roma", "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+               "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
                "servizi": [], "immagini": [], "modalita_prenotazione": modalita}, HK)
         self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": slug, "da": "2027-03-01",
                "a": "2027-03-31", "unita_totali": 1, "prezzo_netto_cents": 10000}, HK)

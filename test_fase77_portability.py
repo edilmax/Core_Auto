@@ -131,7 +131,13 @@ class TestIntegrazioneReale(unittest.TestCase):
         inv = crea_channel_manager()
         r = importa(CANONICO, catalogo=cat, inventario=inv)
         self.assertTrue(r.catalogo_applicato)
-        # cercabile in vetrina
+        # dal 17/11 arriva in BOZZA: l'export non dice paese ne' CIN, e in vetrina non c'e'
+        # finche' l'host non lo pubblica dal pannello coi controlli di legge
+        # (`test_cin_italia.TestPolicyItalia.test_un_annuncio_importato_arriva_come_bozza`)
+        self.assertEqual(cat.cerca(CriteriRicerca(citta="Roma"))["totale"], 0)
+        self.assertEqual(cat.dettaglio_owner("casa-roma")["stato"], "bozza")
+        self.assertTrue(cat.imposta_stato("casa-roma", "pubblicato"))
+        # pubblicato: cercabile in vetrina
         res = cat.cerca(CriteriRicerca(citta="Roma"))
         self.assertEqual(res["totale"], 1)
         self.assertEqual(res["risultati"][0]["slug"], "casa-roma")

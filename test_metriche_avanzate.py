@@ -81,6 +81,7 @@ class TestMetricheAvanzate(unittest.TestCase):
     def _listing(self, slug, valuta, prezzo):
         self.g("POST", "/api/host/pubblica",
                {"slug": slug, "titolo": slug, "citta": "X", "prezzo_notte_cents": prezzo,
+                "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                 "capacita": 4, "politica_cancellazione": "flessibile", "valuta": valuta},
                {"X-Host-Token": self.tok})
         self.g("POST", "/api/host/disponibilita_range",

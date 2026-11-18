@@ -50,6 +50,7 @@ class TestSospesoNonPrenotabile(unittest.TestCase):
         self.tok = c["token"]
         self.g("POST", "/api/host/pubblica",
                {"slug": "casa", "titolo": "Casa", "citta": "Roma", "prezzo_notte_cents": 50000,
+                "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                 "capacita": 4, "politica_cancellazione": "flessibile"}, {"X-Host-Token": self.tok})
         self.g("POST", "/api/host/disponibilita_range",
                {"alloggio_id": "casa", "da": "2026-09-01", "a": "2026-09-30",

@@ -122,7 +122,7 @@ class _GiroValuta(unittest.TestCase):
         self.assertEqual(s, 201, c)
         self.tok = c["token"]
         s, c = self.g("POST", "/api/host/pubblica",
-                      {"slug": "stanza", "titolo": "Stanza", "citta": "Tokyo",
+                      {"slug": "stanza", "titolo": "Stanza", "citta": "Tokyo", "paese": "JP",
                        "prezzo_notte_cents": self.PREZZO, "valuta": self.VALUTA,
                        "capacita": 2, "politica_cancellazione": "flessibile",
                        "tassa_soggiorno_cents": 0},

@@ -197,7 +197,8 @@ class TestStripeIdentity(unittest.TestCase):
         # prenotazione pagata + payout: il transfer NON parte (manuale > automatico)
         oggi = datetime.date.today()
         self.g("POST", "/api/host/pubblica", {"slug": "casa-i", "titolo": "I",
-               "citta": "Roma", "prezzo_notte_cents": 10000, "capacita": 2}, self.hk)
+               "citta": "Roma", "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+               "prezzo_notte_cents": 10000, "capacita": 2}, self.hk)
         self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": "casa-i",
                "da": oggi.isoformat(),
                "a": (oggi + datetime.timedelta(days=40)).isoformat(),

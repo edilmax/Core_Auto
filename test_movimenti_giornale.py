@@ -193,7 +193,8 @@ class _BancoDeiBonifici(unittest.TestCase):
         self.hid = es.host_id
         self.assertTrue(self.hid)
         self.g("POST", "/api/host/pubblica", {"host_id": self.hid, "slug": "casa", "titolo": "C",
-               "citta": "Roma", "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
+               "citta": "Roma", "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+               "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
                "servizi": [], "immagini": [], "tassa_pp_notte_cents": 200}, HK)
         self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": "casa",
                "da": "2027-08-01", "a": "2027-08-31", "unita_totali": 5,

@@ -69,7 +69,8 @@ class TestPaginazioneServerSide(unittest.TestCase):
         # DUE alloggi dello stesso host: la pagina deve attraversarli entrambi
         for slug in ("hotel-a", "hotel-b"):
             self.g("POST", "/api/host/pubblica", {"host_id": "demo", "slug": slug,
-                   "titolo": slug.upper(), "citta": "Roma", "descrizione": "x",
+                   "titolo": slug.upper(), "citta": "Roma", "paese": "IT",
+                   "cin": "IT012034B4ABC1DEFG", "descrizione": "x",
                    "prezzo_notte_cents": 10000, "capacita": 2, "servizi": [],
                    "immagini": [], "tassa_pp_notte_cents": 0}, HK)
             self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": slug,
@@ -201,7 +202,8 @@ class TestPaginazioneServerSide(unittest.TestCase):
     def test_richiesta_non_approvata_non_in_lista(self):
         # alloggio 'su richiesta': il book crea 'in_attesa_host', nessun blocco inventario
         self.g("POST", "/api/host/pubblica", {"host_id": "demo", "slug": "sur",
-               "titolo": "SR", "citta": "Roma", "descrizione": "x",
+               "titolo": "SR", "citta": "Roma", "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+               "descrizione": "x",
                "prezzo_notte_cents": 10000, "capacita": 2, "servizi": [], "immagini": [],
                "tassa_pp_notte_cents": 0, "modalita_prenotazione": "su_richiesta"}, HK)
         self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": "sur",

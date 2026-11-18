@@ -70,6 +70,7 @@ class TestPaginaRecensione(unittest.TestCase):
         oggi = datetime.date.today()
         self.g("POST", "/api/host/pubblica",
                {"slug": "attico", "titolo": "Attico Vista Colosseo", "citta": "Roma",
+                "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                 "prezzo_notte_cents": 24500, "capacita": 4}, tk)
         self.g("POST", "/api/host/disponibilita_range",
                {"alloggio_id": "attico", "da": oggi.isoformat(),

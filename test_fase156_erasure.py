@@ -46,6 +46,7 @@ class TestErasure(unittest.TestCase):
         self.hid = c["host_id"]
         self.g("POST", "/api/host/pubblica", {
             "host_id": self.hid, "slug": "casa", "titolo": "Casa", "citta": "Roma",
+            "paese": "IT", "cin": "IT012034B4ABC1DEFG",
             "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
             "servizi": [], "immagini": ["https://x/y.jpg"]}, HK)
         self.g("POST", "/api/host/disponibilita_range", {
@@ -988,6 +989,7 @@ class TestIlCancellamiTOGLIEancheIlCALENDARIOesterno(unittest.TestCase):
     def test_l_URL_del_calendario_NON_sopravvive_alla_cancellazione(self):
         s, c = self.g("POST", "/api/host/pubblica",
                       {"slug": "casa-ical", "titolo": "Casa", "citta": "Roma",
+                       "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                        "prezzo_notte_cents": 10000, "capacita": 2},
                       {"X-Host-Token": self.tok})
         self.assertIn(s, (200, 201), c)
@@ -1012,6 +1014,7 @@ class TestIlCancellamiTOGLIEancheIlCALENDARIOesterno(unittest.TestCase):
         delle due. O sparisce, o l'oblio lo dichiara — mai «ok» con il dato ancora li'."""
         s, _ = self.g("POST", "/api/host/pubblica",
                       {"slug": "casa-ical2", "titolo": "Casa", "citta": "Roma",
+                       "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                        "prezzo_notte_cents": 10000, "capacita": 2},
                       {"X-Host-Token": self.tok})
         self.assertIn(s, (200, 201))

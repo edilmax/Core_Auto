@@ -204,6 +204,7 @@ def main():
         tok = c["token"]
         g("POST", "/api/host/pubblica",
           {"slug": "villa-rimb", "titolo": "Villa Rimborso", "citta": "Roma",
+           "paese": "IT", "cin": "IT012034B4ABC1DEFG",
            "prezzo_notte_cents": 20000, "capacita": 4,
            "politica_cancellazione": "flessibile"}, {"X-Host-Token": tok})
         g("POST", "/api/host/disponibilita_range",

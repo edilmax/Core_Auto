@@ -124,6 +124,7 @@ class TestIlTotaleTornaAlCentESIMO(unittest.TestCase):
         tok = c["token"]
         st, c = g("POST", "/api/host/pubblica",
                   {"slug": "a1", "titolo": "A", "citta": "Roma", "valuta": valuta,
+                   "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                    "prezzo_notte_cents": prezzo, "capacita": 4,
                    "politica_cancellazione": "flessibile",
                    "tassa_soggiorno_cents": tassa,

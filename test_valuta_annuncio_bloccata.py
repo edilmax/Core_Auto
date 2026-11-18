@@ -90,7 +90,7 @@ class TestValutaAnnuncioBloccata(unittest.TestCase):
         return self.r.gestisci(m, p, {}, json.dumps(b) if b is not None else None, h or {})
 
     def _pubblica(self, **extra):
-        base = {"slug": "zen", "titolo": "Zen House", "citta": "Tokyo",
+        base = {"slug": "zen", "titolo": "Zen House", "citta": "Tokyo", "paese": "JP",
                 "prezzo_notte_cents": 18000, "capacita": 2,
                 "politica_cancellazione": "flessibile"}
         base.update(extra)

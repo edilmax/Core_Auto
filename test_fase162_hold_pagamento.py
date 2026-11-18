@@ -117,7 +117,8 @@ class TestIlWebhookNonDiceMaiGestitoSeNoiAbbiamoFallito(unittest.TestCase):
         self.sis.concierge._link = lambda dati: "https://pay/" + str(dati.get("riferimento", ""))
         self.r = crea_router(self.sis, host_key="hk", base_url="https://bookinvip.com")
         self.g("POST", "/api/host/pubblica", {"host_id": "demo", "slug": "casa", "titolo": "C",
-               "citta": "Roma", "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
+               "citta": "Roma", "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+               "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
                "servizi": [], "immagini": [], "tassa_pp_notte_cents": 200}, HK)
         self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": "casa", "da": "2027-02-01",
                "a": "2027-02-28", "unita_totali": 1, "prezzo_netto_cents": 10000}, HK)
@@ -189,7 +190,8 @@ class TestFlussoHold(unittest.TestCase):
         self.sis.concierge._link = lambda dati: "https://pay/" + str(dati.get("riferimento", ""))
         self.r = crea_router(self.sis, host_key="hk", base_url="https://bookinvip.com")
         self.g("POST", "/api/host/pubblica", {"host_id": "demo", "slug": "casa", "titolo": "C",
-               "citta": "Roma", "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
+               "citta": "Roma", "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+               "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
                "servizi": [], "immagini": [], "tassa_pp_notte_cents": 200}, HK)
         self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": "casa", "da": "2027-02-01",
                "a": "2027-02-28", "unita_totali": 1, "prezzo_netto_cents": 10000}, HK)

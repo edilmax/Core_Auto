@@ -972,11 +972,11 @@
  "d4e612aafcd1": {
   "blocco": 9,
   "comando": "python collaudi/esame_marketing.py --casella giurisdizioni --scrivi",
-  "commit": "c2f73f6",
+  "commit": "77b1118",
   "condizione": "si pubblica SOLO dove e' lecito (le giurisdizioni le decide fase154)",
   "denominatore": 8,
   "esito": true,
-  "impronta": "f2c6268d8838",
+  "impronta": "9dad0a5ae60c",
   "impronte_moduli": {
    "fase158_domanda": "c8b1f3c520bb",
    "fase161_domanda_allarme": "fa75bc0fe516",
@@ -995,7 +995,7 @@
    "fase48_advertising": "e694368273cc",
    "fase68_niche_profiler": "48ae64216384",
    "fase76_viral_loop": "d9e0e83877a7",
-   "fase77_portability": "6a44640e8850",
+   "fase77_portability": "5d6d4978552f",
    "fase89_jurisdiction_outreach": "117be484f3ae",
    "fase90_marketing": "7e03531da8ab",
    "fase91_canali_social": "e10d754a3fd0",
@@ -1007,7 +1007,7 @@
    "fase97_inbound_seo": "bface742e2fe"
   },
   "motivo": "",
-  "quando": "2026-11-14T16:23:00"
+  "quando": "2026-11-18T13:57:11"
  },
  "d70ecb7a31cc": {
   "blocco": 1,
@@ -1051,11 +1051,11 @@
  "df0678e71e35": {
   "blocco": 9,
   "comando": "python collaudi/esame_marketing.py --casella interruttore --scrivi",
-  "commit": "c2f73f6",
+  "commit": "77b1118",
   "condizione": "nessun canale pubblica senza che una persona possa fermarlo",
   "denominatore": 26,
   "esito": true,
-  "impronta": "f2c6268d8838",
+  "impronta": "9dad0a5ae60c",
   "impronte_moduli": {
    "fase158_domanda": "c8b1f3c520bb",
    "fase161_domanda_allarme": "fa75bc0fe516",
@@ -1074,7 +1074,7 @@
    "fase48_advertising": "e694368273cc",
    "fase68_niche_profiler": "48ae64216384",
    "fase76_viral_loop": "d9e0e83877a7",
-   "fase77_portability": "6a44640e8850",
+   "fase77_portability": "5d6d4978552f",
    "fase89_jurisdiction_outreach": "117be484f3ae",
    "fase90_marketing": "7e03531da8ab",
    "fase91_canali_social": "e10d754a3fd0",
@@ -1086,7 +1086,7 @@
    "fase97_inbound_seo": "bface742e2fe"
   },
   "motivo": "",
-  "quando": "2026-11-14T16:23:00"
+  "quando": "2026-11-18T13:57:11"
  },
  "e0c5eaf17028": {
   "blocco": 6,

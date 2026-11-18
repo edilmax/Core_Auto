@@ -51,9 +51,11 @@ function mkEl(id){
     closest(){ return null; }, querySelectorAll(){ return []; }, querySelector(){ return null; },
     addEventListener(){}, removeEventListener(){}, select(){}, focus(){}, click(){},
     scrollIntoView(){},
+    add(o){ el.options.push(o); },     // <select>.add, come nel browser (menu dei paesi, 18/11)
   };
   return el;
 }
+function Option(text, value){ return {text: text, value: value}; }
 const document = {
   getElementById(id){ if(!REG.has(id)) REG.set(id, mkEl(id)); return REG.get(id); },
   querySelectorAll(){ return []; }, querySelector(){ return null; },

@@ -127,6 +127,7 @@ class _Base(unittest.TestCase):
         import datetime
         oggi = self.oggi(fuso or "Europe/Rome")
         corpo = {"slug": slug, "titolo": slug, "citta": "Roma", "prezzo_notte_cents": prezzo,
+                 "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                  "capacita": 4, "valuta": valuta, "politica_cancellazione": "flessibile"}
         if fuso:
             corpo["fuso"] = fuso

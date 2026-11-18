@@ -177,7 +177,8 @@ class MacchinaBookinVIP(RuleBasedStateMachine):
         slug = "casa%d" % self._n_annunci
         s, o = self._g("POST", "/api/host/pubblica",
                        {"slug": slug, "titolo": "Casa %d" % self._n_annunci,
-                        "citta": "Roma", "prezzo_notte_cents": prezzo, "capacita": 4,
+                        "citta": "Roma", "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+                        "prezzo_notte_cents": prezzo, "capacita": 4,
                         "politica_cancellazione": politica,
                         "tassa_pp_notte_cents": tassa}, self.tok)
         assert s == 201, "pubblica: %d %r" % (s, o)
@@ -227,6 +228,7 @@ class MacchinaBookinVIP(RuleBasedStateMachine):
         slug = self._eliminati.pop(0)
         s, o = self._g("POST", "/api/host/pubblica",
                        {"slug": slug, "titolo": "Rinata %s" % slug, "citta": "Roma",
+                        "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                         "prezzo_notte_cents": prezzo, "capacita": 2}, self.tok)
         assert s == 201, "ricrea: %d %r" % (s, o)  # nosec B101 - qui l'assert e' il mestiere
         scheda = self.sis.catalogo.dettaglio_owner(slug) or {}

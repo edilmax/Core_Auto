@@ -42,6 +42,7 @@ class TestPoliticaCancellazione(unittest.TestCase):
     def _pubblica(self, politica):
         self.g("POST", "/api/host/pubblica", {
             "host_id": "demo", "slug": "casa", "titolo": "Casa", "citta": "Roma",
+            "paese": "IT", "cin": "IT012034B4ABC1DEFG",
             "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
             "servizi": [], "immagini": [], "politica_cancellazione": politica}, HK)
         self.g("POST", "/api/host/disponibilita_range", {

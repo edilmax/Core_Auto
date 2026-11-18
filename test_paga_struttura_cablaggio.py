@@ -71,6 +71,7 @@ class TestPagaStrutturaCablaggio(unittest.TestCase):
         # annuncio A: ACCETTA paga in struttura (default, non lo passa nemmeno)
         self.g("POST", "/api/host/pubblica",
                {"slug": "casa-si", "titolo": "Casa Si", "citta": "Roma",
+                "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                 "prezzo_notte_cents": 30000, "capacita": 4,
                 "politica_cancellazione": "flessibile"}, {"X-Host-Token": self.tok})
         self.g("POST", "/api/host/disponibilita_range",
@@ -79,6 +80,7 @@ class TestPagaStrutturaCablaggio(unittest.TestCase):
         # annuncio B: NON accetta (toggle OFF esplicito)
         self.g("POST", "/api/host/pubblica",
                {"slug": "casa-no", "titolo": "Casa No", "citta": "Roma",
+                "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                 "prezzo_notte_cents": 30000, "capacita": 4, "paga_in_struttura": False,
                 "politica_cancellazione": "flessibile"}, {"X-Host-Token": self.tok})
         self.g("POST", "/api/host/disponibilita_range",

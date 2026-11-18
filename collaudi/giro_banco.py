@@ -326,6 +326,7 @@ for i in range(QUANTE):
     tk = {"X-Host-Token": c["token"]}
     s2, _ = chiama("POST", "/api/host/pubblica", {
         "slug": slug, "titolo": "Casa di prova %02d" % (i + 1), "citta": "Milano",
+        "paese": "IT", "cin": "IT012034B4ABC1DEFG",
         "prezzo_notte_cents": PREZZO, "capacita": 2}, tk)
     s3, _ = chiama("POST", "/api/host/disponibilita_range", {
         "alloggio_id": slug, "da": oggi.isoformat(),

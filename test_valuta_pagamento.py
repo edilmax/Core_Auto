@@ -74,6 +74,7 @@ class TestValutaPagamento(unittest.TestCase):
             tok = c["token"]
             g("POST", "/api/host/pubblica",
               {"slug": "a", "titolo": "A", "citta": "X", "prezzo_notte_cents": prezzo,
+               "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                "capacita": 2, "politica_cancellazione": "flessibile",
                "valuta": valuta_annuncio}, {"X-Host-Token": tok})
             g("POST", "/api/host/disponibilita_range",

@@ -15,6 +15,7 @@ class TestElimina(unittest.TestCase):
         self.r = crea_router(self.sys, host_key="hk")
         self.tok = self._reg("h@del.it")
         self.g("POST","/api/host/pubblica",{"slug":"sbagliato","titolo":"Oops","citta":"Roma",
+               "paese":"IT","cin":"IT012034B4ABC1DEFG",
                "prezzo_notte_cents":9000,"capacita":2},{"X-Host-Token":self.tok})
     def tearDown(self): shutil.rmtree(self.d, ignore_errors=True)
     def g(self,m,p,b=None,h=None,q=None):
@@ -116,6 +117,7 @@ class TestUnAnnuncioCANCELLATOSPARISCEDAVVERO(unittest.TestCase):
         spia = "via-SPIA-DELLE-PROVE-ZZZZ"        # niente cifre di fila: verrebbero mascherate
         s, d = self.g("POST", "/api/host/pubblica",
                       {"slug": "casa-byte", "titolo": "Oops", "citta": "Roma",
+                       "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                        "prezzo_notte_cents": 9000, "capacita": 2, "indirizzo": spia},
                       {"X-Host-Token": self.tok})
         self.assertIn(s, (200, 201), d)
@@ -158,6 +160,7 @@ class TestUnAnnuncioCANCELLATOSPARISCEDAVVERO(unittest.TestCase):
         """
         s, d = self.g("POST", "/api/host/pubblica",
                       {"slug": "casa-orfana", "titolo": "Orfana", "citta": "Roma",
+                       "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                        "prezzo_notte_cents": 100, "capacita": 2}, {"X-Host-Token": self.tok})
         self.assertIn(s, (200, 201), d)
         s, d = self._apri_periodo("casa-orfana", 9000)
@@ -180,6 +183,7 @@ class TestUnAnnuncioCANCELLATOSPARISCEDAVVERO(unittest.TestCase):
         calendario e' quello del morto, la vetrina dice il prezzo del morto."""
         s, d = self.g("POST", "/api/host/pubblica",
                       {"slug": "casa-erede", "titolo": "Erede", "citta": "Roma",
+                       "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                        "prezzo_notte_cents": 9000, "capacita": 2}, {"X-Host-Token": self.tok})
         self.assertIn(s, (200, 201), d)
         s, d = self._apri_periodo("casa-erede", 9000)
@@ -189,6 +193,7 @@ class TestUnAnnuncioCANCELLATOSPARISCEDAVVERO(unittest.TestCase):
         self.assertEqual(s, 200, d)
         s, d = self.g("POST", "/api/host/pubblica",
                       {"slug": "casa-erede", "titolo": "Erede 2", "citta": "Roma",
+                       "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                        "prezzo_notte_cents": 100, "capacita": 2}, {"X-Host-Token": self.tok})
         self.assertIn(s, (200, 201), d)
         scheda = self.sys.catalogo.dettaglio_owner("casa-erede")

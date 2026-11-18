@@ -75,6 +75,7 @@ class _Base(unittest.TestCase):
         self.tok, self.hid = c["token"], c["host_id"]
         st, c = self.g("POST", "/api/host/pubblica",
                        {"slug": "casa", "titolo": "Casa", "citta": "Roma",
+                        "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                         "prezzo_notte_cents": 20000, "valuta": "EUR", "capacita": 4,
                         "politica_cancellazione": "flessibile"},
                        {"X-Host-Token": self.tok})

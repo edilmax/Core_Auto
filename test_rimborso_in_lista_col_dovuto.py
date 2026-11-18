@@ -96,6 +96,7 @@ class _Banco(unittest.TestCase):
         self.oggi = datetime.datetime.now(ZoneInfo("Europe/Rome")).date()
         self.g("POST", "/api/host/pubblica",
                {"slug": "casa", "titolo": "C", "citta": "Roma", "prezzo_notte_cents": 20000,
+                "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                 "capacita": 4, "tassa_pp_notte_cents": 200}, {"X-Host-Token": self.tok})
         self.g("POST", "/api/host/disponibilita_range",
                {"alloggio_id": "casa", "da": self.oggi.isoformat(),

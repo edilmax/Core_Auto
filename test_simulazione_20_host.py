@@ -130,6 +130,7 @@ class TestSimulazione20Host(unittest.TestCase):
     def _pubblica(self, tok, hid, slug, *, prezzo=PREZZO):
         s, c = self.g("POST", "/api/host/pubblica",
                       {"host_id": hid, "slug": slug, "titolo": f"Casa {slug}", "citta": "Roma",
+                       "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                        "descrizione": "bella e vera", "prezzo_notte_cents": prezzo, "capacita": 4,
                        "servizi": ["wifi"], "modalita_prenotazione": "immediata",
                        "politica_cancellazione": "flessibile", "immagini": ["https://x/y.jpg"]},

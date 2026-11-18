@@ -150,7 +150,8 @@ class _Base(unittest.TestCase):
         self.r = crea_router(self.sis, host_key="hk", admin_key="ak",
                              base_url="https://bookinvip.com")
         self.g("POST", "/api/host/pubblica", {"host_id": "demo", "slug": "casa", "titolo": "C",
-               "citta": "Roma", "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
+               "citta": "Roma", "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+               "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
                "servizi": [], "immagini": [], "tassa_pp_notte_cents": 200,
                "politica_cancellazione": "non_rimborsabile"}, HK)
         self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": "casa",
@@ -693,6 +694,7 @@ class TestIlLinkVeroChiedeIlBlocco(unittest.TestCase):
         for slug, modo in (("subito", "immediata"), ("richiesta", "su_richiesta")):
             s, c = self.g("POST", "/api/host/pubblica", {
                 "host_id": "demo", "slug": slug, "titolo": slug, "citta": "Roma",
+                "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                 "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
                 "servizi": [], "immagini": [], "modalita_prenotazione": modo}, HK)
             self.assertIn(s, (200, 201), c)
@@ -1431,7 +1433,8 @@ class TestLaCancellazioneDellOspiteAiMargini(_ConLeSpie):
         # un annuncio SENZA tassa di soggiorno: la tassa si restituisce sempre, e qui serve
         # un rimborso che sia davvero zero
         self.g("POST", "/api/host/pubblica", {"host_id": "demo", "slug": "casa0", "titolo": "C0",
-               "citta": "Roma", "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
+               "citta": "Roma", "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+               "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
                "servizi": [], "immagini": [], "politica_cancellazione": "non_rimborsabile"}, HK)
         self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": "casa0",
                "da": _vero("2027-04-01"), "a": _vero("2027-05-31"), "unita_totali": 1,

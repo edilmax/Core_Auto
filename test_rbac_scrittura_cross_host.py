@@ -43,6 +43,7 @@ class TestRBACScritturaCrossHost(unittest.TestCase):
         tok = c["token"]
         self.g("POST", "/api/host/pubblica",
                {"slug": slug, "titolo": slug, "citta": "Roma", "prezzo_notte_cents": 50000,
+                "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                 "capacita": 4, "politica_cancellazione": "flessibile"}, {"X-Host-Token": tok})
         return tok
 
@@ -126,6 +127,7 @@ class TestUnaScritturaSuUnAnnuncioCHENONESISTE(unittest.TestCase):
         self.tok = c["token"]
         self.g("POST", "/api/host/pubblica",
                {"slug": "casa-vera", "titolo": "Casa vera", "citta": "Roma",
+                "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                 "prezzo_notte_cents": 50000, "capacita": 2}, {"X-Host-Token": self.tok})
         # PREMESSA (sbaglio S1): il nome fantasma non deve esistere davvero, se no la
         # guardia proverebbe un'altra cosa e passerebbe per il motivo sbagliato.

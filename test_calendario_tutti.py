@@ -25,6 +25,7 @@ class TestCalendarioTutti(unittest.TestCase):
         for slug in ("uno", "due"):
             self.g("POST", "/api/host/pubblica",
                    {"slug": slug, "titolo": "Casa " + slug, "citta": "Roma",
+                    "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                     "prezzo_notte_cents": 10000, "capacita": 2}, {"X-Host-Token": self.tok})
             for gg in ("2026-09-01", "2026-09-02"):
                 self.sys.inventario.imposta_disponibilita(slug, gg, unita_totali=1,

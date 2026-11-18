@@ -69,6 +69,7 @@ class TestIdorRichieste(unittest.TestCase):
         co = (oggi + datetime.timedelta(days=5)).isoformat()
         g("POST", "/api/host/pubblica",
           {"slug": "casa-A", "titolo": "Casa A", "citta": "Roma",
+           "paese": "IT", "cin": "IT012034B4ABC1DEFG",
            "prezzo_notte_cents": 10000, "capacita": 2,
            "modalita_prenotazione": "su_richiesta"}, HA)
         g("POST", "/api/host/disponibilita_range",
