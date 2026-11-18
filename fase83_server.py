@@ -2286,7 +2286,8 @@ def _gettone_prova_valido(firma: Any, gettone: Any, nome: str, ora: int) -> bool
             and isinstance(exp, int) and not isinstance(exp, bool) and exp >= ora)
 
 
-# Leggere il base vecchio, pubblicare e spostare i giorni sono UN gesto (`_host_pubblica`).
+# Leggere il base vecchio, pubblicare e spostare i giorni sono UN gesto (`_host_pubblica`);
+# e cosi' leggere paese/CIN e cambiare lo stato (`_host_stato`, `_admin_alloggio_stato`).
 _SERRATURA_PREZZO_BASE = threading.Lock()
 
 
@@ -3871,9 +3872,11 @@ class RouterHTTP:
         slug, stato = dati.get("slug"), dati.get("stato")
         if not (isinstance(slug, str) and slug and isinstance(stato, str)):
             return 422, {"errore": "campi_non_validi"}
-        # «ripubblica» dell'admin: la legge vale anche per noi (variante del 18/11)
-        manca = _manca_per_ripubblicare(self._sys.catalogo, slug, stato)
-        ok = manca is None and self._sys.catalogo.imposta_stato(slug, stato)
+        # «ripubblica» dell'admin: la legge vale anche per noi (variante del 18/11), e lettura
+        # e scrittura sotto la serratura del salvataggio come `_host_stato` (gara del 18/11)
+        with _SERRATURA_PREZZO_BASE:
+            manca = _manca_per_ripubblicare(self._sys.catalogo, slug, stato)
+            ok = manca is None and self._sys.catalogo.imposta_stato(slug, stato)
         # TRACCIA DEL GESTO (difetto vivo trovato il 2026-09-10 percorrendo la catena del pannello
         # admin, `collaudi/esame_catene_admin.py` anello [traccia]): sospendere un annuncio non
         # lasciava NESSUNA riga, mentre *guardare* l'elenco ne lascia una. La riga del bunker dice
@@ -14006,11 +14009,14 @@ class RouterHTTP:
             return 422, {"errore": "campi_non_validi"}
         if not self._verifica_proprieta(headers, slug):
             return 403, {"errore": "non_tuo"}
-        # «Pubblica» di «I miei alloggi»: stessa regola del salvataggio (variante del 18/11)
-        manca = _manca_per_ripubblicare(self._sys.catalogo, slug, stato)
-        if manca is not None:
-            return 422, {"errore": manca}
-        ok = self._sys.catalogo.imposta_stato(slug, stato)
+        # «Pubblica» di «I miei alloggi»: stessa regola del salvataggio (variante del 18/11).
+        # Leggere paese/CIN e scrivere lo stato sono UN gesto, sotto la serratura del
+        # salvataggio: se no un salvataggio che toglie il CIN entra in mezzo (gara del 18/11).
+        with _SERRATURA_PREZZO_BASE:
+            manca = _manca_per_ripubblicare(self._sys.catalogo, slug, stato)
+            if manca is not None:
+                return 422, {"errore": manca}
+            ok = self._sys.catalogo.imposta_stato(slug, stato)
         return (200 if ok else 422), {"stato": stato if ok else "rifiutato"}
 
     def _cal_arricchito(self, alloggio, da, a, hold_prefetch=None):
