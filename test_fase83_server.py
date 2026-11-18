@@ -11575,5 +11575,81 @@ class TestPR320PezzoSeiLeRigheCheIlGiudiceNonVedeva(_BancoDeiSoldiDelServer):
         self.assertIn("Attico Vista Colosseo", pagina)
 
 
+class TestUnAnnuncioVaOnlineSoloSeDiceDoveSta(unittest.TestCase):
+    """18/11, difetto di LEGGE vivo (`casa-test` a Roma, paese 'XX', senza CIN, pubblicata):
+    `_manca_per_pubblicare` e' la regola unica di ogni strada verso la vetrina. Le guardie
+    complete stanno in `test_cin_italia.TestPolicyItalia`; queste sono qui perche' il giudice
+    della CI (`mutazione_prodotto.py --diff`) accende il test DEDICATO del modulo: nella PR #329
+    quattro guasti delle righe nuove sopravvivevano perche' nessuna prova di questo file li
+    guardava (fase83 :1207 `in`/`and`, :1217 `is`, :12650 `==`)."""
+    CIN = "IT012034B4ABC1DEFG"
+
+    def setUp(self):
+        d = self.dir = tempfile.mkdtemp()
+        self.sis = crea_sistema(ConfigCasaVIP(
+            abilitato=True, segreto_hmac=b"S" * 32, con_registrazione_host=True,
+            db_catalogo=f"{d}/c.db", db_inventario=f"{d}/i.db", db_registro_host=f"{d}/r.db",
+            db_accettazioni=f"{d}/a.db", db_pendenti=f"{d}/p.db"))
+        self.r = crea_router(self.sis, host_key="hk", admin_key="ak",
+                             base_url="https://bookinvip.com")
+        s, c = self.g("POST", "/api/host/registrazione",
+                      {"email": "h@paese.it", "password": "password1", "accetta_termini": True,
+                       "accetta_clausole": True, "accetta_privacy": True,
+                       "doc_sha256": doc_sha256(), "versione": CONTRATTO_HOST_VERSIONE})
+        _deve(s == 201, s, c)
+        self.tk = {"X-Host-Token": c["token"]}
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def g(self, m, p, b=None, h=None):
+        return self.r.gestisci(m, p, {}, json.dumps(b) if b is not None else None, h or {})
+
+    def _pub(self, slug, paese, cin="", stato=None):
+        corpo = {"slug": slug, "titolo": "Casa", "citta": "Roma", "paese": paese, "cin": cin,
+                 "prezzo_notte_cents": 10000, "capacita": 2}
+        if stato:
+            corpo["stato"] = stato
+        s, o = self.g("POST", "/api/host/pubblica", corpo, self.tk)
+        return s, o.get("errore")
+
+    def test_in_italia_senza_CIN_no_all_estero_si(self):
+        # :1207 -- `in PAESI_ITALIA` rovesciato, o `and` al posto di `or`, cambia uno dei due
+        self.assertEqual((422, "cin_obbligatorio_italia"), self._pub("casa-it", "IT"))
+        self.assertEqual((201, None), self._pub("casa-es", "ES"))
+        self.assertEqual((201, None), self._pub("casa-it-cin", "IT", self.CIN))
+
+    def test_la_bozza_si_salva_la_pubblicazione_no(self):
+        # :12650 -- la regola vale SOLO per 'pubblicato': la bozza senza CIN si salva
+        self.assertEqual((201, None), self._pub("casa-bozza", "IT", stato="bozza"))
+        self.assertEqual((422, "cin_obbligatorio_italia"),
+                         self._pub("casa-pubb", "IT", stato="pubblicato"))
+
+    def test_il_pulsante_Pubblica_rilegge_l_annuncio_salvato(self):
+        # :1217 -- l'annuncio c'e': la regola si applica ai suoi dati salvati
+        self.assertEqual((201, None), self._pub("casa-st", "IT", stato="bozza"))
+        s, o = self.g("POST", "/api/host/stato", {"slug": "casa-st", "stato": "pubblicato"},
+                      self.tk)
+        self.assertEqual((422, "cin_obbligatorio_italia"), (s, o.get("errore")))
+        self.assertEqual("bozza", self.sis.catalogo.dettaglio_owner("casa-st")["stato"])
+
+    def test_senza_paese_non_va_online(self):
+        self.assertEqual((422, "paese_obbligatorio"), self._pub("casa-xx", "XX", self.CIN))
+
+    def test_la_ripubblicazione_dell_admin_segue_la_stessa_regola(self):
+        # :3876/:3885 -- «ripubblica» dell'admin: rifiutato senza CIN, eseguito coi dati giusti
+        ak = {"X-Admin-Key": "ak"}
+        self.assertEqual((201, None), self._pub("casa-adm", "IT", stato="bozza"))
+        s, o = self.g("POST", "/api/admin/alloggio_stato",
+                      {"slug": "casa-adm", "stato": "pubblicato"}, ak)
+        self.assertEqual((422, "rifiutato", "cin_obbligatorio_italia", "bozza"),
+                         (s, o.get("stato"), o.get("errore"),
+                          self.sis.catalogo.dettaglio_owner("casa-adm")["stato"]))
+        self.assertEqual((201, None), self._pub("casa-adm-ok", "ES", stato="bozza"))
+        s, o = self.g("POST", "/api/admin/alloggio_stato",
+                      {"slug": "casa-adm-ok", "stato": "pubblicato"}, ak)
+        self.assertEqual((200, "pubblicato"), (s, o.get("stato")))
+
+
 if __name__ == "__main__":
     unittest.main()
