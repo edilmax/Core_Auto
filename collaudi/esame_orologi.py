@@ -257,6 +257,7 @@ class Banco(object):
         h = {"X-Host-Token": self.tok}
         s, c = self.g("POST", "/api/host/pubblica",
                       {"slug": slug, "titolo": "Villa " + slug, "citta": "Roma",
+                       "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                        "prezzo_notte_cents": PREZZO_NOTTE, "capacita": 4,
                        "politica_cancellazione": politica}, h)
         if s not in (200, 201):

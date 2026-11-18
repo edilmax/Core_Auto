@@ -1932,6 +1932,7 @@ class _BaseIntegrazione(_ContrattiPuliti):
     def pubblica(self, slug="casa-1", prezzo=12000, citta="Roma"):
         s, c = self.g("POST", "/api/host/pubblica",
                       {"slug": slug, "titolo": "Casa prova", "citta": citta,
+                       "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                        "prezzo_notte_cents": prezzo, "capacita": 4,
                        "politica_cancellazione": "flessibile"}, self.tok)
         self.assertEqual(s, 201, c)

@@ -83,6 +83,7 @@ class TestBombardamentoSuRichiesta(unittest.TestCase):
                 slug = "casa%d" % i
                 g("POST", "/api/host/pubblica",
                   {"slug": slug, "titolo": "C%d" % i, "citta": "Roma",
+                   "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                    "prezzo_notte_cents": 20000, "capacita": 4,
                    "modalita_prenotazione": "su_richiesta"}, H)
                 ci = (oggi + datetime.timedelta(days=3 + i)).isoformat()

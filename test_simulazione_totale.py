@@ -131,6 +131,7 @@ class TestSimulazioneTotale(unittest.TestCase):
                   politica="flessibile"):
         s, c = self.g("POST", "/api/host/pubblica",
                       {"host_id": hid, "slug": slug, "titolo": f"Casa {slug}", "citta": citta,
+                       "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                        "descrizione": "bella", "prezzo_notte_cents": prezzo, "capacita": 4,
                        "servizi": ["wifi", "piscina"], "modalita_prenotazione": modalita,
                        "politica_cancellazione": politica, "immagini": ["https://x/y.jpg"]},

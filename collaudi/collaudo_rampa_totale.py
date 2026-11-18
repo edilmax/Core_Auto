@@ -95,6 +95,7 @@ def crea_host(r, email, slug, prezzo):
     o = datetime.date.today()
     s, x = G(r, "POST", "/api/host/pubblica",
              {"slug": slug, "titolo": "Casa " + slug, "citta": "Roma",
+              "paese": "IT", "cin": "IT012034B4ABC1DEFG",
               "prezzo_notte_cents": prezzo, "capacita": 6}, tk)
     assert s == 201, x
     G(r, "POST", "/api/host/disponibilita_range",

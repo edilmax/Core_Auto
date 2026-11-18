@@ -46,6 +46,7 @@ class _Base(unittest.TestCase):
                             base_url="https://bookinvip.com")
         cls.r.gestisci("POST", "/api/host/pubblica", {}, json.dumps({
             "host_id": "demo", "slug": "casa", "titolo": "Casa", "citta": "Roma",
+            "paese": "IT", "cin": "IT012034B4ABC1DEFG",
             "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 4,
             "servizi": ["wifi"], "immagini": ["https://x/y.jpg"]}), HK)
         cls.r.gestisci("POST", "/api/host/disponibilita_range", {}, json.dumps({

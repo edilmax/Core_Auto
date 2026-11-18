@@ -91,6 +91,7 @@ class TestEmailEsitoRichiesta(unittest.TestCase):
     def _pubblica(self, slug, modalita):
         self.g("POST", "/api/host/pubblica",
                {"slug": slug, "titolo": "Casa ER", "citta": "Roma",
+                "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                 "prezzo_notte_cents": 10000, "capacita": 2,
                 "modalita_prenotazione": modalita}, {"X-Host-Token": self.tok})
         self.g("POST", "/api/host/disponibilita_range",

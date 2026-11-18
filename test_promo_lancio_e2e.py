@@ -106,6 +106,7 @@ class BasePromo(unittest.TestCase):
         oggi = datetime.date.today()
         s, o = self._g(r, "POST", "/api/host/pubblica",
                        {"slug": slug, "titolo": "Casa promo", "citta": "Roma",
+                        "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                         "prezzo_notte_cents": PREZZO, "capacita": 4}, tk)
         self.assertEqual(s, 201, o)
         self._g(r, "POST", "/api/host/disponibilita_range",

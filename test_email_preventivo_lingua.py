@@ -36,6 +36,7 @@ class TestPreventivoEmailLingua(unittest.TestCase):
         oggi = datetime.date.today()
         self.g("POST", "/api/host/pubblica",
                {"host_id": "demo", "slug": "casa", "titolo": "Villa Sole", "citta": "Roma",
+                "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                 "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
                 "servizi": [], "immagini": [], "politica_cancellazione": "flessibile"}, self.HK)
         self.g("POST", "/api/host/disponibilita_range",

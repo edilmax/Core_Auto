@@ -60,6 +60,7 @@ class TestCreditoValuta(unittest.TestCase):
         for slug, val in (("casa-eur", "EUR"), ("casa-jpy", "JPY")):
             self.g("POST", "/api/host/pubblica",
                    {"slug": slug, "titolo": slug, "citta": "Roma",
+                    "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                     "prezzo_notte_cents": 50000, "capacita": 2, "valuta": val,
                     "politica_cancellazione": "rigida"}, {"X-Host-Token": self.tok})
             self.g("POST", "/api/host/disponibilita_range",

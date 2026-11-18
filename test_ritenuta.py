@@ -439,10 +439,18 @@ class TestCasaFuoriItalia(_Base):
 
 class TestCasaConSoloIlCIN(_Base):
     """Sopravvissuto del giro sul diff (fase83:6677): il paese vuoto ma il CIN c'e' -- il CIN
-    esiste solo in Italia, quindi la casa e' in Italia."""
-    PAESE = ""
+    esiste solo in Italia, quindi la casa e' in Italia.
+    Dal 18/11 un annuncio SENZA paese non si pubblica piu' (`_manca_per_pubblicare`): questo e'
+    un annuncio salvato PRIMA della regola, e il paese vuoto si scrive nell'archivio come fa
+    `test_casa_italiana_SENZA_CIN_si_trattiene_lo_stesso` per il CIN."""
 
     def test_il_CIN_basta_a_dire_Italia(self):
+        import sqlite3
+        con = sqlite3.connect(os.path.join(self.dir, "c.db"))
+        with con:
+            con.execute("UPDATE alloggi SET paese='' WHERE slug='casa'")
+        con.close()
+        self.assertEqual("", self.sis.catalogo.dettaglio_owner("casa")["paese"])
         self._accendi()
         rif, _q = self._prenota_paga()
         self.r._trasferisci_all_host(rif, self._maturato(rif))

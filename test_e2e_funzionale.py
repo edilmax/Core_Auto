@@ -33,6 +33,7 @@ SEG = b"e" * 32
 HK = {"X-Host-Key": "hk"}
 AK = {"X-Admin-Key": "ak"}
 PUB = {"host_id": "demo", "slug": "casa-roma", "titolo": "Casa Roma", "citta": "Roma",
+       "paese": "IT", "cin": "IT012034B4ABC1DEFG",
        "descrizione": "Bilocale centro", "prezzo_notte_cents": 10000, "capacita": 4,
        "servizi": ["wifi"], "immagini": ["https://x/y.jpg"]}
 

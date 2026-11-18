@@ -55,6 +55,7 @@ class TestIsolamentoMultiHost(unittest.TestCase):
         slug = "casa-host-%s-%d" % (tag, n)
         s, _ = self.g("POST", "/api/host/pubblica", {
             "titolo": "Villa di %d" % n, "citta": "Roma", "prezzo_notte_cents": 10000 + n,
+            "paese": "IT", "cin": "IT012034B4ABC1DEFG",
             "capacita": 2, "slug": slug}, H)
         self.assertEqual(s, 201)
         # date proprie (il campo del motore e' 'alloggio_id')

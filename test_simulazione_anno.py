@@ -114,6 +114,7 @@ class TestSimulazioneAnno(unittest.TestCase):
             sg = f"casa-{i:04d}"
             s, _ = self.g("POST", "/api/host/pubblica",
                           {"slug": sg, "titolo": "Casa %d" % i, "citta": "Roma",
+                           "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                            "prezzo_notte_cents": prezzo, "capacita": 2 + i % 4, "valuta": val,
                            "modalita_prenotazione": modal, "politica_cancellazione": pol,
                            "sconto_settimana_bps": 1000 if i % 3 else 0},
@@ -248,6 +249,7 @@ class TestSimulazioneAnno(unittest.TestCase):
                        "doc_sha256": doc_sha256(), "versione": CONTRATTO_HOST_VERSIONE})
         t = c["token"]
         self.g("POST", "/api/host/pubblica", {"slug": "gara", "titolo": "Gara", "citta": "Roma",
+               "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                "prezzo_notte_cents": 10000, "capacita": 2}, {"X-Host-Token": t})
         for gg in ("2026-09-01", "2026-09-02"):
             self.sys.inventario.imposta_disponibilita("gara", gg, unita_totali=1, prezzo_netto_cents=10000)

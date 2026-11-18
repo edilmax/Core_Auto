@@ -31,6 +31,7 @@ class TestCancellazioneGuest(unittest.TestCase):
         self.r = crea_router(self.sis, host_key="hk", base_url="https://bookinvip.com")
         self.g("POST", "/api/host/pubblica", {
             "host_id": "demo", "slug": "casa", "titolo": "Casa", "citta": "Roma",
+            "paese": "IT", "cin": "IT012034B4ABC1DEFG",
             "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
             "servizi": [], "immagini": []}, HK)
         self.g("POST", "/api/host/disponibilita_range", {

@@ -93,6 +93,7 @@ class TestEscrowGiaLiquidato(unittest.TestCase):
         self.hid, self.tok = c["host_id"], c["token"]
         s, _ = self.g("POST", "/api/host/pubblica",
                       {"slug": "casa-liq", "titolo": "Casa Liq", "citta": "Roma",
+                       "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                        "prezzo_notte_cents": 15000, "capacita": 2,
                        "politica_cancellazione": "flessibile"}, {"X-Host-Token": self.tok})
         self.assertEqual(s, 201)

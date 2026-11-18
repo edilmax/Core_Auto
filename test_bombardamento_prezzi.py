@@ -82,6 +82,7 @@ class TestBombardamentoPrezzi(unittest.TestCase):
             oggi = datetime.date.today()
             g("POST", "/api/host/pubblica",
               {"slug": "casa", "titolo": "C", "citta": "Roma",
+               "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                "prezzo_notte_cents": 20000, "capacita": 4}, H)
             g("POST", "/api/host/disponibilita_range",
               {"alloggio_id": "casa", "da": oggi.isoformat(),

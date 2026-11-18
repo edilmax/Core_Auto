@@ -80,6 +80,7 @@ class TestBombardamentoChatProve(unittest.TestCase):
         oggi = datetime.date.today()
         self.g("POST", "/api/host/pubblica",
                {"slug": "casa", "titolo": "Casa", "citta": "Roma",
+                "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                 "prezzo_notte_cents": 20000, "capacita": 4}, {"X-Host-Token": self.tok})
         self.g("POST", "/api/host/disponibilita_range",
                {"alloggio_id": "casa", "da": oggi.isoformat(),

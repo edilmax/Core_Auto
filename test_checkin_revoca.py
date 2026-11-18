@@ -73,7 +73,9 @@ class TestCheckinRevoca(unittest.TestCase):
         self.tok = c["token"]
         oggi = datetime.date.today()
         self.g("POST", "/api/host/pubblica",
-               {"slug": "casa", "titolo": "C", "citta": "Roma", "prezzo_notte_cents": 20000,
+               # all'ESTERO: qui si prova la revoca del check-in, non la schedina della Questura
+               {"slug": "casa", "titolo": "C", "citta": "Madrid", "paese": "ES",
+                "prezzo_notte_cents": 20000,
                 "capacita": 6, "politica_cancellazione": "flessibile"}, {"X-Host-Token": self.tok})
         self.g("POST", "/api/host/disponibilita_range",
                {"alloggio_id": "casa", "da": oggi.isoformat(),

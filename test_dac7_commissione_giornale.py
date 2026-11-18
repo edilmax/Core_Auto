@@ -85,6 +85,7 @@ class TestDac7CommissioneGiornale(unittest.TestCase):
                "iban": "IT60X0542811101000000123456"}, {"X-Host-Token": tok})
         g("POST", "/api/host/pubblica",
           {"slug": "big", "titolo": "B", "citta": "Roma", "valuta": "EUR",
+           "paese": "IT", "cin": "IT012034B4ABC1DEFG",
            "prezzo_notte_cents": 50000, "capacita": 4}, {"X-Host-Token": tok})
         g("POST", "/api/host/disponibilita_range",
           {"alloggio_id": "big", "da": oggi.isoformat(),
@@ -159,6 +160,7 @@ class TestDac7CommissioneGiornale(unittest.TestCase):
         con.commit(); con.close()
         g("POST", "/api/host/pubblica",
           {"slug": "h", "titolo": "H", "citta": "Roma", "valuta": "EUR",
+           "paese": "IT", "cin": "IT012034B4ABC1DEFG",
            "prezzo_notte_cents": 20000, "capacita": 4}, {"X-Host-Token": tok})
         g("POST", "/api/host/disponibilita_range",
           {"alloggio_id": "h", "da": oggi.isoformat(),

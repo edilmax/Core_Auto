@@ -70,6 +70,7 @@ def build(d):
     oggi = datetime.date.today()
     g("POST", "/api/host/pubblica",
       {"slug": "attico", "titolo": "Attico Vista Colosseo", "citta": "Roma",
+       "paese": "IT", "cin": "IT012034B4ABC1DEFG",
        "prezzo_notte_cents": 24500, "capacita": 6}, tk)
     g("POST", "/api/host/disponibilita_range",
       {"alloggio_id": "attico", "da": oggi.isoformat(),

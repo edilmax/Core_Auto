@@ -206,6 +206,7 @@ def percorri(salta=None, chiave_stripe="sk"):
         p("3 entra col suo utente", s == 200 and log.get("token"), "http %s" % s)
 
         annuncio = {"slug": "casa", "titolo": "Casa", "citta": "Roma", "descrizione": "x",
+                    "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                     "prezzo_netto_cents": 10000, "prezzo_notte_cents": 10000, "capacita": 4,
                     "servizi": [], "immagini": [], "politica_cancellazione": "flessibile"}
         # ANELLO «vetrina», primo tempo: prima di pubblicare l'annuncio NON esiste per nessuno.

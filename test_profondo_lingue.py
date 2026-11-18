@@ -615,7 +615,8 @@ class _ConRouter(unittest.TestCase):
         oggi = datetime.date.today()
         s, c = self.g("POST", "/api/host/pubblica",
                       {"host_id": "h", "slug": "casa", "titolo": "Casa Test",
-                       "citta": "Roma", "prezzo_notte_cents": 20000, "capacita": 4,
+                       "citta": "Roma", "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+                       "prezzo_notte_cents": 20000, "capacita": 4,
                        "servizi": ["wifi", "parcheggio"]}, {"X-Host-Key": "hk"})
         self.assertEqual(s, 201, c)
         s, c = self.g("POST", "/api/host/disponibilita_range",
@@ -1037,6 +1038,7 @@ class TestRotteHTTPVere(unittest.TestCase):
 
         g("POST", "/api/host/pubblica",
           {"host_id": "h", "slug": "casa", "titolo": "Casa Test", "citta": "Roma",
+           "paese": "IT", "cin": "IT012034B4ABC1DEFG",
            "prezzo_notte_cents": 20000, "capacita": 4}, {"X-Host-Key": "hk"})
         g("POST", "/api/host/disponibilita_range",
           {"alloggio_id": "casa", "da": oggi.isoformat(),

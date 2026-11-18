@@ -65,6 +65,7 @@ class TestPinManuale(unittest.TestCase):
 
     def _pubblica(self, slug, extra=None):
         b = {"slug": slug, "titolo": "Pin " + slug, "citta": "Roma",
+             "paese": "IT", "cin": "IT012034B4ABC1DEFG",
              "prezzo_notte_cents": 9000, "capacita": 2}
         if extra:
             b.update(extra)

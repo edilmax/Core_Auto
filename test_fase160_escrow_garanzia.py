@@ -134,7 +134,8 @@ class TestE2E(unittest.TestCase):
         def g(m, p, b=None, h=None, q=None):
             return r.gestisci(m, p, q or {}, json.dumps(b) if b is not None else None, h or {})
         g("POST", "/api/host/pubblica", {"host_id": "demo", "slug": "casa", "titolo": "Casa",
-          "citta": "Roma", "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
+          "citta": "Roma", "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+          "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
           "servizi": [], "immagini": []}, HK)
         g("POST", "/api/host/disponibilita_range", {"alloggio_id": "casa", "da": "2026-11-01",
           "a": "2026-11-30", "unita_totali": 1, "prezzo_netto_cents": 10000}, HK)

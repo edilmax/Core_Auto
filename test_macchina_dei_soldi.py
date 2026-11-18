@@ -461,6 +461,7 @@ def _prepara_base(config, radice):
     prezzo = IMPORTI[importo]
     s1, c1 = g("POST", "/api/host/pubblica",
                {"slug": "casa-macchina", "titolo": "Casa della macchina", "citta": "Roma",
+                "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                 "prezzo_notte_cents": prezzo, "capacita": 2, "politica_cancellazione": politica},
                {"X-Host-Token": token})
     s2, c2 = g("POST", "/api/host/disponibilita_range",

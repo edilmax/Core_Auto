@@ -166,6 +166,7 @@ class TestFAQ(unittest.TestCase):
                                       "versione": CONTRATTO_HOST_VERSIONE}), {})
         r.gestisci("POST", "/api/host/pubblica", {},
                    json.dumps({"slug": "faq-casa", "titolo": "Casa FAQ", "citta": "Roma",
+                               "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                                "prezzo_notte_cents": 12000, "capacita": 4, "camere": 2,
                                "bagni": 1, "servizi": ["wifi", "piscina"]}),
                    {"X-Host-Token": c["token"]})
@@ -205,6 +206,7 @@ class TestRottaEPublish(unittest.TestCase):
         self.tok = c["token"]
         s, c = self.g("POST", "/api/host/pubblica",
                       {"slug": "casa-seo", "titolo": "Casa SEO", "citta": "Roma",
+                       "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                        "prezzo_notte_cents": 11000, "capacita": 4, "camere": 2,
                        "bagni": 1, "servizi": ["wifi", "piscina"]},
                       {"X-Host-Token": self.tok})
@@ -242,6 +244,7 @@ class TestRottaEPublish(unittest.TestCase):
         self.r._motore_seo_cache = Esplosivo()
         s, c = self.g("POST", "/api/host/pubblica",
                       {"slug": "casa-seo", "titolo": "Casa SEO agg", "citta": "Roma",
+                       "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                        "prezzo_notte_cents": 12000, "capacita": 4},
                       {"X-Host-Token": self.tok})
         self.assertEqual(s, 201, c)

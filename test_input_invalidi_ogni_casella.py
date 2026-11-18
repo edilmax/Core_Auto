@@ -70,7 +70,8 @@ class TestInputInvalidiOgniCasella(unittest.TestCase):
                              base_url="https://bookinvip.com")
         # un annuncio SANO di riferimento (per le rotte che vogliono un alloggio esistente)
         self.g("POST", "/api/host/pubblica", {"host_id": "demo", "slug": "sano",
-               "titolo": "Sano", "citta": "Roma", "descrizione": "x",
+               "titolo": "Sano", "citta": "Roma", "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+               "descrizione": "x",
                "prezzo_notte_cents": 10000, "capacita": 2, "servizi": [], "immagini": [],
                "tassa_pp_notte_cents": 200}, HK)
         self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": "sano",
@@ -118,6 +119,7 @@ class TestInputInvalidiOgniCasella(unittest.TestCase):
     def test_ogni_casella_con_ogni_veleno(self):
         self._bombarda("POST", "/api/host/pubblica",
                        {"host_id": "demo", "slug": "attacco", "titolo": "T", "citta": "Roma",
+                        "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                         "descrizione": "d", "prezzo_notte_cents": 10000, "capacita": 2,
                         "servizi": [], "immagini": [], "tassa_pp_notte_cents": 200}, HK)
         self._bombarda("POST", "/api/host/disponibilita_range",
@@ -167,7 +169,8 @@ class TestInputInvalidiOgniCasella(unittest.TestCase):
                 self.assertGreater(cap, 0, f"annuncio con capacita' avvelenata: {a}")
         # 2) range INVERTITO (da > a): non deve creare notti prenotabili
         self.g("POST", "/api/host/pubblica", {"host_id": "demo", "slug": "inverso",
-               "titolo": "I", "citta": "Roma", "descrizione": "x",
+               "titolo": "I", "citta": "Roma", "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+               "descrizione": "x",
                "prezzo_notte_cents": 10000, "capacita": 2, "servizi": [], "immagini": [],
                "tassa_pp_notte_cents": 0}, HK)
         self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": "inverso",

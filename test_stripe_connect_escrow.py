@@ -131,6 +131,7 @@ class TestConnectEscrow(unittest.TestCase):
         self.hid, self.tok = c["host_id"], c["token"]
         s, _ = self.g("POST", "/api/host/pubblica",
                       {"slug": "casa-cx", "titolo": "Casa CX", "citta": "Roma",
+                       "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                        "prezzo_notte_cents": 10000, "capacita": 2}, {"X-Host-Token": self.tok})
         self.assertEqual(s, 201)
         s, _ = self.g("POST", "/api/host/disponibilita_range",

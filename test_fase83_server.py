@@ -757,6 +757,7 @@ class TestHost(unittest.TestCase):
         h = {"X-Host-Key": "segreto-host"}
         s, c = self.r.gestisci("POST", "/api/host/pubblica", body=json.dumps(
             {"host_id": "h1", "slug": "nuovo", "titolo": "Nuovo", "citta": "Milano",
+             "paese": "IT", "cin": "IT012034B4ABC1DEFG",
              "prezzo_notte_cents": 12000, "capacita": 2}), headers=h)
         self.assertEqual(s, 201)
         s2, c2 = self.r.gestisci("POST", "/api/host/disponibilita", body=json.dumps(
@@ -881,7 +882,8 @@ class TestSelfServiceHost(unittest.TestCase):
         # col token pubblica: host_id forzato al suo anche se ne passa un altro
         s2, _ = self.r.gestisci("POST", "/api/host/pubblica", headers=h, body=json.dumps(
             {"host_id": "IMPOSTORE", "slug": "casa-mario", "titolo": "Casa Mario",
-             "citta": "Bari", "prezzo_notte_cents": 8000, "capacita": 2}))
+             "citta": "Bari", "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+             "prezzo_notte_cents": 8000, "capacita": 2}))
         self.assertEqual(s2, 201)
         _, miei = self.r.gestisci("GET", "/api/host/alloggi", {"host_id": hid}, headers=h)
         self.assertEqual({a["slug"] for a in miei["alloggi"]}, {"casa-mario"})
@@ -988,6 +990,7 @@ class TestOnboarding(unittest.TestCase):
         # `422 scheda_non_valida / host_id_non_valido` e l'annuncio non nasce.
         st, _c = self.r.gestisci("POST", "/api/host/pubblica", headers=self.h, body=json.dumps(
             {"slug": "casa", "titolo": "Casa", "citta": "Roma", "host_id": "h_onboarding0001",
+             "paese": "IT", "cin": "IT012034B4ABC1DEFG",
              "prezzo_notte_cents": 9000, "capacita": 2}))
         self.assertIn(st, (200, 201), _c)   # premessa del banco: senza annuncio non si misura
 
@@ -1745,6 +1748,7 @@ class TestAprireIlLinkNonDecideNiente(unittest.TestCase):
         cls.hid, tok = c["host_id"], c["token"]
         s, p = cls._g("POST", "/api/host/pubblica",
                       {"slug": "casa-get", "titolo": "Casa GET", "citta": "Roma",
+                       "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                        "prezzo_notte_cents": 10000, "capacita": 2,
                        "modalita_prenotazione": "su_richiesta"}, {"X-Host-Token": tok})
         _deve(s == 201, s, p)
@@ -2496,6 +2500,7 @@ class _BancoDeiSoldiDelServer(unittest.TestCase):
 
     def pubblica(self, slug, politica="flessibile", **altro):
         annuncio = {"slug": slug, "titolo": "Casa", "citta": "Roma", "prezzo_notte_cents": 10000,
+                    "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                     "capacita": 2, "politica_cancellazione": politica}
         annuncio.update(altro)
         self.g("POST", "/api/host/pubblica", annuncio, {"X-Host-Token": self.tok})
@@ -5125,7 +5130,8 @@ class TestIlBloccoIncassatoSuUnaCancellazioneDellOspiteSiRestituisce(_OraVeraPer
         # fase83 :8542): non rimborsabile, dopo le 48 ore e senza tassa di soggiorno all'ospite
         # non spetta niente, e nel blocco non si segna un importo dovuto di zero
         self.g("POST", "/api/host/pubblica", {"host_id": "demo", "slug": "casa0", "titolo": "C0",
-               "citta": "Roma", "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
+               "citta": "Roma", "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+               "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
                "servizi": [], "immagini": [], "politica_cancellazione": "non_rimborsabile"},
                _HK_BLOCCO)
         self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": "casa0",
@@ -5305,7 +5311,8 @@ class TestFB2bLaRipresaTieneLaDecisioneDelPrimoClic(_OraVeraPerIlPreventivo, _Ba
         arrivo = oggi + datetime.timedelta(days=6)
         ci, co = arrivo.isoformat(), (arrivo + datetime.timedelta(days=2)).isoformat()
         self.g("POST", "/api/host/pubblica", {"host_id": "demo", "slug": "casam", "titolo": "M",
-               "citta": "Roma", "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
+               "citta": "Roma", "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+               "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
                "servizi": [], "immagini": [], "tassa_pp_notte_cents": 200,
                "politica_cancellazione": "moderata"}, _HK_BLOCCO)
         self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": "casam",
@@ -8440,7 +8447,8 @@ class TestR1IlGiroDeiBlocchiNonIncassaUnaPrenotazioneGiaChiusa(_OraVeraPerIlPrev
         # flessibile e arrivo lontano: dopo le 48 ore all'ospite torna tutto, quindi il blocco si
         # ANNULLA (niente da trattenere) invece di incassarsi
         self.g("POST", "/api/host/pubblica", {"host_id": "demo", "slug": slug, "titolo": "F",
-               "citta": "Roma", "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
+               "citta": "Roma", "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+               "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
                "servizi": [], "immagini": [], "politica_cancellazione": "flessibile"},
                _HK_BLOCCO)
         self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": slug,
@@ -8927,7 +8935,8 @@ class TestF5NienteDaRestituireNonEUnImportoSconosciuto(_OraVeraPerIlPreventivo, 
 
     def test_F5_all_ospite_non_spetta_niente_e_il_giro_tace(self):
         self.g("POST", "/api/host/pubblica", {"host_id": "demo", "slug": "casa-f5", "titolo": "C0",
-               "citta": "Roma", "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
+               "citta": "Roma", "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+               "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
                "servizi": [], "immagini": [], "politica_cancellazione": "non_rimborsabile"},
                _HK_BLOCCO)
         self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": "casa-f5",
@@ -9172,6 +9181,7 @@ class TestIlPrezzoCambiatoDallHostNonTornaQuelloVecchio(_BancoDeiSoldiDelServer)
     def modifica(self, prezzo):
         return self.g("POST", "/api/host/pubblica",
                       {"slug": self.SLUG, "titolo": "Casa", "citta": "Roma",
+                       "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                        "prezzo_notte_cents": prezzo, "capacita": 2,
                        "politica_cancellazione": "flessibile"}, {"X-Host-Token": self.tok})
 
@@ -9350,6 +9360,7 @@ class TestIlPrezzoCambiatoDallHostNonTornaQuelloVecchio(_BancoDeiSoldiDelServer)
         # euro e yen (code-review 30/10). Senza prenotazioni il cambio e' permesso.
         s, c = self.g("POST", "/api/host/pubblica",
                       {"slug": self.SLUG, "titolo": "Casa", "citta": "Roma", "valuta": "USD",
+                       "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                        "prezzo_notte_cents": 12500, "capacita": 2,
                        "politica_cancellazione": "flessibile"}, {"X-Host-Token": self.tok})
         _deve(s == 201, s, c)
@@ -11562,6 +11573,82 @@ class TestPR320PezzoSeiLeRigheCheIlGiudiceNonVedeva(_BancoDeiSoldiDelServer):
         self.assertEqual(emessi, [("r320", "attico-320")], "PREMESSA: e' la pagina col modulo")
         self.assertIn("recBox", pagina, "PREMESSA: il modulo del voto c'e'")
         self.assertIn("Attico Vista Colosseo", pagina)
+
+
+class TestUnAnnuncioVaOnlineSoloSeDiceDoveSta(unittest.TestCase):
+    """18/11, difetto di LEGGE vivo (`casa-test` a Roma, paese 'XX', senza CIN, pubblicata):
+    `_manca_per_pubblicare` e' la regola unica di ogni strada verso la vetrina. Le guardie
+    complete stanno in `test_cin_italia.TestPolicyItalia`; queste sono qui perche' il giudice
+    della CI (`mutazione_prodotto.py --diff`) accende il test DEDICATO del modulo: nella PR #329
+    quattro guasti delle righe nuove sopravvivevano perche' nessuna prova di questo file li
+    guardava (fase83 :1207 `in`/`and`, :1217 `is`, :12650 `==`)."""
+    CIN = "IT012034B4ABC1DEFG"
+
+    def setUp(self):
+        d = self.dir = tempfile.mkdtemp()
+        self.sis = crea_sistema(ConfigCasaVIP(
+            abilitato=True, segreto_hmac=b"S" * 32, con_registrazione_host=True,
+            db_catalogo=f"{d}/c.db", db_inventario=f"{d}/i.db", db_registro_host=f"{d}/r.db",
+            db_accettazioni=f"{d}/a.db", db_pendenti=f"{d}/p.db"))
+        self.r = crea_router(self.sis, host_key="hk", admin_key="ak",
+                             base_url="https://bookinvip.com")
+        s, c = self.g("POST", "/api/host/registrazione",
+                      {"email": "h@paese.it", "password": "password1", "accetta_termini": True,
+                       "accetta_clausole": True, "accetta_privacy": True,
+                       "doc_sha256": doc_sha256(), "versione": CONTRATTO_HOST_VERSIONE})
+        _deve(s == 201, s, c)
+        self.tk = {"X-Host-Token": c["token"]}
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def g(self, m, p, b=None, h=None):
+        return self.r.gestisci(m, p, {}, json.dumps(b) if b is not None else None, h or {})
+
+    def _pub(self, slug, paese, cin="", stato=None):
+        corpo = {"slug": slug, "titolo": "Casa", "citta": "Roma", "paese": paese, "cin": cin,
+                 "prezzo_notte_cents": 10000, "capacita": 2}
+        if stato:
+            corpo["stato"] = stato
+        s, o = self.g("POST", "/api/host/pubblica", corpo, self.tk)
+        return s, o.get("errore")
+
+    def test_in_italia_senza_CIN_no_all_estero_si(self):
+        # :1207 -- `in PAESI_ITALIA` rovesciato, o `and` al posto di `or`, cambia uno dei due
+        self.assertEqual((422, "cin_obbligatorio_italia"), self._pub("casa-it", "IT"))
+        self.assertEqual((201, None), self._pub("casa-es", "ES"))
+        self.assertEqual((201, None), self._pub("casa-it-cin", "IT", self.CIN))
+
+    def test_la_bozza_si_salva_la_pubblicazione_no(self):
+        # :12650 -- la regola vale SOLO per 'pubblicato': la bozza senza CIN si salva
+        self.assertEqual((201, None), self._pub("casa-bozza", "IT", stato="bozza"))
+        self.assertEqual((422, "cin_obbligatorio_italia"),
+                         self._pub("casa-pubb", "IT", stato="pubblicato"))
+
+    def test_il_pulsante_Pubblica_rilegge_l_annuncio_salvato(self):
+        # :1217 -- l'annuncio c'e': la regola si applica ai suoi dati salvati
+        self.assertEqual((201, None), self._pub("casa-st", "IT", stato="bozza"))
+        s, o = self.g("POST", "/api/host/stato", {"slug": "casa-st", "stato": "pubblicato"},
+                      self.tk)
+        self.assertEqual((422, "cin_obbligatorio_italia"), (s, o.get("errore")))
+        self.assertEqual("bozza", self.sis.catalogo.dettaglio_owner("casa-st")["stato"])
+
+    def test_senza_paese_non_va_online(self):
+        self.assertEqual((422, "paese_obbligatorio"), self._pub("casa-xx", "XX", self.CIN))
+
+    def test_la_ripubblicazione_dell_admin_segue_la_stessa_regola(self):
+        # :3876/:3885 -- «ripubblica» dell'admin: rifiutato senza CIN, eseguito coi dati giusti
+        ak = {"X-Admin-Key": "ak"}
+        self.assertEqual((201, None), self._pub("casa-adm", "IT", stato="bozza"))
+        s, o = self.g("POST", "/api/admin/alloggio_stato",
+                      {"slug": "casa-adm", "stato": "pubblicato"}, ak)
+        self.assertEqual((422, "rifiutato", "cin_obbligatorio_italia", "bozza"),
+                         (s, o.get("stato"), o.get("errore"),
+                          self.sis.catalogo.dettaglio_owner("casa-adm")["stato"]))
+        self.assertEqual((201, None), self._pub("casa-adm-ok", "ES", stato="bozza"))
+        s, o = self.g("POST", "/api/admin/alloggio_stato",
+                      {"slug": "casa-adm-ok", "stato": "pubblicato"}, ak)
+        self.assertEqual((200, "pubblicato"), (s, o.get("stato")))
 
 
 if __name__ == "__main__":

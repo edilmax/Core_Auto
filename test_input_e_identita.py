@@ -109,6 +109,7 @@ class _Giro(unittest.TestCase):
         self.tok = c["token"]
         st, c = self.g("POST", "/api/host/pubblica",
                        {"slug": "attico-studi", "titolo": TITOLO, "citta": "Torino",
+                        "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                         "prezzo_notte_cents": 15000, "valuta": "EUR", "capacita": 2,
                         "politica_cancellazione": "flessibile"},
                        {"X-Host-Token": self.tok})

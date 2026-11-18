@@ -72,7 +72,8 @@ class TestScadenzaMassa(unittest.TestCase):
         self.sis.concierge._link = lambda dati: "https://pay/" + str(dati.get("riferimento", ""))
         self.r = crea_router(self.sis, host_key="hk", base_url="https://bookinvip.com")
         self.g("POST", "/api/host/pubblica", {"host_id": "demo", "slug": "hotel",
-               "titolo": "H", "citta": "Roma", "descrizione": "x",
+               "titolo": "H", "citta": "Roma", "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+               "descrizione": "x",
                "prezzo_notte_cents": 10000, "capacita": 2, "servizi": [], "immagini": [],
                "tassa_pp_notte_cents": 200}, HK)
         self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": "hotel",

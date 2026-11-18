@@ -123,6 +123,7 @@ class Banco:
         self.co = (oggi + datetime.timedelta(days=GIORNI_ARRIVO + 2)).isoformat()
         s, c = self.g("POST", "/api/host/pubblica",
                       {"slug": "casa-inc", "titolo": "Casa Incroci", "citta": "Roma",
+                       "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                        "prezzo_notte_cents": 10000, "capacita": 2,
                        "tassa_pp_notte_cents": 0,
                        "politica_cancellazione": politica,

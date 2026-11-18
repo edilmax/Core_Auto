@@ -97,7 +97,8 @@ class TestBombardamentoCalendarioTutti(unittest.TestCase):
             slugs_a = ["a-casa%d" % i for i in range(4)]
             for sl, H in [(s, HA) for s in slugs_a] + [("b-casa0", HB)]:
                 g("POST", "/api/host/pubblica", {"slug": sl, "titolo": "T " + sl,
-                  "citta": "Roma", "prezzo_notte_cents": 20000, "capacita": 4}, H)
+                  "citta": "Roma", "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+                  "prezzo_notte_cents": 20000, "capacita": 4}, H)
                 g("POST", "/api/host/disponibilita_range",
                   {"alloggio_id": sl, "da": da, "a": a,
                    "unita_totali": 1, "prezzo_netto_cents": 20000}, H)
@@ -166,7 +167,8 @@ class TestBombardamentoCalendarioTutti(unittest.TestCase):
                 barrier.wait()
                 sl = "a-nuova%d" % i
                 s, _ = g("POST", "/api/host/pubblica", {"slug": sl, "titolo": "N",
-                         "citta": "Roma", "prezzo_notte_cents": 15000, "capacita": 2}, HA)
+                         "citta": "Roma", "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+                         "prezzo_notte_cents": 15000, "capacita": 2}, HA)
                 if s in (200, 201):
                     with lock:
                         pubblicati.append(sl)
@@ -248,7 +250,8 @@ class TestBombardamentoCalendarioTutti(unittest.TestCase):
             da = oggi.isoformat()
             a = (oggi + datetime.timedelta(days=5)).isoformat()
             g("POST", "/api/host/pubblica", {"slug": "casa", "titolo": "C",
-              "citta": "Roma", "prezzo_notte_cents": 20000, "capacita": 2}, H)
+              "citta": "Roma", "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+              "prezzo_notte_cents": 20000, "capacita": 2}, H)
             g("POST", "/api/host/disponibilita_range",
               {"alloggio_id": "casa", "da": da, "a": a,
                "unita_totali": 1, "prezzo_netto_cents": 20000}, H)

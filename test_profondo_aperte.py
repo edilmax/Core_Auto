@@ -567,6 +567,7 @@ class TestRotteHTTPIntercettate(unittest.TestCase):
         st, out = cls._router("POST", "/api/host/pubblica",
                               {"slug": "villa-aperte", "titolo": "Villa Aperte",
                                "citta": "Roma", "prezzo_notte_cents": PREZZO_NOTTE,
+                               "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                                "capacita": 4}, HT)
         assert st == 201, out
         st, out = cls._router("POST", "/api/host/disponibilita_range",
@@ -871,6 +872,7 @@ class TestKillSwitchGlobale(unittest.TestCase):
         self.sis.registro_host.imposta_stripe_account(self.hid, "acct_TEST")
         st, _o = self.g("POST", "/api/host/pubblica",
                         {"host_id": self.hid, "slug": "casa", "titolo": "C", "citta": "Roma",
+                         "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                          "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
                          "servizi": [], "immagini": []}, {"X-Host-Key": "hk"})
         self.assertEqual(st, 201)
@@ -1102,6 +1104,7 @@ class TestRangeCalendario(unittest.TestCase):
         self.base = datetime.date(2027, 3, 1)
         st, _o = self.g("POST", "/api/host/pubblica",
                         {"host_id": "h", "slug": "casa", "titolo": "C", "citta": "Roma",
+                         "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                          "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
                          "servizi": [], "immagini": []}, self.HK)
         self.assertEqual(st, 201)
@@ -1207,7 +1210,8 @@ class TestRangeCalendario(unittest.TestCase):
         un estraneo capirebbe, dalla differenza fra 422 e 403, se lo slug esiste."""
         st, out = self.g("POST", "/api/host/pubblica",
                          {"host_id": "altro", "slug": "villa-altrui", "titolo": "V",
-                          "citta": "Roma", "descrizione": "x", "prezzo_notte_cents": 9000,
+                          "citta": "Roma", "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+                          "descrizione": "x", "prezzo_notte_cents": 9000,
                           "capacita": 2, "servizi": [], "immagini": []}, self.HK)
         self.assertEqual(st, 201, out)
         es = self.sis.registro_host.registra("estraneo@aperte.invalid", "password12",

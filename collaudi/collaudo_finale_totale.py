@@ -358,6 +358,7 @@ def c1():
             slug = "casa%d" % giorni
             G(r, "POST", "/api/host/pubblica",
               {"slug": slug, "titolo": "Casa", "citta": "Roma",
+               "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                "prezzo_notte_cents": 20000, "capacita": 4}, tk)
             G(r, "POST", "/api/host/disponibilita_range",
               {"alloggio_id": slug, "da": oggi.isoformat(),

@@ -93,6 +93,7 @@ class TestStressDualPersona(unittest.TestCase):
         for sl in slugs:
             g("POST", "/api/host/pubblica",
               {"slug": sl, "titolo": "T " + sl, "citta": "Roma",
+               "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                "prezzo_notte_cents": 15000, "capacita": 3}, HA)
             g("POST", "/api/host/disponibilita_range",
               {"alloggio_id": sl, "da": da, "a": a,

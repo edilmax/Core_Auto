@@ -46,7 +46,8 @@ class TestFieldPaginato(unittest.TestCase):
 
     def _pub(self, host, slug, citta):
         self.g("POST", "/api/host/pubblica", {"host_id": host, "slug": slug, "titolo": slug.upper(),
-               "citta": citta, "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
+               "citta": citta, "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+               "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
                "servizi": [], "immagini": [], "tassa_pp_notte_cents": 0}, HK)
 
     def _lista(self, **q):

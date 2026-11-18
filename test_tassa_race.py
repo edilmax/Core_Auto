@@ -120,6 +120,7 @@ class TestTassaRaceEndToEnd(unittest.TestCase):
             oggi = datetime.date.today()
             g("POST", "/api/host/pubblica",
               {"slug": "casa", "titolo": "C", "citta": "Roma", "prezzo_notte_cents": 20000,
+               "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                "capacita": 4, "tassa_pp_notte_cents": 200,
                "politica_cancellazione": "flessibile"}, H)
             g("POST", "/api/host/disponibilita_range",

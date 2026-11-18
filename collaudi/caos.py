@@ -123,6 +123,7 @@ def vettore_A():
     a = (oggi + datetime.timedelta(days=60)).isoformat()
     sp, _ = _http(porta, "POST", "/api/host/pubblica",
                   {"slug": "caos", "titolo": "Caos", "citta": "Roma",
+                   "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                    "prezzo_notte_cents": 20000, "capacita": 4}, hh)
     sd, _ = _http(porta, "POST", "/api/host/disponibilita_range",
                   {"alloggio_id": "caos", "da": da, "a": a, "unita_totali": 5,

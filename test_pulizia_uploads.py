@@ -61,6 +61,7 @@ class TestPuliziaUploads(unittest.TestCase):
         self._file("ref_chat.png", giorni_fa=8)
         s, c = self.g("POST", "/api/host/pubblica",
                       {"slug": "casa-pulizia", "titolo": "Casa", "citta": "Roma",
+                       "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                        "prezzo_notte_cents": 10000, "capacita": 2,
                        "immagini": ["/uploads/ref_cat.png"]},
                       {"X-Host-Token": self.tok})

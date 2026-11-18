@@ -62,6 +62,7 @@ class TestCalendarioPrezzi(unittest.TestCase):
         self.tok = c["token"]
         self.g("POST", "/api/host/pubblica",
                {"slug": "casa", "titolo": "Casa", "citta": "Roma",
+                "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                 "prezzo_notte_cents": 10000, "capacita": 2}, {"X-Host-Token": self.tok})
         for g in (_giorno(0), _giorno(1)):
             self.sys.inventario.imposta_disponibilita("casa", g, unita_totali=1,
@@ -193,6 +194,7 @@ class _Apparecchio:
         self.tok = c["token"]
         self.g("POST", "/api/host/pubblica",
                {"slug": "casa", "titolo": "Casa", "citta": "Roma",
+                "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                 "prezzo_notte_cents": 10000, "capacita": 2}, {"X-Host-Token": self.tok})
 
     def tearDown(self):

@@ -105,6 +105,7 @@ class TestBenchmarkSqlite(unittest.TestCase):
         for sl in slugs:
             g("scrittura", "POST", "/api/host/pubblica",
               {"slug": sl, "titolo": "B " + sl, "citta": "Roma",
+               "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                "prezzo_notte_cents": 15000, "capacita": 4}, H)
             g("scrittura", "POST", "/api/host/disponibilita_range",
               {"alloggio_id": sl, "da": da, "a": a,

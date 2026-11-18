@@ -82,7 +82,8 @@ class TestBloccoPayoutDAC7(unittest.TestCase):
         self.connect = _ConnectContatore()
         self.sis.connect = self.connect
         self.g("POST", "/api/host/pubblica", {"host_id": self.hid, "slug": "casa",
-               "titolo": "C", "citta": "Roma", "descrizione": "x",
+               "titolo": "C", "citta": "Roma", "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+               "descrizione": "x",
                "prezzo_notte_cents": 10000, "capacita": 2, "servizi": [], "immagini": []}, HK)
         self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": "casa",
                "da": "2027-08-01", "a": "2027-08-31", "unita_totali": 5,

@@ -112,6 +112,7 @@ class TestGuardieCollegamenti(unittest.TestCase):
         oggi = datetime.date.today()
         self.r.gestisci("POST", "/api/host/pubblica", {}, json.dumps({
             "slug": "casa-guardia", "titolo": "Casa", "citta": "Roma",
+            "paese": "IT", "cin": "IT012034B4ABC1DEFG",
             "prezzo_notte_cents": 20000, "capacita": 4}), tk)
         self.r.gestisci("POST", "/api/host/disponibilita_range", {}, json.dumps({
             "alloggio_id": "casa-guardia", "da": oggi.isoformat(),

@@ -77,6 +77,7 @@ class TestAdminRimborsoMoney(unittest.TestCase):
         self.tok, self.hid = c["token"], c["host_id"]
         self.g("POST", "/api/host/pubblica",
                {"slug": "casa", "titolo": "Casa", "citta": "Roma", "prezzo_notte_cents": 50000,
+                "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                 "capacita": 4, "politica_cancellazione": "flessibile"}, {"X-Host-Token": self.tok})
         self.g("POST", "/api/host/disponibilita_range",
                {"alloggio_id": "casa", "da": "2026-09-01", "a": "2026-09-30",
@@ -444,6 +445,7 @@ class TestIlRimborsoARRIVADavveroAllOspite(unittest.TestCase):
         self.tok, self.hid = c["token"], c["host_id"]
         self.g("POST", "/api/host/pubblica",
                {"slug": "casa", "titolo": "Casa", "citta": "Roma", "prezzo_notte_cents": 50000,
+                "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                 "capacita": 4, "politica_cancellazione": "flessibile"}, {"X-Host-Token": self.tok})
         self.g("POST", "/api/host/disponibilita_range",
                {"alloggio_id": "casa", "da": "2026-09-01", "a": "2026-09-30",
@@ -871,6 +873,7 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
         self.tok, self.hid = c["token"], c["host_id"]
         self.g("POST", "/api/host/pubblica",
                {"slug": "casa", "titolo": "Casa", "citta": "Roma", "prezzo_notte_cents": 50000,
+                "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                 "capacita": 4, "politica_cancellazione": "flessibile"}, {"X-Host-Token": self.tok})
         self.g("POST", "/api/host/disponibilita_range",
                {"alloggio_id": "casa", "da": "2026-09-01", "a": "2026-09-30",
@@ -1347,6 +1350,7 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
         su una riga che tocca i soldi."""
         s, _ = self.g("POST", "/api/host/pubblica",
                       {"slug": "casa-usd", "titolo": "Casa USD", "citta": "Roma",
+                       "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                        "prezzo_notte_cents": 50000, "capacita": 4, "valuta": "USD",
                        "politica_cancellazione": "flessibile"}, {"X-Host-Token": self.tok})
         self.assertEqual(s, 201, "setup: l'annuncio in USD non e' stato pubblicato")
@@ -2520,6 +2524,7 @@ class TestLaListaDeiRimborsiDovuti(unittest.TestCase):
         for slug, politica, fra, _perche in casi:
             self.g("POST", "/api/host/pubblica",
                    {"slug": slug, "titolo": "Casa " + slug, "citta": "Roma",
+                    "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                     "prezzo_notte_cents": 50000, "capacita": 4,
                     "politica_cancellazione": politica}, {"X-Host-Token": self.tok})
             self.g("POST", "/api/host/disponibilita_range",

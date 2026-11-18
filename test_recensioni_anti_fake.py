@@ -56,6 +56,7 @@ class TestRecensioniAntiFake(unittest.TestCase):
         self.tok = c["token"]
         self.g("POST", "/api/host/pubblica",
                {"slug": "casa", "titolo": "Casa", "citta": "Roma", "prezzo_notte_cents": 50000,
+                "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                 "capacita": 4, "politica_cancellazione": "flessibile"}, {"X-Host-Token": self.tok})
         # ⛔ RELATIVA: `test_recensione_pagata_ammessa` pretende `troppo_presto`, cioe' un
         # soggiorno che deve ANCORA arrivare. Con le date cablate (2026-09-15/18) sarebbe

@@ -37,6 +37,7 @@ class TestIcalExport(unittest.TestCase):
         self.tok = self._reg("h1@ic.it")
         s, _ = self.g("POST", "/api/host/pubblica",
                       {"slug": "casa", "titolo": "Casa", "citta": "Roma",
+                       "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                        "prezzo_notte_cents": 10000, "capacita": 2}, {"X-Host-Token": self.tok})
         self.assertEqual(s, 201)
         # ⛔ DATE RELATIVE, e la storia di questo punto vale piu' della riparazione. Il

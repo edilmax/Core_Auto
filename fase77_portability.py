@@ -298,7 +298,11 @@ def importa(raw: Any, *, sorgente: str = "canonico", catalogo: Any = None,
                                  indirizzo=scheda.get("indirizzo", "") or "",
                                  lat_micro=scheda.get("lat_micro"),
                                  lon_micro=scheda.get("lon_micro"),
-                                 pin_manuale=bool(scheda.get("pin_manuale", False)))
+                                 pin_manuale=bool(scheda.get("pin_manuale", False)),
+                                 # in BOZZA (17/11): l'export non dice il paese ne' il CIN, e
+                                 # online va solo dal pannello, coi controlli di legge di tutti
+                                 # (fase83 `_manca_per_pubblicare`)
+                                 stato="bozza")
             imgs = [Immagine(u, i) for i, u in enumerate(immagini)]
             catalogo.pubblica(sch, imgs)
             rep.catalogo_applicato = True

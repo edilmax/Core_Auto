@@ -80,6 +80,7 @@ class TestIdorFotoElimina(unittest.TestCase):
     def _pubblica(self, hid, slug, url):
         s, c = self.g("POST", "/api/host/pubblica",
                       {"host_id": hid, "slug": slug, "titolo": "T", "citta": "Roma",
+                       "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                        "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
                        "servizi": [], "immagini": [url]}, HK)
         self.assertIn(s, (200, 201), "pubblica %s: %s" % (slug, c))
@@ -146,6 +147,7 @@ class TestIdorFotoElimina(unittest.TestCase):
         nome = url.rsplit("/", 1)[1]
         s, c = self.g("POST", "/api/host/pubblica",
                       {"slug": "casa-b2", "titolo": "T", "citta": "Roma", "descrizione": "x",
+                       "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                        "prezzo_notte_cents": 10000, "capacita": 2, "servizi": [],
                        "immagini": [url]}, {"X-Host-Token": self.tokB})
         self.assertIn(s, (200, 201), c)

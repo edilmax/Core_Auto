@@ -250,6 +250,7 @@ class TestE2EHostAvvisato(unittest.TestCase):
         hid = c["host_id"]
         g("POST", "/api/host/pubblica",
           {"host_id": hid, "slug": "casa", "titolo": "Casa Mia", "citta": "Roma",
+           "paese": "IT", "cin": "IT012034B4ABC1DEFG",
            "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
            "servizi": [], "immagini": []}, HK)
         g("POST", "/api/host/disponibilita_range",

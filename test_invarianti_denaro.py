@@ -71,6 +71,7 @@ class TestInvariantiDenaro(unittest.TestCase):
             pol = _POLITICHE[i % len(_POLITICHE)]
             self.g("POST", "/api/host/pubblica",
                    {"slug": slug, "titolo": f"C{i}", "citta": "Roma",
+                    "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                     "prezzo_notte_cents": prezzo, "capacita": 8,
                     "politica_cancellazione": pol}, {"X-Host-Token": self.tok})
             self.g("POST", "/api/host/disponibilita_range",

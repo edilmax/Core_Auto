@@ -58,7 +58,8 @@ class TestEnforcement(unittest.TestCase):
         self.r = crea_router(self.sis, host_key="hk", admin_key="ak",
                              base_url="https://bookinvip.com")
         self.g("POST", "/api/host/pubblica", {"host_id": "demo", "slug": "casa", "titolo": "C",
-               "citta": "Roma", "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
+               "citta": "Roma", "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+               "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 2,
                "servizi": [], "immagini": [], "tassa_pp_notte_cents": 0}, {"X-Host-Key": "hk"})
         self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": "casa",
                "da": "2027-12-01", "a": "2027-12-31", "unita_totali": 3,

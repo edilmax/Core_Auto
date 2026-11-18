@@ -86,6 +86,7 @@ class TestVerificheHost(unittest.TestCase):
         oggi = datetime.date.today()
         self.g("POST", "/api/host/pubblica",
                {"slug": "casa-v", "titolo": "Casa V", "citta": "Roma",
+                "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                 "prezzo_notte_cents": 10000, "capacita": 2}, {"X-Host-Token": self.tok})
         self.g("POST", "/api/host/disponibilita_range",
                {"alloggio_id": "casa-v", "da": oggi.isoformat(),

@@ -220,7 +220,8 @@ def _banco(dir_dati):
     host_id = corpo.get("host_id") or ""
     stato, corpo = chiama("POST", "/api/host/pubblica",
                           {"slug": "casa-oblio", "titolo": "Casa " + RAGIONE,
-                           "citta": "Roma", "prezzo_notte_cents": 10000, "capacita": 2},
+                           "citta": "Roma", "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+                           "prezzo_notte_cents": 10000, "capacita": 2},
                           {"X-Host-Token": token})
     if stato not in (200, 201):
         return None, None, None, "la pubblicazione e' fallita: %s %s" % (stato, corpo)

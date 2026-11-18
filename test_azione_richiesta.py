@@ -54,6 +54,7 @@ class TestAzioneRichiesta(unittest.TestCase):
         self.hid, self.tok = c["host_id"], c["token"]
         s, p = self.g("POST", "/api/host/pubblica",
                       {"slug": "casa-sr", "titolo": "Casa SR", "citta": "Roma",
+                       "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                        "prezzo_notte_cents": 10000, "capacita": 2,
                        "modalita_prenotazione": "su_richiesta"}, {"X-Host-Token": self.tok})
         self.assertEqual(s, 201, p)

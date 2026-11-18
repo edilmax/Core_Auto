@@ -55,6 +55,7 @@ def _pubblica(r, slug="casa-x", prezzo=20000):
         "doc_sha256": doc_sha256(), "versione": CONTRATTO_HOST_VERSIONE})
     tk = {"X-Host-Token": c["token"]}
     _g(r, "POST", "/api/host/pubblica", {"slug": slug, "titolo": "Casa", "citta": "Roma",
+                                         "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                                          "prezzo_notte_cents": prezzo, "capacita": 4}, tk)
     return tk
 

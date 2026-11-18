@@ -61,6 +61,7 @@ class TestTassaPreAcquisto(unittest.TestCase):
 
     def _pubblica(self, **tax):
         body = {"host_id": "demo", "slug": "casa", "titolo": "Casa", "citta": "Roma",
+                "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                 "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 4,
                 "servizi": [], "immagini": []}
         body.update(tax)
@@ -147,6 +148,7 @@ class TestTassaPreAcquisto(unittest.TestCase):
 
     def _pubblica_stato(self, **tax):
         body = {"host_id": "demo", "slug": "casa-v", "titolo": "Casa V", "citta": "Roma",
+                "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                 "descrizione": "x", "prezzo_notte_cents": 10000, "capacita": 4,
                 "servizi": [], "immagini": []}
         body.update(tax)
@@ -207,7 +209,8 @@ class TestTassaPreAcquisto(unittest.TestCase):
         self.assertEqual(q["valuta"], "USD")
         # annuncio EUR (default) -> preventivo EUR
         self.g("POST", "/api/host/pubblica", {"host_id": "demo", "slug": "casa2",
-                "titolo": "C2", "citta": "Roma", "descrizione": "x", "prezzo_notte_cents": 9000,
+                "titolo": "C2", "citta": "Roma", "paese": "IT", "cin": "IT012034B4ABC1DEFG",
+                "descrizione": "x", "prezzo_notte_cents": 9000,
                 "capacita": 2, "servizi": [], "immagini": [], "valuta": "EUR"}, HK)
         self.g("POST", "/api/host/disponibilita_range", {"alloggio_id": "casa2",
                 "da": _fra(1), "a": _fra(60), "unita_totali": 1,

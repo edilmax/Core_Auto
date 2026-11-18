@@ -88,6 +88,7 @@ def _host_pubblica(g, tk, slug, unita, prezzo, da, a, min_notti=1):
     restituito per la disponibilita' e lo RITORNO, cosi' il chiamante interroga la chiave giusta."""
     s, bp = g("POST", "/api/host/pubblica",
               {"slug": slug, "titolo": "Casa " + slug, "citta": "Roma",
+               "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                "prezzo_notte_cents": prezzo, "capacita": 4}, tk)
     reale = bp.get("slug") if isinstance(bp, dict) and bp.get("slug") else slug
     g("POST", "/api/host/disponibilita_range",

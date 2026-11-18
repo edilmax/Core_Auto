@@ -534,6 +534,10 @@ CODICI_VISIBILI = (
     # prenotazione dell'ospite (`POST /api/concierge/book`, index.html). 4/11, N1 (voce 227):
     # il tetto delle prenotazioni non pagate per indirizzo risponde 429 con questo codice.
     "troppe_prenotazioni_in_attesa",
+    # pannello host — «Pubblica» (`POST /api/host/pubblica` e `/api/host/stato`). 18/11: senza
+    # paese, o in Italia senza CIN, l'annuncio non va online; dal pulsante della lista l'host
+    # leggeva la frase generica «riprova fra qualche minuto» e non sapeva cosa mancava.
+    "paese_obbligatorio", "cin_obbligatorio_italia",
 )
 
 

@@ -103,6 +103,7 @@ class TestBombardamentoConcorrente(unittest.TestCase):
                 slug = "casa%d" % i
                 g("POST", "/api/host/pubblica",
                   {"slug": slug, "titolo": "C%d" % i, "citta": "Roma",
+                   "paese": "IT", "cin": "IT012034B4ABC1DEFG",
                    "prezzo_notte_cents": rnd.choice([5000, 20000, 90000]), "capacita": 4,
                    "politica_cancellazione": pol[i % 4]}, H)
                 ci = (oggi + datetime.timedelta(days=2 + (i % 5))).isoformat()
