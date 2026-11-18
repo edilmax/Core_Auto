@@ -226,34 +226,38 @@ class TestPolicyItalia(unittest.TestCase):
         bozza togliendo il CIN, la scrittura mette online i dati letti PRIMA: annuncio in Italia
         pubblicato senza CIN. Qui il salvataggio viene lanciato proprio fra la lettura e la
         scrittura; lettura-e-scrittura devono essere UN gesto, come il salvataggio."""
-        vero = self.sis.catalogo.imposta_stato
         for rotta, h in (("/api/host/stato", self.tk),
                          ("/api/admin/alloggio_stato", {"X-Admin-Key": "ak"})):
             with self.subTest(rotta=rotta):
-                slug = "casa-gara-" + ("adm" if "admin" in rotta else "host")
-                s, o = self._pub(paese="IT", cin=CIN_OK, stato="bozza", slug=slug)
-                self.assertEqual(201, s, o)
-                salvato, fili = threading.Event(), []
-
-                def senza_cin():
-                    self._pub(paese="IT", cin="", stato="bozza", slug=slug)
-                    salvato.set()
-
-                def scrittura_in_ritardo(sl, st):
-                    fili.append(threading.Thread(target=senza_cin))
-                    fili[0].start()
-                    salvato.wait(1.0)   # senza serratura il salvataggio entra qui
-                    return vero(sl, st)
-
-                with mock.patch.object(self.sis.catalogo, "imposta_stato",
-                                       scrittura_in_ritardo):
-                    self.g("POST", rotta, {"slug": slug, "stato": "pubblicato"}, h)
-                self.assertEqual(1, len(fili), "la scrittura dello stato non e' passata di qui")
-                fili[0].join(5)
-                self.assertFalse(fili[0].is_alive(), "il salvataggio concorrente e' bloccato")
-                a = self.sis.catalogo.dettaglio_owner(slug)
+                a = self._gara_stato_contro_salvataggio(rotta, h)
                 self.assertFalse(a.get("stato") == "pubblicato" and not a.get("cin"),
                                  "in Italia online senza CIN dopo la gara: %r" % (a,))
+
+    def _gara_stato_contro_salvataggio(self, rotta, h):
+        """«Pubblica» su una bozza italiana col CIN; il salvataggio che toglie il CIN parte fra
+        la lettura della regola e la scrittura dello stato. Torna l'annuncio come resta."""
+        slug = "casa-gara-" + ("adm" if "admin" in rotta else "host")
+        s, o = self._pub(paese="IT", cin=CIN_OK, stato="bozza", slug=slug)
+        self.assertEqual(201, s, o)
+        vero = self.sis.catalogo.imposta_stato
+        salvato, fili = threading.Event(), []
+
+        def senza_cin():
+            self._pub(paese="IT", cin="", stato="bozza", slug=slug)
+            salvato.set()
+
+        def scrittura_in_ritardo(sl, st):
+            fili.append(threading.Thread(target=senza_cin))
+            fili[0].start()
+            salvato.wait(1.0)   # senza serratura il salvataggio entra qui
+            return vero(sl, st)
+
+        with mock.patch.object(self.sis.catalogo, "imposta_stato", scrittura_in_ritardo):
+            self.g("POST", rotta, {"slug": slug, "stato": "pubblicato"}, h)
+        self.assertEqual(1, len(fili), "la scrittura dello stato non e' passata di qui")
+        fili[0].join(5)
+        self.assertFalse(fili[0].is_alive(), "il salvataggio concorrente e' bloccato")
+        return self.sis.catalogo.dettaglio_owner(slug)
 
     def test_cin_storpio_422(self):
         s, o = self._pub(paese="IT", cin="cattivo!")
