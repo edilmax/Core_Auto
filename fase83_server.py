@@ -11455,6 +11455,12 @@ class RouterHTTP:
             rec = pp.conferma(rif) if pp is not None else None
             if rec is not None and rec.get("corpo_illeggibile"):
                 return False                    # l'archivio non ha scritto: ERROR gia' dato
+            if rec is not None and rec.get("contesa"):
+                logger.error("webhook | codice: conferma_contesa | riferimento: %s | messaggio: "
+                             "la scrittura «pagato» ha perso la gara troppe volte, niente e' "
+                             "confermato: rispondo 503 perche' Stripe ritenti",
+                             _rif_per_registro(rif))
+                return False
             if rec is None:
                 logger.warning("pagamento per riferimento sconosciuto '%s' (ignorato)",
                                _rif_per_registro(rif))
@@ -14281,11 +14287,12 @@ class RouterHTTP:
         366 giorni) usciva **200 con la lista VUOTA**, e il pannello host mostrava "0 giorni"
         come se il calendario fosse vuoto invece di dire che le date erano sbagliate — mentre
         la SCRITTURA, con gli STESSI due campi, rispondeva 422 spiegando il motivo."""
-        import datetime as _dtr
-        try:
-            d0 = _dtr.date.fromisoformat(da)
-            d1 = _dtr.date.fromisoformat(a)
-        except (ValueError, TypeError, AttributeError):
+        # ⛔ la STESSA lettura delle date del percorso dei soldi (fase58._data_iso, solo
+        #    AAAA-MM-GG): dal Python 3.11 «20270905» passava qui e il calendario rispondeva
+        #    200 VUOTO (variant-analysis 19/11 sera)
+        from fase58_channel_manager import _data_iso
+        d0, d1 = _data_iso(da), _data_iso(a)
+        if d0 is None or d1 is None:
             return "date_non_valide"
         n = (d1 - d0).days
         if n <= 0 or n > 366:

@@ -513,6 +513,56 @@ class TestPayout(unittest.TestCase):
         self.assertEqual(s, 422)
 
 
+class TestUnaDataScrittaInAltroModoNonEntra(unittest.TestCase):
+    """19/11 sera, sharp-edges (Trail of Bits) sui moduli dei soldi: dal Python 3.11 -- quello
+    della produzione -- `date.fromisoformat` accetta anche «20270905» e «2027-W36-1». Il
+    preventivo le prendeva per buone, ma il calcolo dell'ora d'arrivo (`_istante_checkin`) le
+    scarta: la garanzia dell'ospite partiva allora DAL PAGAMENTO e l'host veniva pagato prima
+    che l'ospite arrivasse, senza che potesse piu' contestare. Una data entra solo scritta
+    AAAA-MM-GG. (Su Python 3.9 quelle forme erano gia' rifiutate: la guardia morde sul 3.11.)"""
+
+    def setUp(self):
+        self.sys = _sistema()
+        _popola(self.sys)
+        self.r = crea_router(self.sys, host_key="hk")
+
+    def test_il_preventivo_rifiuta_le_date_non_scritte_aaaa_mm_gg(self):
+        # gli stessi giorni della prova buona qui sotto (la casa di prova e' libera), scritti
+        # nelle due forme che il 3.11 accetta: compatta e settimana ISO (2026-W36-2 = 1/9)
+        for ci, co in (("20260901", "20260902"), ("2026-W36-2", "2026-W36-3")):
+            s, c = self.r.gestisci("POST", "/api/concierge/quote", body=json.dumps(
+                {"alloggio_id": "casa", "check_in": ci, "check_out": co}))
+            self.assertEqual(422, s, (ci, c))
+
+    def test_calendario_e_metriche_dell_host_rifiutano_le_stesse_forme(self):
+        # variant-analysis (Trail of Bits) 19/11 sera: lo stesso difetto in `_errore_range_notti`,
+        # il contratto delle date del calendario e delle metriche dell'host -- «20270905»
+        # passava, poi il calendario rispondeva 200 VUOTO invece di dire che la data e' sbagliata
+        from fase83_server import RouterHTTP
+        # anche UNA sola data sbagliata basta (mutazione della CI 19/11: `or` -> `and`
+        # sopravviveva perche' qui erano sbagliate sempre tutte e due)
+        for da, a in (("20260901", "20260902"), ("2026-W36-2", "2026-W36-3"),
+                      ("2026-09-01", "non-una-data"), ("non-una-data", "2026-09-02")):
+            self.assertEqual("date_non_valide", RouterHTTP._errore_range_notti(da, a), (da, a))
+        self.assertIsNone(RouterHTTP._errore_range_notti("2026-09-01", "2026-09-02"))
+
+    def test_una_conferma_contesa_fa_ritentare_stripe(self):
+        # sharp-edges M1 (19/11 sera), lato server: la riga «contesa» non e' un pagamento
+        # confermato -- si risponde False (503) e lo si scrive nel registro
+        pp = self.sys.pagamenti_pendenti
+        finta = {"riferimento": "R-contesa", "stato": "in_attesa", "contesa": True}
+        with mock.patch.object(pp, "conferma", return_value=finta):
+            with self.assertLogs("core_auto.server", level="ERROR") as reg:
+                esito = self.r._conferma_pagamento("R-contesa")
+        self.assertIs(False, esito)
+        self.assertTrue(any("conferma_contesa" in x for x in reg.output), reg.output)
+
+    def test_la_data_buona_resta_buona(self):
+        s, c = self.r.gestisci("POST", "/api/concierge/quote", body=json.dumps(
+            {"alloggio_id": "casa", "check_in": "2026-09-01", "check_out": "2026-09-02"}))
+        self.assertEqual(200, s, c)
+
+
 class TestSplitPreview(unittest.TestCase):
     """Dividi tra amici (fase133): quote uguali a conservazione esatta."""
     def setUp(self):

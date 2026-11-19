@@ -397,10 +397,14 @@ class PagamentiPendenti:
             and 0 < limit <= 5000 else 500
         con = self._apri()
         try:
+            # ⛔ le CHIAVI del JSON (virgolette e due punti), non la parola nuda: il corpo
+            #    contiene anche il titolo scelto dall'host, e un titolo con «blocco_incassato_ts»
+            #    toglieva la prenotazione dal giro che incassa (sharp-edges 19/11 sera). Dentro
+            #    un valore le virgolette sono sempre precedute da «\»: non si possono imitare.
             righe = con.execute(
-                "SELECT * FROM pendenti WHERE corpo_json LIKE '%blocco_pi%' "
-                "AND corpo_json NOT LIKE '%blocco_incassato_ts%' "
-                "AND corpo_json NOT LIKE '%blocco_annullato_ts%' "
+                "SELECT * FROM pendenti WHERE corpo_json LIKE '%\"blocco_pi\":%' "
+                "AND corpo_json NOT LIKE '%\"blocco_incassato_ts\":%' "
+                "AND corpo_json NOT LIKE '%\"blocco_annullato_ts\":%' "
                 "ORDER BY creato_ts LIMIT ?", (lim,)).fetchall()
         finally:
             con.close()
@@ -552,7 +556,10 @@ class PagamentiPendenti:
                 # CAS perso: lo stato è cambiato tra lettura e scrittura (es. lo sweeper
                 # ha appena marcato 'scaduto') -> rileggi e rigioca. Il loop converge:
                 # gli stati confermabili sono 2 e le transizioni finiscono su stati fermi.
-            return self._riga(r)
+            # ⛔ OTTO GARE PERSE (sharp-edges 19/11 sera): niente e' stato scritto, e la riga con
+            #    lo stato di prima sembrerebbe una conferma RIUSCITA. Lo si dice: il chiamante
+            #    risponde 503 e Stripe ritenta.
+            return dict(self._riga(r), contesa=True)
         finally:
             con.close()
 

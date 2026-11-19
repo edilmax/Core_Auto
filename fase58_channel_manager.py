@@ -64,9 +64,14 @@ def _data_iso(s: Any) -> Optional[datetime.date]:
     if not isinstance(s, str):
         return None
     try:
-        return datetime.date.fromisoformat(s)
+        d = datetime.date.fromisoformat(s)
     except (ValueError, TypeError):
         return None
+    # ⛔ SOLO AAAA-MM-GG (19/11 sera, sharp-edges): dal Python 3.11 -- la produzione --
+    #    passano anche «20270905» e «2027-W36-1»; il resto del programma (l'ora d'arrivo della
+    #    garanzia, i confronti fra date scritte) non le capisce e la tutela dell'ospite partiva
+    #    dal pagamento invece che dall'arrivo.
+    return d if d.isoformat() == s else None
 
 
 def notti(check_in: Any, check_out: Any) -> Optional[List[str]]:
