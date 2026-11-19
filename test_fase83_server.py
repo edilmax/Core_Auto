@@ -539,7 +539,10 @@ class TestUnaDataScrittaInAltroModoNonEntra(unittest.TestCase):
         # il contratto delle date del calendario e delle metriche dell'host -- «20270905»
         # passava, poi il calendario rispondeva 200 VUOTO invece di dire che la data e' sbagliata
         from fase83_server import RouterHTTP
-        for da, a in (("20260901", "20260902"), ("2026-W36-2", "2026-W36-3")):
+        # anche UNA sola data sbagliata basta (mutazione della CI 19/11: `or` -> `and`
+        # sopravviveva perche' qui erano sbagliate sempre tutte e due)
+        for da, a in (("20260901", "20260902"), ("2026-W36-2", "2026-W36-3"),
+                      ("2026-09-01", "non-una-data"), ("non-una-data", "2026-09-02")):
             self.assertEqual("date_non_valide", RouterHTTP._errore_range_notti(da, a), (da, a))
         self.assertIsNone(RouterHTTP._errore_range_notti("2026-09-01", "2026-09-02"))
 
