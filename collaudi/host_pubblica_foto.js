@@ -93,6 +93,20 @@ function sorveglia(page, dove, sacco) {
   // ── IL FORM: tutti i campi che un host vero riempirebbe ------------------------------
   await ph.fill('#p_titolo', TITOLO);
   await ph.fill('#p_citta', CITTA_NUOVA);
+  // ── IL CIN SI VEDE ANCHE SENZA PAESE (19/11, il fondatore: «nel pannello host non vedo un
+  //    campo dove mettere la CIN»). Il suo annuncio di Roma era salvato col vecchio 'XX':
+  //    `caricaModifica` mette quel valore nel menu, che resta VUOTO, e il campo CIN spariva.
+  //    Qui si rifa' lo stesso gesto del caricamento: col paese vuoto il CIN dev'essere a schermo.
+  await ph.evaluate(() => {
+    const s = document.getElementById('p_paese');
+    s.value = 'XX';
+    s.onchange();
+  });
+  const senzaPaese = await ph.evaluate(() => document.getElementById('p_paese').value);
+  esigi(senzaPaese === '', `il menu del paese non si e' svuotato col vecchio 'XX': ${JSON.stringify(senzaPaese)}`);
+  esigi(await ph.isVisible('#p_cin'),
+    'annuncio senza paese: il campo CIN e\' NASCOSTO, e l\'host italiano non sa dove scriverlo');
+  console.log(`[HOST] paese vuoto -> campo CIN visibile: ${await ph.isVisible('#p_cin')}`);
   await ph.selectOption('#p_paese', 'IT');
   await ph.fill('#p_cin', CIN);
   await ph.fill('#p_descr', 'Loft di collaudo: luminoso, centro, per il percorso A2.');

@@ -1706,8 +1706,10 @@ scudoTasti(['btnLogin','btnRegister','btnPubblica','btnPin','btnDisp','btnTrasp'
     .filter(c=>!gia.has(c)).map(c=>[c,(nomi&&nomi.of(c))||c])
     .sort((a,b)=>a[1].localeCompare(b[1],LANG)).forEach(([c,n])=>sel.add(new Option(n,c)));
 })();
-// CIN visibile solo per l'Italia (obbligo di legge IT; all'estero il campo sparisce)
-document.getElementById('p_paese').onchange=function(){ document.getElementById('lCin').style.display=(this.value==='IT')?'':'none'; };
+// CIN visibile per l'Italia (obbligo di legge IT) E col paese ancora vuoto: un annuncio salvato
+// senza paese (il vecchio 'XX') apriva il menu vuoto e il CIN spariva (fondatore, 19/11).
+// Sparisce solo quando l'host ha scelto un paese estero.
+document.getElementById('p_paese').onchange=function(){ document.getElementById('lCin').style.display=(!this.value||this.value==='IT')?'':'none'; };
 document.getElementById('p_paese').onchange();
 // PASSWORD DIMENTICATA (C2): risposta SEMPRE uguale, che l'email esista o no (anti-enumerazione)
 document.getElementById('lnkPwDim').onclick=async function(ev){ ev.preventDefault();
