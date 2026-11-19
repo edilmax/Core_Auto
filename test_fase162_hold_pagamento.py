@@ -56,6 +56,76 @@ class TestModulo(unittest.TestCase):
         self.assertTrue(self.p.rimuovi("R1"))
 
 
+class TestUnaConfermaContesaNonSembraRiuscita(unittest.TestCase):
+    """19/11 sera, sharp-edges (Trail of Bits) M1: se la scrittura «pagato» perdeva la gara 8
+    volte di fila, `conferma` restituiva la riga con lo stato di prima ('in_attesa') -- la
+    stessa risposta di una conferma RIUSCITA -- senza aver scritto niente. Il server andava
+    avanti come se fosse pagata, e il giro delle scadenze poi liberava le date di un ospite che
+    aveva pagato. D19: lo stato «impossibile» si costruisce a mano."""
+
+    def setUp(self):
+        self.p = crea_pagamenti_pendenti(":memory:", orologio=lambda: 1000)
+        self.p.inizializza_schema()
+        self.p.registra("R9", alloggio_id="casa", check_in="2027-01-10",
+                        check_out="2027-01-12", idem_key="k9", scadenza_ts=2000)
+
+    def test_dopo_otto_gare_perse_lo_dice(self):
+        vero = self.p._apri
+
+        class Contesa:                 # ogni «pagato» trova la riga cambiata nel frattempo
+            def __init__(self, con):
+                self.con = con
+
+            def execute(self, sql, *a):
+                if sql.lstrip().startswith("UPDATE pendenti SET stato='pagato'"):
+                    return mock.Mock(rowcount=0)
+                return self.con.execute(sql, *a)
+
+            def __enter__(self):
+                return self.con.__enter__()
+
+            def __exit__(self, *e):
+                return self.con.__exit__(*e)
+
+            def close(self):
+                return self.con.close()
+
+        with mock.patch.object(self.p, "_apri", lambda: Contesa(vero())):
+            rec = self.p.conferma("R9")
+        self.assertTrue(rec.get("contesa"), rec)
+        self.assertEqual("in_attesa", self.p.info("R9")["stato"])
+
+
+class TestUnTitoloNonNascondeUnBloccoDaIncassare(unittest.TestCase):
+    """19/11 sera, sharp-edges M6: `blocchi_aperti` cercava le parole «blocco_incassato_ts» /
+    «blocco_annullato_ts» OVUNQUE nel testo del corpo, che contiene anche il titolo scelto
+    dall'host. Un titolo con quella parola toglieva la prenotazione dal giro che incassa:
+    l'autorizzazione scadeva, l'ospite non pagava e l'host non veniva pagato. Si cercano le
+    CHIAVI del JSON (virgolette e due punti), che un testo dentro un valore non puo' imitare."""
+
+    def setUp(self):
+        self.p = crea_pagamenti_pendenti(":memory:", orologio=lambda: 1000)
+        self.p.inizializza_schema()
+
+    def test_il_titolo_con_la_parola_non_toglie_il_blocco(self):
+        for rif, titolo in (("R-t1", 'Casa blocco_incassato_ts'),
+                            ("R-t2", 'Attico "blocco_annullato_ts": 1')):
+            self.p.registra(rif, alloggio_id="casa", check_in="2027-01-10",
+                            check_out="2027-01-12", idem_key="k-" + rif, scadenza_ts=2000,
+                            corpo_json=json.dumps({"titolo": titolo}))
+            self.assertTrue(self.p.segna_blocco(rif, blocco_pi="pi_" + rif))
+        aperti = sorted(r["riferimento"] for r in self.p.blocchi_aperti())
+        self.assertEqual(["R-t1", "R-t2"], aperti)
+
+    def test_un_blocco_incassato_resta_fuori(self):
+        self.p.registra("R-t3", alloggio_id="casa", check_in="2027-01-10",
+                        check_out="2027-01-12", idem_key="k3", scadenza_ts=2000,
+                        corpo_json=json.dumps({"titolo": "Casa"}))
+        self.p.segna_blocco("R-t3", blocco_pi="pi_3")
+        self.p.segna_blocco("R-t3", blocco_incassato_ts=1500)
+        self.assertEqual([], self.p.blocchi_aperti())
+
+
 class TestLHoldDuraAlmenoQuantoLaPaginaDiPagamento(unittest.TestCase):
     """⛔ D20 — scritta PRIMA della riparazione e vista ROSSA sul codice di produzione.
 
