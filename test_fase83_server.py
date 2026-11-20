@@ -12025,8 +12025,21 @@ class TestUnSalvataggioLentoNonFaDoppioni(unittest.TestCase):
                 if len(chiamati) == tetto:
                     break
                 time.sleep(0.05)
+            # ⛔ CI 20/11 (PR #334): col mutante blocking=False -> True questo salvataggio
+            #    aspettava un posto TENENDO la serratura dei posti, e i quattro giri SEO, per
+            #    chiudere, aspettavano quella serratura: blocco eterno, giro di mutazione «non
+            #    determinabile». In un filo a tempo; se resta appeso lo si sblocca dal semaforo.
             with self.assertLogs("core_auto.server", level="WARNING") as reg:
-                self._nuovo("invio-tetto-oltre", titolo="Casa oltre", tk=oltre)
+                filo = threading.Thread(target=lambda: self._nuovo(
+                    "invio-tetto-oltre", titolo="Casa oltre", tk=oltre), daemon=True)
+                filo.start()
+                filo.join(5)
+                appeso = filo.is_alive()
+                if appeso:
+                    fase83_server._POSTI_SEO.release()
+                    filo.join(5)
+            self.assertFalse(appeso, "a tetto pieno il salvataggio ASPETTA un posto SEO: la "
+                                     "richiesta del pannello resta appesa")
             in_volo = len(chiamati)
         finally:
             libera.set()
@@ -12700,6 +12713,23 @@ class TestLaCodaSeoASequenzeCasuali(unittest.TestCase):
                 self.arrivata = {}  # (host, casa) -> ultima versione arrivata al motore
                 self.persa = set()  # (host, casa) dichiarate non avvisate
 
+            def prendi_entro_5_secondi(self, h, casa):
+                # ⛔ CI 20/11 (PR #334, giudice --diff): col mutante blocking=False -> True un
+                #    salvataggio a tetto pieno ASPETTAVA un posto per sempre e la prova restava
+                #    ferma -- punto «non determinabile», CI rossa. In un filo a tempo: se resta
+                #    appeso si sblocca a mano e la prova FALLISCE, cioe' il mutante muore.
+                esito = []
+                filo = threading.Thread(
+                    target=lambda: esito.append(R._prendi_posto_seo(h, casa)), daemon=True)
+                filo.start()
+                filo.join(5)
+                if filo.is_alive():
+                    fase83_server._POSTI_SEO.release()
+                    filo.join(5)
+                    caso.fail("il salvataggio di %s/%s aspetta un posto SEO invece di "
+                              "rispondere subito" % (h, casa))
+                return esito[0]
+
             def teardown(self):
                 fase83_server._POSTI_SEO, vecchia = self.vecchi
                 fase83_server._SEO_PER_HOST.clear()
@@ -12709,7 +12739,7 @@ class TestLaCodaSeoASequenzeCasuali(unittest.TestCase):
                   v=st.integers(0, 9))
             def salva(self, h, casa, v):
                 casa = str(casa)
-                esito = R._prendi_posto_seo(h, casa)
+                esito = self.prendi_entro_5_secondi(h, casa)
                 self.ultima[(h, casa)] = v
                 self.persa.discard((h, casa))
                 coda = self.coda.get(h, {})
@@ -12785,9 +12815,13 @@ class TestLaCodaSeoASequenzeCasuali(unittest.TestCase):
                         caso.assertEqual(v, self.arrivata.get(chiave), chiave)
                 caso.assertEqual({}, fase83_server._SEO_PER_HOST)
 
+        # ⛔ SENZA la fase che riduce il controesempio, come la prova degli invii qui sopra
+        #    (CI 20/11, PR #334): col mutante blocking=False -> True ogni sequenza ridotta
+        #    ripeteva l'attesa di 5 s del salvataggio appeso, e il giro durava oltre il tempo
+        #    concesso. La sequenza che fallisce si stampa lo stesso.
         Coda.TestCase.settings = settings(max_examples=300, stateful_step_count=60,
                                           deadline=None, derandomize=True, database=None,
-                                          phases=(Phase.explicit, Phase.generate, Phase.shrink))
+                                          phases=(Phase.explicit, Phase.generate))
         Coda.TestCase("runTest").runTest()
 
 

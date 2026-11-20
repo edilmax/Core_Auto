@@ -16283,5 +16283,60 @@ class TestLeDipendenzeDelBrowserHannoLaVersioneEsatta(unittest.TestCase):
                          "(un `^` o un `~` prende da solo la versione nuova): %s" % libere)
 
 
+class TestIlGiroDiMutazioneInstallaCioCheLeSueProveImportano(unittest.TestCase):
+    """20/11, CI della PR #334: il job `mutazione` (giro intero, «gira su stdlib pura») e'
+    diventato rosso con BASE ROSSA -- `test_fase83_server` ha preso due prove a sequenze
+    casuali con Hypothesis, e su quel job Hypothesis non c'era: ModuleNotFoundError. La z3
+    ha gia' la sua guardia (sopra); questa e' la stessa radice vista dal giro di mutazione:
+    le librerie si DERIVANO dalle prove che il giro accende (la quarta colonna di MUTANTI),
+    mai da un elenco scritto a mano."""
+
+    # nome importato -> nome del pacchetto da installare (solo le librerie di collaudo)
+    LIBRERIE = {"hypothesis": "hypothesis", "z3": "z3-solver", "yaml": "pyyaml",
+                "flask": "flask", "coverage": "coverage"}
+
+    @staticmethod
+    def _librerie_importate(nome_modulo):
+        import ast
+        with io.open(os.path.join(QUI, nome_modulo + ".py"), encoding="utf-8") as f:
+            albero = ast.parse(f.read())
+        usate = set()
+        for n in ast.walk(albero):
+            if isinstance(n, ast.Import):
+                usate |= {a.name.split(".")[0] for a in n.names}
+            elif isinstance(n, ast.ImportFrom) and n.module:
+                usate.add(n.module.split(".")[0])
+        return usate
+
+    def test_ogni_job_che_lancia_la_mutazione_installa_le_librerie_delle_sue_prove(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "mutazione_per_guardia", os.path.join(QUI, "collaudi", "mutazione_prodotto.py"))
+        mp = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mp)
+        moduli = {x.split(".")[0] for m in mp.MUTANTI for x in m[3].split()}
+        self.assertGreater(len(moduli), 10, "premessa: le prove del giro intero si leggono "
+                                            "da MUTANTI (quarta colonna)")
+        servono = set()
+        for nome in moduli:
+            servono |= self._librerie_importate(nome) & set(self.LIBRERIE)
+        self.assertIn("hypothesis", servono, "premessa: test_fase83_server usa Hypothesis")
+        senza = []
+        for nome_job, job in _doc_ci()["jobs"].items():
+            passi = _passi(job)
+            if not any(isinstance(p.get("run"), str) and "collaudi/mutazione_prodotto.py"
+                       in p["run"] for p in passi):
+                continue
+            installati = " ".join(p["run"] for p in passi if isinstance(p.get("run"), str)
+                                  and "pip install" in p["run"])
+            for lib in sorted(servono):
+                if not re.search(r"(?<![\w-])%s(?![\w-])" % re.escape(self.LIBRERIE[lib]),
+                                 installati):
+                    senza.append("%s senza %s" % (nome_job, self.LIBRERIE[lib]))
+        self.assertEqual([], senza, "un job lancia la mutazione ma non installa le librerie "
+                                    "che le sue prove importano: la base e' rossa e nessun "
+                                    "punteggio vale")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
