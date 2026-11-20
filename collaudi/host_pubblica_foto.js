@@ -161,7 +161,54 @@ function sorveglia(page, dove, sacco) {
   esigi(thumb, `la foto caricata non ha prodotto nessuna thumbnail /uploads/ nel pannello host`);
   console.log(`[HOST] foto caricata: ${String(srcThumb).slice(0, 60)}`);
 
+  // ── LA RISPOSTA PERSA (19/11, il fondatore: «connessione lenta e alla fine mi trovo con tre
+  //    annunci identici»). Il server SALVA, ma la risposta arriva dopo il tempo massimo del
+  //    pannello, che dice «riprova». Il riprova deve aggiornare lo STESSO annuncio: piu' sotto
+  //    la prova «le opzioni sono cambiate di UNO» lo pretende (prima ne nascevano due).
+  await ph.evaluate(() => { window.__TEMPO_MAX_MS = 2000; });
+  // revisione 20/11: si guarda anche COSA manda il pannello -- il riprova deve riusare la
+  // STESSA chiave_invio (con una chiave nuova il server farebbe un secondo annuncio, e la
+  // prova «cambiate di UNO» lo vedrebbe solo se l'elenco si aggiorna) -- e che il primo
+  // invio sia arrivato al server e salvato (201): senza, «risposta persa» non e' provata
+  const chiaviInviate = [];
+  const ascoltaInvii = req => {
+    if (req.method() !== 'POST' || !req.url().includes('/api/host/pubblica')) return;
+    let ch = 'illeggibile';
+    try { ch = (req.postDataJSON() || {}).chiave_invio; } catch (e) { /* resta illeggibile */ }
+    chiaviInviate.push(ch);
+  };
+  ph.on('request', ascoltaInvii);
+  let rispostaInRitardo = true;
+  let statoPrimoInvio = null;
+  await ph.route('**/api/host/pubblica', async route => {
+    const risposta = await route.fetch();          // il server riceve e salva davvero
+    if (rispostaInRitardo) {
+      rispostaInRitardo = false;
+      statoPrimoInvio = risposta.status();
+      await new Promise(ok => setTimeout(ok, 3000));
+    }
+    // la pagina puo' aver gia' chiuso la richiesta (e' il «riprova» che vogliamo): lo si dice,
+    // non si tace (silent-failure-hunter 19/11 sera)
+    await route.fulfill({ response: risposta }).catch(e =>
+      console.log(`[HOST] risposta in ritardo non consegnata: ${String(e && e.message).slice(0, 120)}`));
+  });
   await ph.click('#btnPubblica');
+  let msgLento = '';
+  for (let i = 0; i < 40 && !msgLento.includes('❌'); i++) {
+    await ph.waitForTimeout(250);
+    msgLento = ((await ph.innerText('#msgPub').catch(() => '')) || '').trim();
+  }
+  esigi(msgLento.includes('❌'),
+    `la risposta in ritardo non ha dato il «riprova» atteso: ${JSON.stringify(msgLento.slice(0, 200))}`);
+  console.log(`[HOST] risposta persa, il pannello dice: ${msgLento.slice(0, 90)}`);
+  await ph.waitForTimeout(1500);                   // la risposta in ritardo si chiude
+  await ph.unroute('**/api/host/pubblica');
+  await ph.evaluate(() => {
+    window.__TEMPO_MAX_MS = 15000;
+    document.getElementById('msgPub').textContent = '';   // l'esito del riprova, non quello di prima
+  });
+
+  await ph.click('#btnPubblica');                  // il «riprova» dell'host
   let msgPub = '';
   let decisoPub = false;
   for (let i = 0; i < 40 && !decisoPub; i++) {
@@ -173,6 +220,13 @@ function sorveglia(page, dove, sacco) {
   esigi(msgPub.includes('✅') && !msgPub.includes('❌'),
     `la pubblicazione e' FALLITA sul pannello host: ${JSON.stringify(msgPub.slice(0, 300))}`);
   console.log(`[HOST] pubblicazione: ${msgPub.slice(0, 120)}`);
+  ph.off('request', ascoltaInvii);
+  esigi(statoPrimoInvio === 201,
+    `il primo invio (quello con la risposta persa) non e' stato salvato dal server: stato ${statoPrimoInvio}`);
+  esigi(chiaviInviate.length === 2 && typeof chiaviInviate[0] === 'string'
+        && chiaviInviate[0].length >= 8 && chiaviInviate[0] === chiaviInviate[1],
+    `il riprova non ha riusato la chiave dell'invio: ${JSON.stringify(chiaviInviate)}`);
+  console.log(`[HOST] stessa chiave nei due invii: ${chiaviInviate.length === 2 && chiaviInviate[0] === chiaviInviate[1]}`);
 
   // Lo SLUG nuovo: l'opzione che prima non c'era. Se la select non si e' aggiornata da sola,
   // la forza "Il mio elenco"; il valore dev'esserci, perche' la prova dell'ospite lo nomina.

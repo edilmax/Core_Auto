@@ -2290,6 +2290,39 @@ def _gettone_prova_valido(firma: Any, gettone: Any, nome: str, ora: int) -> bool
 # e cosi' leggere paese/CIN e cambiare lo stato (`_host_stato`, `_admin_alloggio_stato`).
 _SERRATURA_PREZZO_BASE = threading.Lock()
 
+# L'INDIRIZZO DI UN ANNUNCIO NUOVO (19/11, un gesto del fondatore = tre annunci). Lo slug scelto
+# resta PRENOTATO finche' l'annuncio non e' nel catalogo: due annunci nuovi nello stesso istante
+# prendevano lo stesso indirizzo e il secondo scriveva sopra il primo. E la `chiave_invio` del
+# pannello lega un invio al SUO annuncio: il «riprova» dopo una risposta persa aggiorna quello,
+# non ne crea un altro (come la chiave di idempotenza di Stripe). In UN processo, come le altre.
+_SERRATURA_INVII = threading.RLock()
+_SLUG_PRENOTATI: Dict[str, float] = {}
+# (proprietario, chiave, impronta di titolo e citta') -> (slug, ora): ogni CASA ha la sua voce,
+# cosi' un riprova con un'altra casa e' un annuncio nuovo e non sovrascrive il primo (code-review
+# 19/11), e tornare alla prima casa ritrova il SUO annuncio (prova a sequenze casuali, 19/11:
+# Baita, Attico, Baita con la stessa chiave faceva un secondo Baita)
+_INVII_PUBBLICA: Dict[Tuple[str, str, str], Tuple[str, float]] = {}
+# slug -> invii nuovi ancora in corso su quello slug: prenotazione e chiave si liberano solo
+# quando l'ULTIMO finisce (un rifiutato non libera cio' che un altro sta salvando)
+_IN_VOLO: Dict[str, int] = {}
+_DURATA_INVIO_S = 24 * 3600
+_CHIAVE_INVIO_OK = re.compile(r"[A-Za-z0-9_-]{8,64}")
+# il motore SEO del salvataggio gira dopo la risposta, ma non piu' di tanti insieme: con
+# Overpass muto ogni giro resta 20 s, e senza tetto i fili si accumulano
+_TETTO_SEO_IN_CORSO = 4
+_POSTI_SEO = threading.BoundedSemaphore(_TETTO_SEO_IN_CORSO)
+# ...e UN giro per host: un host che salva di continuo non li tiene tutti, lasciando senza
+# avviso ai motori gli annunci degli altri (adversarial-modeler 19/11 sera). Cio' che lo stesso
+# host salva mentre il suo giro e' in corso aspetta in coda e lo fa lo stesso filo dopo: prima
+# saltava, e la seconda casa salvata di fila non arrivava mai ai motori (code-review 20/11). In
+# coda c'e' solo lo slug (in ordine d'arrivo): la casa si rilegge quando tocca a lei, cosi' una
+# scheda letta in ritardo non scrive la versione vecchia sopra la nuova (code-reviewer 20/11).
+# La coda non prende posti del tetto e ha un tetto suo.
+_SEO_PER_HOST: Dict[str, Dict[str, None]] = {}
+_CODA_SEO_PER_HOST = 20
+_SERRATURA_POSTI_SEO = threading.Lock()
+_SERRATURA_MOTORE_SEO = threading.Lock()
+
 
 class RouterHTTP:
     """Router PURO (testabile): cabla il SistemaCasaVIP (fase81) sulle rotte HTTP."""
@@ -12623,9 +12656,19 @@ class RouterHTTP:
             dati["host_id"] = hid
         # AUTO-ID: l'host NON deve inventarsi uno slug. Se non lo fornisce (nuovo alloggio),
         # lo generiamo noi dal titolo/città, numerato e UNIVOCO -> zero errori/collisioni.
-        if not (isinstance(dati.get("slug"), str) and dati.get("slug").strip()):
-            dati = dict(dati)
-            dati["slug"] = self._slug_unico(dati.get("titolo"), dati.get("citta"))
+        if isinstance(dati.get("slug"), str) and dati.get("slug").strip():
+            return self._host_pubblica_scheda(dati, headers, hid)
+        dati = dict(dati)
+        voce = self._voce_invio(hid, dati)
+        dati["slug"] = self._slug_per_invio(voce, dati.get("titolo"), dati.get("citta"))
+        esito = (500, {})
+        try:
+            esito = self._host_pubblica_scheda(dati, headers, hid)
+            return esito
+        finally:
+            self._chiudi_invio(dati["slug"], voce, esito[0])
+
+    def _host_pubblica_scheda(self, dati, headers, hid):
         # SICUREZZA: la pubblicazione è un UPSERT per slug che RIASSEGNA host_id. In modalità
         # self-service (token) impedisci di pubblicare su uno slug ALTRUI (furto di annuncio).
         # slug nuovo/auto -> proprietario None -> consentito; slug proprio -> aggiorna.
@@ -12680,6 +12723,11 @@ class RouterHTTP:
         # ⛔ Moneta cambiata: i giorni sono nella moneta di prima, e confrontarli col base nuovo
         # mescolerebbe euro e yen -- non si spostano.
         with _SERRATURA_PREZZO_BASE:
+            # «e' tuo?» si richiede QUI, nello stesso gesto del salvataggio: fra il controllo di
+            # sopra e l'upsert (che riassegna host_id) un altro host poteva creare lo stesso
+            # indirizzo, e questo salvataggio glielo prendeva (code-review 19/11)
+            if not self._verifica_proprieta(headers, scheda.slug):
+                return 403, {"errore": "non_tuo"}
             prima = self._sys.catalogo.dettaglio_owner(scheda.slug)
             id_num = self._sys.catalogo.pubblica(scheda, imgs)
             calendario = {"aggiornati": 0, "speciali": 0, "prenotati": 0}
@@ -12717,12 +12765,37 @@ class RouterHTTP:
                          "promozione", scheda.slug, exc_info=True)
         # MOTORE SEO AUTONOMO (fase173): appena l'host pubblica, il motore valuta la pagina
         # e (se IndexNow e' acceso) avvisa i motori. ISOLATO: mai rompe la pubblicazione.
+        # ⛔ DOPO la risposta, in un filo suo (19/11): chiede i luoghi vicini a Overpass, che
+        # muto fa aspettare 20 s; il pannello dopo 15 s dice «riprova» e l'annuncio raddoppiava.
         try:
             det = self._sys.catalogo.dettaglio(scheda.slug)
-            if det is not None:
-                self._motore_seo().su_pubblicazione(det, self._base_url)
+            chi = hid or str(dati.get("host_id") or "")
+            posto = "" if det is None else self._prendi_posto_seo(chi, scheda.slug)
+            # nel registro senza «a capo»: l'host di un invio da operatore arriva dal corpo
+            # della richiesta (CodeQL py/log-injection, PR #334)
+            chi_log = chi.replace("\r", " ").replace("\n", " ")
+            slug_log = str(scheda.slug).replace("\r", " ").replace("\n", " ")
+            if posto == "tetto_pieno":
+                logger.warning("SEO | codice: seo_saltato | motivo: tetto_pieno | slug: %s | "
+                               "host: %s | messaggio: %d giri SEO gia' in corso, questo "
+                               "salvataggio non avvisa i motori", slug_log, chi_log,
+                               _TETTO_SEO_IN_CORSO)
+            elif posto == "coda_piena":
+                logger.warning("SEO | codice: seo_saltato | motivo: coda_piena | slug: %s | "
+                               "host: %s | messaggio: %d case gia' in coda per questo host, "
+                               "questo salvataggio non avvisa i motori", slug_log, chi_log,
+                               _CODA_SEO_PER_HOST)
+            elif posto == "parti":
+                try:
+                    threading.Thread(target=self._seo_su_pubblicazione,
+                                     args=(det, scheda.slug, chi),
+                                     name="seo-" + scheda.slug, daemon=True).start()
+                except Exception:
+                    self._rendi_posto_seo(chi)
+                    raise
         except Exception:
-            logger.warning("motore SEO su publish fallito (ISOLATO)", exc_info=True)
+            logger.warning("SEO | codice: seo_non_avviato | slug: %s | messaggio: motore SEO "
+                           "del salvataggio non partito (ISOLATO)", scheda.slug, exc_info=True)
         # COLD-START: primo annuncio nella citta -> avvisa la lista d'attesa (fase158). ISOLATO.
         try:
             if getattr(scheda, "stato", "") == "pubblicato":
@@ -12735,11 +12808,144 @@ class RouterHTTP:
         return 201, {"stato": "pubblicato", "slug": scheda.slug, "id": id_num,
                      "calendario": calendario}
 
+    def _seo_su_pubblicazione(self, det, slug, chi):
+        """Il motore SEO del salvataggio, nel suo filo: poi le schede che lo stesso host ha
+        messo in coda nel frattempo. Un errore resta qui (ISOLATO) e il posto torna libero
+        comunque. Le case in coda si rileggono dal catalogo quando tocca a loro (una non piu'
+        pubblicata non avvisa)."""
+        prossimo = slug
+        try:
+            while prossimo is not None:
+                slug = prossimo
+                try:
+                    if det is None:
+                        det = self._sys.catalogo.dettaglio(slug)
+                    if det is not None:
+                        self._motore_seo().su_pubblicazione(det, self._base_url)
+                except Exception:
+                    logger.warning("SEO | codice: seo_fallito | slug: %s | messaggio: motore "
+                                   "SEO del salvataggio fallito (ISOLATO)", slug, exc_info=True)
+                det = None
+                prossimo = self._prossimo_seo(chi)
+        finally:
+            if prossimo is not None:
+                self._rendi_posto_seo(chi)
+
+    @staticmethod
+    def _prendi_posto_seo(chi, slug):
+        """"parti": giro nuovo (l'host non ne ha in corso e il tetto generale non e' pieno);
+        "in_coda": l'host ha gia' un giro, la casa aspetta il suo filo (una volta sola);
+        "tetto_pieno" o "coda_piena": questo salvataggio non avvisa i motori."""
+        with _SERRATURA_POSTI_SEO:
+            coda = _SEO_PER_HOST.get(chi)
+            if coda is not None:
+                if slug not in coda and len(coda) >= _CODA_SEO_PER_HOST:
+                    return "coda_piena"
+                coda[slug] = None
+                return "in_coda"
+            if not _POSTI_SEO.acquire(blocking=False):
+                return "tetto_pieno"
+            _SEO_PER_HOST[chi] = {}
+            return "parti"
+
+    @staticmethod
+    def _prossimo_seo(chi):
+        """Lo slug della prossima casa in coda dell'host, o None: e allora il posto torna
+        libero, nello stesso gesto (un salvataggio che arriva dopo trova il posto libero, non
+        una coda morta)."""
+        with _SERRATURA_POSTI_SEO:
+            coda = _SEO_PER_HOST.get(chi)
+            if coda:
+                slug = next(iter(coda))
+                del coda[slug]
+                return slug
+            _SEO_PER_HOST.pop(chi, None)
+            _POSTI_SEO.release()
+            return None
+
+    @staticmethod
+    def _rendi_posto_seo(chi):
+        """Il posto torna libero solo se questo host lo tiene davvero: un secondo «rendi»
+        non regala al tetto un posto che nessuno ha preso (silent-failure-hunter 20/11)."""
+        with _SERRATURA_POSTI_SEO:
+            if chi not in _SEO_PER_HOST:
+                return
+            persi = list(_SEO_PER_HOST.pop(chi))
+            _POSTI_SEO.release()
+        if persi:
+            logger.warning("SEO | codice: seo_saltato | motivo: giro_interrotto | slug: %s | "
+                           "host: %s | messaggio: queste case in coda non avvisano i motori",
+                           ", ".join(persi).replace("\r", " ").replace("\n", " "),
+                           str(chi).replace("\r", " ").replace("\n", " "))
+
+    @staticmethod
+    def _voce_invio(hid, dati):
+        """(proprietario, chiave, casa) dell'invio, o None. Il proprietario e' l'host del token;
+        per l'operatore (chiave host, senza token) l'host_id che manda, cosi' la stessa chiave
+        non sposta l'annuncio di un host su un altro. La casa e' l'impronta di titolo e citta'.
+        Una chiave scritta male si scarta e si DICE."""
+        chiave = dati.get("chiave_invio")
+        if chiave is None:
+            return None
+        if not (isinstance(chiave, str) and _CHIAVE_INVIO_OK.fullmatch(chiave)):
+            logger.warning("PUBBLICA | codice: chiave_invio_non_valida | tipo: %s | messaggio: "
+                           "chiave dell'invio scartata, un riprova di questo invio puo' creare "
+                           "un doppione", type(chiave).__name__)
+            return None
+        casa = "|".join(str(dati.get(k) or "").strip().casefold() for k in ("titolo", "citta"))
+        return (hid or str(dati.get("host_id") or ""), chiave, casa)
+
+    def _slug_per_invio(self, voce, titolo, citta):
+        """Lo slug di un annuncio NUOVO. Stessa voce (proprietario, chiave, casa) = stesso
+        annuncio (il «riprova» lo aggiorna); altrimenti uno slug nuovo, prenotato.
+        Conta l'invio fra quelli in volo su quello slug (lo chiude `_chiudi_invio`)."""
+        with _SERRATURA_INVII:
+            import time as _t
+            ora = _t.monotonic()
+            for k in [k for k, v in _INVII_PUBBLICA.items() if ora - v[1] > _DURATA_INVIO_S]:
+                del _INVII_PUBBLICA[k]
+            ricordo = _INVII_PUBBLICA.get(voce) if voce is not None else None
+            if ricordo is not None:
+                slug = ricordo[0]
+            else:
+                slug = self._slug_unico(titolo, citta, prenota=True)
+                if voce is not None:
+                    _INVII_PUBBLICA[voce] = (slug, ora)
+            _IN_VOLO[slug] = _IN_VOLO.get(slug, 0) + 1
+            return slug
+
+    def _chiudi_invio(self, slug, voce, stato):
+        """Fine di un invio nuovo. Finche' un altro invio e' in volo sullo stesso slug non si
+        libera niente. All'ultimo: la prenotazione cade (l'annuncio e' nel catalogo, o non ci
+        andra'); e se l'invio e' fallito e lo slug NON e' un annuncio di questo proprietario
+        (mai nato, o nato da un altro), la chiave si stacca: il prossimo riprova ne fa uno suo."""
+        with _SERRATURA_INVII:
+            rimasti = _IN_VOLO.get(slug, 1) - 1
+            if rimasti > 0:
+                _IN_VOLO[slug] = rimasti
+                return
+            _IN_VOLO.pop(slug, None)
+            _SLUG_PRENOTATI.pop(slug, None)
+            if stato == 201 or voce is None or _INVII_PUBBLICA.get(voce, ("",))[0] != slug:
+                return
+            try:
+                suo = self._sys.catalogo.host_di_alloggio(slug) == voce[0]
+            except Exception:
+                logger.error("PUBBLICA | codice: invio_non_verificabile | slug: %s | messaggio: "
+                             "catalogo muto, la chiave dell'invio resta legata allo slug",
+                             str(slug).replace("\r", " ").replace("\n", " "), exc_info=True)
+                return
+            if not suo:
+                _INVII_PUBBLICA.pop(voce, None)
+
     def _motore_seo(self):
-        """Motore SEO (fase173) costruito pigramente dai componenti del sistema."""
+        """Motore SEO (fase173) costruito pigramente dai componenti del sistema; sotto
+        serratura, perche' ora lo chiamano i fili del salvataggio."""
         if getattr(self, "_motore_seo_cache", None) is None:
-            from fase173_motore_seo import crea_motore_da_sistema
-            self._motore_seo_cache = crea_motore_da_sistema(self._sys)
+            with _SERRATURA_MOTORE_SEO:
+                if getattr(self, "_motore_seo_cache", None) is None:
+                    from fase173_motore_seo import crea_motore_da_sistema
+                    self._motore_seo_cache = crea_motore_da_sistema(self._sys)
         return self._motore_seo_cache
 
     def _host_seo_report(self, query, headers):
@@ -13001,7 +13207,7 @@ class RouterHTTP:
             return None
         return "/uploads/" + nome
 
-    def _slug_unico(self, titolo, citta):
+    def _slug_unico(self, titolo, citta, prenota=False):
         """Genera uno slug pubblico pulito dal titolo (o città), garantito UNIVOCO nel catalogo.
         L'host non lo vede/digita mai: serve solo come indirizzo interno stabile."""
         import re as _re, unicodedata as _ud, secrets as _s
@@ -13010,13 +13216,30 @@ class RouterHTTP:
         base = _re.sub(r"[^a-zA-Z0-9]+", "-", base).strip("-").lower()[:40] or "casa"
         cat = getattr(self._sys, "catalogo", None)
         candidati = [base] + ["%s-%d" % (base, i) for i in range(2, 80)]
-        for cand in candidati:
-            try:
-                if cat is None or cat.host_di_alloggio(cand) is None:
-                    return cand
-            except Exception:
-                break
-        return base + "-" + _s.token_hex(3)
+        # si saltano gli indirizzi PRENOTATI dai salvataggi in corso; `prenota` (il salvataggio
+        # di `_slug_per_invio`) tiene il suo finche' `_chiudi_invio` non lo libera
+        with _SERRATURA_INVII:
+            import time as _t
+            ora = _t.monotonic()
+            for s in [s for s, t in _SLUG_PRENOTATI.items() if ora - t > _DURATA_INVIO_S]:
+                del _SLUG_PRENOTATI[s]
+            scelto = None
+            for cand in candidati:
+                if cand in _SLUG_PRENOTATI:
+                    continue
+                try:
+                    if cat is None or cat.host_di_alloggio(cand) is None:
+                        scelto = cand
+                        break
+                except Exception:
+                    logger.error("PUBBLICA | codice: slug_non_verificabile | messaggio: catalogo "
+                                 "muto scegliendo l'indirizzo, uso un suffisso casuale",
+                                 exc_info=True)
+                    break
+            scelto = scelto or base + "-" + _s.token_hex(3)
+            if prenota:
+                _SLUG_PRENOTATI[scelto] = ora
+            return scelto
 
     def _foto_elimina(self, body, headers):
         """Cancella una foto caricata per errore (file in UPLOAD_DIR). Host-auth. Path-safe:

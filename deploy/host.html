@@ -1078,6 +1078,12 @@ document.getElementById('btnFiscale').onclick = (async function(){
   }catch(e){ m.className='msg err'; m.textContent=T('fx_err'); console.warn('bookinvip-host',e); }
 });
 
+let CHIAVE_INVIO = null;
+function nuovaChiaveInvio(){
+  try{ if(window.crypto && crypto.randomUUID) return crypto.randomUUID(); }
+  catch(e){ console.warn('chiave invio: crypto.randomUUID non disponibile, uso la riserva', e); }
+  return 'inv-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,12);
+}
 document.getElementById('btnPubblica').onclick = async ()=>{
   const m = document.getElementById('msgPub');
   if(!document.getElementById('p_titolo').value.trim()){ m.className='msg err'; m.textContent=T('dev_titolo'); return; }
@@ -1090,8 +1096,12 @@ document.getElementById('btnPubblica').onclick = async ()=>{
   const imgs = (window.__foto||[]).concat(document.getElementById('p_img').value.split('\n').map(s=>s.trim()).filter(Boolean));
   const valp = document.getElementById('p_valuta').value || 'EUR';
   const prezzoNuovo = toCents(document.getElementById('p_prezzo').value, valp);
+  // LA CHIAVE DELL'INVIO (19/11, un gesto = tre annunci): resta la STESSA finche' il server non
+  // risponde «salvato», cosi' un «riprova» dopo una risposta persa aggiorna lo stesso annuncio.
+  if(!editing && !CHIAVE_INVIO) CHIAVE_INVIO = nuovaChiaveInvio();
   const r = await post('/api/host/pubblica', {
     slug:document.getElementById('p_slug').value,   // vuoto = nuovo annuncio, id generato in automatico
+    chiave_invio: editing ? undefined : CHIAVE_INVIO,
     titolo:document.getElementById('p_titolo').value, citta:document.getElementById('p_citta').value,
     paese:document.getElementById('p_paese').value,
     cin:document.getElementById('p_cin').value.trim().toUpperCase(),
@@ -1112,6 +1122,7 @@ document.getElementById('btnPubblica').onclick = async ()=>{
     paga_in_struttura:document.getElementById('p_paga_struttura').checked,
     capacita:parseInt(document.getElementById('p_cap').value)||1, servizi:serv, immagini:imgs});
   if(r.status===201){
+    if(!editing) CHIAVE_INVIO = null;   // salvato: il prossimo annuncio nuovo avra' la sua
     m.className='msg ok'; m.textContent='✅ '+T(editing?'aggiornato_ok':'pubblicato_ok');
     // IL PREZZO BASE (giro dell'host vero, 30/10): si dice cosa e' successo ai giorni del
     // calendario, se no il prezzo che «torna» resta un mistero. `null` = i giorni non sono stati
@@ -1238,6 +1249,7 @@ function svuotaForm(){ window.__foto=[]; renderThumbs(); PIN_MANUALE=false; chiu
   ['p_titolo','p_descr','p_citta','p_indirizzo','p_lat','p_lon','p_img','p_serv'].forEach(id=>document.getElementById(id).value=''); }
 document.getElementById('btnAnnullaMod').onclick=()=>{ esciModifica(); svuotaForm(); };
 async function caricaModifica(slug){
+  CHIAVE_INVIO = null;   // l'host passa a un annuncio esistente: il prossimo nuovo e' un invio nuovo
   const m=document.getElementById('msgPub');
   try{
     const d=await getJson('/api/host/alloggio?slug='+encodeURIComponent(slug),{headers:authHeaders()});

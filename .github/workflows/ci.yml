@@ -440,11 +440,16 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
-      # Nessuna "cache: pip" qui: questo job non installa niente (gira su stdlib pura),
-      # quindi la cache sarebbe solo tempo perso a salvarla e ricaricarla.
+      # Nessuna "cache: pip" qui: questo job installa solo Hypothesis (sotto), la cache
+      # sarebbe tempo perso a salvarla e ricaricarla.
       - uses: actions/setup-python@v6
         with:
           python-version: '3.9'
+      # ⛔ 20/11 (PR #334): test_fase83_server porta prove a sequenze casuali con Hypothesis;
+      #    senza, la base del giro e' rossa (ModuleNotFoundError) e nessun punteggio vale.
+      #    Guardia: test_pipeline_ci.TestIlGiroDiMutazioneInstallaCioCheLeSueProveImportano
+      - name: Librerie di collaudo delle prove che il giro accende
+        run: pip install hypothesis
       - name: Mutazione (i test si accorgono dei guasti?)
         run: python collaudi/mutazione_prodotto.py
 
