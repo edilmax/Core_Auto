@@ -1516,7 +1516,7 @@ _TRACCIA = os.path.join(tempfile.gettempdir(),
                         "bookinvip_mutazione_in_corso_%s" % _SUFFISSO_WORKTREE)
 
 
-def _biglietto(percorso):
+def _biglietto(percorso, traccia=None):
     """La cartella del biglietto di QUEL file: UN biglietto per FILE, non uno per tutta
     la macchina.
 
@@ -1539,7 +1539,19 @@ def _biglietto(percorso):
     a quella vera -- cioe' spegnerebbe la rete di una campagna in corso.
     """
     impronta = hashlib.sha256(os.path.abspath(percorso).encode("utf-8")).hexdigest()[:16]
-    return os.path.join(_TRACCIA, "giro_" + impronta)
+    return os.path.join(traccia or _TRACCIA, "giro_" + impronta)
+
+
+def _traccia_di(radice):
+    """La casella dei biglietti di un ALBERO qualsiasi: stessa formula di `_TRACCIA`.
+
+    Serve al giro in parallelo (20/11/2026): il mutante si scrive in una COPIA del progetto, e
+    le guardie che girano dentro la copia cercano l'originale nella casella della copia, non
+    in quella dell'albero vero. ⛔ La formula deve restare identica a quella di `_TRACCIA`:
+    lo pretende `test_pipeline_ci.TestIlGiroInParallelo.test_la_casella_della_copia_e_quella_che_la_copia_legge`.
+    """
+    suffisso = "".join(c if c.isalnum() else "_" for c in os.path.basename(radice))
+    return os.path.join(tempfile.gettempdir(), "bookinvip_mutazione_in_corso_%s" % suffisso)
 
 
 def biglietti_aperti(traccia=None):
@@ -1567,9 +1579,9 @@ def biglietti_aperti(traccia=None):
     return aperti
 
 
-def _apri_traccia(percorso, sorgente):
+def _apri_traccia(percorso, sorgente, traccia=None):
     try:
-        mio = _biglietto(percorso)
+        mio = _biglietto(percorso, traccia)
         os.makedirs(mio, exist_ok=True)
         with io.open(os.path.join(mio, "quale.txt"), "w", encoding="utf-8") as f:
             f.write(percorso)
@@ -1580,7 +1592,7 @@ def _apri_traccia(percorso, sorgente):
         pass                      # la rete e' un di piu': non deve impedire il giro
 
 
-def _tornato_identico(percorso):
+def _tornato_identico(percorso, traccia=None):
     """(uguale, motivo): il file sul disco e' tornato IDENTICO AL BYTE all'originale?
 
     ⛔ PERCHE' ESISTE (2026-08-17). Il biglietto si stracciava **senza guardare il file**.
@@ -1601,7 +1613,7 @@ def _tornato_identico(percorso):
     (sbaglio S7). Il biglietto resta, e `guardia_commit.py` spiega da se' come toglierlo a
     mano. Un biglietto di troppo costa un minuto; uno di meno costa un guasto in produzione.
     """
-    mio = _biglietto(percorso)
+    mio = _biglietto(percorso, traccia)
     try:
         with io.open(os.path.join(mio, "originale.txt"), encoding="utf-8", newline="") as f:
             atteso = f.read()
@@ -1619,7 +1631,7 @@ def _tornato_identico(percorso):
     return (True, a[:16])
 
 
-def _chiudi_traccia(percorso=None):
+def _chiudi_traccia(percorso=None, traccia=None):
     """Chiude il biglietto di QUEL file, **e solo se il file e' tornato identico al byte**.
     Senza argomento chiude TUTTO -- e resta senza argomento solo dove chiudere tutto e'
     giusto (il recupero, che li ha appena ripristinati tutti).
@@ -1638,7 +1650,7 @@ def _chiudi_traccia(percorso=None):
         if percorso is None:
             shutil.rmtree(_TRACCIA, ignore_errors=True)
             return
-        uguale, motivo = _tornato_identico(percorso)
+        uguale, motivo = _tornato_identico(percorso, traccia)
         if not uguale:
             # ⛔ MAI IN SILENZIO. Il biglietto che resta e' la protezione; senza il grido,
             # chi lavora scopre il blocco al commit e non sa perche'.
@@ -1647,9 +1659,9 @@ def _chiudi_traccia(percorso=None):
                   % (os.path.basename(percorso), motivo, percorso))
             print("  ⛔ RIPRISTINO NON DIMOSTRATO su %s: %s" % (percorso, motivo))
             return
-        shutil.rmtree(_biglietto(percorso), ignore_errors=True)
+        shutil.rmtree(_biglietto(percorso, traccia), ignore_errors=True)
         try:
-            os.rmdir(_TRACCIA)
+            os.rmdir(traccia or _TRACCIA)
         except OSError:
             pass                  # ci sono altri giri aperti: la loro rete resta accesa
     except OSError:
@@ -1748,7 +1760,262 @@ def base_e_verde(bersaglio):
     return _BASI[bersaglio]
 
 
-def giro_sul_diff(base="HEAD~1", tetto=40, tetto_test=8):
+# Il tetto della base quando gira in N copie insieme: le copie si contendono il PC, e una base
+# che sul PC scarico finisce in 900 s puo' sforare. Sforare qui fa BASE ROSSA (mai un ucciso).
+_TETTO_BASE_PARALLELA = 1800
+
+
+def _prova_in_parallelo(compiti, esiti, paralleli, radice=None):
+    """Prova i mutanti in N COPIE del progetto insieme, invece che uno alla volta sul posto.
+
+    ⛔ PERCHE' (fondatore, 20/11/2026: «non c'e' un sistema per fare la mutazione subito, per
+    tutti?»). Misurato quel giorno: 40 mutanti in 5 ore e 15, circa 8 minuti l'uno, con il
+    processo dei test a 212 s di CPU su 5 minuti -- cioe' quasi tutto ATTESA. Il PC ha 16
+    processori e il giro ne usava uno. In copie separate i mutanti non si pestano i piedi.
+
+    E l'albero vero NON si tocca mai: il guasto si scrive solo nella copia. Un giro ucciso a
+    meta' lascia una copia rotta in TEMP, non un file di produzione rotto.
+
+    `compiti` = [(indice in esiti, percorso, sorgente sano, mutante, bersaglio)]; scrive il
+    verdetto dentro `esiti[indice]`. Ritorna un dizionario che dichiara come ha misurato.
+
+    ⛔ D18 -- I CONTROLLI CHE GLI IMPEDISCONO DI BARARE (un ucciso falso e' il verso peggiore,
+    perche' non grida mai):
+      1. ogni copia esegue IL SUO codice: si chiede a Python da dove importa ogni modulo
+         mutato; se risponde l'albero vero, il guasto nella copia non verrebbe mai eseguito
+         (falsi sopravvissuti) e il giro si ferma con BASE ROSSA;
+      2. la base gira in TUTTE le copie INSIEME, prima dei mutanti: se le copie si disturbano
+         (una porta fissa, un file in TEMP con nome fisso), la base cade e quei punti sono
+         BASE ROSSA, non uccisi;
+      3. la stessa base, tutte insieme, si rifa' ALLA FINE: se cade, nessun «ucciso» del giro
+         vale (diventano NON DETERMINABILI, che fanno rosso il verdetto);
+      4. dopo ogni mutante TUTTI i `.py` della copia devono tornare identici, e una copia il
+         cui test e' scaduto (un figlio puo' restare vivo e scriverci) non si usa piu': le
+         copie perse si contano, e senza copie sane i punti rimasti escono subito;
+      5. «ucciso» solo se c'e' il rapporto di unittest che fallisce (`Ran` e `FAILED (`): un
+         processo morto senza rapporto (memoria finita, disco pieno) non ha visto il guasto;
+      6. la copia NON porta il `.git`: un test che fa `git add` non tocca il repository vero.
+         Un test che ha bisogno di git cade gia' sulla base: BASE ROSSA, dichiarata.
+    ⚠️ Cosa NON esclude (dichiarato anche nell'uscita del giro): un disturbo fra le copie che
+    capiti solo a volte, a meta' giro, o solo fra test DIVERSI che girano insieme. Il giudice
+    della CI resta in fila.
+    """
+    import concurrent.futures
+    import queue
+    import stat
+    import threading
+    import traceback
+    radice = radice or REPO
+    info = {"copie": paralleli, "tetto_mutante": None, "base_piu_lenta": None,
+            "controllo_finale": None, "copie_perse": 0, "perse_perche": [],
+            "percorsi": [], "copie_rimaste": []}
+    copie, vive, serratura = [], [], threading.Lock()
+
+    def _segna(i, verdetto, nota=None):
+        esiti[i]["verdetto"] = verdetto
+        if nota:
+            esiti[i]["nota"] = nota[:300]
+
+    def _impronta(dest):
+        h = hashlib.sha256()
+        for cartella, sotto, nomi in os.walk(dest):
+            sotto[:] = sorted(s for s in sotto if s != "__pycache__")
+            for n in sorted(nomi):
+                if n.endswith(".py"):
+                    p = os.path.join(cartella, n)
+                    h.update(os.path.relpath(p, dest).encode("utf-8"))
+                    with open(p, "rb") as f:
+                        h.update(f.read())
+        return h.hexdigest()
+
+    def _perdi(dest, perche):
+        with serratura:
+            if dest in vive:
+                vive.remove(dest)
+                info["copie_perse"] += 1
+                info["perse_perche"].append(perche[:160])
+
+    def _togli(percorso):
+        def _sblocca(funzione, p, _errore):
+            try:
+                os.chmod(p, stat.S_IWRITE)
+                funzione(p)
+            except OSError:
+                pass
+        shutil.rmtree(percorso, onerror=_sblocca)
+        return not os.path.exists(percorso)
+
+    def _cronometra(bersaglio, dest):
+        t0 = time.time()
+        verde, uscita = esegui(bersaglio, timeout=_TETTO_BASE_PARALLELA, cwd=dest)
+        return verde, uscita, time.time() - t0
+
+    def _base_ovunque(bersaglio, dove):
+        with concurrent.futures.ThreadPoolExecutor(len(dove)) as ex:
+            return [f.result() for f in [ex.submit(_cronometra, bersaglio, d) for d in dove]]
+
+    def _ha_visto_fallire(uscita):
+        return "Ran " in (uscita or "") and "FAILED (" in (uscita or "")
+
+    try:
+        if os.environ.get("PYTHONPATH"):
+            for i, *_ in compiti:
+                _segna(i, "base_rossa", "PYTHONPATH impostato: le copie potrebbero importare "
+                                        "l'albero vero, il giro in parallelo non misura")
+            return info
+        for _ in range(paralleli):
+            dest = tempfile.mkdtemp(prefix="mut_par_")
+            copie.append(dest)
+            info["percorsi"].append(dest)
+            shutil.copytree(radice, dest, dirs_exist_ok=True,
+                            ignore=shutil.ignore_patterns("__pycache__", "node_modules",
+                                                          ".pytest_cache", ".hypothesis",
+                                                          ".git"))
+        # (1) ogni copia esegue il SUO codice -- per modulo: un modulo storto ferma i suoi punti
+        storti = {}
+        for percorso in sorted({c[1] for c in compiti}):
+            nome = percorso[:-3].replace("\\", "/").replace("/", ".")
+            for dest in copie:
+                try:
+                    r = subprocess.run(
+                        [sys.executable, "-c", "import importlib, os; print(os.path.abspath("
+                         "importlib.import_module(%r).__file__))" % nome],
+                        cwd=dest, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=600)
+                except subprocess.TimeoutExpired:
+                    storti[percorso] = "l'import di %s non finisce in 600 s" % nome
+                    break
+                righe = r.stdout.decode("utf-8", "replace").strip().splitlines()
+                visto = righe[-1] if righe else ""
+                if r.returncode != 0:
+                    storti[percorso] = "import di %s FALLITO nella copia: %s" % (nome, visto)
+                    break
+                if os.path.normcase(visto) != os.path.normcase(
+                        os.path.abspath(os.path.join(dest, percorso))):
+                    storti[percorso] = ("la copia non esegue il suo codice: %s si importa da %r"
+                                        % (percorso, visto))
+                    break
+        # (2) la base, in tutte le copie insieme
+        rosse, durate = {}, []
+        for bersaglio in sorted({c[4] for c in compiti if c[1] not in storti}):
+            esito_basi = _base_ovunque(bersaglio, copie)
+            durate.extend(d for _v, _u, d in esito_basi)
+            cadute = [(k, u) for k, (v, u, _d) in enumerate(esito_basi) if v is not True]
+            if cadute:
+                rosse[bersaglio] = ("base caduta in %d su %d copie (copia %s): %s"
+                                    % (len(cadute), len(copie),
+                                       ", ".join(str(k + 1) for k, _u in cadute),
+                                       (cadute[0][1] or "")[-160:]))
+        info["base_piu_lenta"] = int(max(durate)) if durate else 0
+        info["tetto_mutante"] = tetto = max(600, 3 * info["base_piu_lenta"])
+        impronte = {dest: _impronta(dest) for dest in copie}
+        vive.extend(copie)
+        libere = queue.Queue()
+        for dest in copie:
+            libere.put(dest)
+
+        def _prendi():
+            while True:
+                with serratura:
+                    if not vive:
+                        raise RuntimeError("nessuna copia sana rimasta: punto non provato")
+                try:
+                    return libere.get(timeout=5)
+                except queue.Empty:
+                    continue
+
+        def _uno(compito):
+            i, percorso, sorgente, m, bersaglio = compito
+            dest = _prendi()
+            sana = False
+            try:
+                pieno = os.path.join(dest, percorso)
+                traccia = _traccia_di(dest)
+                _apri_traccia(pieno, sorgente, traccia)
+                if not os.path.exists(os.path.join(_biglietto(pieno, traccia),
+                                                   "originale.txt")):
+                    sana = True                    # niente e' stato toccato
+                    return i, "non_determinabile", ("il biglietto della copia non si scrive: "
+                                                    "le guardie non troverebbero l'originale")
+                _riscrivi_intatto(pieno, applica_mutante(sorgente, m))
+                try:
+                    verde, uscita = esegui(bersaglio, timeout=tetto, cwd=dest)
+                finally:
+                    _riscrivi_intatto(pieno, sorgente)
+                    _chiudi_traccia(pieno, traccia)
+                if _impronta(dest) != impronte[dest]:                       # (4)
+                    _perdi(dest, "i .py della copia non sono tornati identici")
+                    return i, "non_determinabile", ("dopo il mutante i .py della copia non "
+                                                    "sono tornati identici: copia ritirata")
+                if verde is None:
+                    _perdi(dest, "test scaduto: un figlio puo' essere rimasto vivo")
+                    return i, "non_determinabile", ("i test non hanno finito in %ss: copia "
+                                                    "ritirata" % tetto)
+                sana = True
+                if verde:
+                    return i, "sopravvissuto", None
+                if not _ha_visto_fallire(uscita):                          # (5)
+                    return i, "non_determinabile", ("i test sono usciti male SENZA il "
+                                                    "rapporto di unittest: guasto non visto. "
+                                                    + (uscita or "")[-120:])
+                return i, "ucciso", None
+            except Exception as errore:
+                _perdi(dest, "%s: %s" % (type(errore).__name__, errore))
+                raise
+            finally:
+                if sana:
+                    libere.put(dest)
+
+        da_provare = []
+        for c in compiti:
+            if c[1] in storti:
+                _segna(c[0], "base_rossa", storti[c[1]])
+            elif c[4] in rosse:
+                _segna(c[0], "base_rossa", "i test non sono verdi nelle copie in parallelo: "
+                                           + rosse[c[4]])
+            else:
+                da_provare.append(c)
+        with concurrent.futures.ThreadPoolExecutor(len(copie)) as ex:
+            futuri = {ex.submit(_uno, c): c for c in da_provare}
+            for f in concurrent.futures.as_completed(futuri):
+                try:
+                    i, verdetto, nota = f.result()
+                except Exception as errore:
+                    i, verdetto = futuri[f][0], "non_determinabile"
+                    nota = "%s: %s" % (type(errore).__name__, errore)
+                    if not isinstance(errore, RuntimeError) or "nessuna copia" not in str(errore):
+                        print("::warning title=Punto NON PROVATO (giro in parallelo)::%s:%s -- %s"
+                              % (futuri[f][1], esiti[i]["riga"], nota))
+                        print("".join(traceback.format_exception(
+                            type(errore), errore, errore.__traceback__))[-1500:])
+                _segna(i, verdetto, nota)
+        # (3) la base di nuovo, tutte insieme, SOLO sulle copie sane: se cade, gli uccisi
+        #     non valgono. Nessuna base da rifare = «non eseguito», mai «verde».
+        bersagli = sorted({c[4] for c in da_provare})
+        if not bersagli or not vive:
+            info["controllo_finale"] = "non eseguito"
+        else:
+            cadute = [b for b in bersagli
+                      if any(v is not True for v, _u, _d in _base_ovunque(b, list(vive)))]
+            info["controllo_finale"] = "rosso" if cadute else "verde"
+            if cadute:
+                for c in da_provare:
+                    if esiti[c[0]]["verdetto"] == "ucciso":
+                        _segna(c[0], "non_determinabile",
+                               "controllo finale in parallelo ROSSO sulle copie sane: le "
+                               "copie si disturbano, l'ucciso non vale")
+        return info
+    finally:
+        for c in compiti:                  # nessun punto resta senza verdetto
+            if esiti[c[0]]["verdetto"] == "in_attesa":
+                _segna(c[0], "non_determinabile", "il giro in parallelo si e' interrotto "
+                                                  "prima di provare questo punto")
+        for dest in copie:
+            if not _togli(dest):
+                info["copie_rimaste"].append(dest)
+            shutil.rmtree(_traccia_di(dest), ignore_errors=True)
+
+
+def giro_sul_diff(base="HEAD~1", tetto=40, tetto_test=8, paralleli=1):
     """Genera i mutanti SULLE RIGHE APPENA CAMBIATE e chiede: qualcuno se ne accorgerebbe?
 
     Ritorna (esiti, rinunce). Ogni esito dice riga, guasto e verdetto. I tetti servono a
@@ -1757,6 +2024,7 @@ def giro_sul_diff(base="HEAD~1", tetto=40, tetto_test=8):
     """
     esiti, rinunce = [], {"oltre_il_tetto": 0, "senza_sorveglianti": 0, "generatore": {},
                           "senza_dedicato": []}
+    compiti = []          # solo con paralleli > 1: si provano tutti insieme alla fine
     for percorso, righe in sorted(righe_toccate(base).items()):
         pieno = os.path.join(REPO, percorso)
         sorgente = _leggi_intatto(pieno)
@@ -1795,6 +2063,13 @@ def giro_sul_diff(base="HEAD~1", tetto=40, tetto_test=8):
                               "danno": m["danno"],
                               "nota": "nessun file di test nomina questo modulo"})
                 continue
+            if paralleli > 1:
+                esiti.append({"file": percorso, "riga": m["riga"], "verdetto": "in_attesa",
+                              "danno": m["danno"],
+                              "nota": "%s -> %s" % (m["vecchio"], m["nuovo"]),
+                              "sorveglianti": len(sorveglianti)})
+                compiti.append((len(esiti) - 1, percorso, sorgente, m, bersaglio))
+                continue
             _sano, _uscita = base_e_verde(bersaglio)
             if _sano is not True:
                 esiti.append({"file": percorso, "riga": m["riga"], "verdetto": "base_rossa",
@@ -1816,6 +2091,8 @@ def giro_sul_diff(base="HEAD~1", tetto=40, tetto_test=8):
                           "danno": m["danno"],
                           "nota": "%s -> %s" % (m["vecchio"], m["nuovo"]),
                           "sorveglianti": len(sorveglianti)})
+    if compiti:
+        rinunce["parallelo"] = _prova_in_parallelo(compiti, esiti, paralleli)
     return esiti, rinunce
 
 
@@ -2127,7 +2404,7 @@ def giro_su_moduli(nomi, tetto=30, tetto_test=6, minuti=45, killer=None, riconfe
     return esiti, rinunce
 
 
-def esegui(test_str, timeout=900):
+def esegui(test_str, timeout=900, cwd=None):
     """Esegue i test killer. Ritorna (verde, uscita), dove `verde` puo' essere:
         True  -> i test passano   (il mutante SOPRAVVIVE a questo giro)
         False -> i test falliscono (il mutante e' UCCISO)
@@ -2145,7 +2422,8 @@ def esegui(test_str, timeout=900):
     """
     try:
         p = subprocess.run([sys.executable, "-m", "unittest"] + test_str.split(),
-                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout)
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout,
+                           cwd=cwd)
     except subprocess.TimeoutExpired:
         return None, "TEMPO SCADUTO dopo %ss: i test non hanno finito. Il mutante potrebbe " \
                      "aver introdotto un ciclo che non termina." % timeout
@@ -2555,10 +2833,32 @@ if __name__ == "__main__" and "--diff" in sys.argv:
     # Il tetto si DICHIARA da fuori (in CI: job `caselle`): i punti oltre il tetto non sono
     # provati, e qui sotto il verdetto li conta rossi -- tagliare e' una scelta visibile.
     _tetto = int(sys.argv[sys.argv.index("--tetto") + 1]) if "--tetto" in sys.argv else 40
+    # `--paralleli N` (20/11/2026): N copie del progetto provano i mutanti insieme. Senza,
+    # il giro resta quello di sempre, in fila e sul posto (cosi' gira la CI).
+    _chiesti = (int(sys.argv[sys.argv.index("--paralleli") + 1])
+                if "--paralleli" in sys.argv else 1)
+    _paralleli = max(1, min(_chiesti, os.cpu_count() or 1))
     print("=" * 90)
-    print("MUTANTI GENERATI SUL DIFF  (base: %s · tetto: %d)" % (_base, _tetto))
+    print("MUTANTI GENERATI SUL DIFF  (base: %s · tetto: %d · copie in parallelo: %d)"
+          % (_base, _tetto, _paralleli))
     print("=" * 90)
-    _esiti, _rinunce = giro_sul_diff(_base, tetto=_tetto)
+    if _paralleli != _chiesti:
+        print("  ⚠️ chieste %d copie, usate %d (processori di questo PC: %s)"
+              % (_chiesti, _paralleli, os.cpu_count()))
+    _esiti, _rinunce = giro_sul_diff(_base, tetto=_tetto, paralleli=_paralleli)
+    if _rinunce.get("parallelo"):
+        _p = _rinunce["parallelo"]
+        print("  in parallelo: %s copie · base piu' lenta %ss · tetto per mutante %ss · "
+              "controllo finale delle copie: %s · copie perse: %d%s"
+              % (_p["copie"], _p["base_piu_lenta"], _p["tetto_mutante"],
+                 _p["controllo_finale"], _p["copie_perse"],
+                 (" (" + "; ".join(_p["perse_perche"]) + ")") if _p["perse_perche"] else ""))
+        print("  NON ESCLUSO dal giro in parallelo (dichiarato): un disturbo fra le copie che "
+              "capiti solo a volte a meta' giro, o solo fra test DIVERSI che girano insieme. "
+              "Il giudice della CI gira in fila.")
+        if _p["copie_rimaste"]:
+            print("::warning title=Copie rimaste in TEMP::non si sono cancellate (un processo "
+                  "figlio le tiene aperte?): %s" % ", ".join(_p["copie_rimaste"]))
     _sopr = [e for e in _esiti if e["verdetto"] == "sopravvissuto"]
     _scop = [e for e in _esiti if e["verdetto"] == "scoperto"]
     for e in _esiti:
@@ -2570,8 +2870,13 @@ if __name__ == "__main__" and "--diff" in sys.argv:
           % (len(_esiti), sum(1 for e in _esiti if e["verdetto"] == "ucciso"),
              len(_sopr), len(_scop), len(_nd)))
     for e in _nd:
-        print("::warning title=Punto NON ESAMINATO in %s::riga %s -- i test non hanno finito "
-              "in tempo: %s" % (e["file"], e["riga"], e["danno"]))
+        # Il giro in parallelo scrive nella nota la causa VERA (copia persa, errore, uscita
+        # senza rapporto); il giro in fila vi tiene il mutante («a -> b»): li' e' il tempo.
+        _motivo = e.get("nota") or ""
+        if not _motivo or " -> " in _motivo:
+            _motivo = "i test non hanno finito in tempo"
+        print("::warning title=Punto NON ESAMINATO in %s::riga %s -- %s: %s"
+              % (e["file"], e["riga"], _motivo, e["danno"]))
     if _rinunce.get("senza_dedicato"):
         # Dichiarato col NUMERO, non solo coi nomi: fra tre settimane un conteggio che passa da
         # 1 a 9 si vede, un elenco che si allunga no.

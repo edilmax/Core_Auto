@@ -16283,5 +16283,317 @@ class TestLeDipendenzeDelBrowserHannoLaVersioneEsatta(unittest.TestCase):
                          "(un `^` o un `~` prende da solo la versione nuova): %s" % libere)
 
 
+class TestIlGiroInParallelo(unittest.TestCase):
+    """20/11/2026, il fondatore: «non c'e' un sistema per fare la mutazione subito, per tutti?».
+    Il giro `--diff --paralleli N` prova i mutanti in N COPIE del progetto insieme. Qui si
+    pretende che dia gli stessi verdetti del giro in fila, che non tocchi l'albero vero, e --
+    D18 -- che non possa contare «ucciso» un mutante quando le copie si disturbano fra loro."""
+
+    _CAVIA = ("def doppio(x):\n"
+              "    if x < 0:\n"
+              "        return 0\n"
+              "    if x > 10:\n"
+              "        return 2 * x\n"
+              "    return x\n")
+    # Nessuna prova guarda x == 0: il `<` -> `<=` della riga 2 SOPRAVVIVE.
+    # doppio(10) == 10 guarda il confine: il `>` -> `>=` della riga 4 MUORE.
+    _PROVA = ("import unittest\n"
+              "from cavia_par import doppio\n"
+              "class T(unittest.TestCase):\n"
+              "    def test_doppio(self):\n"
+              "%s"
+              "        self.assertEqual(doppio(-3), 0)\n"
+              "        self.assertEqual(doppio(20), 40)\n"
+              "        self.assertEqual(doppio(10), 10)\n"
+              "        self.assertEqual(doppio(5), 5)\n")
+
+    @staticmethod
+    def _motore():
+        import importlib.util
+        p = os.path.join(QUI, "collaudi", "mutazione_prodotto.py")
+        spec = importlib.util.spec_from_file_location("_mut_par", p)
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        return m
+
+    def _radice(self, corpo_in_piu=""):
+        d = tempfile.mkdtemp(prefix="cavia_radice_")
+        self.addCleanup(shutil.rmtree, d, True)
+        with io.open(os.path.join(d, "cavia_par.py"), "w", encoding="utf-8", newline="\n") as f:
+            f.write(self._CAVIA)
+        with io.open(os.path.join(d, "test_cavia_par.py"), "w", encoding="utf-8",
+                     newline="\n") as f:
+            f.write(self._PROVA % corpo_in_piu)
+        return d
+
+    def _compiti(self, m):
+        mutanti, _ = m.genera_mutanti(self._CAVIA)
+        self.assertEqual([(x["riga"], x["vecchio"], x["nuovo"]) for x in mutanti],
+                         [(2, "<", "<="), (4, ">", ">=")], "premessa: i due mutanti della cavia")
+        esiti = [{"file": "cavia_par.py", "riga": x["riga"], "verdetto": "in_attesa",
+                  "danno": x["danno"]} for x in mutanti]
+        compiti = [(i, "cavia_par.py", self._CAVIA, x, "test_cavia_par")
+                   for i, x in enumerate(mutanti)]
+        return esiti, compiti
+
+    def test_la_casella_della_copia_e_quella_che_la_copia_legge(self):
+        import importlib.util
+        m = self._motore()
+        self.assertEqual(m._traccia_di(m._RADICE_WORKTREE), m._TRACCIA,
+                         "la formula della casella dei biglietti e' divergente: le guardie "
+                         "dentro una copia cercherebbero l'originale nel posto sbagliato")
+        spec = importlib.util.spec_from_file_location(
+            "_guardia_par", os.path.join(QUI, "collaudi", "guardia_commit.py"))
+        g = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(g)
+        self.assertEqual(m._traccia_di(g._RADICE), g.TRACCIA,
+                         "`guardia_commit.py` calcola la casella con un'altra formula")
+        t = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, t, True)
+        self.assertEqual(os.path.dirname(m._biglietto("x.py", t)), t)
+        self.assertEqual(os.path.dirname(m._biglietto("x.py")), m._TRACCIA)
+
+    def test_in_parallelo_uccide_e_lascia_vivere_come_in_fila_e_non_tocca_l_albero(self):
+        m = self._motore()
+        sentinella = tempfile.mkdtemp(prefix="cavia_sentinella_")
+        self.addCleanup(shutil.rmtree, sentinella, True)
+        # La prova scrive DA DENTRO dove gira: cosi' si vede se il guasto e' andato nella copia
+        # o nell'albero vero (un albero mutato e poi rimesso a posto avrebbe gli stessi byte).
+        corpo = ("        import os, cavia_par\n"
+                 "        with open(os.path.join(%r, str(os.getpid())), 'w') as f:\n"
+                 "            f.write(os.path.abspath(cavia_par.__file__) + '|' +\n"
+                 "                    str(os.path.exists('.git')))\n" % sentinella)
+        d = self._radice(corpo)
+        with io.open(os.path.join(d, ".git"), "w", encoding="utf-8") as f:
+            f.write("gitdir: C:/un/repository/vero/.git/worktrees/x\n")
+        esiti, compiti = self._compiti(m)
+
+        def byte_dell_albero():
+            tutto = {}
+            for n in os.listdir(d):
+                if n != "__pycache__":
+                    with open(os.path.join(d, n), "rb") as f:
+                        tutto[n] = f.read()
+            return tutto
+        impronta = byte_dell_albero()
+        info = m._prova_in_parallelo(compiti, esiti, 2, radice=d)
+        self.assertEqual([e["verdetto"] for e in esiti], ["sopravvissuto", "ucciso"],
+                         "in parallelo i verdetti non sono quelli veri: %r" % esiti)
+        self.assertEqual(info["controllo_finale"], "verde")
+        self.assertGreaterEqual(info["tetto_mutante"], 600)
+        self.assertEqual(byte_dell_albero(), impronta,
+                         "il giro in parallelo ha toccato l'albero vero")
+        visti = []
+        for n in os.listdir(sentinella):
+            with io.open(os.path.join(sentinella, n), encoding="utf-8") as f:
+                visti.append(f.read())
+        self.assertGreaterEqual(len(visti), 6, "basi e mutanti non hanno lasciato traccia")
+        for riga in visti:
+            dove, git = riga.split("|")
+            self.assertFalse(os.path.normcase(dove).startswith(os.path.normcase(d)),
+                             "un test ha girato sull'albero VERO: %s" % dove)
+            self.assertEqual(git, "False", "la copia si porta dietro il `.git` dell'albero "
+                             "vero: un `git add` di un test toccherebbe il repository vero")
+        self.assertEqual(len(info["percorsi"]), 2)
+        for dest in info["percorsi"]:
+            self.assertFalse(os.path.exists(dest), "copia lasciata in TEMP: %s" % dest)
+        self.assertEqual(info["copie_rimaste"], [])
+        # Il giro in fila, sul posto, sulla stessa cavia: stessi verdetti.
+        in_fila = []
+        for _i, _p, sorgente, mutante, bersaglio in compiti:
+            pieno = os.path.join(d, "cavia_par.py")
+            m._riscrivi_intatto(pieno, m.applica_mutante(sorgente, mutante))
+            try:
+                verde, _ = m.esegui(bersaglio, timeout=120, cwd=d)
+            finally:
+                m._riscrivi_intatto(pieno, sorgente)
+            in_fila.append("sopravvissuto" if verde else "ucciso")
+        self.assertEqual(in_fila, [e["verdetto"] for e in esiti])
+
+    def test_se_le_copie_si_disturbano_nessun_mutante_risulta_ucciso(self):
+        """D18, il verso pericoloso: una prova che usa un file in TEMP col nome fisso fallisce
+        se due copie la eseguono insieme. Il giro deve dirlo (BASE ROSSA), non contare uccisi."""
+        m = self._motore()
+        incontro = tempfile.mkdtemp(prefix="cavia_incontro_")
+        self.addCleanup(shutil.rmtree, incontro, True)
+        serratura = os.path.join(tempfile.gettempdir(), "cavia_par_serratura_%d" % os.getpid())
+        # Le due copie si ASPETTANO (fino a 60 s) prima di prendere la serratura: niente gara
+        # di tempi, la seconda la trova sempre presa.
+        corpo = ("        import os, time\n"
+                 "        open(os.path.join(%r, str(os.getpid())), 'w').close()\n"
+                 "        t0 = time.time()\n"
+                 "        while len(os.listdir(%r)) < 2 and time.time() - t0 < 60:\n"
+                 "            time.sleep(0.05)\n"
+                 "        fd = os.open(%r, os.O_CREAT | os.O_EXCL)\n"
+                 "        try:\n"
+                 "            time.sleep(2)\n"
+                 "        finally:\n"
+                 "            os.close(fd)\n"
+                 "            os.remove(%r)\n" % (incontro, incontro, serratura, serratura))
+        d = self._radice(corpo)
+        esiti, compiti = self._compiti(m)
+        info = m._prova_in_parallelo(compiti, esiti, 2, radice=d)
+        self.assertEqual([e["verdetto"] for e in esiti], ["base_rossa", "base_rossa"],
+                         "le copie si disturbano e il giro non lo vede: %r" % esiti)
+        self.assertIn("1 su 2", esiti[0]["nota"], "la nota non dice quante copie sono cadute")
+        self.assertEqual(info["controllo_finale"], "non eseguito",
+                         "nessuna base rifatta, eppure il controllo finale si dichiara")
+
+    def test_un_errore_dentro_un_mutante_si_vede_nella_nota(self):
+        m = self._motore()
+        d = self._radice()
+        esiti, compiti = self._compiti(m)
+        vero = m.applica_mutante
+
+        def applica(sorgente, mutante):
+            if mutante["riga"] == 4:
+                raise RuntimeError("guasto finto nel giudice")
+            return vero(sorgente, mutante)
+        m.applica_mutante = applica
+        m._prova_in_parallelo(compiti, esiti, 2, radice=d)
+        self.assertEqual([e["verdetto"] for e in esiti], ["sopravvissuto", "non_determinabile"])
+        self.assertIn("guasto finto nel giudice", esiti[1]["nota"],
+                      "l'errore e' sparito: chi legge il giro non sa perche' quel punto e' fuori")
+
+    def test_una_copia_che_non_torna_identica_si_ritira_e_il_giro_non_aspetta(self):
+        m = self._motore()
+        d = self._radice()
+        esiti, compiti = self._compiti(m)
+        vero, sporcate = m._riscrivi_intatto, []
+
+        def riscrivi(percorso, testo):
+            if testo == self._CAVIA and "mut_par_" in percorso and not sporcate:
+                sporcate.append(percorso)
+                testo = testo + "# rimasto sporco\n"
+            return vero(percorso, testo)
+        m._riscrivi_intatto = riscrivi
+        t0 = time.time()
+        info = m._prova_in_parallelo(compiti, esiti, 1, radice=d)
+        self.assertLess(time.time() - t0, 300, "senza copie sane il giro deve fermarsi subito")
+        self.assertEqual([e["verdetto"] for e in esiti],
+                         ["non_determinabile", "non_determinabile"])
+        self.assertIn("identic", esiti[0]["nota"])
+        self.assertIn("nessuna copia sana", esiti[1]["nota"])
+        self.assertEqual(info["copie_perse"], 1)
+        self.assertEqual(info["controllo_finale"], "non eseguito")
+
+    def test_dopo_un_tempo_scaduto_la_copia_non_si_riusa(self):
+        """Un test che non finisce puo' lasciare un processo figlio vivo che scrive nella copia:
+        il mutante dopo, nella stessa copia, potrebbe morire per colpa sua (falso ucciso)."""
+        m = self._motore()
+        d = self._radice()
+        esiti, compiti = self._compiti(m)
+        vero = m.esegui
+
+        def esegui(test_str, timeout=900, cwd=None):
+            if timeout != m._TETTO_BASE_PARALLELA:
+                return None, "TEMPO SCADUTO finto"
+            return vero(test_str, timeout=timeout, cwd=cwd)
+        m.esegui = esegui
+        info = m._prova_in_parallelo(compiti, esiti, 1, radice=d)
+        self.assertEqual([e["verdetto"] for e in esiti],
+                         ["non_determinabile", "non_determinabile"])
+        self.assertIn("nessuna copia sana", esiti[1]["nota"])
+        self.assertEqual(info["copie_perse"], 1)
+
+    def test_un_test_che_muore_senza_fallire_non_e_un_ucciso(self):
+        """Un processo che esce con un codice diverso da zero senza il rapporto di unittest
+        (memoria finita, disco pieno, un `os._exit`) non ha VISTO il guasto: non e' un ucciso."""
+        m = self._motore()
+        d = self._radice("        import os\n"
+                         "        if doppio(10) != 10:\n"
+                         "            os._exit(3)\n")
+        esiti, compiti = self._compiti(m)
+        m._prova_in_parallelo(compiti, esiti, 2, radice=d)
+        self.assertEqual([e["verdetto"] for e in esiti], ["sopravvissuto", "non_determinabile"],
+                         "un'uscita senza rapporto di unittest e' stata contata uccisa: %r"
+                         % esiti)
+
+    def test_il_giro_sul_diff_passa_davvero_dalle_copie(self):
+        """Dal giro vero (`giro_sul_diff`), non dalla funzione interna: git, righe cambiate,
+        sorveglianti, copie."""
+        m = self._motore()
+        d = self._radice()
+        sano = self._CAVIA
+        with io.open(os.path.join(d, "cavia_par.py"), "w", encoding="utf-8", newline="\n") as f:
+            f.write(sano.replace("x < 0", "x < -5").replace("x > 10", "x > 99"))
+        for comando in (["git", "init", "-q"], ["git", "add", "-A"],
+                        ["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm",
+                         "base"]):
+            subprocess.run(comando, cwd=d, check=True, capture_output=True)
+        with io.open(os.path.join(d, "cavia_par.py"), "w", encoding="utf-8", newline="\n") as f:
+            f.write(sano)
+        m.REPO = d
+        esiti, rinunce = m.giro_sul_diff("HEAD", paralleli=2)
+        self.assertEqual([(e["riga"], e["verdetto"]) for e in esiti],
+                         [(2, "sopravvissuto"), (4, "ucciso")], "%r" % esiti)
+        self.assertEqual(rinunce["parallelo"]["controllo_finale"], "verde")
+
+    def test_se_il_controllo_finale_cade_gli_uccisi_non_valgono(self):
+        m = self._motore()
+        d = self._radice()
+        esiti, compiti = self._compiti(m)
+        vero, basi = m.esegui, []
+
+        def esegui(test_str, timeout=900, cwd=None):
+            if timeout == m._TETTO_BASE_PARALLELA:
+                basi.append(cwd)
+                if len(basi) > 2:          # la prima base (2 copie) passa, quella finale no
+                    return False, "disturbo finto"
+            return vero(test_str, timeout=timeout, cwd=cwd)
+        m.esegui = esegui
+        info = m._prova_in_parallelo(compiti, esiti, 2, radice=d)
+        self.assertEqual(len(basi), 4, "la base finale non e' stata rifatta in ogni copia")
+        self.assertEqual(info["controllo_finale"], "rosso")
+        self.assertEqual([e["verdetto"] for e in esiti], ["sopravvissuto", "non_determinabile"],
+                         "un ucciso e' rimasto valido dopo un controllo finale rosso: %r" % esiti)
+        self.assertEqual(m.verdetto_modulo(esiti, {"oltre_il_tetto": 0})[0], 1)
+
+    def test_una_copia_che_esegue_un_altro_codice_ferma_il_giro(self):
+        """Se nella copia Python importa il modulo da un altro posto, il guasto scritto nella
+        copia non gira mai: tutti «sopravvissuti» falsi. Qui un pacchetto con lo stesso nome
+        ha la precedenza sul file."""
+        m = self._motore()
+        d = self._radice()
+        os.makedirs(os.path.join(d, "cavia_par"))
+        with io.open(os.path.join(d, "cavia_par", "__init__.py"), "w", encoding="utf-8") as f:
+            f.write("from importlib import import_module\n")
+        esiti, compiti = self._compiti(m)
+        m._prova_in_parallelo(compiti, esiti, 2, radice=d)
+        self.assertEqual([e["verdetto"] for e in esiti], ["base_rossa", "base_rossa"])
+        self.assertIn("non esegue il suo codice", esiti[0]["nota"])
+
+    def test_con_pythonpath_impostato_il_giro_non_misura(self):
+        m = self._motore()
+        d = self._radice()
+        esiti, compiti = self._compiti(m)
+        vecchio = os.environ.get("PYTHONPATH")
+        os.environ["PYTHONPATH"] = d
+        try:
+            m._prova_in_parallelo(compiti, esiti, 2, radice=d)
+        finally:
+            if vecchio is None:
+                os.environ.pop("PYTHONPATH", None)
+            else:
+                os.environ["PYTHONPATH"] = vecchio
+        self.assertEqual([e["verdetto"] for e in esiti], ["base_rossa", "base_rossa"])
+
+    def test_l_opzione_paralleli_arriva_al_giro_e_senza_resta_in_fila(self):
+        import ast
+        with io.open(os.path.join(QUI, "collaudi", "mutazione_prodotto.py"),
+                     encoding="utf-8") as f:
+            albero = ast.parse(f.read())
+        blocco = [n for n in albero.body
+                  if isinstance(n, ast.If) and "'--diff'" in ast.dump(n.test)][0]
+        giro = [c for c in ast.walk(blocco) if isinstance(c, ast.Call)
+                and isinstance(c.func, ast.Name) and c.func.id == "giro_sul_diff"]
+        self.assertTrue(giro and any(k.arg == "paralleli" for k in giro[0].keywords),
+                        "`--paralleli` non arriva a giro_sul_diff")
+        funz = [n for n in albero.body
+                if isinstance(n, ast.FunctionDef) and n.name == "giro_sul_diff"][0]
+        self.assertEqual(ast.literal_eval(funz.args.defaults[-1]), 1,
+                         "senza --paralleli il giro deve restare in fila (cosi' gira la CI)")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
