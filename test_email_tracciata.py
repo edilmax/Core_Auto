@@ -179,14 +179,24 @@ class TestNessunThreadButtaViaLaRisposta(unittest.TestCase):
             "da `_invia_tracciato`.\n    %s" % "\n    ".join(colpevoli))
 
     def test_il_wrapper_e_davvero_usato(self):
-        """L'altra meta': se togliessi i `target=` senza mettere niente, la guardia
-        di sopra sarebbe verde su un file che non manda piu' nessuna email."""
-        quanti = len(re.findall(r"target\s*=\s*_invia_tracciato", _sorgente()))
+        """L'altra meta': se togliessi i punti d'invio senza mettere niente, la guardia
+        di sopra sarebbe verde su un file che non manda piu' nessuna email.
+        ⛔ 20/11 (punto (7) dei doppioni): i punti d'invio non aprono piu' un filo ciascuno
+        (`target=_invia_tracciato`) ma passano dall'unica porta `_spedisci_email`, che li mette
+        in fila; la fila la serve `_postino`, che chiama `_invia_tracciato`. Si contano le
+        chiamate alla porta, e si pretende che la porta arrivi davvero al wrapper."""
+        testo = _sorgente()
+        quanti = len(re.findall(r"(?<!def )_spedisci_email\(", testo))
         self.assertGreaterEqual(
-            quanti, 7,
-            "mi aspetto almeno 7 punti di invio agganciati al wrapper (voucher, ciclo, "
-            "reset password, benvenuto host, esito richiesta, recupero hold, allarme "
-            "del Guardiano); trovati %d" % quanti)
+            quanti, 9,
+            "mi aspetto almeno 9 punti di invio passati dalla porta (voucher, ciclo, "
+            "controversia, reset password, benvenuto host, esito richiesta, recupero hold, "
+            "subentro, allarme del Guardiano); trovati %d" % quanti)
+        self.assertEqual([], re.findall(r"target\s*=\s*_invia_tracciato", testo),
+                         "un invio apre ancora il SUO filo, fuori dalla fila col tetto")
+        postino = testo[testo.index("def _postino("):testo.index("def _spedisci_email(")]
+        self.assertIn("_invia_tracciato(*lettera)", postino,
+                      "la fila non arriva al wrapper che legge la risposta")
 
 
 # ---------------------------------------------------------------------------

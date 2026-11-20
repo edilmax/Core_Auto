@@ -160,6 +160,59 @@ def _invia_tracciato(prov: Any, destinatario: Any, oggetto: Any, corpo_html: Any
     return bool(esito)
 
 
+# Punto (7) del 20/11 (variant-analysis): ogni email partiva nel SUO filo, senza tetto -- una
+# raffica apriva un filo e una connessione al server di posta per ciascuna. Ora `_spedisci_email`
+# e' l'unica porta: una fila con un tetto, servita da pochi fili fissi; a fila piena l'email va
+# nella coda DUREVOLE dei ritentativi (fase86) e il registro lo dice. Numeri scelti, non misurati.
+_FILI_EMAIL = 4
+_TETTO_EMAIL_IN_ATTESA = 500
+_FILA_EMAIL: List[Tuple[Any, ...]] = []
+_SEGNALE_EMAIL = threading.Condition()
+_FILI_EMAIL_VIVI: List[threading.Thread] = []
+
+
+def _postino() -> None:
+    """Un filo fisso: prende la prossima email della fila e la manda con `_invia_tracciato`
+    (che non solleva mai: un errore resta li', contato e messo nei ritentativi)."""
+    while True:
+        with _SEGNALE_EMAIL:
+            while not _FILA_EMAIL:
+                _SEGNALE_EMAIL.wait()
+            lettera = _FILA_EMAIL.pop(0)
+        _invia_tracciato(*lettera)
+
+
+def _spedisci_email(prov: Any, destinatario: Any, oggetto: Any, corpo_html: Any,
+                    template: str = "", riferimento: str = "") -> None:
+    """L'unica porta d'uscita delle email in background. Non solleva e non aspetta."""
+    lettera = (prov, destinatario, oggetto, corpo_html, template, riferimento)
+    with _SEGNALE_EMAIL:
+        piena = len(_FILA_EMAIL) >= _TETTO_EMAIL_IN_ATTESA
+        if not piena:
+            _FILI_EMAIL_VIVI[:] = [f for f in _FILI_EMAIL_VIVI if f.is_alive()]
+            try:
+                while len(_FILI_EMAIL_VIVI) < _FILI_EMAIL:
+                    filo = threading.Thread(target=_postino,
+                                            name="email-%d" % len(_FILI_EMAIL_VIVI), daemon=True)
+                    filo.start()
+                    _FILI_EMAIL_VIVI.append(filo)
+            except Exception:
+                logger.error("EMAIL | codice: postino_non_avviato | messaggio: un filo delle "
+                             "email non e' partito", exc_info=True)
+            if _FILI_EMAIL_VIVI:
+                _FILA_EMAIL.append(lettera)
+                _SEGNALE_EMAIL.notify()
+            else:
+                piena = True        # nessun filo che la mandi: va nei ritentativi
+    if piena:
+        logger.error("EMAIL | codice: coda_email_piena | template=%s riferimento=%s | messaggio: "
+                     "fila piena (tetto %d) o nessun filo d'invio, questa va nei ritentativi",
+                     _riga_registro(template), _riga_registro(riferimento),
+                     _TETTO_EMAIL_IN_ATTESA)
+        _conta_email_ko(template)
+        _accoda_email(prov, destinatario, oggetto, corpo_html, template, riferimento)
+
+
 def _accoda_email(prov: Any, destinatario: Any, oggetto: Any, corpo_html: Any,
                   template: str, riferimento: str) -> None:
     """ORDINE DEL FONDATORE (10/11): l'email fallita si SALVA e si ritenta (coda di fase86,
@@ -2320,8 +2373,52 @@ _POSTI_SEO = threading.BoundedSemaphore(_TETTO_SEO_IN_CORSO)
 # La coda non prende posti del tetto e ha un tetto suo.
 _SEO_PER_HOST: Dict[str, Dict[str, None]] = {}
 _CODA_SEO_PER_HOST = 20
+# punto (5) del 20/11: a tetto pieno l'host NUOVO non salta piu' i motori: aspetta qui, in ordine
+# d'arrivo, e il primo giro che finisce gli passa il posto. Tetto agli host in attesa: oltre, il
+# salvataggio salta e lo dice (`tetto_pieno`).
+_SEO_IN_ATTESA: Dict[str, Dict[str, None]] = {}
+_HOST_SEO_IN_ATTESA = 100
+# Punto (9) del 20/11: il filo dei giri SEO e l'orologio della memoria degli invii passano da qui.
+# Le prove sostituiscono QUESTI due nomi, non `threading.Thread` ne' `time.monotonic` di tutto il
+# processo (che cambierebbero anche i fili delle email, i limitatori, i giri di altre prove).
+_FILO_SEO = threading.Thread
+
+
+def _adesso_invii() -> float:
+    import time as _t
+    return _t.monotonic()
 _SERRATURA_POSTI_SEO = threading.Lock()
 _SERRATURA_MOTORE_SEO = threading.Lock()
+# I freni della pubblicazione (20/11, punti (2) e (3); OWASP API4:2023 «limit how often a single
+# client/user can execute a single operation»): annunci NUOVI per host, e salvataggi per host in
+# un minuto. Numeri scelti, non misurati: un host vero ne usa pochi; il fondatore li puo' cambiare.
+_TETTO_ANNUNCI_PER_HOST = 200
+_PUBBLICA_PER_FINESTRA = 60
+
+
+def _proprietario_muto(sottocodice: str, etichetta: str, valore: Any,
+                       messaggio: str = "l'archivio dei padroni non risponde: nego e rispondo "
+                                        "503, l'host riprova") -> Tuple[int, Dict[str, Any]]:
+    """L'archivio che dice di chi e' un annuncio non risponde: si NEGA (fail-closed), ma col
+    motivo vero. Prima l'host si sentiva dire «non e' tuo» sul SUO annuncio, e il registro non
+    diceva ne' quale ne' perche' (20/11, punto (1) dei doppioni). Va chiamata dentro l'`except`:
+    la riga porta l'errore vero. L'a-capo si toglie qui: il valore arriva dalla richiesta.
+    `messaggio` dice cosa succede DAVVERO dopo (un registro che dice «nego» quando si passa e'
+    un falso allarme: silent-failure-hunter 20/11)."""
+    logger.warning("PROPRIETA | codice: proprietario_non_verificabile | sottocodice: %s | "
+                   "%s: %s | messaggio: %s", sottocodice, etichetta,
+                   str(valore).replace("\r", " ").replace("\n", " ")[:120], messaggio,
+                   exc_info=True)
+    return 503, {"errore": "storage_non_disponibile", "riprova": True}
+
+
+class _ProprietarioNonVerificabile(Exception):
+    """Sale da `_verifica_proprieta` fino a `gestisci`, che risponde la tupla che porta: cosi'
+    i quattordici punti che chiedono «e' tuo?» restano un `if` solo."""
+
+    def __init__(self, risposta: Tuple[int, Dict[str, Any]]):
+        super().__init__(risposta[1].get("errore"))
+        self.risposta = risposta
 
 
 class RouterHTTP:
@@ -2364,7 +2461,25 @@ class RouterHTTP:
                                                  base_blocco_sec=HOLD_SECONDI_DEFAULT,
                                                  max_blocco_sec=6 * 3600)
         except Exception:
+            # silent-failure-hunter 20/11: si spegneva senza una riga
+            logger.error("AVVIO | codice: freno_non_attivo | freno: prenotazioni_non_pagate | "
+                         "messaggio: il tetto delle prenotazioni non pagate non e' partito",
+                         exc_info=True)
             self._tetto_hold = None
+        # punto (3) del 20/11: i salvataggi di un host (anche gli aggiornamenti) in un minuto.
+        # Stesso attrezzo; contato per HOST (il token), non per indirizzo: e' l'host che pesa.
+        # Blocco FISSO di 60 s (base = massimo): il conto dei blocchi del limitatore non cala
+        # mai, e col raddoppio un host vero che salva molto arrivava a 10 minuti (code-reviewer)
+        try:
+            from fase179_rate_limit import crea_rate_limiter
+            self._tetto_pubblica = crea_rate_limiter(soglia=_PUBBLICA_PER_FINESTRA,
+                                                     finestra_sec=60, base_blocco_sec=60,
+                                                     max_blocco_sec=60)
+        except Exception:
+            logger.error("AVVIO | codice: freno_non_attivo | freno: pubblicazioni | messaggio: "
+                         "il limite di frequenza delle pubblicazioni non e' partito",
+                         exc_info=True)
+            self._tetto_pubblica = None
 
     def _chiave_hold(self, headers):
         """Chiave del tetto delle prenotazioni non pagate: l'indirizzo, e per IPv6 la sua
@@ -2392,6 +2507,8 @@ class RouterHTTP:
         headers = headers or {}
         try:
             return self._instrada(metodo, path, query, body, headers)
+        except _ProprietarioNonVerificabile as e:
+            return e.risposta
         except Exception:
             logger.error("RouterHTTP: eccezione ISOLATA (-> 500)", exc_info=True)
             return 500, {"errore": "errore_interno"}
@@ -7165,11 +7282,7 @@ class RouterHTTP:
                 _ogg = _oggetto_email("v_ogg_pay" if _purl else "v_ogg_conf", _lang_osp)
                 # IN BACKGROUND: l'SMTP (rete) non deve MAI rallentare la conferma prenotazione.
                 # Il provider e' gia' fail-safe (non solleva); il thread e' daemon (isolato).
-                import threading
-                threading.Thread(
-                    target=_invia_tracciato,
-                    args=(self._sys.email_provider, email, _ogg, html, "voucher", ref),
-                    daemon=True).start()
+                _spedisci_email(self._sys.email_provider, email, _ogg, html, "voucher", ref)
             except Exception:
                 logger.warning("invio email voucher fallito (ignorato)", exc_info=True)
         elif isinstance(email, str) and "@" in email:
@@ -7337,14 +7450,19 @@ class RouterHTTP:
         # dall'alloggio; per un host self-service (host_id_atteso valorizzato) deve coincidere,
         # e se l'ownership NON è confermabile -> DENY. L'operatore (host_id_atteso None) resta
         # ammesso (back-office). Il link firmato porta l'hid reale -> continua a passare.
-        owner = None
+        owner, muto = None, None
         try:
             owner = self._sys.catalogo.host_di_alloggio(rec.get("alloggio_id", "")) or None
         except Exception:
-            owner = None
+            # prima l'errore spariva in silenzio (20/11, variante del punto (1)): ora una riga
+            # col codice, e se nemmeno la richiesta dice il padrone si risponde «riprova»
+            muto = _proprietario_muto(
+                "decidi_richiesta", "riferimento", ref,
+                "l'archivio dei padroni non risponde: vale il padrone scritto sulla richiesta; "
+                "se manca, si nega e l'host riprova")
         owner = owner or (rec.get("host_id") or None)
         if host_id_atteso and owner != host_id_atteso:
-            return 403, {"errore": "non_tua"}
+            return muto if (muto is not None and owner is None) else (403, {"errore": "non_tua"})
         if approva:
             try:
                 corpo = _leggi_corpo(rec, "decidi_richiesta")
@@ -7770,10 +7888,7 @@ class RouterHTTP:
             prov = getattr(self._sys, "email_provider", None)
             if prov is None or not (isinstance(dest, str) and "@" in dest):
                 return
-            import threading
-            threading.Thread(target=_invia_tracciato,
-                             args=(prov, dest, oggetto, html, template, riferimento),
-                             daemon=True).start()
+            _spedisci_email(prov, dest, oggetto, html, template, riferimento)
         except Exception:
             logger.warning("email background fallita (ignorata)", exc_info=True)
 
@@ -8883,11 +8998,9 @@ class RouterHTTP:
                           "decisione dal riquadro Controversie.</p>"
                           % (_hc.escape(str(res[0])),
                              _hc.escape(str(res[1].get("motivo", ""))[:500])))
-                threading.Thread(target=_invia_tracciato,
-                                 args=(_prov, _dest,
-                                       "BookinVIP - Controversia aperta: serve una decisione",
-                                       _corpo, "controversia_aperta", str(res[0])),
-                                 daemon=True).start()
+                _spedisci_email(_prov, _dest,
+                                "BookinVIP - Controversia aperta: serve una decisione",
+                                _corpo, "controversia_aperta", str(res[0]))
             else:
                 logger.warning("EMAIL NON INVIATA: template=controversia_aperta riferimento=%s "
                                "-- provider email SPENTO (contata in email_ko, vedi "
@@ -12235,13 +12348,9 @@ class RouterHTTP:
                 # Il token resta nel FRAGMENT (#) -> mai nei log del server. Il gate lo gestisce.
                 link = ((self._base_url or "https://bookinvip.com")
                         + "/entra-host#reset=" + tok)
-                import threading
-                threading.Thread(target=_invia_tracciato,
-                                 args=(self._sys.email_provider, k,
-                                       oggetto("rp_ogg", lang),
-                                       corpo_reset_password_html(link, lingua=lang),
-                                       "reset_password", ""),
-                                 daemon=True).start()
+                _spedisci_email(self._sys.email_provider, k, oggetto("rp_ogg", lang),
+                                corpo_reset_password_html(link, lingua=lang),
+                                "reset_password", "")
             elif tok:
                 # ⛔ IL RAMO CHE MANCAVA. `tok` c'e' -> l'email era DOVUTA, ma il
                 # provider e' spento: chi ha chiesto il reset aspettera' per sempre.
@@ -12337,17 +12446,13 @@ class RouterHTTP:
             try:
                 from fase86_email import corpo_benvenuto_host_html, oggetto
                 lang = dati.get("lang", "en")     # lingua scelta in fase di registrazione
-                import threading
-                threading.Thread(
-                    target=_invia_tracciato,
-                    args=(self._sys.email_provider,
-                          str(dati.get("email", "")).strip().lower(),
-                          oggetto("b_ogg", lang),
-                          corpo_benvenuto_host_html(
-                              (self._base_url or "https://bookinvip.com") + "/host.html",
-                              lingua=lang),
-                          "benvenuto_host", ""),
-                    daemon=True).start()
+                _spedisci_email(self._sys.email_provider,
+                                str(dati.get("email", "")).strip().lower(),
+                                oggetto("b_ogg", lang),
+                                corpo_benvenuto_host_html(
+                                    (self._base_url or "https://bookinvip.com") + "/host.html",
+                                    lingua=lang),
+                                "benvenuto_host", "")
             except Exception:
                 logger.warning("email benvenuto host fallita (ignorata)", exc_info=True)
         elif e.ok:
@@ -12561,9 +12666,8 @@ class RouterHTTP:
             padrone = (self._sys.catalogo.host_di_alloggio(rec.get("alloggio_id", ""))
                        or rec.get("host_id") or None)
         except Exception:
-            logger.warning("chat: padrone della prenotazione non verificabile -> NEGO "
-                           "(fail-closed)", exc_info=True)
-            return 403, {"errore": "non_tua"}
+            # fail-closed, ma col motivo vero (20/11): l'archivio non risponde, non «non e' tua»
+            return _proprietario_muto("chat", "riferimento", pren)
         if padrone != hid:
             return 403, {"errore": "non_tua"}
         return None
@@ -12654,10 +12758,27 @@ class RouterHTTP:
         if hid:
             dati = dict(dati)
             dati["host_id"] = hid
+            # punto (3) del 20/11: un host che salva a raffica aspetta (429), gli altri no
+            if self._tetto_pubblica is not None:
+                chiave = "pubblica:" + hid
+                consentito, attesa = self._tetto_pubblica.consenti(chiave)
+                if not consentito:
+                    logger.warning("PUBBLICA | codice: troppe_pubblicazioni | host: %s | "
+                                   "attesa_sec: %d | messaggio: troppi salvataggi in un minuto",
+                                   hid.replace("\r", " ").replace("\n", " "), attesa)
+                    return 429, {"errore": "troppe_pubblicazioni", "riprova_tra_sec": attesa}
+                self._tetto_pubblica.fallito(chiave)
         # AUTO-ID: l'host NON deve inventarsi uno slug. Se non lo fornisce (nuovo alloggio),
         # lo generiamo noi dal titolo/città, numerato e UNIVOCO -> zero errori/collisioni.
         if isinstance(dati.get("slug"), str) and dati.get("slug").strip():
             return self._host_pubblica_scheda(dati, headers, hid)
+        # punto (4) del 20/11: la scheda si controlla PRIMA di cercare l'indirizzo -- una scheda
+        # sbagliata non deve costare letture del catalogo ne' un indirizzo prenotato. Lo stesso
+        # controllo si rifa' in `_host_pubblica_scheda` sulla scheda vera (questo e' solo l'anticipo)
+        from fase57_vetrina import valida_scheda
+        ok, codice, _scheda = valida_scheda(dict(dati, slug="verifica-scheda"))
+        if not ok:
+            return 422, {"errore": "scheda_non_valida", "dettaglio": codice}
         dati = dict(dati)
         voce = self._voce_invio(hid, dati)
         dati["slug"] = self._slug_per_invio(voce, dati.get("titolo"), dati.get("citta"))
@@ -12729,6 +12850,23 @@ class RouterHTTP:
             if not self._verifica_proprieta(headers, scheda.slug):
                 return 403, {"errore": "non_tuo"}
             prima = self._sys.catalogo.dettaglio_owner(scheda.slug)
+            # punto (2) del 20/11: un annuncio NUOVO oltre il tetto dell'host non nasce; un
+            # annuncio gia' suo si aggiorna sempre. Sotto la stessa serratura del salvataggio:
+            # due invii insieme non passano il tetto in due
+            if prima is None and hid:
+                try:
+                    quanti = self._sys.catalogo.conta_alloggi_host(hid)
+                except Exception:
+                    # silent-failure-hunter 20/11: era un 500 generico senza codice
+                    return _proprietario_muto("tetto_annunci", "host", hid,
+                                              "annunci dell'host non contabili: annuncio "
+                                              "nuovo non creato, rispondo 503, l'host riprova")
+            if prima is None and hid and quanti >= _TETTO_ANNUNCI_PER_HOST:
+                logger.warning("PUBBLICA | codice: troppi_annunci | host: %s | tetto: %d | "
+                               "messaggio: annuncio nuovo rifiutato",
+                               hid.replace("\r", " ").replace("\n", " "),
+                               _TETTO_ANNUNCI_PER_HOST)
+                return 422, {"errore": "troppi_annunci", "tetto": _TETTO_ANNUNCI_PER_HOST}
             id_num = self._sys.catalogo.pubblica(scheda, imgs)
             calendario = {"aggiornati": 0, "speciali": 0, "prenotati": 0}
             if prima is not None and prima.get("valuta") == scheda.valuta:
@@ -12777,22 +12915,16 @@ class RouterHTTP:
             slug_log = str(scheda.slug).replace("\r", " ").replace("\n", " ")
             if posto == "tetto_pieno":
                 logger.warning("SEO | codice: seo_saltato | motivo: tetto_pieno | slug: %s | "
-                               "host: %s | messaggio: %d giri SEO gia' in corso, questo "
-                               "salvataggio non avvisa i motori", slug_log, chi_log,
-                               _TETTO_SEO_IN_CORSO)
+                               "host: %s | messaggio: %d giri SEO in corso e %d host gia' in "
+                               "attesa, questo salvataggio non avvisa i motori", slug_log,
+                               chi_log, _TETTO_SEO_IN_CORSO, _HOST_SEO_IN_ATTESA)
             elif posto == "coda_piena":
                 logger.warning("SEO | codice: seo_saltato | motivo: coda_piena | slug: %s | "
                                "host: %s | messaggio: %d case gia' in coda per questo host, "
                                "questo salvataggio non avvisa i motori", slug_log, chi_log,
                                _CODA_SEO_PER_HOST)
             elif posto == "parti":
-                try:
-                    threading.Thread(target=self._seo_su_pubblicazione,
-                                     args=(det, scheda.slug, chi),
-                                     name="seo-" + scheda.slug, daemon=True).start()
-                except Exception:
-                    self._rendi_posto_seo(chi)
-                    raise
+                self._lancia_giro_seo(det, scheda.slug, chi)
         except Exception:
             logger.warning("SEO | codice: seo_non_avviato | slug: %s | messaggio: motore SEO "
                            "del salvataggio non partito (ISOLATO)", scheda.slug, exc_info=True)
@@ -12813,10 +12945,10 @@ class RouterHTTP:
         messo in coda nel frattempo. Un errore resta qui (ISOLATO) e il posto torna libero
         comunque. Le case in coda si rileggono dal catalogo quando tocca a loro (una non piu'
         pubblicata non avvisa)."""
-        prossimo = slug
+        prossimo = (chi, slug)
         try:
             while prossimo is not None:
-                slug = prossimo
+                chi, slug = prossimo
                 try:
                     if det is None:
                         det = self._sys.catalogo.dettaglio(slug)
@@ -12829,13 +12961,37 @@ class RouterHTTP:
                 prossimo = self._prossimo_seo(chi)
         finally:
             if prossimo is not None:
-                self._rendi_posto_seo(chi)
+                dopo = self._rendi_posto_seo(chi)
+                if dopo is not None:
+                    self._lancia_giro_seo(None, dopo[1], dopo[0])
+
+    def _lancia_giro_seo(self, det, slug, chi):
+        """Il filo del giro SEO di `chi`, che tiene gia' il posto. Se il filo non parte il posto
+        si rende, e se passa a un host in attesa si prova a far partire il SUO giro: nessuno
+        resta in attesa di un giro che non partira' (punto (5) del 20/11). Finisce: ogni
+        tentativo fallito toglie un host dall'attesa (le sue case si dichiarano perse)."""
+        while True:
+            try:
+                _FILO_SEO(target=self._seo_su_pubblicazione, args=(det, slug, chi),
+                          name="seo-" + str(slug), daemon=True).start()
+                return
+            except Exception:
+                logger.warning("SEO | codice: seo_non_avviato | slug: %s | messaggio: motore SEO "
+                               "del salvataggio non partito (ISOLATO)",
+                               str(slug).replace("\r", " ").replace("\n", " "), exc_info=True)
+                dopo = self._rendi_posto_seo(chi)
+                if dopo is None:
+                    return
+                det, (chi, slug) = None, dopo
 
     @staticmethod
     def _prendi_posto_seo(chi, slug):
-        """"parti": giro nuovo (l'host non ne ha in corso e il tetto generale non e' pieno);
-        "in_coda": l'host ha gia' un giro, la casa aspetta il suo filo (una volta sola);
-        "tetto_pieno" o "coda_piena": questo salvataggio non avvisa i motori."""
+        """"parti": giro nuovo (l'host non ne ha in corso e il tetto generale non e' pieno; se
+        l'host era in attesa si porta dietro le sue case); "in_coda": l'host ha gia' un giro, la
+        casa aspetta il suo filo; "in_attesa": tetto pieno, la casa aspetta che un giro passi il
+        posto all'host (punto (5) del 20/11); "tetto_pieno" (anche la sala d'attesa e' piena) o
+        "coda_piena": questo salvataggio non avvisa i motori. Mai bloccante: a tetto pieno si
+        risponde, non si aspetta il posto tenendo la serratura (mutazione n.6, 20/11)."""
         with _SERRATURA_POSTI_SEO:
             coda = _SEO_PER_HOST.get(chi)
             if coda is not None:
@@ -12843,40 +12999,67 @@ class RouterHTTP:
                     return "coda_piena"
                 coda[slug] = None
                 return "in_coda"
+            attesa = _SEO_IN_ATTESA.get(chi)
             if not _POSTI_SEO.acquire(blocking=False):
-                return "tetto_pieno"
-            _SEO_PER_HOST[chi] = {}
+                if attesa is None:
+                    if len(_SEO_IN_ATTESA) >= _HOST_SEO_IN_ATTESA:
+                        return "tetto_pieno"
+                    attesa = _SEO_IN_ATTESA[chi] = {}
+                elif slug not in attesa and len(attesa) >= _CODA_SEO_PER_HOST:
+                    return "coda_piena"
+                attesa[slug] = None
+                return "in_attesa"
+            resto = _SEO_IN_ATTESA.pop(chi, {})
+            resto.pop(slug, None)
+            _SEO_PER_HOST[chi] = resto
             return "parti"
 
     @staticmethod
+    def _passa_il_posto():
+        """Sotto `_SERRATURA_POSTI_SEO`, dopo che un host ha lasciato il suo posto: lo prende
+        il primo host in attesa -- (host, prima casa), le altre restano nella sua coda -- o
+        torna libero (None)."""
+        if _SEO_IN_ATTESA:
+            chi = next(iter(_SEO_IN_ATTESA))
+            case = _SEO_IN_ATTESA.pop(chi)
+            prima = next(iter(case))
+            del case[prima]
+            _SEO_PER_HOST[chi] = case
+            return chi, prima
+        _POSTI_SEO.release()
+        return None
+
+    @staticmethod
     def _prossimo_seo(chi):
-        """Lo slug della prossima casa in coda dell'host, o None: e allora il posto torna
-        libero, nello stesso gesto (un salvataggio che arriva dopo trova il posto libero, non
-        una coda morta)."""
+        """(host, slug) della prossima casa: dalla coda dell'host, o -- coda vuota -- del primo
+        host in attesa, a cui il posto passa senza tornare libero. None: il posto torna libero,
+        nello stesso gesto (un salvataggio che arriva dopo trova il posto, non una coda morta)."""
         with _SERRATURA_POSTI_SEO:
             coda = _SEO_PER_HOST.get(chi)
             if coda:
                 slug = next(iter(coda))
                 del coda[slug]
-                return slug
+                return chi, slug
             _SEO_PER_HOST.pop(chi, None)
-            _POSTI_SEO.release()
-            return None
+            return RouterHTTP._passa_il_posto()
 
     @staticmethod
     def _rendi_posto_seo(chi):
         """Il posto torna libero solo se questo host lo tiene davvero: un secondo «rendi»
-        non regala al tetto un posto che nessuno ha preso (silent-failure-hunter 20/11)."""
+        non regala al tetto un posto che nessuno ha preso (silent-failure-hunter 20/11). Se un
+        host aspetta il posto passa a lui: si restituisce (host, slug) e chi chiama fa partire
+        il suo giro."""
         with _SERRATURA_POSTI_SEO:
             if chi not in _SEO_PER_HOST:
-                return
+                return None
             persi = list(_SEO_PER_HOST.pop(chi))
-            _POSTI_SEO.release()
+            dopo = RouterHTTP._passa_il_posto()
         if persi:
             logger.warning("SEO | codice: seo_saltato | motivo: giro_interrotto | slug: %s | "
                            "host: %s | messaggio: queste case in coda non avvisano i motori",
                            ", ".join(persi).replace("\r", " ").replace("\n", " "),
                            str(chi).replace("\r", " ").replace("\n", " "))
+        return dopo
 
     @staticmethod
     def _voce_invio(hid, dati):
@@ -12900,17 +13083,27 @@ class RouterHTTP:
         annuncio (il «riprova» lo aggiorna); altrimenti uno slug nuovo, prenotato.
         Conta l'invio fra quelli in volo su quello slug (lo chiude `_chiudi_invio`)."""
         with _SERRATURA_INVII:
-            import time as _t
-            ora = _t.monotonic()
+            ora = _adesso_invii()
             for k in [k for k, v in _INVII_PUBBLICA.items() if ora - v[1] > _DURATA_INVIO_S]:
                 del _INVII_PUBBLICA[k]
             ricordo = _INVII_PUBBLICA.get(voce) if voce is not None else None
             if ricordo is not None:
+                _IN_VOLO[ricordo[0]] = _IN_VOLO.get(ricordo[0], 0) + 1
+                return ricordo[0]
+        # punto (4) del 20/11: l'indirizzo si cerca FUORI dalla serratura comune (le letture del
+        # catalogo non fermano gli altri invii); `_slug_unico` lo prenota sotto la sua
+        nuovo = self._slug_unico(titolo, citta, prenota=True)
+        with _SERRATURA_INVII:
+            ricordo = _INVII_PUBBLICA.get(voce) if voce is not None else None
+            if ricordo is not None:
+                # un invio gemello (stessa voce) ha scelto mentre si cercava: vale il suo, e
+                # l'indirizzo prenotato qui torna libero
+                _SLUG_PRENOTATI.pop(nuovo, None)
                 slug = ricordo[0]
             else:
-                slug = self._slug_unico(titolo, citta, prenota=True)
+                slug = nuovo
                 if voce is not None:
-                    _INVII_PUBBLICA[voce] = (slug, ora)
+                    _INVII_PUBBLICA[voce] = (slug, _adesso_invii())
             _IN_VOLO[slug] = _IN_VOLO.get(slug, 0) + 1
             return slug
 
@@ -13216,15 +13409,33 @@ class RouterHTTP:
         base = _re.sub(r"[^a-zA-Z0-9]+", "-", base).strip("-").lower()[:40] or "casa"
         cat = getattr(self._sys, "catalogo", None)
         candidati = [base] + ["%s-%d" % (base, i) for i in range(2, 80)]
+        # punto (4) del 20/11: gli indirizzi liberi si cercano FUORI dalla serratura comune degli
+        # invii (prima: fino a 79 letture del catalogo con tutti gli altri invii fermi). Se ne
+        # tengono alcuni: sotto la serratura si salta chi e' stato prenotato nel frattempo e si
+        # RILEGGE solo quello scelto (puo' essere nato un annuncio fra le due letture)
+        liberi = []
+        for cand in candidati:
+            try:
+                if cat is None or cat.host_di_alloggio(cand) is None:
+                    liberi.append(cand)
+                    if len(liberi) >= 5:
+                        break
+            except Exception:
+                logger.error("PUBBLICA | codice: slug_non_verificabile | messaggio: catalogo "
+                             "muto scegliendo l'indirizzo, uso un suffisso casuale",
+                             exc_info=True)
+                break
         # si saltano gli indirizzi PRENOTATI dai salvataggi in corso; `prenota` (il salvataggio
         # di `_slug_per_invio`) tiene il suo finche' `_chiudi_invio` non lo libera
         with _SERRATURA_INVII:
-            import time as _t
-            ora = _t.monotonic()
+            ora = _adesso_invii()
             for s in [s for s, t in _SLUG_PRENOTATI.items() if ora - t > _DURATA_INVIO_S]:
                 del _SLUG_PRENOTATI[s]
+            # il primo libero non prenotato si RILEGGE; se e' nato intanto si passa al
+            # successivo (code-reviewer 20/11: prima si saltava subito al suffisso casuale).
+            # Senza gare e' una lettura sola sotto la serratura
             scelto = None
-            for cand in candidati:
+            for cand in liberi:
                 if cand in _SLUG_PRENOTATI:
                     continue
                 try:
@@ -13233,10 +13444,14 @@ class RouterHTTP:
                         break
                 except Exception:
                     logger.error("PUBBLICA | codice: slug_non_verificabile | messaggio: catalogo "
-                                 "muto scegliendo l'indirizzo, uso un suffisso casuale",
+                                 "muto rileggendo l'indirizzo, uso un suffisso casuale",
                                  exc_info=True)
                     break
-            scelto = scelto or base + "-" + _s.token_hex(3)
+            if scelto is None:
+                scelto = base + "-" + _s.token_hex(3)
+                logger.warning("PUBBLICA | codice: slug_casuale | slug: %s | messaggio: nessun "
+                               "indirizzo numerato libero fra quelli letti, uso un suffisso "
+                               "casuale", scelto)
             if prenota:
                 _SLUG_PRENOTATI[scelto] = ora
             return scelto
@@ -14146,12 +14361,12 @@ class RouterHTTP:
             return True
         try:
             owner = self._sys.catalogo.host_di_alloggio(slug)
-        except Exception:
+        except Exception as errore:
             # FAIL-CLOSED sul permesso: l'archivio che non risponde non fa passare la
             # scrittura. Prima un errore di lookup lasciava modificare qualsiasi annuncio.
-            logger.warning("_verifica_proprieta: proprietario non verificabile -> NEGO "
-                           "(fail-closed)", exc_info=True)
-            return False
+            # E si dice il vero (20/11): 503 «riprova», non 403 «non e' tuo».
+            raise _ProprietarioNonVerificabile(
+                _proprietario_muto("verifica_proprieta", "slug", slug)) from errore
         return owner is None or owner == hid
 
     def _alloggio_in_catalogo(self, slug) -> bool:
@@ -14318,11 +14533,8 @@ class RouterHTTP:
                      ) % (_h.escape(riga), _h.escape(titolo),
                           _h.escape(rec.get("check_in", "")),
                           _h.escape(rec.get("check_out", "")), _h.escape(base + "/"))
-            import threading
-            threading.Thread(target=_invia_tracciato,
-                             args=(ep, email, ogg, corpo, "esito_richiesta",
-                                   str(rec.get("riferimento", ""))),
-                             daemon=True).start()
+            _spedisci_email(ep, email, ogg, corpo, "esito_richiesta",
+                            str(rec.get("riferimento", "")))
         except Exception:
             logger.warning("email esito richiesta fallita (ISOLATA)", exc_info=True)
 
@@ -14361,12 +14573,8 @@ class RouterHTTP:
                      "effettuato. Questa è un'email di servizio, non riceverai promemoria.</p></div>"
                      ) % (_h.escape(titolo), _h.escape(rec.get("check_in", "")),
                           _h.escape(rec.get("check_out", "")), _h.escape(url))
-            import threading
-            threading.Thread(target=_invia_tracciato,
-                             args=(ep, email,
-                                   "BookinVIP - Le tue date sono di nuovo libere", corpo,
-                                   "recupero_hold", str(rec.get("riferimento", ""))),
-                             daemon=True).start()
+            _spedisci_email(ep, email, "BookinVIP - Le tue date sono di nuovo libere", corpo,
+                            "recupero_hold", str(rec.get("riferimento", "")))
         except Exception:
             logger.warning("email recupero hold fallita (ISOLATA)", exc_info=True)
 
@@ -15178,16 +15386,14 @@ def _subentro_per_disaccordo(sistema: Any, *, ora_ts: Any = None) -> List[str]:
                     or "info@bookinvip.com")
             prov = getattr(sistema, "email_provider", None)
             if prov is not None and dest:
-                threading.Thread(
-                    target=_invia_tracciato,
-                    args=(prov, dest, "BookinVIP - SUBENTRO: host e ospite non si sono messi "
-                          "d'accordo (prenotazione %s)" % rif,
-                          "<p>Alla scadenza della garanzia host e ospite avevano scritto entrambi "
-                          "nella chat della prenotazione <b>%s</b> e l'ospite non ha premuto "
-                          "«tutto ok». I soldi restano fermi: leggi la conversazione nel pannello "
-                          "admin, riquadro Controversie, e decidi lo split.</p>" % rif,
-                          "subentro_disaccordo", rif),
-                    daemon=True).start()
+                _spedisci_email(
+                    prov, dest, "BookinVIP - SUBENTRO: host e ospite non si sono messi "
+                    "d'accordo (prenotazione %s)" % rif,
+                    "<p>Alla scadenza della garanzia host e ospite avevano scritto entrambi "
+                    "nella chat della prenotazione <b>%s</b> e l'ospite non ha premuto "
+                    "«tutto ok». I soldi restano fermi: leggi la conversazione nel pannello "
+                    "admin, riquadro Controversie, e decidi lo split.</p>" % rif,
+                    "subentro_disaccordo", rif)
     except Exception:
         logger.error("subentro per disaccordo: giro fallito (ISOLATO)", exc_info=True)
     return subentrate
@@ -15921,9 +16127,7 @@ def servi(sistema: Any, *, host: str = "127.0.0.1", porta: int = 8080,
                         # sa ne' del buco nei conti ne' dell'email persa
                         # (referto 20, §3.1). Da qui in poi almeno la seconda
                         # meta' di quel giro si vede.
-                        _thg.Thread(target=_invia_tracciato,
-                                    args=(prov, dest, _oggetto, _corpo, _template, ""),
-                                    daemon=True).start()
+                        _spedisci_email(prov, dest, _oggetto, _corpo, _template, "")
                     else:
                         logger.warning("EMAIL NON INVIATA: template=%s riferimento= -- "
                                        "provider email SPENTO (contata in email_ko, vedi "

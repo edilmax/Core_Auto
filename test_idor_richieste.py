@@ -114,6 +114,60 @@ class TestIdorRichieste(unittest.TestCase):
         self.assertEqual(out.get("errore"), "non_tua")
         self.assertEqual(sis.pagamenti_pendenti.info(ref)["stato"], "in_attesa_host")
 
+    def test_archivio_muto_e_padrone_ignoto_dice_riprova_non_non_tua(self):
+        """20/11, variante del punto (1): se il catalogo non risponde e la richiesta non porta
+        il padrone, il proprietario si sentiva dire «non_tua» -- e nessuna riga nel registro
+        (l'errore era inghiottito). Si nega ancora, ma col vero motivo e una riga col codice."""
+        from unittest import mock
+        sis, g, registra = self._mk()
+        HA = registra("a4@idor.it")
+        ref = self._crea_richiesta_di_A(sis, g, HA)
+        con = sis.pagamenti_pendenti._apri()
+        try:
+            with con:
+                con.execute("UPDATE pendenti SET host_id='' WHERE riferimento=?", (ref,))
+        finally:
+            con.close()
+
+        def muto(*_a, **_k):
+            raise OSError("catalogo giu'")
+
+        with mock.patch.object(sis.catalogo, "host_di_alloggio", muto):
+            for azione in ("approva", "rifiuta"):
+                with self.assertLogs("core_auto.server", level="WARNING") as reg:
+                    st, out = g("POST", "/api/host/richieste/" + azione, {"riferimento": ref},
+                                HA)
+                self.assertEqual((503, "storage_non_disponibile"), (st, out.get("errore")),
+                                 azione)
+                self.assertTrue(any("codice: proprietario_non_verificabile" in r and ref in r
+                                    for r in reg.output), reg.output)
+        self.assertEqual(sis.pagamenti_pendenti.info(ref)["stato"], "in_attesa_host")
+
+    def test_archivio_muto_ma_padrone_scritto_sulla_richiesta_decide_lui(self):
+        # l'altra direzione: col padrone scritto sulla richiesta la riserva vale come oggi --
+        # un altro host resta 403, il proprietario passa
+        from unittest import mock
+        sis, g, registra = self._mk()
+        HA, HB = registra("a5@idor.it"), registra("b5@idor.it")
+        ref = self._crea_richiesta_di_A(sis, g, HA)
+
+        def muto(*_a, **_k):
+            raise OSError("catalogo giu'")
+
+        with mock.patch.object(sis.catalogo, "host_di_alloggio", muto):
+            with self.assertLogs("core_auto.server", level="WARNING") as reg:
+                st, out = g("POST", "/api/host/richieste/approva", {"riferimento": ref}, HB)
+            self.assertEqual((403, "non_tua"), (st, out.get("errore")))
+            # silent-failure-hunter 20/11: qui NON si risponde «riprova», quindi il registro non
+            # deve dire «nego e rispondo 503» (falso allarme): dice che decide la richiesta
+            riga = [r for r in reg.output if "sottocodice: decidi_richiesta" in r]
+            self.assertTrue(riga, reg.output)
+            self.assertNotIn("503", riga[0])
+            self.assertIn("padrone scritto sulla richiesta", riga[0])
+            self.assertEqual(sis.pagamenti_pendenti.info(ref)["stato"], "in_attesa_host")
+            st, out = g("POST", "/api/host/richieste/rifiuta", {"riferimento": ref}, HA)
+            self.assertEqual(200, st, out)
+
     def test_proprietario_puo_ancora_decidere(self):
         # NON-REGRESSIONE: A approva la SUA richiesta -> ok (link Stripe generato)
         sis, g, registra = self._mk()
