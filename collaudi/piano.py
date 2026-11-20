@@ -496,6 +496,18 @@ BLOCCHI = (
             "gestore (D.Lgs. 70/2003, art. 7), un modo per segnalare un contenuto illegale (DSA, "
             "art. 16), e un ospite in difficolta' all'arrivo sa a chi scrivere a ogni ora: prima "
             "un agente stretto sul suo compito, poi Claude, il fondatore solo nei casi estremi",
+            # ⛔ IN CODA (19/11, sessione 8edc0c48). Il fondatore ha pubblicato tre annunci di
+            # prova con un CIN INVENTATO e sono andati online: il motore guarda solo che il CIN
+            # ci sia. Il Reg. UE 2024/1028 art. 7.1.c chiede alla piattaforma «ragionevoli
+            # sforzi» per verificare a campione la validita' dei numeri, con lo sportello unico
+            # dello Stato (art. 10.2.b), e art. 7.2 di avvisare autorita' e host. Per le
+            # piattaforme private non si e' trovato un accesso pubblico alla BDSR (solo la
+            # ricerca a mano per i cittadini, con anti-robot). Il fondatore: niente
+            # registrazioni finche' il software non funziona -- la richiesta al Ministero e' DOPO.
+            "un CIN inventato non va online: il pannello e il server accettano solo un codice con "
+            "la forma del CIN, e la validita' si verifica a campione sullo sportello ufficiale "
+            "dello Stato (Reg. UE 2024/1028 art. 7) con l'esito comunicato a host e autorita' -- "
+            "l'accesso per la piattaforma chiesto al Ministero quando il software funziona",
         ),
     },
     {

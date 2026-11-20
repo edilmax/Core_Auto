@@ -168,9 +168,12 @@ class TestUnaScritturaSuUnAnnuncioCHENONESISTE(unittest.TestCase):
         with open(fase83_server.__file__, encoding="utf-8") as f:
             sorgente = f.read()
         quanti = sorgente.count("self._verifica_proprieta(")
+        # 14 dal 19/11: la 14a non e' una rotta nuova, e' il SECONDO controllo di
+        # `_host_pubblica_scheda`, rifatto dentro `_SERRATURA_PREZZO_BASE` nello stesso gesto
+        # dell'upsert (un altro host creava lo stesso indirizzo fra controllo e salvataggio)
         self.assertEqual(
-            quanti, 13,
-            "i punti che chiamano `_verifica_proprieta` sono %d, non 13: e' nata (o sparita) "
+            quanti, 14,
+            "i punti che chiamano `_verifica_proprieta` sono %d, non 14: e' nata (o sparita) "
             "una rotta. Guardala: se SCRIVE e prende il nome dal corpo, va aggiunta a "
             "SCRITTURE_COL_NOME_NEL_CORPO, se no aggiorna questo numero con il motivo" % quanti)
 

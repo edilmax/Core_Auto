@@ -11701,5 +11701,1053 @@ class TestUnAnnuncioVaOnlineSoloSeDiceDoveSta(unittest.TestCase):
         self.assertEqual((200, "pubblicato"), (s, o.get("stato")))
 
 
+def _aspetta_i_giri_seo(caso):
+    """Aspetta i fili «seo-*» ancora in volo (di qualunque prova) e pretende che siano finiti."""
+    for f in threading.enumerate():
+        if f.name.startswith("seo-") and f is not threading.current_thread():
+            f.join(30)
+    vivi = [f.name for f in threading.enumerate() if f.name.startswith("seo-")]
+    caso.assertEqual([], vivi, "giri SEO ancora in volo dopo 30 s")
+
+
+class TestUnSalvataggioLentoNonFaDoppioni(unittest.TestCase):
+    """19/11, difetto vivo visto dal fondatore: UN gesto, TRE annunci identici (#139-#141,
+    09:51:27, 09:51:46, 09:52:02). `_host_pubblica` aspettava il motore SEO (Overpass muto:
+    20 s di attesa) prima di rispondere; il pannello dopo 15 s dice «connessione lenta,
+    riprova», l'annuncio era gia' salvato, e ogni «riprova» ne creava un altro. Due rimedi:
+    il motore SEO gira DOPO la risposta, e la `chiave_invio` del pannello fa di un invio
+    ripetuto lo STESSO annuncio (come la chiave di idempotenza di Stripe)."""
+
+    def setUp(self):
+        # i giri SEO lasciati in volo da una prova di prima (anche di un'altra classe) rendono il
+        # posto sul semaforo che trovano e tolgono dalla tabella il posto del loro host: si
+        # aspettano PRIMA di rifare i posti, o sporcano questa prova (pr-test-analyzer,
+        # silent-failure-hunter e python-reviewer, 20/11). Prima della cartella temporanea: se
+        # l'attesa fallisce, non resta niente da pulire (code-reviewer 20/11)
+        _aspetta_i_giri_seo(self)
+        d = self.dir = tempfile.mkdtemp()
+        self.sis = crea_sistema(ConfigCasaVIP(
+            abilitato=True, segreto_hmac=b"S" * 32, con_registrazione_host=True,
+            db_catalogo=f"{d}/c.db", db_inventario=f"{d}/i.db", db_registro_host=f"{d}/r.db",
+            db_accettazioni=f"{d}/a.db", db_pendenti=f"{d}/p.db"))
+        self.r = crea_router(self.sis, host_key="hk", admin_key="ak",
+                             base_url="https://bookinvip.com")
+        # la memoria degli invii e' del processo: ogni prova parte pulita (code-review 19/11)
+        for nome in ("_SLUG_PRENOTATI", "_INVII_PUBBLICA", "_IN_VOLO", "_SEO_PER_HOST"):
+            getattr(fase83_server, nome).clear()
+        # ...e anche i posti del motore SEO (code-review 19/11 sera). Il motore e' finto e non
+        # aspetta niente: le prove non chiedono ai servizi veri.
+        fase83_server._POSTI_SEO = threading.BoundedSemaphore(fase83_server._TETTO_SEO_IN_CORSO)
+
+        class MotoreFermo:
+            def su_pubblicazione(self, *_a, **_k):
+                return None
+
+        self.r._motore_seo_cache = MotoreFermo()
+        self.tk = self._registra("h@doppioni.it")
+
+    def tearDown(self):
+        # ogni prova chiude i suoi giri SEO e li lascia a posto: posti tutti liberi, nessun host
+        try:
+            _aspetta_i_giri_seo(self)
+            self.assertEqual({}, fase83_server._SEO_PER_HOST)
+            self.assertEqual(fase83_server._TETTO_SEO_IN_CORSO, fase83_server._POSTI_SEO._value)
+        finally:
+            shutil.rmtree(self.dir, ignore_errors=True)
+
+    def g(self, m, p, b=None, h=None):
+        return self.r.gestisci(m, p, {}, json.dumps(b) if b is not None else None, h or {})
+
+    def _registra(self, email):
+        s, c = self.g("POST", "/api/host/registrazione",
+                      {"email": email, "password": "password1", "accetta_termini": True,
+                       "accetta_clausole": True, "accetta_privacy": True,
+                       "doc_sha256": doc_sha256(), "versione": CONTRATTO_HOST_VERSIONE})
+        _deve(s == 201, s, c)
+        return {"X-Host-Token": c["token"]}
+
+    def _nuovo(self, chiave, prezzo=200, tk=None, paese="ES", titolo="Test non prenotabile",
+               **extra):
+        # come il pannello: slug VUOTO = annuncio nuovo, lo slug lo genera il server
+        corpo = {"slug": "", "titolo": titolo, "citta": "Livigno",
+                 "paese": paese, "prezzo_notte_cents": prezzo, "capacita": 2}
+        if chiave is not None:
+            corpo["chiave_invio"] = chiave
+        corpo.update(extra)
+        return self.g("POST", "/api/host/pubblica", corpo, tk or self.tk)
+
+    def _annunci(self, tk=None):
+        s, o = self.g("GET", "/api/host/alloggi", None, tk or self.tk)
+        _deve(s == 200, s, o)
+        return sorted(a["slug"] for a in o["alloggi"])
+
+    def test_lo_stesso_invio_ripetuto_resta_un_annuncio(self):
+        s1, o1 = self._nuovo("invio-a1b2c3d4", prezzo=200)
+        s2, o2 = self._nuovo("invio-a1b2c3d4", prezzo=250)   # il «riprova» dopo i 15 s
+        self.assertEqual((201, 201), (s1, s2), (o1, o2))
+        self.assertEqual(o1["slug"], o2["slug"], "il riprova ha creato un SECONDO annuncio")
+        self.assertEqual([o1["slug"]], self._annunci())
+        # vince l'ultimo invio: l'host ha corretto il prezzo prima di riprovare
+        self.assertEqual(250, self.sis.catalogo.dettaglio_owner(o1["slug"])["prezzo_base_cents"])
+
+    def test_invii_diversi_fanno_annunci_diversi(self):
+        _, o1 = self._nuovo("invio-uno-111111")
+        _, o2 = self._nuovo("invio-due-222222")
+        _, o3 = self._nuovo(None)                  # pannello vecchio, senza chiave: come prima
+        self.assertEqual(3, len({o1["slug"], o2["slug"], o3["slug"]}), (o1, o2, o3))
+
+    def test_un_invio_rifiutato_non_tiene_l_indirizzo(self):
+        # in Italia senza CIN: rifiutato, l'annuncio non nasce
+        s, o = self._nuovo("invio-rifiuto-77", paese="IT")
+        self.assertEqual((422, "cin_obbligatorio_italia"), (s, o.get("errore")))
+        # l'indirizzo e' di nuovo libero per il prossimo annuncio...
+        _, altro = self._nuovo(None)
+        self.assertEqual("test-non-prenotabile", altro["slug"])
+        # ...e la chiave rifiutata non punta li': il suo riprova fa un annuncio suo
+        s, mio = self._nuovo("invio-rifiuto-77")
+        self.assertEqual(201, s, mio)
+        self.assertEqual(["test-non-prenotabile", "test-non-prenotabile-2"], self._annunci())
+
+    def test_un_riprova_rifiutato_non_perde_l_annuncio_gia_nato(self):
+        _, o1 = self._nuovo("invio-nato-8888")
+        s, o2 = self._nuovo("invio-nato-8888", paese="IT")      # rifiutato: senza CIN
+        self.assertEqual(422, s, o2)
+        _, o3 = self._nuovo("invio-nato-8888", prezzo=260)
+        self.assertEqual(o1["slug"], o3["slug"])
+        self.assertEqual([o1["slug"]], self._annunci())
+
+    def test_la_stessa_chiave_di_un_altro_host_non_tocca_il_mio_annuncio(self):
+        _, mio = self._nuovo("invio-comune-333")
+        altro = self._registra("altro@doppioni.it")
+        s, suo = self._nuovo("invio-comune-333", tk=altro)
+        self.assertEqual(201, s, suo)
+        self.assertNotEqual(mio["slug"], suo["slug"])
+        self.assertEqual([mio["slug"]], self._annunci())
+        self.assertEqual([suo["slug"]], self._annunci(altro))
+
+    def _gara(self, chiave_prima, chiave_seconda):
+        # il secondo invio arriva mentre il primo e' ancora dentro `pubblica`
+        vero, vero_slug = self.sis.catalogo.pubblica, self.r._slug_per_invio
+        esiti, fili, scelto = [], [], threading.Event()
+
+        def secondo():
+            esiti.append(self._nuovo(chiave_seconda, prezzo=300))
+
+        def slug_segnato(*a, **k):
+            try:
+                return vero_slug(*a, **k)
+            finally:
+                if fili and threading.current_thread() is fili[0]:
+                    scelto.set()
+
+        def pubblica_lenta(*a, **k):
+            if not fili:
+                fili.append(threading.Thread(target=secondo))
+                fili[0].start()
+                # il secondo ha scelto il suo indirizzo mentre il primo e' qui dentro: il punto
+                # della gara e' garantito, non affidato a un'attesa a occhio (revisione 20/11)
+                self.assertTrue(scelto.wait(5), "il secondo invio non ha scelto l'indirizzo")
+            return vero(*a, **k)
+
+        with mock.patch.object(self.sis.catalogo, "pubblica", pubblica_lenta), \
+                mock.patch.object(self.r, "_slug_per_invio", slug_segnato):
+            esiti.append(self._nuovo(chiave_prima))
+            fili[0].join(5)
+        self.assertTrue(scelto.is_set())
+        self.assertFalse(fili[0].is_alive(), "il secondo invio e' rimasto bloccato")
+        self.assertEqual([201, 201], [s for s, _ in esiti], esiti)
+        return self._annunci()
+
+    def _raffica(self, chiavi):
+        # tutti gli invii partono NELLO STESSO ISTANTE (la prova regina delle skill scaricate il
+        # 19/11: samber api-idempotency-retry «N identical concurrent requests, exactly one side
+        # effect»; yaklang race-condition «20-100 copies as simultaneously as possible»)
+        cancello, esiti = threading.Barrier(len(chiavi)), []
+
+        def invio(ch):
+            # un errore dentro il filo si scrive nell'esito: prima restava solo «manca un
+            # esito», senza dire quale errore (silent-failure-hunter 20/11)
+            try:
+                cancello.wait(5)
+                esiti.append(self._nuovo(ch)[0])
+            except Exception as e:
+                esiti.append(repr(e))
+
+        fili = [threading.Thread(target=invio, args=(ch,)) for ch in chiavi]
+        for f in fili:
+            f.start()
+        for f in fili:
+            f.join(20)
+        self.assertEqual([], [f.name for f in fili if f.is_alive()], "invii rimasti appesi")
+        self.assertEqual([201] * len(chiavi), esiti, esiti)
+        return self._annunci()
+
+    def test_venti_invii_identici_insieme_fanno_un_annuncio(self):
+        self.assertEqual(1, len(self._raffica(["invio-raffica-0000"] * 20)))
+
+    def test_venti_annunci_diversi_insieme_sono_venti(self):
+        self.assertEqual(20, len(self._raffica(["invio-raffica-%04d" % i for i in range(20)])))
+
+    def test_due_invii_insieme_restano_un_annuncio(self):
+        self.assertEqual(1, len(self._gara("invio-gara-4444", "invio-gara-4444")))
+
+    def test_due_annunci_nuovi_insieme_non_si_sovrascrivono(self):
+        # stesso titolo, stesso istante, invii DIVERSI: prima prendevano lo stesso indirizzo
+        # e il secondo scriveva sopra il primo (da due host diversi: un annuncio rubato)
+        self.assertEqual(2, len(self._gara("invio-gara-5555", "invio-gara-6666")))
+        # e senza chiave (pannello vecchio): altri due annunci, non uno
+        self.assertEqual(4, len(self._gara(None, None)))
+
+    # ── i rilievi delle revisioni indipendenti dello stesso giorno (code-review, silent-failure-
+    #    hunter, differential-review): ognuno qui sotto e' stato visto ROSSO prima del rimedio.
+
+    def test_una_chiave_scritta_male_non_fa_rispondere_500(self):
+        # una lista non si puo' usare come chiave di un dizionario: il `finally` esplodeva e
+        # l'host riceveva un errore del server al posto di «serve il CIN». Solo con la memoria
+        # degli invii NON vuota (Python non calcola la chiave su un dizionario vuoto): come in
+        # produzione, dove c'e' sempre l'invio di qualcun altro.
+        self._nuovo("invio-di-un-altro-1")
+        with self.assertLogs("core_auto.server", level="WARNING") as reg:
+            s, o = self._nuovo([1, 2], paese="IT")
+        self.assertEqual((422, "cin_obbligatorio_italia"), (s, o.get("errore")))
+        self.assertTrue(any("chiave_invio_non_valida" in r for r in reg.output), reg.output)
+
+    def test_un_riprova_con_un_altra_casa_non_sovrascrive_la_prima(self):
+        # risposta persa, poi l'host scrive un'ALTRA casa e preme Pubblica con la stessa chiave
+        _, prima = self._nuovo("invio-impronta-1", titolo="Baita sul lago")
+        _, altra = self._nuovo("invio-impronta-1", titolo="Attico in centro")
+        self.assertNotEqual(prima["slug"], altra["slug"])
+        self.assertEqual("Baita sul lago",
+                         self.sis.catalogo.dettaglio_owner(prima["slug"])["titolo"])
+        self.assertEqual(2, len(self._annunci()))
+
+    def test_un_invio_rifiutato_non_libera_cio_che_un_altro_in_volo_sta_salvando(self):
+        # B (valido) e' dentro `pubblica`; A, stessa chiave, viene rifiutato e finisce prima;
+        # C, il riprova dopo, deve ritrovare l'annuncio di B -- non farne un secondo
+        vero = self.sis.catalogo.pubblica
+        dentro, libera, esiti = threading.Event(), threading.Event(), []
+
+        def pubblica_trattenuta(*a, **k):
+            dentro.set()
+            libera.wait(5)
+            return vero(*a, **k)
+
+        with mock.patch.object(self.sis.catalogo, "pubblica", pubblica_trattenuta):
+            b = threading.Thread(target=lambda: esiti.append(self._nuovo("invio-volo-999")))
+            b.start()
+            self.assertTrue(dentro.wait(5))
+            s, o = self._nuovo("invio-volo-999", paese="IT")       # A: senza CIN, rifiutato
+            self.assertEqual(422, s, o)
+            libera.set()
+            b.join(5)
+        self.assertEqual(201, esiti[0][0], esiti)
+        _, c = self._nuovo("invio-volo-999", prezzo=270)
+        self.assertEqual(esiti[0][1]["slug"], c["slug"])
+        self.assertEqual(1, len(self._annunci()), self._annunci())
+
+    def test_la_proprieta_si_controlla_nello_stesso_gesto_del_salvataggio(self):
+        # fra il controllo «e' tuo?» e il salvataggio, un ALTRO host crea lo stesso indirizzo:
+        # prima il salvataggio di A lo riassegnava ad A (annuncio rubato a B)
+        altro = self._registra("b@doppioni.it")
+        vera = self.r._geocodifica_se_serve
+        fatto = []
+
+        def nel_mezzo(dati):
+            if not fatto:
+                fatto.append(None)   # prima della chiamata: quella di B ripassa di qui
+                fatto[0] = self.g("POST", "/api/host/pubblica", {
+                    "slug": dati["slug"], "titolo": "Casa di B", "citta": "Livigno",
+                    "paese": "ES", "prezzo_notte_cents": 900, "capacita": 2}, altro)
+            return vera(dati)
+
+        with mock.patch.object(self.r, "_geocodifica_se_serve", nel_mezzo):
+            s, o = self._nuovo("invio-furto-1234")
+        self.assertEqual(201, fatto[0][0], fatto)
+        slug = fatto[0][1]["slug"]
+        self.assertEqual((403, "non_tuo"), (s, o.get("errore")))
+        self.assertEqual("Casa di B", self.sis.catalogo.dettaglio_owner(slug)["titolo"])
+        self.assertEqual([slug], self._annunci(altro))
+        # e la chiave di A non resta legata all'annuncio di B: il suo riprova ne fa uno suo
+        s, mio = self._nuovo("invio-furto-1234")
+        self.assertEqual(201, s, mio)
+        self.assertNotEqual(slug, mio["slug"])
+
+    def test_l_operatore_non_sposta_l_annuncio_di_un_host_su_un_altro(self):
+        hk = {"X-Host-Key": "hk"}
+        _, a = self._nuovo("invio-operatore-1", tk=hk, host_id="host-A")
+        _, b = self._nuovo("invio-operatore-1", tk=hk, host_id="host-B")
+        self.assertNotEqual(a["slug"], b["slug"])
+        self.assertEqual("host-A", self.sis.catalogo.host_di_alloggio(a["slug"]))
+
+    def test_un_catalogo_che_non_risponde_si_scrive_nel_registro(self):
+        with mock.patch.object(self.sis.catalogo, "host_di_alloggio",
+                               side_effect=sqlite3.OperationalError("database is locked")):
+            with self.assertLogs("core_auto.server", level="ERROR") as reg:
+                s, _o = self._nuovo("invio-catalogo-77")
+        self.assertEqual(403, s)        # proprieta' non verificabile: si nega (fail-closed)
+        self.assertTrue(any("invio_non_verificabile" in r for r in reg.output), reg.output)
+        # mutazione 20/11: i due `exc_info=True` cambiavano senza che nessuno lo vedesse; un
+        # ERROR senza traccia dice «catalogo muto» ma non dove ne' perche'
+        for codice in ("invio_non_verificabile", "slug_non_verificabile"):
+            righe = [r for r in reg.records if codice in r.getMessage()]
+            self.assertTrue(righe and righe[0].exc_info, (codice, reg.output))
+        # e cosa lascia (revisione 20/11): la chiave resta legata allo slug (non si sa di chi
+        # e'), ma niente resta «in volo» o prenotato...
+        legate = list(fase83_server._INVII_PUBBLICA.values())
+        self.assertEqual(1, len(legate), legate)
+        self.assertEqual({}, fase83_server._IN_VOLO)
+        self.assertEqual({}, fase83_server._SLUG_PRENOTATI)
+        # ...e tornato il catalogo, il riprova salva su quello stesso slug: un annuncio, non due
+        s, o = self._nuovo("invio-catalogo-77")
+        self.assertEqual(201, s, o)
+        self.assertEqual([legate[0][0]], self._annunci())
+
+    def test_il_motore_seo_ha_un_tetto_di_lavori_insieme(self):
+        chiamati, libera = [], threading.Event()
+
+        class MotoreMuto:
+            def su_pubblicazione(self, det, *_a, **_k):
+                chiamati.append(det["slug"])
+                libera.wait(10)
+
+        self.r._motore_seo_cache = MotoreMuto()
+        tetto = fase83_server._TETTO_SEO_IN_CORSO
+        self.assertEqual(4, tetto)
+        # un host diverso per ogni lavoro: un host solo ne tiene al piu' uno (vedi sotto)
+        host = [self.tk] + [self._registra("tetto%d@doppioni.it" % i) for i in range(1, tetto)]
+        # ...e quello «oltre» e' di un host NUOVO: col primo host sarebbe finito nella sua coda,
+        # e la prova misurava il posto per host invece del tetto generale (revisione 20/11)
+        oltre = self._registra("oltre@doppioni.it")
+        try:
+            for i in range(tetto):
+                self._nuovo("invio-tetto-%04d" % i, titolo="Casa %d" % i, tk=host[i])
+            for _ in range(50):
+                if len(chiamati) == tetto:
+                    break
+                time.sleep(0.05)
+            with self.assertLogs("core_auto.server", level="WARNING") as reg:
+                self._nuovo("invio-tetto-oltre", titolo="Casa oltre", tk=oltre)
+            in_volo = len(chiamati)
+        finally:
+            libera.set()
+        self.assertEqual(tetto, in_volo, chiamati)
+        self.assertTrue(any("seo_saltato" in r and "tetto_pieno" in r and "casa-oltre" in r
+                            for r in reg.output), reg.output)
+        # finiti i lavori, il posto torna libero (si riprova per un po': i fili chiudono da soli)
+        for i in range(40):
+            self._nuovo("invio-tetto-dopo-%02d" % i, titolo="Casa dopo %d" % i)
+            time.sleep(0.05)
+            if any(s.startswith("casa-dopo") for s in chiamati):
+                break
+        self.assertTrue(any(s.startswith("casa-dopo") for s in chiamati), chiamati)
+
+    def test_a_tetto_pieno_il_salvataggio_non_aspetta_un_posto(self):
+        """Mutazione n.6 (20/11), punto rimasto NON DETERMINABILE: `acquire(blocking=False)`
+        reso bloccante faceva restare APPESA la richiesta di pubblicazione finche' un giro SEO
+        non finiva (e i test scadevano senza dirlo). La prova ora lo vede in 5 secondi."""
+        tetto = fase83_server._TETTO_SEO_IN_CORSO
+        for i in range(tetto):
+            self.assertEqual("parti", self.r._prendi_posto_seo("pieno-%d" % i, "casa-%d" % i))
+        esito = []
+        filo = threading.Thread(
+            target=lambda: esito.append(self.r._prendi_posto_seo("oltre", "casa-oltre")),
+            daemon=True)
+        try:
+            filo.start()
+            filo.join(5)
+            self.assertFalse(filo.is_alive(), "a tetto pieno il salvataggio ASPETTA un posto: "
+                             "la richiesta del pannello resta appesa")
+            self.assertEqual(["tetto_pieno"], esito)
+        finally:
+            # Il filo appeso tiene la serratura dei posti: `_prossimo_seo` lo aspetterebbe per
+            # sempre (prova appesa invece che rossa). Lo si sblocca da fuori, sul semaforo.
+            sbloccato = filo.is_alive()
+            if sbloccato:
+                fase83_server._POSTI_SEO.release()
+                filo.join(5)
+            for i in range(tetto):
+                self.r._prossimo_seo("pieno-%d" % i)
+            if "parti" in esito:
+                if sbloccato:          # il suo posto e' quello reso a mano qui sopra
+                    fase83_server._SEO_PER_HOST.pop("oltre", None)
+                else:
+                    self.r._prossimo_seo("oltre")
+
+    def test_un_giro_seo_fermato_da_un_errore_grave_rende_il_posto(self):
+        """Mutazione n.6 (20/11), punto SOPRAVVISSUTO: `if prossimo is not None` nel `finally`
+        del giro SEO. Un errore che `except Exception` non prende (qui un BaseException) ferma
+        il giro a meta': il posto deve tornare libero e le case in coda vanno dichiarate perse,
+        o quell'host non avvisa piu' i motori fino al riavvio."""
+        class Fermo(BaseException):
+            pass
+
+        class MotoreCheSiFerma:
+            def su_pubblicazione(self, *_a, **_k):
+                raise Fermo()
+
+        self.r._motore_seo_cache = MotoreCheSiFerma()
+        self.assertEqual("parti", self.r._prendi_posto_seo("h-fermo", "casa-a"))
+        self.assertEqual("in_coda", self.r._prendi_posto_seo("h-fermo", "casa-b"))
+        with self.assertLogs("core_auto.server", level="WARNING") as reg:
+            with self.assertRaises(Fermo):
+                self.r._seo_su_pubblicazione({"slug": "casa-a"}, "casa-a", "h-fermo")
+        self.assertEqual({}, fase83_server._SEO_PER_HOST,
+                         "il giro fermato tiene ancora il posto dell'host")
+        self.assertEqual(fase83_server._TETTO_SEO_IN_CORSO, fase83_server._POSTI_SEO._value,
+                         "il giro fermato non ha reso il posto sul semaforo")
+        self.assertTrue(any("giro_interrotto" in r and "casa-b" in r for r in reg.output),
+                        reg.output)
+
+    def test_un_host_solo_non_occupa_tutti_i_posti_del_motore_seo(self):
+        # adversarial-modeler 19/11 sera: un host che salva di continuo mentre Overpass e' muto
+        # teneva TUTTI i posti, e gli annunci degli altri host non avvisavano piu' i motori
+        chiamati, libera = [], threading.Event()
+
+        class MotoreMuto:
+            def su_pubblicazione(self, det, *_a, **_k):
+                chiamati.append(det["slug"])
+                libera.wait(10)
+
+        self.r._motore_seo_cache = MotoreMuto()
+        altro = self._registra("vittima@doppioni.it")
+        try:
+            for i in range(getattr(fase83_server, "_TETTO_SEO_IN_CORSO", 4) + 1):
+                self._nuovo("invio-ingordo-%04d" % i, titolo="Ingordo %d" % i)
+            self._nuovo("invio-vittima-0001", titolo="Casa della vittima", tk=altro)
+            for _ in range(60):
+                if "casa-della-vittima" in chiamati:
+                    break
+                time.sleep(0.05)
+            # contati PRIMA di liberare: dopo, il filo dell'ingordo fa la sua coda (20/11)
+            visti = list(chiamati)
+        finally:
+            libera.set()
+        self.assertIn("casa-della-vittima", visti, visti)
+        self.assertEqual(1, sum(s.startswith("ingordo") for s in visti), visti)
+
+    def test_il_filo_seo_non_trattiene_lo_spegnimento_e_i_suoi_errori_hanno_la_traccia(self):
+        # mutazione 19/11 sera: `daemon=True` e i due `exc_info=True` cambiavano senza che
+        # nessuna prova se ne accorgesse. Un filo NON daemon tiene vivo il processo allo
+        # spegnimento (il deploy aspetta Overpass); un avviso senza traccia non dice dove.
+        visto = []
+
+        class MotoreRotto:
+            def su_pubblicazione(self, *_a, **_k):
+                visto.append(threading.current_thread().daemon)
+                raise RuntimeError("overpass muto")
+
+        self.r._motore_seo_cache = MotoreRotto()
+        with self.assertLogs("core_auto.server", level="WARNING") as reg:
+            s, o = self._nuovo("invio-filo-0001")
+            for _ in range(60):
+                if any("seo_fallito" in r.getMessage() for r in reg.records):
+                    break
+                time.sleep(0.05)
+        self.assertEqual(201, s, o)
+        self.assertEqual([True], visto)
+        rotto = [r for r in reg.records if "seo_fallito" in r.getMessage()]
+        self.assertTrue(rotto and rotto[0].exc_info, reg.output)
+        self.assertIn(o["slug"], rotto[0].getMessage())
+
+    def test_un_filo_seo_che_non_parte_lo_dice_e_rende_il_posto(self):
+        tetto = getattr(fase83_server, "_TETTO_SEO_IN_CORSO", 4)
+        with mock.patch.object(fase83_server.threading, "Thread",
+                               side_effect=RuntimeError("can't start new thread")):
+            with self.assertLogs("core_auto.server", level="WARNING") as reg:
+                s, o = self._nuovo("invio-filo-0002")
+        self.assertEqual(201, s, o)
+        partito = [r for r in reg.records if "seo_non_avviato" in r.getMessage()]
+        self.assertTrue(partito and partito[0].exc_info, reg.output)
+        self.assertEqual(tetto, fase83_server._POSTI_SEO._value, "il posto non e' tornato")
+        self.assertEqual({}, getattr(fase83_server, "_SEO_PER_HOST", {}))
+
+    def test_la_memoria_di_un_invio_dura_ventiquattro_ore_giuste(self):
+        # mutazione 19/11 sera: `>` -> `>=` sul confine delle 24 ore non lo vedeva nessuno
+        durata = fase83_server._DURATA_INVIO_S
+        with mock.patch("time.monotonic", return_value=1000.0):
+            _, prima = self._nuovo("invio-orologio-1")
+        with mock.patch("time.monotonic", return_value=1000.0 + durata):
+            _, stessa = self._nuovo("invio-orologio-1")
+        self.assertEqual(prima["slug"], stessa["slug"], "allo scoccare delle 24 ore e' ancora "
+                                                         "lo stesso invio")
+        with mock.patch("time.monotonic", return_value=1001.0 + 2 * durata):
+            _, dopo = self._nuovo("invio-orologio-1")
+        self.assertNotEqual(prima["slug"], dopo["slug"], "dopo le 24 ore e' un invio nuovo")
+
+    def test_un_indirizzo_prenotato_resta_tale_fino_alle_ventiquattro_ore(self):
+        durata = fase83_server._DURATA_INVIO_S
+        fase83_server._SLUG_PRENOTATI["test-non-prenotabile"] = 1000.0
+        with mock.patch("time.monotonic", return_value=1000.0 + durata):
+            _, o = self._nuovo(None)
+        self.assertEqual("test-non-prenotabile-2", o["slug"])
+        fase83_server._SLUG_PRENOTATI["test-non-prenotabile"] = 1000.0
+        with mock.patch("time.monotonic", return_value=1001.0 + durata):
+            _, o = self._nuovo(None, titolo="Test non prenotabile")
+        self.assertEqual("test-non-prenotabile", o["slug"], "la prenotazione scaduta resta")
+
+    def test_l_operatore_senza_host_non_crea_annunci_senza_proprietario(self):
+        # silent-failure-hunter 19/11 sera temeva che gli invii dell'operatore SENZA host_id
+        # (proprietario vuoto nella memoria degli invii) si sovrascrivessero fra loro. Non
+        # possono: un annuncio senza host e' rifiutato prima. Chiuso con questa misura.
+        hk = {"X-Host-Key": "hk"}
+        for titolo in ("Una casa", "Altra casa"):
+            s, o = self._nuovo("invio-operatore-9", tk=hk, titolo=titolo)
+            self.assertEqual((422, "host_id_non_valido"), (s, o.get("dettaglio")), o)
+        self.assertEqual({}, fase83_server._INVII_PUBBLICA)
+
+    def test_il_salvataggio_non_aspetta_il_motore_seo(self):
+        chiamato, libera = threading.Event(), threading.Event()
+
+        class MotoreMuto:   # come Overpass il 19/11: risponde dopo 20 secondi
+            def su_pubblicazione(self, *_a, **_k):
+                chiamato.set()
+                libera.wait(10)
+
+        self.r._motore_seo_cache = MotoreMuto()
+        t0 = time.monotonic()
+        try:
+            s, o = self._nuovo("invio-seo-55555")
+            durata = time.monotonic() - t0
+        finally:
+            libera.set()
+        self.assertEqual(201, s, o)
+        self.assertLess(durata, 3.0, "il salvataggio ha aspettato il motore SEO: l'host vede "
+                                     "«connessione lenta, riprova» e l'annuncio raddoppia")
+        self.assertTrue(chiamato.wait(5), "il motore SEO non e' piu' stato chiamato")
+
+    # --- mutazione n.4 (20/11): una prova per ogni punto sopravvissuto -----------------------
+
+    def test_l_operatore_da_a_ogni_host_il_suo_giro_seo(self):
+        # `chi = hid or str(dati.get("host_id") or "")`: per l'operatore (chiave host, senza
+        # token) il posto SEO e' dell'host per cui pubblica. Con un `and` al posto di un `or`
+        # tutti gli invii dell'operatore finivano sullo stesso posto, e il secondo host saltava
+        chiamati, libera = [], threading.Event()
+
+        class MotoreMuto:
+            def su_pubblicazione(self, det, *_a, **_k):
+                chiamati.append(det["slug"])
+                libera.wait(10)
+
+        self.r._motore_seo_cache = MotoreMuto()
+        hk = {"X-Host-Key": "hk"}
+        try:
+            sa, a = self._nuovo("invio-op-seo-a1", tk=hk, host_id="host-A", titolo="Casa di A")
+            sb, b = self._nuovo("invio-op-seo-b1", tk=hk, host_id="host-B", titolo="Casa di B")
+            for _ in range(60):
+                if len(chiamati) == 2:
+                    break
+                time.sleep(0.05)
+        finally:
+            libera.set()
+        self.assertEqual((201, 201), (sa, sb), (a, b))
+        self.assertEqual(sorted([a["slug"], b["slug"]]), sorted(chiamati))
+
+    def test_a_posti_pieni_un_host_nuovo_non_resta_appeso(self):
+        # `_POSTI_SEO.acquire(blocking=False)`: a posti pieni il salvataggio di un host NUOVO
+        # salta il giro SEO e risponde. Se aspettasse il posto, terrebbe la serratura dei posti
+        # e i giri in corso non potrebbero renderlo: il salvataggio resterebbe appeso per sempre
+        chiamati, libera = [], threading.Event()
+
+        class MotoreMuto:
+            def su_pubblicazione(self, det, *_a, **_k):
+                chiamati.append(det["slug"])
+                libera.wait(10)
+
+        self.r._motore_seo_cache = MotoreMuto()
+        tetto = getattr(fase83_server, "_TETTO_SEO_IN_CORSO", 4)
+        host = [self.tk] + [self._registra("pieno%d@doppioni.it" % i) for i in range(1, tetto)]
+        nuovo = self._registra("nuovo@doppioni.it")
+        esito = []
+        try:
+            for i in range(tetto):
+                self._nuovo("invio-pieno-%04d" % i, titolo="Piena %d" % i, tk=host[i])
+            for _ in range(60):
+                if len(chiamati) == tetto:
+                    break
+                time.sleep(0.05)
+            self.assertEqual(tetto, len(chiamati), chiamati)
+            with self.assertLogs("core_auto.server", level="WARNING") as reg:
+                t = threading.Thread(target=lambda: esito.append(self._nuovo(
+                    "invio-pieno-oltre", titolo="Casa oltre", tk=nuovo)), daemon=True)
+                t.start()
+                t.join(3)
+                appeso = t.is_alive()
+                if appeso:      # si sblocca a mano, o le prove dopo resterebbero ferme
+                    fase83_server._POSTI_SEO.release()
+                    t.join(5)
+        finally:
+            libera.set()
+        self.assertFalse(appeso, "a posti pieni il salvataggio aspettava un posto SEO")
+        self.assertEqual(201, esito[0][0], esito)
+        self.assertTrue(any("seo_saltato" in r for r in reg.output), reg.output)
+
+    def test_un_invio_riuscito_non_interroga_il_catalogo_alla_fine(self):
+        # `_chiudi_invio`: dopo un 201 l'annuncio e' nel catalogo e la chiave resta sua; non
+        # c'e' niente da verificare. Con l'`or` cambiato in `and` la chiusura richiedeva il
+        # catalogo dopo ogni salvataggio riuscito (e con il catalogo muto scriveva un ERROR finto)
+        voce = ("host-x", "invio-chiuso-01", "casa|livigno")
+        fase83_server._INVII_PUBBLICA[voce] = ("casa-chiusa", time.monotonic())
+        fase83_server._IN_VOLO["casa-chiusa"] = 1
+        with mock.patch.object(self.sis.catalogo, "host_di_alloggio",
+                               side_effect=sqlite3.OperationalError("database is locked")) as m:
+            self.r._chiudi_invio("casa-chiusa", voce, 201)
+        m.assert_not_called()
+        self.assertEqual("casa-chiusa", fase83_server._INVII_PUBBLICA[voce][0])
+        self.assertNotIn("casa-chiusa", fase83_server._IN_VOLO)
+
+    def test_un_invio_fallito_non_stacca_la_chiave_che_ora_indica_un_altro_annuncio(self):
+        # `_chiudi_invio`: un invio vecchio sullo slug S1 fallisce DOPO che la stessa chiave e'
+        # stata legata a S2 (24 ore passate mentre era in volo, e un riprova ha fatto S2). La
+        # chiave non e' piu' di S1: non si tocca. Con l'`or` cambiato in `and` si staccava da S2,
+        # e il riprova seguente creava un TERZO annuncio
+        voce = ("host-y", "invio-vecchio-01", "casa|livigno")
+        fase83_server._INVII_PUBBLICA[voce] = ("casa-s2", time.monotonic())
+        fase83_server._IN_VOLO["casa-s1"] = 1
+        fase83_server._SLUG_PRENOTATI["casa-s1"] = time.monotonic()
+        with mock.patch.object(self.sis.catalogo, "host_di_alloggio",
+                               wraps=self.sis.catalogo.host_di_alloggio) as m:
+            self.r._chiudi_invio("casa-s1", voce, 422)
+        self.assertEqual("casa-s2", fase83_server._INVII_PUBBLICA.get(voce, ("staccata",))[0])
+        m.assert_not_called()
+        self.assertNotIn("casa-s1", fase83_server._SLUG_PRENOTATI)
+
+    def test_un_invio_senza_chiave_non_tocca_la_memoria_degli_invii(self):
+        # D19: lo stato «impossibile» costruito a mano. Senza chiave (`voce` None) la chiusura
+        # non legge la memoria degli invii: anche se ci fosse una voce None, non si sfoglia
+        # `voce[0]` (TypeError) e non si chiede niente al catalogo
+        fase83_server._INVII_PUBBLICA[None] = ("casa-senza", time.monotonic())
+        fase83_server._IN_VOLO["casa-senza"] = 1
+        with mock.patch.object(self.sis.catalogo, "host_di_alloggio") as m:
+            self.r._chiudi_invio("casa-senza", None, 422)
+        m.assert_not_called()
+        self.assertEqual("casa-senza", fase83_server._INVII_PUBBLICA[None][0])
+
+    def test_il_motore_seo_si_costruisce_alla_prima_chiamata(self):
+        # `_motore_seo`: senza motore gia' pronto lo costruisce (fase173) una volta sola. Col
+        # primo `is None` rovesciato non lo costruiva mai e ogni giro SEO falliva
+        del self.r._motore_seo_cache
+        finto = object()
+        with mock.patch("fase173_motore_seo.crea_motore_da_sistema",
+                        return_value=finto) as crea:
+            self.assertIs(finto, self.r._motore_seo())
+            self.assertIs(finto, self.r._motore_seo())
+        crea.assert_called_once_with(self.sis)
+
+    def test_scegliere_un_indirizzo_senza_prenotarlo_non_lo_tiene(self):
+        # `_slug_unico(prenota=False)`: l'importazione e gli altri chiamanti senza `prenota`
+        # scelgono l'indirizzo e basta; prenotarlo per 24 ore lo toglierebbe al prossimo
+        primo = self.r._slug_unico("Casa Importata", "Roma")
+        secondo = self.r._slug_unico("Casa Importata", "Roma")
+        self.assertEqual(("casa-importata", "casa-importata"), (primo, secondo))
+        self.assertEqual({}, fase83_server._SLUG_PRENOTATI)
+
+    # --- revisioni 20/11: il secondo salvataggio veloce dello STESSO host -------------------
+
+    def _motore_trattenuto(self):
+        # il primo giro resta fermo finche' la prova non lo libera (Overpass muto); i giri
+        # dopo passano subito. Ogni giro scrive slug e prezzo che il motore ha ricevuto
+        chiamati, libera = [], threading.Event()
+
+        class MotoreMuto:
+            def su_pubblicazione(self, det, *_a, **_k):
+                chiamati.append((det["slug"], det["prezzo_notte_cents"]))
+                libera.wait(10)
+
+        self.r._motore_seo_cache = MotoreMuto()
+        return chiamati, libera
+
+    def _aspetta(self, condizione, volte=100):
+        for _ in range(volte):
+            if condizione():
+                return True
+            time.sleep(0.05)
+        return False
+
+    def test_il_secondo_salvataggio_veloce_avvisa_comunque_i_motori(self):
+        # code-review 20/11: l'host salva la casa A e subito la casa B mentre il giro di A e'
+        # ancora fermo su Overpass. Il posto dell'host era occupato e B saltava l'avviso
+        # (`seo_saltato`): con IndexNow acceso in produzione, B non arrivava mai ai motori
+        chiamati, libera = self._motore_trattenuto()
+        try:
+            with self.assertLogs("core_auto.server", level="INFO") as reg:
+                fase83_server.logger.info("inizio")
+                _, a = self._nuovo("invio-veloce-a1", titolo="Casa A")
+                self.assertTrue(self._aspetta(lambda: len(chiamati) == 1), chiamati)
+                _, b = self._nuovo("invio-veloce-b1", titolo="Casa B")
+                # la casa B e' davvero in coda (non arrivata per un'altra strada)
+                self.assertEqual([{b["slug"]: None}], list(fase83_server._SEO_PER_HOST.values()))
+                libera.set()
+                self.assertTrue(self._aspetta(lambda: len(chiamati) == 2), chiamati)
+        finally:
+            libera.set()
+        self.assertEqual([a["slug"], b["slug"]], [s for s, _ in chiamati])
+        self.assertFalse(any("seo_saltato" in r for r in reg.output), reg.output)
+        self.assertTrue(self._aspetta(lambda: fase83_server._SEO_PER_HOST == {}),
+                        fase83_server._SEO_PER_HOST)
+        self.assertEqual(fase83_server._TETTO_SEO_IN_CORSO, fase83_server._POSTI_SEO._value)
+
+    def test_due_salvataggi_della_stessa_casa_in_coda_avvisano_l_ultimo(self):
+        # mentre il giro di A e' fermo, l'host corregge B due volte: in coda resta l'ultima
+        # versione di B (un avviso per casa, col prezzo giusto), non due avvisi ne' il vecchio
+        chiamati, libera = self._motore_trattenuto()
+        try:
+            _, a = self._nuovo("invio-coda-a1", titolo="Casa A")
+            self.assertTrue(self._aspetta(lambda: len(chiamati) == 1), chiamati)
+            _, b = self._nuovo("invio-coda-b1", titolo="Casa B", prezzo=300)
+            self._nuovo("invio-coda-b1", titolo="Casa B", prezzo=350)
+            libera.set()
+            self.assertTrue(self._aspetta(lambda: len(chiamati) >= 2), chiamati)
+            self.assertTrue(self._aspetta(lambda: fase83_server._SEO_PER_HOST == {}))
+        finally:
+            libera.set()
+        self.assertEqual([(a["slug"], 200), (b["slug"], 350)], chiamati)
+
+    def test_la_coda_avvisa_la_casa_com_e_quando_tocca_a_lei(self):
+        # code-reviewer 20/11: due salvataggi della stessa casa quasi insieme; quello partito
+        # prima legge la scheda (300), quello dopo salva 350 e la mette in coda, poi il primo
+        # scrive in coda la sua scheda VECCHIA sopra la nuova: ai motori arrivava il 300.
+        # Qui la lettura in ritardo si imita: durante il secondo salvataggio il catalogo
+        # restituisce la scheda di prima. La coda deve rileggere la casa quando tocca a lei
+        chiamati, libera = self._motore_trattenuto()
+        try:
+            self._nuovo("invio-fresca-a1", titolo="Casa A")
+            self.assertTrue(self._aspetta(lambda: len(chiamati) == 1), chiamati)
+            _, b = self._nuovo("invio-fresca-b1", titolo="Casa B", prezzo=300)
+            vecchia = self.sis.catalogo.dettaglio(b["slug"])
+            with mock.patch.object(self.sis.catalogo, "dettaglio", return_value=vecchia):
+                self._nuovo("invio-fresca-b1", titolo="Casa B", prezzo=350)
+            libera.set()
+            self.assertTrue(self._aspetta(lambda: len(chiamati) >= 2), chiamati)
+            self.assertTrue(self._aspetta(lambda: fase83_server._SEO_PER_HOST == {}))
+        finally:
+            libera.set()
+        self.assertEqual([("casa-a", 200), (b["slug"], 350)], chiamati)
+
+    def test_la_coda_di_un_host_non_prende_i_posti_degli_altri(self):
+        # la coda di un host non occupa posti del tetto generale: mentre l'host 1 ha un giro
+        # fermo e uno in coda, gli altri tre host trovano ancora il loro posto
+        chiamati, libera = self._motore_trattenuto()
+        tetto = fase83_server._TETTO_SEO_IN_CORSO
+        altri = [self._registra("coda%d@doppioni.it" % i) for i in range(1, tetto)]
+        try:
+            self._nuovo("invio-posti-a1", titolo="Casa A")
+            self._nuovo("invio-posti-b1", titolo="Casa B")
+            for i, tk in enumerate(altri):
+                self._nuovo("invio-posti-x%d" % i, titolo="Altra %d" % i, tk=tk)
+            self.assertTrue(self._aspetta(lambda: len(chiamati) == tetto), chiamati)
+            in_volo = sorted(s for s, _ in chiamati)
+            in_coda = [list(q) for q in fase83_server._SEO_PER_HOST.values() if q]
+        finally:
+            libera.set()
+        self.assertEqual(sorted(["casa-a"] + ["altra-%d" % i for i in range(tetto - 1)]),
+                         in_volo)
+        self.assertEqual([["casa-b"]], in_coda)
+
+    def test_la_coda_di_un_host_ha_un_tetto(self):
+        # una coda senza limite e' memoria che cresce a ogni salvataggio di un host che non
+        # smette: oltre il tetto il salvataggio lo dice nel registro e non si mette in coda
+        chiamati, libera = self._motore_trattenuto()
+        coda = fase83_server._CODA_SEO_PER_HOST
+        try:
+            self._nuovo("invio-tettocoda-00", titolo="Casa ferma")
+            self.assertTrue(self._aspetta(lambda: len(chiamati) == 1), chiamati)
+            for i in range(coda):
+                self._nuovo("invio-tettocoda-%02d" % (i + 1), titolo="Casa %d" % i)
+            with self.assertLogs("core_auto.server", level="WARNING") as reg:
+                self._nuovo("invio-tettocoda-oltre", titolo="Casa oltre")
+            libera.set()
+            self.assertTrue(self._aspetta(lambda: len(chiamati) == coda + 1), chiamati)
+            self.assertTrue(self._aspetta(lambda: fase83_server._SEO_PER_HOST == {}))
+        finally:
+            libera.set()
+        self.assertTrue(any("seo_saltato" in r and "coda_piena" in r and "casa-oltre" in r
+                            for r in reg.output), reg.output)
+        self.assertNotIn("casa-oltre", [s for s, _ in chiamati])
+
+    def test_venti_case_dello_stesso_host_insieme_arrivano_tutte_ai_motori(self):
+        # gara (barriera da 20) mentre il motore e' fermo: un giro in corso, 19 in coda; finito
+        # il primo, lo stesso filo le fa tutte, ognuna una volta, e i posti tornano liberi
+        chiamati, libera = self._motore_trattenuto()
+        try:
+            case = self._raffica(["invio-coda20-%04d" % i for i in range(20)])
+            self.assertEqual(20, len(case))
+            # uno in corso, diciannove davvero in coda (non arrivati per un'altra strada)
+            self.assertEqual([19], [len(q) for q in fase83_server._SEO_PER_HOST.values()])
+            libera.set()
+            self.assertTrue(self._aspetta(lambda: len(chiamati) >= 20, 200), chiamati)
+            self.assertTrue(self._aspetta(lambda: fase83_server._SEO_PER_HOST == {}))
+        finally:
+            libera.set()
+        self.assertEqual(sorted(case), sorted(s for s, _ in chiamati))
+
+    def test_rendere_un_posto_che_nessuno_tiene_non_regala_un_posto(self):
+        # D19, lo stato «impossibile» costruito a mano: un «rendi» per un host che non ha un
+        # giro (un secondo rendi, o un filo che rende dopo che il suo posto e' gia' stato reso)
+        # non tocca il semaforo. Prima rilasciava comunque: col tetto pieno regalava un quinto
+        # posto, col tetto vuoto esplodeva (silent-failure-hunter 20/11)
+        tetto = fase83_server._TETTO_SEO_IN_CORSO
+        self.assertEqual("parti", self.r._prendi_posto_seo("host-1", "casa-1"))
+        self.r._rendi_posto_seo("host-1")
+        self.r._rendi_posto_seo("host-1")
+        self.r._rendi_posto_seo("host-mai-visto")
+        self.assertEqual(tetto, fase83_server._POSTI_SEO._value)
+        self.assertEqual({}, fase83_server._SEO_PER_HOST)
+
+    # --- prove mancanti segnalate dalle revisioni del 20/11 --------------------------------
+
+    def test_la_chiave_dell_invio_ha_confini_esatti(self):
+        # `_CHIAVE_INVIO_OK`: da 8 a 64 fra lettere senza accento, cifre, «-» e «_», e TUTTA la
+        # chiave (un a-capo in fondo non passa)
+        dati = {"titolo": " Casa ", "citta": "ROMA"}
+        for chiave, buona in (("a" * 7, False), ("a" * 8, True), ("a" * 64, True),
+                              ("a" * 65, False), ("", False), ("abcdefgh\n", False),
+                              ("abcd.efgh", False), ("abcd efgh", False), ("àbcdefgh", False),
+                              ("Ab-_09xyz", True)):
+            with self.subTest(chiave=chiave):
+                voce = self.r._voce_invio("h1", dict(dati, chiave_invio=chiave))
+                self.assertEqual(("h1", chiave, "casa|roma") if buona else None, voce)
+
+    def test_la_stessa_casa_scritta_diversa_e_lo_stesso_invio(self):
+        # l'impronta della casa ignora maiuscole e spazi ai lati; una citta' diversa e' un'altra
+        _, a = self._nuovo("invio-impronta-2", titolo="Baita sul lago")
+        _, b = self._nuovo("invio-impronta-2", titolo="  BAITA SUL LAGO ")
+        self.assertEqual(a["slug"], b["slug"])
+        _, c = self._nuovo("invio-impronta-2", titolo="Baita sul lago", citta="Bormio")
+        self.assertNotEqual(a["slug"], c["slug"])
+        self.assertEqual(2, len(self._annunci()))
+
+    def test_un_annuncio_gia_esistente_non_usa_la_memoria_degli_invii(self):
+        # slug scritto = modifica di un annuncio: la chiave non si ricorda e non si prenota
+        # niente, per l'host, per un altro host e per l'operatore
+        altro = self._registra("esplicito@doppioni.it")
+        for i, (tk, extra) in enumerate(((self.tk, {}), (altro, {}),
+                                         ({"X-Host-Key": "hk"}, {"host_id": "host-op"}))):
+            corpo = dict({"slug": "casa-esplicita-%d" % i, "titolo": "Casa", "citta": "Livigno",
+                          "paese": "ES", "prezzo_notte_cents": 200, "capacita": 2,
+                          "chiave_invio": "invio-esplicito-1"}, **extra)
+            s, o = self.g("POST", "/api/host/pubblica", corpo, tk)
+            self.assertEqual(201, s, o)
+            self.assertEqual(({}, {}, {}), (fase83_server._INVII_PUBBLICA,
+                                            fase83_server._IN_VOLO,
+                                            fase83_server._SLUG_PRENOTATI))
+
+    def test_un_catalogo_che_si_rompe_nel_salvare_non_lascia_l_invio_appeso(self):
+        with mock.patch.object(self.sis.catalogo, "pubblica",
+                               side_effect=sqlite3.OperationalError("disk I/O error")):
+            try:
+                s, _o = self._nuovo("invio-rotto-0001")
+            except sqlite3.OperationalError:
+                s = "eccezione"
+        self.assertNotEqual(201, s)
+        # l'annuncio non e' nato: niente in volo, niente prenotato, la chiave si stacca...
+        self.assertEqual(({}, {}, {}), (fase83_server._INVII_PUBBLICA, fase83_server._IN_VOLO,
+                                        fase83_server._SLUG_PRENOTATI))
+        # ...e il riprova salva davvero, una volta sola
+        s, o = self._nuovo("invio-rotto-0001")
+        self.assertEqual(201, s, o)
+        self.assertEqual([o["slug"]], self._annunci())
+
+
+class TestGliInviiASequenzeCasuali(unittest.TestCase):
+    """19/11, skill property-based-testing (Trail of Bits): sequenze CASUALI di invii nuovi,
+    riprova con la stessa casa, riprova con un'altra casa, invii rifiutati, due host. Quattro
+    regole che valgono dopo OGNI passo, qualunque sia l'ordine:
+    1. un annuncio non cambia MAI proprietario;
+    2. un annuncio salvato non sparisce e non cambia casa (titolo);
+    3. per ogni (host, chiave, casa) c'e' al piu' UN annuncio;
+    4. un invio riuscito con una coppia (chiave, casa) mai vista aggiunge esattamente UN
+       annuncio; una gia' vista non ne aggiunge."""
+
+    def test_le_quattro_regole_reggono_su_ogni_sequenza(self):
+        from hypothesis import settings, strategies as st
+        from hypothesis.stateful import RuleBasedStateMachine, invariant, rule
+        caso = self
+
+        class Invii(RuleBasedStateMachine):
+            def __init__(self):
+                super().__init__()
+                b = TestUnSalvataggioLentoNonFaDoppioni("test_invii_diversi_fanno_annunci_diversi")
+                b.setUp()
+                self.b = b
+                self.host = [b.tk, b._registra("h2@stati.it")]
+                self.visti = {}         # (host, chiave, casa) -> slug
+                self.proprietario = {}  # slug -> indice dell'host
+                self.casa_di = {}       # slug -> titolo
+
+            def teardown(self):
+                self.b.tearDown()
+
+            def _tutti(self):
+                return {s for i in range(2) for s in self.b._annunci(self.host[i])}
+
+            @rule(h=st.integers(0, 1),
+                  chiave=st.sampled_from(["invio-aaaa1111", "invio-bbbb2222", "invio-cccc3333",
+                                          None]),
+                  casa=st.sampled_from(["Baita", "Attico", "Loft"]),
+                  rifiutato=st.booleans())
+            def invia(self, h, chiave, casa, rifiutato):
+                prima = self._tutti()
+                s, o = self.b._nuovo(chiave, tk=self.host[h], titolo=casa,
+                                     paese="IT" if rifiutato else "ES")
+                dopo = self._tutti()
+                if rifiutato:
+                    caso.assertEqual(422, s, o)
+                    caso.assertEqual(prima, dopo)
+                    return
+                caso.assertEqual(201, s, o)
+                slug = o["slug"]
+                voce = (h, chiave, casa)
+                if chiave is not None and voce in self.visti:
+                    caso.assertEqual(self.visti[voce], slug)       # regola 3
+                    caso.assertEqual(prima, dopo)                  # regola 4
+                else:
+                    caso.assertNotIn(slug, prima)
+                    caso.assertEqual(prima | {slug}, dopo)         # regola 4
+                    if chiave is not None:
+                        self.visti[voce] = slug
+                    self.proprietario[slug] = h
+                    self.casa_di[slug] = casa
+
+            @invariant()
+            def nessun_annuncio_cambia_proprietario_ne_casa(self):
+                for i in range(2):
+                    for slug in self.b._annunci(self.host[i]):
+                        caso.assertEqual(self.proprietario.get(slug), i, slug)   # regola 1
+                for slug, casa in self.casa_di.items():                          # regola 2
+                    caso.assertEqual(casa,
+                                     self.b.sis.catalogo.dettaglio_owner(slug)["titolo"])
+
+        # ⛔ SENZA la fase che RIDUCE il controesempio (19/11 sera): ogni passo ricrea un
+        #    sistema con i suoi database, e sotto mutazione la riduzione durava oltre il tempo
+        #    concesso -- 20 punti «non esaminati». La sequenza che fallisce si stampa lo stesso.
+        # ⛔ E le stesse sequenze a ogni giro (revisione 20/11): a caso, un mutante poteva
+        #    morire in un giro e sopravvivere nel successivo, e la CI diventare rossa a sorte.
+        from hypothesis import Phase
+        Invii.TestCase.settings = settings(max_examples=60, stateful_step_count=12,
+                                           deadline=None, derandomize=True, database=None,
+                                           phases=(Phase.explicit, Phase.generate))
+        Invii.TestCase("runTest").runTest()
+
+
+class TestLaCodaSeoASequenzeCasuali(unittest.TestCase):
+    """20/11, skill property-based-testing (Trail of Bits): la coda SEO per host contro un
+    MODELLO scritto a parte. Salvataggi, fine di un giro e giri interrotti in ordine casuale;
+    dopo ogni passo: posti presi = giri in corso (mai oltre il tetto), coda di un host mai oltre
+    il suo tetto, e ogni casa salvata arriva al motore nella sua ULTIMA versione, oppure il
+    salvataggio ha detto «pieno» o il giro interrotto l'ha dichiarata persa."""
+
+    def test_la_coda_seo_segue_il_modello(self):
+        from hypothesis import Phase, settings, strategies as st
+        from hypothesis.stateful import RuleBasedStateMachine, invariant, precondition, rule
+        R = fase83_server.RouterHTTP
+        caso = self
+
+        class Coda(RuleBasedStateMachine):
+            def __init__(self):
+                super().__init__()
+                # i fili SEO di altre prove renderebbero il posto sul semaforo di questa
+                # (code-reviewer 20/11): si aspettano prima
+                _aspetta_i_giri_seo(caso)
+                self.vecchi = (fase83_server._POSTI_SEO, dict(fase83_server._SEO_PER_HOST))
+                fase83_server._SEO_PER_HOST.clear()
+                fase83_server._POSTI_SEO = threading.BoundedSemaphore(
+                    fase83_server._TETTO_SEO_IN_CORSO)
+                self.giro = {}      # host -> casa che il motore sta facendo
+                self.coda = {}      # host -> {casa: None}, in ordine d'arrivo
+                self.ultima = {}    # (host, casa) -> ultima versione salvata (il catalogo)
+                self.arrivata = {}  # (host, casa) -> ultima versione arrivata al motore
+                self.persa = set()  # (host, casa) dichiarate non avvisate
+
+            def teardown(self):
+                fase83_server._POSTI_SEO, vecchia = self.vecchi
+                fase83_server._SEO_PER_HOST.clear()
+                fase83_server._SEO_PER_HOST.update(vecchia)
+
+            @rule(h=st.sampled_from("abcdef"), casa=st.sampled_from("xyz") | st.integers(0, 25),
+                  v=st.integers(0, 9))
+            def salva(self, h, casa, v):
+                casa = str(casa)
+                esito = R._prendi_posto_seo(h, casa)
+                self.ultima[(h, casa)] = v
+                self.persa.discard((h, casa))
+                coda = self.coda.get(h, {})
+                if h in self.giro:
+                    if casa not in coda and len(coda) >= fase83_server._CODA_SEO_PER_HOST:
+                        caso.assertEqual("coda_piena", esito)
+                        self.persa.add((h, casa))
+                    else:
+                        caso.assertEqual("in_coda", esito)
+                        coda[casa] = None
+                        self.coda[h] = coda
+                elif len(self.giro) >= fase83_server._TETTO_SEO_IN_CORSO:
+                    caso.assertEqual("tetto_pieno", esito)
+                    self.persa.add((h, casa))
+                else:
+                    caso.assertEqual("parti", esito)
+                    self.giro[h] = casa
+                    self.arrivata[(h, casa)] = v
+
+            @precondition(lambda self: self.giro)
+            @rule(data=st.data())
+            def finisce_un_giro(self, data):
+                h = data.draw(st.sampled_from(sorted(self.giro)))
+                dopo = R._prossimo_seo(h)
+                coda = self.coda.get(h, {})
+                if coda:
+                    casa = next(iter(coda))
+                    del coda[casa]
+                    caso.assertEqual(casa, dopo)
+                    self.giro[h] = casa
+                    # il filo rilegge la casa adesso: arriva l'ultima versione salvata
+                    self.arrivata[(h, casa)] = self.ultima[(h, casa)]
+                else:
+                    caso.assertIsNone(dopo)
+                    del self.giro[h]
+                    self.coda.pop(h, None)
+
+            @precondition(lambda self: self.giro)
+            @rule(data=st.data())
+            def un_giro_si_interrompe(self, data):
+                h = data.draw(st.sampled_from(sorted(self.giro)))
+                R._rendi_posto_seo(h)
+                for casa in self.coda.pop(h, {}):
+                    self.persa.add((h, casa))
+                del self.giro[h]
+
+            @invariant()
+            def posti_e_code(self):
+                tetto = fase83_server._TETTO_SEO_IN_CORSO
+                caso.assertLessEqual(len(self.giro), tetto)
+                caso.assertEqual(tetto - len(self.giro), fase83_server._POSTI_SEO._value)
+                vera = {h: list(q) for h, q in fase83_server._SEO_PER_HOST.items()}
+                caso.assertEqual({h: list(self.coda.get(h, {})) for h in self.giro}, vera)
+                for q in vera.values():
+                    caso.assertLessEqual(len(q), fase83_server._CODA_SEO_PER_HOST)
+
+            def finisce_tutto(self):
+                while self.giro:
+                    h = sorted(self.giro)[0]
+                    dopo = R._prossimo_seo(h)
+                    if dopo is None:
+                        del self.giro[h]
+                        self.coda.pop(h, None)
+                    else:
+                        self.coda[h].pop(dopo)
+                        self.arrivata[(h, dopo)] = self.ultima[(h, dopo)]
+
+            @rule()
+            def alla_fine_ogni_casa_arriva_nell_ultima_versione(self):
+                self.finisce_tutto()
+                for chiave, v in self.ultima.items():
+                    if chiave not in self.persa:
+                        caso.assertEqual(v, self.arrivata.get(chiave), chiave)
+                caso.assertEqual({}, fase83_server._SEO_PER_HOST)
+
+        Coda.TestCase.settings = settings(max_examples=300, stateful_step_count=60,
+                                          deadline=None, derandomize=True, database=None,
+                                          phases=(Phase.explicit, Phase.generate, Phase.shrink))
+        Coda.TestCase("runTest").runTest()
+
+
 if __name__ == "__main__":
     unittest.main()
