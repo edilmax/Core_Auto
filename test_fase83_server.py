@@ -13040,6 +13040,266 @@ class TestArchivioMutoNonDiceNonETuo(unittest.TestCase):
         return self.r._host_id_da_token(self.tk)
 
 
+class TestLaChatDellOspiteConArchivioMuto(unittest.TestCase):
+    """20/11, variante del punto (1) dei doppioni nella chat dell'OSPITE: `_voucher_chat_ctx`
+    col catalogo che non risponde dava come padrone un finto host «host». Il messaggio (e la
+    foto di prova di una controversia) finiva in una conversazione che il vero host non vede
+    mai, e l'ospite leggeva «inviato». Ora: 503 riprova, registro col codice, niente scritto;
+    leggere la propria chat resta possibile (non serve sapere chi e' l'host)."""
+
+    def setUp(self):
+        from fase57_vetrina import SchedaAlloggio
+        d = self.dir = tempfile.mkdtemp()
+        self._upload = mock.patch.dict(os.environ, {"UPLOAD_DIR": d + "/up"})
+        self._upload.start()
+        self.sis = crea_sistema(ConfigCasaVIP(
+            abilitato=True, segreto_hmac=b"S" * 32, db_catalogo=f"{d}/c.db",
+            db_inventario=f"{d}/i.db", db_messaggi=f"{d}/m.db", db_pendenti=f"{d}/p.db"))
+        self.r = crea_router(self.sis, host_key="hk", admin_key="ak")
+        self.sis.catalogo.pubblica(SchedaAlloggio(host_id="h1", slug="casa", titolo="Casa",
+                                                  citta="Roma", prezzo_notte_cents=10000,
+                                                  capacita=2))
+        oggi = datetime.date.today()
+        ci, co = oggi + datetime.timedelta(days=60), oggi + datetime.timedelta(days=61)
+        self.sis.inventario.imposta_disponibilita("casa", ci.isoformat(), unita_totali=1,
+                                                  prezzo_netto_cents=10000)
+        s, q = self.g("POST", "/api/concierge/quote", {
+            "alloggio_id": "casa", "check_in": ci.isoformat(), "check_out": co.isoformat(),
+            "party": 2})
+        _deve(s == 200, s, q)
+        s, b = self.g("POST", "/api/concierge/book",
+                      {"quote_token": q["quote_token"], "email": "ospite@x.it"})
+        _deve(s in (200, 201), s, b)
+        self.v, self.rif = b["voucher_token"], b["riferimento"]
+
+    def tearDown(self):
+        self._upload.stop()
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def g(self, m, p, b=None, h=None, q=None):
+        return self.r.gestisci(m, p, q or {}, json.dumps(b) if b is not None else None, h or {})
+
+    @staticmethod
+    def _muto(*_a, **_k):
+        raise sqlite3.OperationalError("database is locked")
+
+    def _scritti(self):
+        return self.sis.messaggistica.thread(self.rif, "ospite")
+
+    def test_col_catalogo_muto_l_ospite_sente_riprova_e_non_si_scrive_niente(self):
+        png = ("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJ"
+               "RU5ErkJggg==")
+        sbagliate = {}
+        with mock.patch.object(self.sis.catalogo, "host_di_alloggio", self._muto):
+            for percorso, corpo in (
+                    ("/api/voucher/messaggio", {"voucher_token": self.v, "testo": "Ciao"}),
+                    ("/api/voucher/prova", {"voucher_token": self.v, "image_base64": png})):
+                with self.assertLogs("core_auto.server", level="WARNING") as reg:
+                    s, c = self.g("POST", percorso, corpo)
+                if (s, c.get("errore")) != (503, "storage_non_disponibile"):
+                    sbagliate[percorso] = (s, c)
+                if not any("codice: proprietario_non_verificabile" in r
+                           and "riferimento: " + self.rif in r for r in reg.output):
+                    sbagliate[percorso + " (registro)"] = reg.output
+        self.assertEqual({}, sbagliate)
+        self.assertEqual([], self._scritti())
+        self.assertEqual([], os.listdir(self.dir + "/up") if os.path.isdir(self.dir + "/up")
+                         else [])
+
+    def test_col_catalogo_muto_l_ospite_legge_la_sua_chat(self):
+        s, _ = self.g("POST", "/api/voucher/messaggio", {"voucher_token": self.v, "testo": "Ciao"})
+        self.assertEqual(201, s)
+        with mock.patch.object(self.sis.catalogo, "host_di_alloggio", self._muto):
+            s, t = self.g("GET", "/api/voucher/messaggi", q={"voucher_token": self.v})
+        self.assertEqual(200, s, t)
+        self.assertEqual(["Ciao"], [m["testo"] for m in t["messaggi"]])
+
+    def test_col_catalogo_sano_il_messaggio_arriva_al_vero_host(self):
+        # l'altra direzione (regola ferrea 10): a catalogo sano si scrive e lo vede h1
+        s, c = self.g("POST", "/api/voucher/messaggio", {"voucher_token": self.v, "testo": "Ciao"})
+        self.assertEqual((201, "inviato"), (s, c.get("stato")))
+        conv = self.sis.messaggistica.conversazioni_host("h1")
+        self.assertEqual([self.rif], [x.get("prenotazione_id") for x in conv])
+        self.assertEqual([], self.sis.messaggistica.conversazioni_host("host"))
+
+    def test_alloggio_senza_padrone_non_scrive_col_finto_host(self):
+        # silent-failure-hunter + code-review 20/11: alloggio cancellato dopo la prenotazione.
+        # Una riga col finto «host» non la legge nessuno E nasconde all'host vero TUTTA la chat
+        # (`thread` nega a chi non e' in ogni riga). Niente scritto, 410 e registro col codice.
+        s, _ = self.g("POST", "/api/voucher/messaggio", {"voucher_token": self.v, "testo": "Prima"})
+        self.assertEqual(201, s)
+        with mock.patch.object(self.sis.catalogo, "host_di_alloggio", lambda *_a, **_k: None):
+            with self.assertLogs("core_auto.server", level="WARNING") as reg:
+                s, c = self.g("POST", "/api/voucher/messaggio",
+                              {"voucher_token": self.v, "testo": "C'e' qualcuno?"})
+        self.assertEqual((410, "alloggio_non_disponibile"), (s, c.get("errore")))
+        self.assertTrue(any("codice: padrone_sconosciuto" in r and self.rif in r
+                            for r in reg.output), reg.output)
+        self.assertEqual(["Prima"], [m["testo"] for m in self.sis.messaggistica.thread(self.rif, "h1")])
+
+    def test_la_pagina_del_voucher_dice_all_ospite_se_il_messaggio_non_parte(self):
+        # code-review 20/11: il pulsante «manda» guardava solo il 201; 503 riprova, 410 e la rete
+        # caduta erano MUTI. Provato nel browser vero (Playwright, 503/410/rete: rosso su master,
+        # verde dopo; script in Core_Auto_GUARDIE_PRONTE\...\errori_20_11\prova.js). Qui la guardia
+        # di suite legge il gestore del pulsante nella pagina VERA: rete in try, ramo d'errore.
+        from fase83_server import pagina_voucher_html
+        with mock.patch.object(self.sis, "pagamenti_pendenti",
+                               types.SimpleNamespace(info=lambda _r: {"stato": "pagato"})):
+            html = pagina_voucher_html(self.sis, self.v, "it")
+        inizio = html.index("chSend').onclick")
+        gestore = html[inizio:html.index("chFile')", inizio)]
+        for pezzo in ("try{", "catch(", "else{", "BVL.riprova", "BVL.op_ko", "status>=500"):
+            self.assertIn(pezzo, gestore, gestore)
+
+    def test_venti_prove_nello_stesso_istante_non_superano_il_tetto(self):
+        # GARA (cassetta degli attrezzi 20/11): il tetto si contava PRIMA di salvare, senza
+        # serratura -- 20 caricamenti insieme con la chat a una prova dal tetto ne facevano
+        # passare 19 (misurato: 28 prove su un tetto di 10). Il tetto e' la difesa del disco.
+        png = ("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJ"
+               "RU5ErkJggg==")
+        corpo = {"voucher_token": self.v, "image_base64": png}
+        for _ in range(fase83_server.MAX_PROVE_FOTO - 1):
+            self.assertEqual(201, self.g("POST", "/api/voucher/prova", corpo)[0])
+        barriera, stati = threading.Barrier(20), []
+
+        def uno():
+            barriera.wait()
+            stati.append(self.g("POST", "/api/voucher/prova", corpo)[0])
+
+        # la finestra fra «conto» e «salvo» si allarga a mano (50 ms): senza, la gara dipende
+        # dai tempi della macchina e la guardia potrebbe non vederla (nella suite era verde
+        # anche sul codice difettoso)
+        vero = fase83_server.RouterHTTP._salva_foto_raw
+
+        def lento(router, *a, **k):
+            time.sleep(0.05)
+            return vero(router, *a, **k)
+
+        with mock.patch.object(fase83_server.RouterHTTP, "_salva_foto_raw", lento):
+            fili = [threading.Thread(target=uno) for _ in range(20)]
+            for f in fili:
+                f.start()
+            for f in fili:
+                f.join(30)
+        prove = [m for m in self._scritti() if "/uploads/" in m["testo"]]
+        self.assertEqual(fase83_server.MAX_PROVE_FOTO, len(prove), sorted(stati))
+        self.assertEqual((1, 19), (stati.count(201), stati.count(429)), sorted(stati))
+        self.assertEqual(len(prove), len(os.listdir(self.dir + "/up")))
+
+    def test_le_prove_non_contate_chiudono(self):
+        # code-review 20/11: il tetto alle foto di prova e' cio' che impedisce di riempire il
+        # disco. Se la chat non si legge il tetto non si conta: si nega (503), non si salva niente.
+        png = ("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJ"
+               "RU5ErkJggg==")
+        with mock.patch.object(self.sis.messaggistica, "thread", self._muto):
+            with self.assertLogs("core_auto.server", level="WARNING") as reg:
+                s, c = self.g("POST", "/api/voucher/prova",
+                              {"voucher_token": self.v, "image_base64": png})
+        self.assertEqual((503, "storage_non_disponibile"), (s, c.get("errore")))
+        self.assertTrue(any("codice: prove_non_contate" in r and self.rif in r
+                            for r in reg.output), reg.output)
+        self.assertEqual([], os.listdir(self.dir + "/up") if os.path.isdir(self.dir + "/up")
+                         else [])
+
+
+class TestIlTettoDeiPreventiviEmailReggeLaGara(unittest.TestCase):
+    """GARA (cassetta degli attrezzi 20/11, variante della gara sulle foto di prova): il tetto
+    per indirizzo di POST /api/preventivo/email si contava, poi si mandava l'email e SOLO DOPO si
+    registrava l'invio, senza serratura -- 20 richieste insieme allo stesso indirizzo (date
+    diverse) passavano tutte: 20 email a una persona ignara dal nostro dominio. Il tetto esiste
+    proprio contro questo (test_abuso_email)."""
+
+    def setUp(self):
+        from fase57_vetrina import SchedaAlloggio
+        self.sis = crea_sistema(ConfigCasaVIP(abilitato=True, segreto_hmac=b"0" * 32))
+        inviate, serratura = self.inviate, self.serratura = [], threading.Lock()
+
+        class Lento:
+            def invia(self, dest, _ogg, _html):
+                time.sleep(0.05)      # la finestra fra «conto» e «registro» si allarga a mano
+                with serratura:
+                    inviate.append(dest)
+                return True
+
+        self.sis.email_provider = Lento()
+        self.sis.catalogo.pubblica(SchedaAlloggio(host_id="h", slug="casa-x", titolo="T",
+                                                  citta="Roma", prezzo_notte_cents=10000,
+                                                  capacita=2))
+        self.oggi = datetime.date.today()
+        for g in range(30, 60):
+            self.sis.inventario.imposta_disponibilita(
+                "casa-x", (self.oggi + datetime.timedelta(days=g)).isoformat(),
+                unita_totali=1, prezzo_netto_cents=10000)
+        self.r = crea_router(self.sis)
+
+    def _chiedi(self, g):
+        ci = self.oggi + datetime.timedelta(days=30 + g)
+        return self.r.gestisci("POST", "/api/preventivo/email", body=json.dumps({
+            "email": "vittima@estraneo.example", "alloggio_id": "casa-x",
+            "check_in": ci.isoformat(),
+            "check_out": (ci + datetime.timedelta(days=1)).isoformat()}))[0]
+
+    def test_venti_richieste_insieme_non_superano_il_tetto(self):
+        barriera, stati = threading.Barrier(20), []
+
+        def una(g):
+            barriera.wait()
+            stati.append(self._chiedi(g))
+
+        fili = [threading.Thread(target=una, args=(g,)) for g in range(20)]
+        for f in fili:
+            f.start()
+        for f in fili:
+            f.join(30)
+        self.assertEqual(fase83_server.MAX_PREVENTIVI_EMAIL_ORA, len(self.inviate), sorted(stati))
+        self.assertEqual(fase83_server.MAX_PREVENTIVI_EMAIL_ORA, stati.count(200), sorted(stati))
+
+    def test_il_tetto_regge_qualunque_sequenza(self):
+        # property-based-testing (Trail of Bits) 20/11: invariante su sequenze casuali di
+        # (indirizzo, date, invio riuscito o no, tempo che passa): per indirizzo mai piu' di
+        # MAX_PREVENTIVI_EMAIL_ORA email partite in un'ora, stesse date mai due volte in 10
+        # minuti, e un invio fallito non consuma il tetto (dopo, a posto libero, si passa).
+        from hypothesis import given, settings, strategies as st
+        tetto = fase83_server.MAX_PREVENTIVI_EMAIL_ORA
+        passo = st.tuples(st.sampled_from(["a@x.example", "b@x.example"]), st.integers(0, 5),
+                          st.booleans(), st.integers(0, 4000))
+
+        @settings(max_examples=150, deadline=None, derandomize=True, database=None)
+        @given(st.lists(passo, max_size=25))
+        def prova(passi):
+            self.r = crea_router(self.sis)
+            orologio, partite = [1_900_000_000.0], []
+            for em, g, ok, avanti in passi:
+                orologio[0] += avanti
+                self.sis.email_provider = types.SimpleNamespace(invia=lambda *_a, _ok=ok: _ok)
+                ci = self.oggi + datetime.timedelta(days=30 + g)
+                with mock.patch("time.time", lambda: orologio[0]):
+                    s, _ = self.r.gestisci("POST", "/api/preventivo/email", body=json.dumps({
+                        "email": em, "alloggio_id": "casa-x", "check_in": ci.isoformat(),
+                        "check_out": (ci + datetime.timedelta(days=1)).isoformat()}))
+                ora = orologio[0]
+                ultima_ora = [t for e, _g, t in partite if e == em and ora - t < 3600]
+                stesse = [t for e, gg, t in partite if e == em and gg == g and ora - t < 600]
+                if s == 200:
+                    self.assertTrue(ok, passi)
+                    self.assertLess(len(ultima_ora), tetto, passi)
+                    self.assertEqual([], stesse, passi)
+                    partite.append((em, g, ora))
+                elif ok and len(ultima_ora) < tetto and not stesse:
+                    self.fail("posto libero ma rifiutato (%s): un fallimento ha consumato il "
+                              "tetto? %s" % (s, passi))
+
+        prova()
+
+    def test_un_invio_fallito_non_consuma_il_tetto(self):
+        # l'altra direzione: la prenotazione del posto si restituisce se l'email non parte
+        self.sis.email_provider = types.SimpleNamespace(invia=lambda *_a: False)
+        self.assertEqual(502, self._chiedi(0))
+        self.sis.email_provider = types.SimpleNamespace(invia=lambda *_a: True)
+        esiti = [self._chiedi(g) for g in range(1, 8)]
+        self.assertEqual(fase83_server.MAX_PREVENTIVI_EMAIL_ORA, esiti.count(200), esiti)
+
+
 class TestLeEmailHannoUnTetto(unittest.TestCase):
     """20/11, punto (7) fuori lavoro dei doppioni (variant-analysis): ogni email partiva nel
     SUO filo, senza tetto -- una raffica (prenotazioni, reset password) apriva un filo e una

@@ -1507,8 +1507,13 @@ def pagina_voucher_html(sistema: Any, token: Any, lingua: Any = None) -> Optiona
         "function carica(){fetch('/api/voucher/messaggi?voucher_token='+encodeURIComponent(tk))"
         ".then(function(r){return r.json();}).then(function(d){rendi(d.messaggi);});}"
         "document.getElementById('chSend').onclick=async function(){var t=document.getElementById('chTxt').value.trim();"
-        "if(!t)return;var r=await fetch('/api/voucher/messaggio',{method:'POST',headers:{'Content-Type':'application/json'},"
-        "body:JSON.stringify({voucher_token:tk,testo:t})});if(r.status===201){document.getElementById('chTxt').value='';carica();}};"
+        # code-review 20/11: ogni risposta diversa da 201 (503 riprova, 410, rete caduta) era
+        # muta -- il testo restava nella casella e l'ospite non sapeva se era partito
+        "if(!t)return;var m=document.getElementById('chMsg');m.textContent='';var r=null;"
+        "try{r=await fetch('/api/voucher/messaggio',{method:'POST',headers:{'Content-Type':'application/json'},"
+        "body:JSON.stringify({voucher_token:tk,testo:t})});}catch(x){r=null;}"
+        "if(r&&r.status===201){document.getElementById('chTxt').value='';carica();}"
+        "else{m.style.color='#b00020';m.textContent=(!r||r.status>=500)?BVL.riprova:BVL.op_ko;}};"
         "document.getElementById('chFile').onchange=function(){var f=this.files[0];if(!f)return;"
         "var rd=new FileReader();rd.onload=async function(){"
         "var r=await fetch('/api/voucher/prova',{method:'POST',headers:{'Content-Type':'application/json'},"
@@ -2309,6 +2314,12 @@ MAX_PREVENTIVI_EMAIL_ORA = 3
 # sola prenotazione valida si riempiva il disco (= sito giu'). 10 e' abbondante per una
 # controversia vera. Il prefisso identifica le prove nel thread (serve anche a contarle).
 MAX_PROVE_FOTO = 10
+# conto + salvataggio delle prove insieme (gara 20/11): UNA serratura per prenotazione (una sola
+# per tutto il sito metteva in fila le prove di tutti dietro un disco lento: revisione 20/11);
+# `_SERRATURA_PROVE` protegge solo il dizionario. Una serratura per prenotazione con prove: poca memoria.
+_SERRATURA_PROVE = threading.Lock()
+_SERRATURE_PROVE_RIF: Dict[str, Any] = {}
+_SERRATURA_PREV_EMAIL = threading.Lock()   # conto + prenotazione dei preventivi email (gara 20/11)
 _PREFISSO_PROVA = "📎 PROVA FOTO:"
 # LA PROVA FOTO E' PRIVATA (D2 del Compito 52, 2026-10-08, «autorizzato» del fondatore). Stava
 # nella cartella delle foto degli annunci e `/uploads/` la dava a chiunque avesse l'URL, in cache
@@ -3038,18 +3049,34 @@ class RouterHTTP:
         return 201, {"url": "/uploads/" + nome}
 
     # --- CHAT DAL VOUCHER (cliente<->host, zero password: autentica il voucher firmato) ---
-    def _voucher_chat_ctx(self, token):
-        """(rif, host_id) dal voucher firmato, o None. guest_id canonico = 'ospite'."""
+    def _voucher_chat_ctx(self, token, con_host=True):
+        """(rif, host_id) dal voucher firmato, o None. guest_id canonico = 'ospite'.
+        Archivio muto: prima il padrone diventava un finto «host» e il messaggio finiva dove il
+        vero host non guarda (20/11); ora 503 riprova col codice. Chi solo LEGGE (con_host=False)
+        non ha bisogno del padrone. Guardia: test_fase83_server.TestLaChatDellOspiteConArchivioMuto"""
         v = self._voucher_valido(token)
         if v is None:
             return None
         rif, allog = v.get("riferimento", ""), v.get("alloggio_id", "")
         if not (rif and allog):
             return None
+        if not con_host:
+            return rif, None
         try:
-            hid = self._sys.catalogo.host_di_alloggio(allog) or "host"
-        except Exception:
-            hid = "host"
+            hid = self._sys.catalogo.host_di_alloggio(allog)
+        except Exception as errore:
+            raise _ProprietarioNonVerificabile(_proprietario_muto(
+                "chat_ospite", "riferimento", rif,
+                "l'archivio dei padroni non risponde: il messaggio o la foto di prova "
+                "dell'ospite NON e' scritto, 503 e l'ospite riprova")) from errore
+        if not hid:
+            # alloggio cancellato dopo la prenotazione. Una riga col finto «host» non la legge
+            # nessuno e nasconde all'host vero TUTTA la chat (`thread` nega a chi non e' in ogni
+            # riga): niente scritto, e si DICE (silent-failure-hunter + code-review 20/11)
+            logger.warning("CHAT OSPITE | codice: padrone_sconosciuto | riferimento: %s | "
+                           "messaggio: l'alloggio non ha piu' un host, niente scritto, 410",
+                           _rif_per_registro(rif))
+            raise _ProprietarioNonVerificabile((410, {"errore": "alloggio_non_disponibile"}))
         return rif, hid
 
     def _host_conversazioni(self, headers):
@@ -3081,7 +3108,7 @@ class RouterHTTP:
         msg = getattr(self._sys, "messaggistica", None)
         if msg is None:
             return 503, {"errore": "messaggistica_non_attiva"}
-        ctx = self._voucher_chat_ctx(query.get("voucher_token"))
+        ctx = self._voucher_chat_ctx(query.get("voucher_token"), con_host=False)
         if ctx is None:
             return 400, {"errore": "voucher_non_valido"}
         rif, _hid = ctx
@@ -3175,6 +3202,17 @@ class RouterHTTP:
         if ctx is None:
             return 400, {"errore": "voucher_non_valido"}
         rif, hid = ctx
+        # GARA (cassetta degli attrezzi 20/11): il tetto si contava e poi si salvava SENZA
+        # serratura -- 20 caricamenti insieme passavano tutti (29 prove su un tetto di 10).
+        # Conto, salvataggio e bolla stanno sotto la stessa serratura. Guardia:
+        # TestLaChatDellOspiteConArchivioMuto.test_venti_prove_nello_stesso_istante_non_superano_il_tetto
+        with _SERRATURA_PROVE:
+            serratura = _SERRATURE_PROVE_RIF.setdefault(rif, threading.Lock())
+        with serratura:
+            return self._carica_prova(msg, dati, rif, hid)
+
+    def _carica_prova(self, msg, dati, rif, hid):
+        """Il resto di `_voucher_prova`: si chiama SOLO sotto la serratura della prenotazione."""
         # TETTO PER PRENOTAZIONE (collaudo 2026-07-15). C'era il limite di 5MB per FILE ma
         # NESSUNO sul numero: con UNA prenotazione valida si potevano caricare foto all'infinito
         # -> disco pieno (44GB liberi = ~9000 file) -> SQLite non scrive piu' -> SITO GIU'.
@@ -3185,7 +3223,12 @@ class RouterHTTP:
             n_prove = sum(1 for m in esistenti
                           if str((m or {}).get("testo", "")).startswith(_PREFISSO_PROVA))
         except Exception:
-            n_prove = 0                      # isolato: un errore di lettura non blocca l'ospite
+            # il tetto e' cio' che impedisce di riempire il disco: se non si conta, si nega
+            # (code-review 20/11; prima n_prove=0 in silenzio e la foto si salvava)
+            logger.warning("PROVA FOTO | codice: prove_non_contate | riferimento: %s | messaggio: "
+                           "chat illeggibile, tetto non contabile: nego e rispondo 503",
+                           _rif_per_registro(rif), exc_info=True)
+            return 503, {"errore": "storage_non_disponibile", "riprova": True}
         if n_prove >= MAX_PROVE_FOTO:
             return 429, {"errore": "troppe_prove_caricate"}
         st, out = self._salva_foto_raw(dati.get("image_base64"))
@@ -10396,14 +10439,39 @@ class RouterHTTP:
             return 422, {"errore": "campi_mancanti"}
         # throttle in-process: 1 invio per (email, alloggio, date) ogni 10 minuti
         import time as _t
-        mem = getattr(self, "_prev_email_ts", None)
-        if mem is None:
-            mem = {}
-            self._prev_email_ts = mem
         ora = _t.time()
-        for k in [k for k, ts in mem.items() if ora - ts > 3600]:
-            mem.pop(k, None)
         chiave = (email.strip().lower(), slug, ci, co)
+        # GARA (cassetta degli attrezzi 20/11): contare e registrare stavano lontani (l'invio in
+        # mezzo) e senza serratura -- 20 richieste insieme = 20 email alla stessa persona. Ora
+        # il posto si PRENOTA sotto `_SERRATURA_PREV_EMAIL` (anche la pulizia delle memorie, che
+        # scorreva il dizionario mentre altri ci scrivevano) e si restituisce se l'email non parte.
+        # Guardia: test_fase83_server.TestIlTettoDeiPreventiviEmailReggeLaGara
+        with _SERRATURA_PREV_EMAIL:
+            mem = getattr(self, "_prev_email_ts", None)
+            if mem is None:
+                mem = {}
+                self._prev_email_ts = mem
+            for k in [k for k, ts in mem.items() if ora - ts > 3600]:
+                mem.pop(k, None)
+            esito = self._prenota_preventivo_email(mem, chiave, ora)
+        if esito is not None:
+            return esito
+        try:
+            st, out = self._manda_preventivo_email(prov, email, dati, slug, ci, co)
+        except Exception:
+            st, out = 500, {"errore": "errore_interno"}
+            logger.error("preventivo email: invio ISOLATO fallito", exc_info=True)
+        if st != 200:
+            with _SERRATURA_PREV_EMAIL:
+                if mem.get(chiave) == ora:
+                    mem.pop(chiave, None)
+                recenti = self._prev_email_storia.get(chiave[0], [])
+                if ora in recenti:
+                    recenti.remove(ora)
+        return st, out
+
+    def _prenota_preventivo_email(self, mem, chiave, ora):
+        """Sotto `_SERRATURA_PREV_EMAIL`: None = posto prenotato, altrimenti la risposta 429."""
         if ora - mem.get(chiave, 0) < 600:
             return 429, {"errore": "gia_inviato_riprova_piu_tardi"}
         # TETTO PER INDIRIZZO (anti-abuso, collaudo 2026-07-15). Il throttle qui sopra e' per
@@ -10412,7 +10480,7 @@ class RouterHTTP:
         # chiamante: senza tetto siamo un mezzo per bombardare terzi DAL NOSTRO dominio. Il danno
         # vero non e' lo spam: e' info@bookinvip.com in BLACKLIST -> voucher e avvisi host non
         # consegnati piu' (cioe' il prodotto muore in silenzio).
-        em = email.strip().lower()
+        em = chiave[0]
         storia = getattr(self, "_prev_email_storia", None)
         if storia is None:
             storia = {}
@@ -10423,6 +10491,12 @@ class RouterHTTP:
             storia.pop(k, None)                      # niente crescita infinita in memoria
         if len(recenti) >= MAX_PREVENTIVI_EMAIL_ORA:
             return 429, {"errore": "troppe_richieste_per_questa_email"}
+        mem[chiave] = ora
+        storia.setdefault(em, []).append(ora)   # conta verso il tetto orario per indirizzo
+        return None
+
+    def _manda_preventivo_email(self, prov, email, dati, slug, ci, co):
+        """Il preventivo ricalcolato e spedito; 200 solo se l'email e' partita."""
         # ricalcolo dal server: se le date non reggono piu', niente email (onesto)
         try:
             r = self._sys.concierge.quota({
@@ -10464,8 +10538,6 @@ class RouterHTTP:
         oggetto = _oggetto_email("prev_ogg", lang, titolo)
         if not prov.invia(email.strip(), oggetto, html):
             return 502, {"errore": "invio_fallito"}
-        mem[chiave] = ora
-        storia.setdefault(em, []).append(ora)   # conta verso il tetto orario per indirizzo
         return 200, {"stato": "inviata"}
 
     def _marketing_campagna(self, body, headers):
