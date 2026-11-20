@@ -12098,6 +12098,48 @@ class TestUnSalvataggioLentoNonFaDoppioni(unittest.TestCase):
         self.assertTrue(any("giro_interrotto" in r and "casa-b" in r for r in reg.output),
                         reg.output)
 
+    def test_un_a_capo_in_host_o_slug_non_scrive_righe_false_nel_registro(self):
+        """CodeQL py/log-injection sulla PR #334 (20/11): host e slug finivano nel registro cosi'
+        com'erano. L'host di un invio da operatore arriva dal corpo della richiesta: con un «a
+        capo» dentro scriveva nel registro una riga intera inventata (un falso `codice:`)."""
+        falso = "h\nSEO | codice: falso | messaggio: riga inventata"
+
+        def senza_a_capo(reg, codice):
+            righe = [r.getMessage() for r in reg.records if codice in r.getMessage()]
+            self.assertTrue(righe, "premessa: nessuna riga %s nel registro" % codice)
+            for riga in righe:
+                self.assertNotIn("\n", riga, "%s: riga falsa nel registro" % codice)
+
+        # (1) e (2): tetto pieno e coda piena, da un invio da OPERATORE (host dal corpo)
+        for esito in ("tetto_pieno", "coda_piena"):
+            self.r._prendi_posto_seo = lambda chi, slug, e=esito: e
+            with self.assertLogs("core_auto.server", level="WARNING") as reg:
+                s, o = self.g("POST", "/api/host/pubblica",
+                              {"slug": "", "titolo": "Casa %s" % esito, "citta": "Livigno",
+                               "paese": "ES", "prezzo_notte_cents": 200, "capacita": 2,
+                               "host_id": falso, "chiave_invio": "invio-acapo-%s" % esito},
+                              {"X-Host-Key": "hk"})
+            self.assertEqual(201, s, o)
+            senza_a_capo(reg, "motivo: " + esito)
+        del self.r._prendi_posto_seo
+        # (3): giro interrotto, con uno slug in coda che porta un a capo
+        self.assertEqual("parti", self.r._prendi_posto_seo(falso, "casa-a"))
+        self.assertEqual("in_coda", self.r._prendi_posto_seo(falso, "casa\nb"))
+        with self.assertLogs("core_auto.server", level="WARNING") as reg:
+            self.r._rendi_posto_seo(falso)
+        senza_a_capo(reg, "giro_interrotto")
+
+        # (4): invio non verificabile col catalogo muto
+        def muto(_slug):
+            raise OSError("catalogo muto")
+        self.r._sys.catalogo.host_di_alloggio = muto
+        voce = (falso, "invio-acapo-4", "casa")
+        fase83_server._INVII_PUBBLICA[voce] = ("casa\nz", time.time())
+        fase83_server._IN_VOLO["casa\nz"] = 1
+        with self.assertLogs("core_auto.server", level="ERROR") as reg:
+            self.r._chiudi_invio("casa\nz", voce, 500)
+        senza_a_capo(reg, "invio_non_verificabile")
+
     def test_un_host_solo_non_occupa_tutti_i_posti_del_motore_seo(self):
         # adversarial-modeler 19/11 sera: un host che salva di continuo mentre Overpass e' muto
         # teneva TUTTI i posti, e gli annunci degli altri host non avvisavano piu' i motori

@@ -12771,15 +12771,19 @@ class RouterHTTP:
             det = self._sys.catalogo.dettaglio(scheda.slug)
             chi = hid or str(dati.get("host_id") or "")
             posto = "" if det is None else self._prendi_posto_seo(chi, scheda.slug)
+            # nel registro senza «a capo»: l'host di un invio da operatore arriva dal corpo
+            # della richiesta (CodeQL py/log-injection, PR #334)
+            chi_log = chi.replace("\r", " ").replace("\n", " ")
+            slug_log = str(scheda.slug).replace("\r", " ").replace("\n", " ")
             if posto == "tetto_pieno":
                 logger.warning("SEO | codice: seo_saltato | motivo: tetto_pieno | slug: %s | "
                                "host: %s | messaggio: %d giri SEO gia' in corso, questo "
-                               "salvataggio non avvisa i motori", scheda.slug, chi,
+                               "salvataggio non avvisa i motori", slug_log, chi_log,
                                _TETTO_SEO_IN_CORSO)
             elif posto == "coda_piena":
                 logger.warning("SEO | codice: seo_saltato | motivo: coda_piena | slug: %s | "
                                "host: %s | messaggio: %d case gia' in coda per questo host, "
-                               "questo salvataggio non avvisa i motori", scheda.slug, chi,
+                               "questo salvataggio non avvisa i motori", slug_log, chi_log,
                                _CODA_SEO_PER_HOST)
             elif posto == "parti":
                 try:
@@ -12871,7 +12875,8 @@ class RouterHTTP:
         if persi:
             logger.warning("SEO | codice: seo_saltato | motivo: giro_interrotto | slug: %s | "
                            "host: %s | messaggio: queste case in coda non avvisano i motori",
-                           ", ".join(persi), chi)
+                           ", ".join(persi).replace("\r", " ").replace("\n", " "),
+                           str(chi).replace("\r", " ").replace("\n", " "))
 
     @staticmethod
     def _voce_invio(hid, dati):
@@ -12928,7 +12933,7 @@ class RouterHTTP:
             except Exception:
                 logger.error("PUBBLICA | codice: invio_non_verificabile | slug: %s | messaggio: "
                              "catalogo muto, la chiave dell'invio resta legata allo slug",
-                             slug, exc_info=True)
+                             str(slug).replace("\r", " ").replace("\n", " "), exc_info=True)
                 return
             if not suo:
                 _INVII_PUBBLICA.pop(voce, None)
