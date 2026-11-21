@@ -439,8 +439,8 @@ FUORI_CI = {
         "legge gli invarianti sulla macchina di PRODUZIONE (ssh)",
     "python collaudi/esame_produzione.py --casella ogni-ora --scrivi":
         "legge il registro del server di PRODUZIONE (ssh)",
-    "python collaudi/esame_sentinella.py --scrivi":
-        "legge la sentinella esterna sul sito vivo e l'API di GitHub",
+    # (21/11/2026) la sentinella non sta piu' qui: il suo comando vuole `--arrivi <registro nginx 24h>`, cioe' e'
+    # «a mano» e `come_si_rimisura` lo riconosce dal segnaposto prima di guardare questo elenco
 }
 TETTO_RIFAI_SEC = 3600       # un esame che in CI non finisce in un'ora e' appeso, non lento
 

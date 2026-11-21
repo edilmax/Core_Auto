@@ -5,6 +5,11 @@
     python collaudi/esame_sentinella.py --scrivi        misura e SCRIVE nella scheda (anche un rosso, col motivo)
     python collaudi/esame_sentinella.py --salva F       salva le letture in F
     python collaudi/esame_sentinella.py --da-file F     giudica letture salvate: niente rete
+    python collaudi/esame_sentinella.py --arrivi R ...  i CONTROLLI del monitor dagli arrivi al sito: R = righe del
+                                                        registro di nginx (B sul VPS, sola lettura:
+                                                        `docker logs casavip_nginx --since 24h | grep UptimeRobot/`),
+                                                        contate solo dagli indirizzi della lista ufficiale. Senza,
+                                                        i controlli sono NON MISURATI (falso allarme del 21/11/2026)
     python collaudi/esame_sentinella.py --con-guasto    storce le letture (ultimo giro di tre giorni fa, mai un
                                                         rosso in storia): deve gridare, NON scrive
     python collaudi/esame_sentinella.py --autoprova     il giudizio su letture costruite, nelle due direzioni
@@ -57,6 +62,7 @@ import io
 import json
 import os
 import re
+import ipaddress
 import subprocess  # nosec B404 - solo `git remote get-url`, argomenti fissi
 import sys
 import urllib.parse
@@ -79,7 +85,9 @@ from piano import BLOCCHI  # noqa: E402
 
 BLOCCO = 8
 MARCA = "sentinella ESTERNA"
-COMANDO = "python collaudi/esame_sentinella.py --scrivi"
+# «a mano» (il segnaposto fra <>): i controlli si contano dagli arrivi nel registro di nginx, che si prende sul
+# VPS; senza, l'esame non puo' dire VERDE, quindi il comando della casella non puo' essere quello senza arrivi
+COMANDO = "python collaudi/esame_sentinella.py --arrivi <registro nginx 24h> --scrivi"
 WORKFLOW = os.path.join(".github", "workflows", "sentinella.yml")
 SITUAZIONI = ("esiste", "sveglia", "grida", "non_scade")
 ULTIMO_MAX_MIN = 60
@@ -90,6 +98,16 @@ MONITOR_BUCO_MAX_MIN = 15
 MONITOR_ULTIMO_MAX_MIN = 15
 VARIABILE_CHIAVE = "UPTIMEROBOT_API_KEY"
 API_UPTIMEROBOT = "https://api.uptimerobot.com/v2/getMonitors"
+# la lista UFFICIALE degli indirizzi del monitor, linkata da uptimerobot.com/help/locations (letta il 21/11/2026):
+# quella con IPv4 E IPv6 (206 voci, contiene tutte le 103 IPv4), cosi' un AAAA aggiunto un giorno al sito non fa
+# scartare gli arrivi in IPv6 e non ritorna il falso allarme (oggi bookinvip.com non ha AAAA)
+IPS_UPTIMEROBOT = "https://cdn.uptimerobot.com/api/IPv4andIPv6.txt"
+# una riga del registro di nginx (formato combinato): indirizzo, [ora], "METODO /percorso ...", ..., "agente"
+MESI_NGINX = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+RIGA_NGINX = re.compile(r'^(\S+) \S+ \S+ \[([^\]]+)\] "(?:HEAD|GET) /api/health[ ?"].*UptimeRobot/')
+# i controlli valgono solo se portano questo marchio: lo mette `--arrivi`. Letture salvate prima del 21/11 (coi
+# controlli presi dai tempi di risposta) o scritte a mano senza marchio restano NON MISURATE (code-review 21/11)
+FONTE_ARRIVI = "registro_nginx"
 SALUTE = "bookinvip.com/api/health"
 PASSI = []
 
@@ -101,6 +119,20 @@ NON_GUARDA = (
     "il monitor esterno finche' non esiste: senza un conto (lo apre il fondatore) le letture `esterno` mancano e la "
     "casella e' ROSSA col motivo; quando c'e', qui si legge cio' che l'API del servizio dichiara, non il servizio stesso",
     "i giri oltre i 100 piu' recenti: l'API ne serve una pagina; il buco massimo e' misurato sulle ultime 24 ore",
+    "i controlli del monitor SENZA `--arrivi`: i `response_times` di UptimeRobot non sono uno per controllo "
+    "(misurato il 21/11/2026: buchi di 415 min nell'API con il monitor che bussava ogni 5 min), quindi senza le "
+    "righe del registro di nginx il passo e' NON MISURATO e rosso; le righe le prende B sul VPS (sola lettura)",
+    "se un arrivo da un indirizzo della lista ufficiale sia davvero di UptimeRobot oltre all'indirizzo: la lista "
+    "si legge da IPS_UPTIMEROBOT a ogni giro, e chi la falsificasse falsificherebbe anche il monitor",
+    "SE L'ARRIVO E' DEL NOSTRO MONITOR: la lista e' di tutti i clienti di UptimeRobot, quindi un altro conto che "
+    "interroga /api/health ogni 5 minuti terrebbe verde la casella anche col nostro morto (l'API dice comunque "
+    "intervallo e stato del NOSTRO); chiuderlo vuole un segno nel nostro indirizzo di controllo (es. ?m=...), "
+    "che si mette dal conto del fondatore",
+    "un CDN o un proxy davanti a nginx: oggi non c'e' (bookinvip.com punta al VPS, `set_real_ip_from` e' "
+    "commentato in deploy/nginx.casavip*.conf); se ci fosse, il registro avrebbe l'indirizzo del proxy e "
+    "tutti gli arrivi sarebbero scartati (rosso, mai verde)",
+    "il codice HTTP della risposta: un arrivo conta anche se il sito ha risposto 5xx, perche' qui si misura "
+    "che il monitor BUSSA, non che il sito risponde (quello lo dice il monitor stesso, con il suo allarme)",
 )
 
 
@@ -179,26 +211,73 @@ def _post_json(url, dati):
 
 def monitor_da_uptimerobot(risposta, adesso):
     """Il campo `esterno` dalle righe di `getMonitors` (logs=1, response_times=1). Prende il monitor che guarda la
-    salute del sito; se non c'e', torna None. Stato: 2 = up, 8/9 = giu', 0 = pausa (api/v2)."""
+    salute del sito; se non c'e', torna None. Stato: 2 = up, 8/9 = giu', 0 = pausa (api/v2).
+    ⛔ I `response_times` NON diventano `controlli` (falso allarme del 21/11/2026): UptimeRobot non ne conserva uno
+    per controllo, e i loro buchi non dicono che il monitor dormiva. Si contano soltanto (`campioni_tempi`); i
+    controlli veri vengono dagli arrivi al sito (`arrivi_da_registro`)."""
     monitor = [m for m in (risposta.get("monitors") or []) if SALUTE in str(m.get("url") or "")]
     if not monitor:
         return None
     m = monitor[0]
     stati = {2: "up", 8: "down", 9: "down", 0: "pausa", 1: "?"}
-    da = adesso - timedelta(hours=24)
-    controlli = []
-    for rt in m.get("response_times") or []:
-        try:
-            t = datetime.fromtimestamp(int(rt.get("datetime")), tz=timezone.utc)
-        except Exception:
-            continue
-        if t >= da:
-            controlli.append(t.strftime("%Y-%m-%dT%H:%M:%SZ"))
     return {"servizio": "uptimerobot", "nome": str(m.get("friendly_name") or ""), "url": str(m.get("url") or ""),
             "intervallo_sec": int(m.get("interval") or 0), "stato": stati.get(m.get("status"), "?"),
-            "controlli": sorted(controlli),
+            "campioni_tempi": len(m.get("response_times") or []),
             "giu_in_storia": sum(1 for lg in (m.get("logs") or []) if lg.get("type") == 1),
             "contatti_allarme": len(m.get("alert_contacts") or [])}
+
+
+def ips_ufficiali():
+    """Gli indirizzi del monitor dalla lista UFFICIALE (IPS_UPTIMEROBOT): un insieme di stringhe, mai vuoto."""
+    req = urllib.request.Request(IPS_UPTIMEROBOT, headers={"User-Agent": "esame_sentinella"})
+    with urllib.request.urlopen(req, timeout=30) as r:  # noqa: S310  # nosec B310 - https fisso, sola lettura
+        ips = {_ip(riga) for riga in r.read().decode("utf-8", "replace").splitlines() if riga.strip()} - {None}
+    if not ips:      # anche una pagina d'errore in HTML: nessuna riga e' un indirizzo
+        raise RuntimeError("la lista ufficiale degli indirizzi di UptimeRobot non contiene indirizzi: %s" % IPS_UPTIMEROBOT)
+    return ips
+
+
+def _ip(testo):
+    """La forma canonica di un indirizzo IPv4/IPv6 (`ipaddress`), o None se non e' un indirizzo."""
+    try:
+        return ipaddress.ip_address(str(testo).strip()).compressed
+    except ValueError:
+        return None
+
+
+def arrivi_da_registro(testo, ips, adesso):
+    """Le visite del monitor a /api/health nelle ultime 24 ore, lette dalle righe del registro di nginx e contate
+    SOLO dagli indirizzi della lista ufficiale. Torna il conto di OGNI riga, perche' una riga persa in silenzio
+    sposta l'esito senza dirlo (silent-failure-hunter 21/11): `righe` (non vuote), `riconosciute` (forma della
+    visita del monitor), `scartati` (indirizzo fuori dalla lista), `illeggibili` (ora non leggibile),
+    `fuori_finestra` (oltre le 24 ore o dopo `adesso`), `controlli` (momenti ISO distinti, ordinati)."""
+    ips = {_ip(x) for x in ips} - {None}
+    conto = {"righe": 0, "riconosciute": 0, "scartati": 0, "illeggibili": 0, "fuori_finestra": 0}
+    controlli = set()
+    for riga in testo.splitlines():
+        if not riga.strip():
+            continue
+        conto["righe"] += 1
+        m = RIGA_NGINX.match(riga.strip())
+        if not m:
+            continue
+        conto["riconosciute"] += 1
+        if _ip(m.group(1)) not in ips:
+            conto["scartati"] += 1
+            continue
+        try:
+            giorno, mese, resto = m.group(2).split("/", 2)   # nginx scrive il mese in inglese, qualunque sia la lingua
+            t = datetime.strptime("%s/%02d/%s" % (giorno, MESI_NGINX.index(mese) + 1, resto),
+                                  "%d/%m/%Y:%H:%M:%S %z").astimezone(timezone.utc)
+        except ValueError:
+            conto["illeggibili"] += 1
+            continue
+        if timedelta(0) <= adesso - t <= timedelta(hours=24):
+            controlli.add(t.strftime("%Y-%m-%dT%H:%M:%SZ"))
+        else:
+            conto["fuori_finestra"] += 1
+    conto["controlli"] = sorted(controlli)
+    return conto
 
 
 def leggi_monitor(adesso):
@@ -225,11 +304,14 @@ def workflow_letto():
 
 
 def _buco_massimo(tempi, adesso, ore=24):
-    """(quanti nelle ultime `ore`, buco massimo in minuti fra due istanti consecutivi, compreso quello fino ad adesso)."""
+    """(quanti nelle ultime `ore`, buco massimo in minuti fra due istanti consecutivi, compresi quello fino ad
+    adesso E quello dall'inizio della finestra al primo istante: senza, un registro di dieci minuti dava un buco
+    di cinque e un verde -- silent-failure-hunter 21/11)."""
     recenti = sorted((t for t in tempi if adesso - t <= timedelta(hours=ore)), reverse=True)
     buchi = [(a - b).total_seconds() / 60 for a, b in zip(recenti, recenti[1:])]
     if recenti:
         buchi.append((adesso - recenti[0]).total_seconds() / 60)
+        buchi.append((recenti[-1] - (adesso - timedelta(hours=ore))).total_seconds() / 60)
     return len(recenti), (max(buchi) if buchi else None)
 
 
@@ -245,6 +327,8 @@ def misura(letture, con_guasto=False):
     est = letture.get("esterno") if isinstance(letture.get("esterno"), dict) else None
     if con_guasto:
         est = None                                   # IL GUASTO 1: nessun monitor esterno
+    # senza arrivi col loro marchio i controlli NON sono misurati (S7): ne' i tempi di risposta, ne' letture vecchie
+    misurati = isinstance((est or {}).get("controlli"), list) and (est or {}).get("fonte_controlli") == FONTE_ARRIVI
     controlli = sorted((_quando(c) for c in (est or {}).get("controlli") or []), reverse=True)
     n24, buco_m = _buco_massimo(controlli, adesso)
     ultimo_m = (adesso - controlli[0]).total_seconds() / 60 if controlli else None
@@ -256,12 +340,18 @@ def misura(letture, con_guasto=False):
     passo("sveglia", "il monitor esterno controlla almeno ogni %d minuti e non e' in pausa" % (MONITOR_INTERVALLO_MAX_SEC // 60),
           fitto and est.get("stato") != "pausa",
           ("intervallo %s s, stato %s" % (est.get("intervallo_sec"), est.get("stato"))) if est else "nessun monitor esterno")
-    monitor_sveglio = fitto and est.get("stato") != "pausa" and buco_m is not None and buco_m <= MONITOR_BUCO_MAX_MIN \
-        and ultimo_m is not None and ultimo_m <= MONITOR_ULTIMO_MAX_MIN
+    monitor_sveglio = fitto and est.get("stato") != "pausa" and misurati and buco_m is not None \
+        and buco_m <= MONITOR_BUCO_MAX_MIN and ultimo_m is not None and ultimo_m <= MONITOR_ULTIMO_MAX_MIN
     passo("sveglia", "nelle ultime 24 ore i controlli del monitor non hanno buchi > %d minuti e l'ultimo ha meno di %d minuti"
           % (MONITOR_BUCO_MAX_MIN, MONITOR_ULTIMO_MAX_MIN), monitor_sveglio,
-          "controlli nelle 24 ore: %d, buco massimo %s, ultimo %s" % (n24, ("%.0f min" % buco_m) if buco_m is not None else "-",
-                                                                       ("%.0f min fa" % ultimo_m) if ultimo_m is not None else "-"))
+          ("controlli nelle 24 ore: %d, buco massimo %s, ultimo %s%s"
+           % (n24, ("%.0f min" % buco_m) if buco_m is not None else "-",
+              ("%.0f min fa" % ultimo_m) if ultimo_m is not None else "-",
+              (" · righe del registro: %s" % ", ".join("%s %d" % kv for kv in sorted(est["arrivi"].items())))
+              if isinstance(est.get("arrivi"), dict) else ""))
+          if misurati else "nessun monitor esterno" if not est else
+          "controlli NON MISURATI: servono gli arrivi al sito (`--arrivi`, registro di nginx); i tempi di risposta "
+          "dell'API (%s campioni) non sono uno per controllo" % est.get("campioni_tempi", "-"))
 
     # I GIRI DI GITHUB: la seconda linea. Si stampano sempre; DECIDONO solo se il monitor esterno non c'e' o non e' sveglio.
     giri = list(letture.get("giri") or [])
@@ -311,7 +401,8 @@ def monitor_finto(intervallo=300, ultimo=2, buco=5, n=288, stato="up", giu=1, co
             continue
         controlli.append((ADESSO_FINTO - timedelta(minutes=m)).strftime("%Y-%m-%dT%H:%M:%SZ"))
     return {"servizio": "finto", "nome": "bookinvip salute", "url": url, "intervallo_sec": intervallo, "stato": stato,
-            "controlli": sorted(controlli), "giu_in_storia": giu, "contatti_allarme": contatti}
+            "controlli": sorted(controlli), "fonte_controlli": FONTE_ARRIVI,     # i controlli finti sono ARRIVI finti
+            "giu_in_storia": giu, "contatti_allarme": contatti}
 
 
 def letture_finte(minuti_fa=5, buco=15, rossi=3, push_giorni=1, n=96, esterno="sano"):
@@ -370,7 +461,8 @@ def autoprova():
          "logs": [{"type": 1, "datetime": ts - 86400}, {"type": 2, "datetime": ts - 86000}], "alert_contacts": [{"id": "1"}]}]}
     est = monitor_da_uptimerobot(risposta, ADESSO_FINTO)
     ok = (est is not None and est["url"].endswith(SALUTE) and est["intervallo_sec"] == 300 and est["stato"] == "up"
-          and len(est["controlli"]) == 3 and est["giu_in_storia"] == 1 and est["contatti_allarme"] == 1
+          and "controlli" not in est and est["campioni_tempi"] == 4      # i tempi di risposta NON sono controlli
+          and est["giu_in_storia"] == 1 and est["contatti_allarme"] == 1
           and monitor_da_uptimerobot({"stat": "ok", "monitors": [risposta["monitors"][0]]}, ADESSO_FINTO) is None
           and monitor_da_uptimerobot({"stat": "ok", "monitors": [dict(risposta["monitors"][1], status=0)]}, ADESSO_FINTO)["stato"] == "pausa")
     riuscita = riuscita and ok
@@ -443,6 +535,12 @@ def main(argv=None):
     # si legge da solo (fino ad allora la casella era ROSSA «serve un conto» col conto attivo dall'11/9)
     if monitor is None and "--con-guasto" not in argv and os.environ.get(VARIABILE_CHIAVE):
         monitor = "uptimerobot"
+    arrivi = None
+    if "--arrivi" in argv:
+        if argv.index("--arrivi") + 1 >= len(argv):
+            print("⛔ `--arrivi` vuole il file con le righe del registro di nginx")
+            return 2
+        arrivi = argv[argv.index("--arrivi") + 1]
     if monitor is not None and monitor != "uptimerobot":
         print("⛔ monitor sconosciuto: %s (valido: uptimerobot; per altri servizi usa --da-file col campo `esterno`)" % monitor)
         return 2
@@ -470,9 +568,20 @@ def main(argv=None):
             letture["esterno"] = leggi_monitor(_quando(letture["adesso"]))
             est = letture["esterno"] or {}
             print("monitor esterno (UptimeRobot, chiave di sola lettura, mai stampata): %s"
-                  % (("«%s» %s, intervallo %s s, stato %s, %d controlli nelle 24 ore" % (est.get("nome"), est.get("url"),
-                      est.get("intervallo_sec"), est.get("stato"), len(est.get("controlli") or []))) if est
+                  % (("«%s» %s, intervallo %s s, stato %s, %s tempi di risposta (NON sono i controlli)"
+                      % (est.get("nome"), est.get("url"), est.get("intervallo_sec"), est.get("stato"),
+                         est.get("campioni_tempi"))) if est
                      else "nessun monitor su %s in questo conto" % SALUTE))
+        if arrivi and not isinstance(letture.get("esterno"), dict):
+            passo("sveglia", "gli arrivi dati con --arrivi hanno un monitor esterno a cui attaccarsi", False,
+                  "%s NON letto: nelle letture non c'e' un monitor esterno" % arrivi)
+        elif arrivi:
+            with io.open(arrivi, encoding="utf-8-sig", errors="replace") as f:   # -sig: un BOM non sporca il 1° indirizzo
+                conto = arrivi_da_registro(f.read(), ips_ufficiali(), _quando(letture["adesso"]))
+            letture["esterno"].update(controlli=conto.pop("controlli"), fonte_controlli=FONTE_ARRIVI, arrivi=conto)
+            print("arrivi del monitor dal registro di nginx: %s -> %d controlli nelle 24 ore · %s (lista %s)"
+                  % (arrivi, len(letture["esterno"]["controlli"]),
+                     ", ".join("%s %d" % kv for kv in sorted(conto.items())), IPS_UPTIMEROBOT))
         if "--salva" in argv:
             percorso = argv[argv.index("--salva") + 1]
             with io.open(percorso, "w", encoding="utf-8") as f:
