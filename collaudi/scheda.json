@@ -24,11 +24,11 @@
  "0d485cbbe89e": {
   "blocco": 8,
   "comando": "python collaudi/esame_deploy.py --da-file <letture> --scrivi",
-  "commit": "4a62245",
+  "commit": "dd62d8c",
   "condizione": "il deploy passa sempre dal protocollo D17, mai a mano",
-  "denominatore": 89,
+  "denominatore": 153,
   "esito": true,
-  "impronta": "35b48621156e",
+  "impronta": "194e20138ca6",
   "impronte_moduli": {
    "fase13_protocollo_finale": "2dce22f058cc",
    "fase16_outbox": "a47de5874653",
@@ -37,16 +37,16 @@
    "fase28_gateway": "650f256a6d9a",
    "fase29_backpressure": "d905d8e921b7",
    "fase37_notifiche": "386192b635b2",
-   "fase38_backup": "0482a29682b2",
+   "fase38_backup": "234cad9ff394",
    "fase39_whatsapp": "e5c341ed59c6",
    "fase42_observability": "a557645447a7",
    "fase60_mcp_server": "56ffc4364819",
-   "fase81_bootstrap_casavip": "91c5a6380318",
-   "fase83_server": "cf243e848272",
-   "fase86_email": "12848db384ba"
+   "fase81_bootstrap_casavip": "755840ed917e",
+   "fase83_server": "5f01ce29a46c",
+   "fase86_email": "71ba17ea5775"
   },
   "motivo": "",
-  "quando": "2026-11-04T21:22:06"
+  "quando": "2026-11-21T22:25:00"
  },
  "0f42c4387710": {
   "blocco": 1,
@@ -129,11 +129,11 @@
  "16d2c823889f": {
   "blocco": 1,
   "comando": "python collaudi/mutazione_prodotto.py --modulo fase65_split_payment.py fase85_pagamenti_stripe.py fase87_stripe_webhook.py fase101_stripe_connect.py fase131_payout_dashboard.py --tetto 200 --minuti 90 --killer test_fase65_split_payment test_fase85_pagamenti_stripe test_fase87_stripe_webhook test_fase101_stripe_connect test_fase131_payout_dashboard",
-  "commit": "22b6e25",
+  "commit": "dd62d8c",
   "condizione": "zero punti di mutazione scoperti sul PERCORSO DEL DENARO -- i cinque moduli che un euro attraversa davvero: entra, viene confermato, va sul conto dell'host, si divide fra ospiti, esce col bonifico -- sul codice che la produzione ESEGUE",
   "denominatore": 377,
   "esito": true,
-  "impronta": "12be9bb1b662",
+  "impronta": "69836f1ec6e7",
   "impronte_moduli": {
    "fase101_stripe_connect": "39dfb5137d9a",
    "fase102_motore_autonomo": "5f821fcc906f",
@@ -143,7 +143,7 @@
    "fase149_deposito_cauzionale": "55747546c350",
    "fase15_idempotency": "bfcd5e8ca68b",
    "fase160_escrow_garanzia": "bf2174697744",
-   "fase162_pagamenti_pendenti": "9e81ebe5ffb6",
+   "fase162_pagamenti_pendenti": "2ba7b5d31a60",
    "fase167_credito_single_use": "45602131ada4",
    "fase177_financial_controller": "664a808eca59",
    "fase17_money": "4f56d5c69a04",
@@ -163,7 +163,7 @@
    "fase99_multicurrency": "3bb03f7179ab"
   },
   "motivo": "",
-  "quando": "2026-11-18T14:30:33"
+  "quando": "2026-11-21T22:49:58"
  },
  "224ae0884a0b": {
   "blocco": 1,
@@ -345,11 +345,11 @@
  "3a547df3a743": {
   "blocco": 8,
   "comando": "python collaudi/esame_backup.py --file <db.gz> --sha <.sha256> --manifest <MANIFEST.txt> --scrivi",
-  "commit": "4a62245",
+  "commit": "dd62d8c",
   "condizione": "il salvataggio e' stato RIPRISTINATO e letto, non solo prodotto",
   "denominatore": 19,
   "esito": true,
-  "impronta": "35b48621156e",
+  "impronta": "194e20138ca6",
   "impronte_moduli": {
    "fase13_protocollo_finale": "2dce22f058cc",
    "fase16_outbox": "a47de5874653",
@@ -358,16 +358,16 @@
    "fase28_gateway": "650f256a6d9a",
    "fase29_backpressure": "d905d8e921b7",
    "fase37_notifiche": "386192b635b2",
-   "fase38_backup": "0482a29682b2",
+   "fase38_backup": "234cad9ff394",
    "fase39_whatsapp": "e5c341ed59c6",
    "fase42_observability": "a557645447a7",
    "fase60_mcp_server": "56ffc4364819",
-   "fase81_bootstrap_casavip": "91c5a6380318",
-   "fase83_server": "cf243e848272",
-   "fase86_email": "12848db384ba"
+   "fase81_bootstrap_casavip": "755840ed917e",
+   "fase83_server": "5f01ce29a46c",
+   "fase86_email": "71ba17ea5775"
   },
   "motivo": "",
-  "quando": "2026-11-04T21:22:12"
+  "quando": "2026-11-21T22:26:13"
  },
  "50691c557e6e": {
   "blocco": 1,
@@ -697,11 +697,11 @@
  "98ef97fd624f": {
   "blocco": 1,
   "comando": "python collaudi/esame_riconciliazione.py --da-file <letture> --scrivi",
-  "commit": "22b6e25",
+  "commit": "dd62d8c",
   "condizione": "la riconciliazione col registro di Stripe gira OGNI notte e manda una mail anche quando e' tutto a posto (la mail che non arriva e' un allarme), con URGENTE nell'oggetto se c'e' un accredito mancante o un'operazione sconosciuta",
   "denominatore": 6,
   "esito": true,
-  "impronta": "12be9bb1b662",
+  "impronta": "69836f1ec6e7",
   "impronte_moduli": {
    "fase101_stripe_connect": "39dfb5137d9a",
    "fase102_motore_autonomo": "5f821fcc906f",
@@ -711,7 +711,7 @@
    "fase149_deposito_cauzionale": "55747546c350",
    "fase15_idempotency": "bfcd5e8ca68b",
    "fase160_escrow_garanzia": "bf2174697744",
-   "fase162_pagamenti_pendenti": "9e81ebe5ffb6",
+   "fase162_pagamenti_pendenti": "2ba7b5d31a60",
    "fase167_credito_single_use": "45602131ada4",
    "fase177_financial_controller": "664a808eca59",
    "fase17_money": "4f56d5c69a04",
@@ -731,16 +731,16 @@
    "fase99_multicurrency": "3bb03f7179ab"
   },
   "motivo": "",
-  "quando": "2026-11-18T14:06:50"
+  "quando": "2026-11-21T22:25:43"
  },
  "a36e3373da1d": {
   "blocco": 8,
   "comando": "python collaudi/esame_sentinella.py --scrivi",
-  "commit": "879b8a4",
+  "commit": "dd62d8c",
   "condizione": "una sentinella ESTERNA (non nostra) si accorge se il sito muore",
   "denominatore": 10,
   "esito": false,
-  "impronta": "ea10f8212ddf",
+  "impronta": "194e20138ca6",
   "impronte_moduli": {
    "fase13_protocollo_finale": "2dce22f058cc",
    "fase16_outbox": "a47de5874653",
@@ -754,11 +754,11 @@
    "fase42_observability": "a557645447a7",
    "fase60_mcp_server": "56ffc4364819",
    "fase81_bootstrap_casavip": "755840ed917e",
-   "fase83_server": "794093343382",
-   "fase86_email": "efa7e7edb654"
+   "fase83_server": "5f01ce29a46c",
+   "fase86_email": "71ba17ea5775"
   },
-  "motivo": "[sveglia] nelle ultime 24 ore i controlli del monitor non hanno buchi > 15 minuti e l'ultimo ha meno di 15 minuti (controlli nelle 24 ore: 102, buco massimo 395 min, ultimo 4 min fa); [sveglia] GitHub (seconda linea): ultimo giro entro 60 minuti e buco massimo nelle 24 ore sotto i 60 minuti — DECIDE, perche' il monitor esterno manca o non e' sveglio (ultimo giro 2026-11-20 22:48 UTC (75 minuti fa), giri nelle 24 ore: 4, buco massimo 523 minuti)",
-  "quando": "2026-11-21T01:03:38"
+  "motivo": "[sveglia] nelle ultime 24 ore i controlli del monitor non hanno buchi > 15 minuti e l'ultimo ha meno di 15 minuti (controlli nelle 24 ore: 113, buco massimo 454 min, ultimo 3 min fa); [sveglia] GitHub (seconda linea): ultimo giro entro 60 minuti e buco massimo nelle 24 ore sotto i 60 minuti — DECIDE, perche' il monitor esterno manca o non e' sveglio (ultimo giro 2026-11-21 18:33 UTC (145 minuti fa), giri nelle 24 ore: 4, buco massimo 493 minuti)",
+  "quando": "2026-11-21T21:57:51"
  },
  "a5c77ac6c76a": {
   "blocco": 5,
