@@ -194,9 +194,22 @@ class TestNessunThreadButtaViaLaRisposta(unittest.TestCase):
             "subentro, allarme del Guardiano); trovati %d" % quanti)
         self.assertEqual([], re.findall(r"target\s*=\s*_invia_tracciato", testo),
                          "un invio apre ancora il SUO filo, fuori dalla fila col tetto")
-        postino = testo[testo.index("def _postino("):testo.index("def _spedisci_email(")]
-        self.assertIn("_invia_tracciato(*lettera)", postino,
-                      "la fila non arriva al wrapper che legge la risposta")
+        # 21/11: il postino passa da `_invia_lettera` (riga su disco: code-review della #335),
+        # che arriva al wrapper su TUTTE e tre le sue strade (senza riga, coda illeggibile, riga
+        # presa): se una strada smettesse di chiamarlo, quell'email non leggerebbe la risposta
+        # S6 (code-review 21/11): si contano le CHIAMATE nell'albero del sorgente, non il testo:
+        # un commento o una docstring non tengono verde questa guardia
+        import ast
+        funzioni = {n.name: n for n in ast.walk(ast.parse(testo))
+                    if isinstance(n, ast.FunctionDef)}
+
+        def chiamate(dove, chi):
+            return [c for c in ast.walk(funzioni[dove]) if isinstance(c, ast.Call)
+                    and isinstance(c.func, ast.Name) and c.func.id == chi]
+        self.assertEqual(1, len(chiamate("_postino", "_invia_lettera")),
+                         "la fila non arriva al postino che legge la risposta")
+        self.assertEqual(3, len(chiamate("_invia_lettera", "_invia_tracciato")),
+                         "una strada del postino non arriva al wrapper che legge la risposta")
 
 
 # ---------------------------------------------------------------------------

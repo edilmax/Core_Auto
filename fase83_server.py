@@ -135,12 +135,13 @@ def _email_provider_spento(template: str, riferimento: str = "") -> None:
 
 
 def _invia_tracciato(prov: Any, destinatario: Any, oggetto: Any, corpo_html: Any,
-                     template: str = "", riferimento: str = "") -> bool:
+                     template: str = "", riferimento: str = "", accoda: bool = True) -> bool:
     """IL PUNTO OBBLIGATO: manda l'email e **legge la risposta**.
 
     E' il `target` di ogni thread di invio. Non solleva mai -- gira dentro un thread
     demone, e un'eccezione morirebbe li' riportandoci al silenzio di prima, con in
-    piu' un thread che esplode.
+    piu' un thread che esplode. `accoda=False`: l'email ha gia' la sua riga nella coda
+    durevole (`_invia_lettera`), un fallimento non ne scrive una seconda.
 
     ⛔ Non registra MAI il destinatario: e' un dato personale e finirebbe in chiaro
     nel registro (referto 12). Bastano il template e il riferimento della pratica."""
@@ -156,7 +157,8 @@ def _invia_tracciato(prov: Any, destinatario: Any, oggetto: Any, corpo_html: Any
                          "risposto NO dopo i suoi tentativi",
                          _riga_registro(template), _riga_registro(riferimento))
         _conta_email_ko(template)
-        _accoda_email(prov, destinatario, oggetto, corpo_html, template, riferimento)
+        if accoda:
+            _accoda_email(prov, destinatario, oggetto, corpo_html, template, riferimento)
     return bool(esito)
 
 
@@ -172,20 +174,69 @@ _FILI_EMAIL_VIVI: List[threading.Thread] = []
 
 
 def _postino() -> None:
-    """Un filo fisso: prende la prossima email della fila e la manda con `_invia_tracciato`
-    (che non solleva mai: un errore resta li', contato e messo nei ritentativi)."""
+    """Un filo fisso: prende la prossima email della fila e la manda con `_invia_lettera`
+    (che non solleva mai: un errore resta li', contato e lasciato ai ritentativi)."""
     while True:
         with _SEGNALE_EMAIL:
             while not _FILA_EMAIL:
                 _SEGNALE_EMAIL.wait()
             lettera = _FILA_EMAIL.pop(0)
-        _invia_tracciato(*lettera)
+        _invia_lettera(*lettera)
+
+
+def _invia_lettera(prov: Any, destinatario: Any, oggetto: Any, corpo_html: Any, template: str,
+                   riferimento: str, id_riga: Optional[int]) -> None:
+    """Il gesto del postino. Senza riga su disco: `_invia_tracciato` come sempre. Con la riga
+    (fornitore con la coda durevole di fase86): la PRENDE, la manda e la CHIUDE con l'esito --
+    consegnata = cancellata, fallita = la ritenta il giro sulla stessa riga. Riga gia' presa
+    dal giro: la manda lui. Coda illeggibile: si manda lo stesso dalla memoria (meglio un
+    doppione che un'email persa), senza scrivere una seconda riga: quella che c'e' la ritenta
+    il giro. Chiude solo col biglietto della SUA presa. Non solleva mai."""
+    if id_riga is None:
+        _invia_tracciato(prov, destinatario, oggetto, corpo_html, template, riferimento)
+        return
+    coda = prov.coda_email
+    try:
+        presa = coda.prendi(id_riga)
+    except Exception:
+        logger.error("EMAIL | codice: coda_illeggibile | template=%s riferimento=%s | messaggio: "
+                     "riga dei ritentativi non leggibile, mando lo stesso (puo' arrivare due "
+                     "volte)", _riga_registro(template), _riga_registro(riferimento),
+                     exc_info=True)
+        _invia_tracciato(prov, destinatario, oggetto, corpo_html, template, riferimento,
+                         accoda=False)
+        return
+    if presa is None:
+        return          # l'ha gia' presa il giro dei ritentativi: la manda lui
+    ok = _invia_tracciato(prov, destinatario, oggetto, corpo_html, template, riferimento,
+                          accoda=False)
+    try:
+        coda.chiudi(id_riga, ok, presa)
+    except Exception:
+        logger.error("EMAIL | codice: coda_non_chiusa | template=%s riferimento=%s | "
+                     "consegnata=%s | messaggio: esito non scritto nella coda: se era "
+                     "consegnata, il giro puo' rimandarla dopo la presa",
+                     _riga_registro(template), _riga_registro(riferimento), ok, exc_info=True)
 
 
 def _spedisci_email(prov: Any, destinatario: Any, oggetto: Any, corpo_html: Any,
                     template: str = "", riferimento: str = "") -> None:
-    """L'unica porta d'uscita delle email in background. Non solleva e non aspetta."""
-    lettera = (prov, destinatario, oggetto, corpo_html, template, riferimento)
+    """L'unica porta d'uscita delle email in background. Non solleva e non aspetta l'invio.
+    Con la coda durevole di fase86 l'email si scrive PRIMA su disco (code-review 21/11: la fila
+    e' in memoria e un riavvio del contenitore la perdeva senza traccia): quella scrittura
+    avviene qui, nel filo di chi chiama, e con l'archivio occupato rinuncia dopo
+    `fase86_email.ATTESA_IN_VOLO_S` (l'email parte allora solo dalla memoria, e si dice)."""
+    id_riga = None
+    in_volo = getattr(getattr(prov, "coda_email", None), "accoda_in_volo", None)
+    if in_volo is not None:
+        try:
+            id_riga = in_volo(destinatario, oggetto, corpo_html, template, riferimento)
+        except Exception:
+            logger.error("EMAIL | codice: coda_non_scritta | template=%s riferimento=%s | "
+                         "messaggio: archivio dei ritentativi non scrivibile, l'email parte solo "
+                         "dalla memoria (un riavvio adesso la perderebbe)",
+                         _riga_registro(template), _riga_registro(riferimento), exc_info=True)
+    lettera = (prov, destinatario, oggetto, corpo_html, template, riferimento, id_riga)
     with _SEGNALE_EMAIL:
         piena = len(_FILA_EMAIL) >= _TETTO_EMAIL_IN_ATTESA
         if not piena:
@@ -210,7 +261,16 @@ def _spedisci_email(prov: Any, destinatario: Any, oggetto: Any, corpo_html: Any,
                      _riga_registro(template), _riga_registro(riferimento),
                      _TETTO_EMAIL_IN_ATTESA)
         _conta_email_ko(template)
-        _accoda_email(prov, destinatario, oggetto, corpo_html, template, riferimento)
+        if id_riga is None:
+            _accoda_email(prov, destinatario, oggetto, corpo_html, template, riferimento)
+        else:                        # la riga e' gia' su disco: parta al prossimo giro
+            try:
+                prov.coda_email.anticipa(id_riga)
+            except Exception:
+                logger.error("EMAIL | codice: coda_non_anticipata | template=%s riferimento=%s "
+                             "| messaggio: la riga su disco partira' col giro dopo la presa "
+                             "(fino a 10 minuti di ritardo)", _riga_registro(template),
+                             _riga_registro(riferimento), exc_info=True)
 
 
 def _accoda_email(prov: Any, destinatario: Any, oggetto: Any, corpo_html: Any,

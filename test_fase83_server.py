@@ -1363,6 +1363,13 @@ class TestRecensioni(unittest.TestCase):
             {"alloggio_id": "casa", "check_in": "2026-09-01", "check_out": "2026-09-02"}))
         r.gestisci("POST", "/api/concierge/book", body=json.dumps(
             {"quote_token": q[1]["quote_token"], "email": "g@x.it"}))
+        # l'email parte in sottofondo (un postino, punto (7) del 20/11): si ASPETTA la consegna
+        # invece di pretenderla nell'istante dopo -- sotto carico (giro di 1558 prove, 21/11) il
+        # postino arrivava un attimo dopo e la prova cadeva «0 != 1» a codice sano
+        for _ in range(200):
+            if inviate:
+                break
+            time.sleep(0.05)
         self.assertEqual(len(inviate), 1)
         self.assertEqual(inviate[0][0], "g@x.it")
         self.assertIn("https://bookinvip.com/voucher/", inviate[0][2])  # link nel corpo
@@ -13426,7 +13433,7 @@ def _ferma_i_postini_non_demoni():
 
     with fase83_server._SEGNALE_EMAIL:
         for _ in vivi:
-            fase83_server._FILA_EMAIL.append((Fine(), "", "", "", "", ""))
+            fase83_server._FILA_EMAIL.append((Fine(), "", "", "", "", "", None))
         fase83_server._SEGNALE_EMAIL.notify_all()
 
 
@@ -13569,6 +13576,189 @@ class TestLeEmailHannoUnTetto(unittest.TestCase):
         self.assertIsNotNone(ganci, "threading._threading_atexits non c'e' piu'")
         self.assertTrue(any(getattr(g, "func", g) is _ferma_i_postini_non_demoni
                             for g in ganci), ganci)
+
+    # ── 21/11, code-review della PR #335: un'email in fila non si perde a un riavvio ──────────
+    def _posta_con_coda_vera(self):
+        """Un fornitore che risponde subito, con la coda DUREVOLE vera di fase86 su disco e un
+        orologio nostro."""
+        from fase86_email import CodaEmail
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        self.t = [1_900_000_000.0]
+
+        class Prov:
+            def __init__(self):
+                self.mandate, self.esito = [], True
+
+            def invia(self, dest, *_a):
+                self.mandate.append(dest)
+                return self.esito
+
+        prov = Prov()
+        prov.coda_email = CodaEmail(os.path.join(d, "coda.db"), prov.invia,
+                                    ora=lambda: self.t[0])
+        prov.coda_email.inizializza_schema()
+        self.r._sys = types.SimpleNamespace(email_provider=prov)
+        return prov
+
+    def _righe(self, prov):
+        con = prov.coda_email._apri()
+        try:
+            return con.execute("SELECT a, stato FROM coda_email ORDER BY id").fetchall()
+        finally:
+            con.close()
+
+    def test_un_email_in_fila_non_si_perde_se_il_processo_muore(self):
+        # il difetto: la fila stava solo in memoria. Qui i postini non partono mai (il processo
+        # «muore» prima dell'invio): dopo la presa, il giro dei ritentativi la deve mandare
+        from fase86_email import PRESA_SCADE_S
+        prov = self._posta_con_coda_vera()
+
+        class FiloMorto:
+            def __init__(self, *_a, **_k):
+                pass
+
+            def start(self):
+                pass
+
+            def is_alive(self):
+                return True
+
+        vivi, fila, segnale, th = self._con_fili_finti(FiloMorto)
+        with vivi, fila, segnale, th:
+            self.r._email_bg("ospite@x.it", "o", "<p>x</p>", "voucher", "R1")
+        self.assertEqual([], prov.mandate)
+        self.t[0] += PRESA_SCADE_S
+        self.assertEqual(1, prov.coda_email.un_giro(), "email persa col processo")
+        self.assertEqual(["ospite@x.it"], prov.mandate)
+
+    def test_venticinque_email_nello_stesso_istante_partono_una_volta_ciascuna(self):
+        # gara (cassetta degli attrezzi 21/11): 25 invii insieme con la barriera, coda vera e
+        # postini veri: ognuna parte UNA volta e su disco non resta niente
+        prov = self._posta_con_coda_vera()
+        barriera = threading.Barrier(25)
+
+        def uno(i):
+            barriera.wait()
+            self.r._email_bg("g%d@x.it" % i, "o", "<p>x</p>", "voucher", "G%d" % i)
+
+        fili = [threading.Thread(target=uno, args=(i,)) for i in range(25)]
+        for f in fili:
+            f.start()
+        for f in fili:
+            f.join(30)
+        attese = sorted("g%d@x.it" % i for i in range(25))
+        self.assertTrue(self._aspetta(lambda: len(prov.mandate) >= 25
+                                      and self._righe(prov) == []),
+                        (len(prov.mandate), self._righe(prov)))
+        self.assertEqual(attese, sorted(prov.mandate), "doppioni o email mancanti")
+
+    def test_il_postino_manda_la_riga_e_la_cancella(self):
+        prov = self._posta_con_coda_vera()
+        self.r._email_bg("ospite@x.it", "o", "<p>x</p>", "voucher", "R2")
+        self.assertTrue(self._aspetta(lambda: prov.mandate == ["ospite@x.it"]
+                                      and self._righe(prov) == []),
+                        (prov.mandate, self._righe(prov)))
+
+    def test_se_la_coda_non_si_scrive_l_email_parte_lo_stesso_e_si_dice(self):
+        prov = self._posta_con_coda_vera()
+        with mock.patch.object(prov.coda_email, "accoda_in_volo", create=True,
+                               side_effect=sqlite3.OperationalError("disk I/O error")):
+            with self.assertLogs("core_auto.server", level="ERROR") as reg:
+                self.r._email_bg("ospite@x.it", "o", "<p>x</p>", "voucher", "R3")
+        righe = [r for r in reg.records if "codice: coda_non_scritta" in r.getMessage()]
+        self.assertEqual([True], [bool(r.exc_info) and isinstance(r.exc_info[1],
+                                                                   sqlite3.OperationalError)
+                                  for r in righe], reg.output)
+        self.assertTrue(self._aspetta(lambda: prov.mandate == ["ospite@x.it"]), prov.mandate)
+
+    def test_a_fila_piena_la_riga_gia_su_disco_non_si_raddoppia(self):
+        prov = self._posta_con_coda_vera()
+        with mock.patch.object(fase83_server, "_TETTO_EMAIL_IN_ATTESA", 0):
+            with self.assertLogs("core_auto.server", level="ERROR") as reg:
+                self.r._email_bg("ospite@x.it", "o", "<p>x</p>", "voucher", "R4")
+        self.assertTrue(any("codice: coda_email_piena" in r for r in reg.output), reg.output)
+        self.assertEqual([("ospite@x.it", "attesa")], self._righe(prov))
+        # ...e parte al prossimo giro, non dopo la presa (code-review 21/11: 10 minuti muti)
+        self.assertEqual(1, prov.coda_email.un_giro())
+        self.assertEqual(["ospite@x.it"], prov.mandate)
+
+    def test_a_fila_piena_se_la_riga_non_si_anticipa_si_dice(self):
+        prov = self._posta_con_coda_vera()
+        with mock.patch.object(fase83_server, "_TETTO_EMAIL_IN_ATTESA", 0), \
+                mock.patch.object(prov.coda_email, "anticipa", create=True,
+                                  side_effect=sqlite3.OperationalError("database is locked")):
+            with self.assertLogs("core_auto.server", level="ERROR") as reg:
+                self.r._email_bg("ospite@x.it", "o", "<p>x</p>", "voucher", "R9")
+        righe = [r for r in reg.records if "codice: coda_non_anticipata" in r.getMessage()]
+        self.assertEqual([True], [bool(r.exc_info) and isinstance(r.exc_info[1],
+                                                                   sqlite3.OperationalError)
+                                  for r in righe], reg.output)
+
+    def test_coda_illeggibile_e_invio_fallito_non_raddoppia_la_riga(self):
+        # code-review 21/11: la riga su disco c'e' gia' (la ritenta il giro): un fallimento con
+        # la coda illeggibile non ne scrive una seconda (due voucher all'ospite)
+        prov = self._posta_con_coda_vera()
+        prov.esito = False
+        id_riga = prov.coda_email.accoda_in_volo("ospite@x.it", "o", "<p>x</p>", "voucher", "R10")
+        with mock.patch.object(prov.coda_email, "prendi",
+                               side_effect=sqlite3.OperationalError("database is locked")):
+            with self.assertLogs("core_auto.server", level="ERROR"):
+                fase83_server._invia_lettera(*self._lettera(prov, id_riga))
+        self.assertEqual([("ospite@x.it", "attesa")], self._righe(prov))
+
+    def _lettera(self, prov, id_riga):
+        return (prov, "ospite@x.it", "o", "<p>x</p>", "voucher", "R5", id_riga)
+
+    def test_il_postino_con_la_riga_su_disco(self):
+        prov = self._posta_con_coda_vera()
+        coda = prov.coda_email
+        # invio fallito: la STESSA riga torna in attesa (nessuna seconda riga) e si dice
+        prov.esito = False
+        id_riga = coda.accoda_in_volo("ospite@x.it", "o", "<p>x</p>", "voucher", "R5")
+        with self.assertLogs("core_auto.server", level="ERROR") as reg:
+            fase83_server._invia_lettera(*self._lettera(prov, id_riga))
+        self.assertEqual([("ospite@x.it", "attesa")], self._righe(prov))
+        self.assertTrue(any("EMAIL NON CONSEGNATA" in r for r in reg.output), reg.output)
+        # riga gia' presa dal giro: il postino non la manda
+        prov.esito, prov.mandate = True, []
+        self.assertTrue(coda.prendi(id_riga))
+        fase83_server._invia_lettera(*self._lettera(prov, id_riga))
+        self.assertEqual([], prov.mandate)
+
+    def test_il_postino_con_la_coda_illeggibile_manda_lo_stesso(self):
+        prov = self._posta_con_coda_vera()
+        id_riga = prov.coda_email.accoda_in_volo("ospite@x.it", "o", "<p>x</p>", "voucher", "R6")
+        with mock.patch.object(prov.coda_email, "prendi",
+                               side_effect=sqlite3.OperationalError("database is locked")):
+            with self.assertLogs("core_auto.server", level="ERROR") as reg:
+                fase83_server._invia_lettera(*self._lettera(prov, id_riga))
+        self.assertEqual(["ospite@x.it"], prov.mandate, "email persa con la coda illeggibile")
+        righe = [r for r in reg.records if "codice: coda_illeggibile" in r.getMessage()]
+        self.assertEqual([True], [bool(r.exc_info) and isinstance(r.exc_info[1],
+                                                                   sqlite3.OperationalError)
+                                  for r in righe], reg.output)
+
+    def test_il_postino_che_non_chiude_la_riga_lo_dice(self):
+        prov = self._posta_con_coda_vera()
+        id_riga = prov.coda_email.accoda_in_volo("ospite@x.it", "o", "<p>x</p>", "voucher", "R7")
+        with mock.patch.object(prov.coda_email, "chiudi",
+                               side_effect=sqlite3.OperationalError("database is locked")):
+            with self.assertLogs("core_auto.server", level="ERROR") as reg:
+                fase83_server._invia_lettera(*self._lettera(prov, id_riga))
+        self.assertEqual(["ospite@x.it"], prov.mandate)
+        righe = [r for r in reg.records if "codice: coda_non_chiusa" in r.getMessage()]
+        self.assertEqual([True], [bool(r.exc_info) and isinstance(r.exc_info[1],
+                                                                   sqlite3.OperationalError)
+                                  for r in righe], reg.output)
+
+    def test_senza_coda_durevole_un_invio_fallito_va_nei_ritentativi(self):
+        # la strada di prima resta per i fornitori senza `accoda_in_volo`
+        prov = types.SimpleNamespace(invia=lambda *_a: False, coda_email=self.posta.coda_email)
+        with self.assertLogs("core_auto.server", level="ERROR"):
+            self.assertFalse(fase83_server._invia_tracciato(prov, "vecchia@x.it", "o", "h",
+                                                            "voucher", "R8"))
+        self.assertEqual(["vecchia@x.it"], self.posta.accodate)
 
 
 class TestLaPubblicazioneHaIFreni(unittest.TestCase):
