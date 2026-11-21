@@ -312,8 +312,11 @@ class TestAccountHost(_BaseHost):
                               {"email": self.email_host, "lang": "it"}, headers={},
                               atteso=200)
         self.assertEqual(out, {"ok": True})            # anti-enumerazione: sempre ok
-        for _ in range(50):                            # l'invio e' in un thread daemon
-            if any(d == self.email_host for d, _o, _h in self.mail.inviate):
+        # l'invio e' in background: si aspetta proprio l'email di RESET (fino a 10 s), non la
+        # prima qualsiasi -- il benvenuto della registrazione la anticipava e la prova smetteva
+        # di aspettare (20/11: le email ora escono in fila, punto (7))
+        for _ in range(1000):
+            if any(d == self.email_host and "#reset=" in h for d, _o, h in self.mail.inviate):
                 break
             time.sleep(0.01)
         reset = [h for d, _o, h in self.mail.inviate if d == self.email_host

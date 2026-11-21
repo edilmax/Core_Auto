@@ -132,6 +132,7 @@ TENTATIVI_EMAIL = 288        # attesa che raddoppia fino a 5 minuti: circa un gi
 ATTESA_PRIMA_S = 30
 ATTESA_MASSIMA_S = 300
 PRESA_SCADE_S = 600
+ATTESA_IN_VOLO_S = 2         # `accoda_in_volo` e' nel filo della richiesta: non si aspetta di piu'
 
 
 class CodaEmail:
@@ -149,9 +150,9 @@ class CodaEmail:
         self._ferma = None
         self._giro = None
 
-    def _apri(self):
+    def _apri(self, attesa_s: float = 30):
         import sqlite3
-        con = sqlite3.connect(self.percorso, timeout=30)
+        con = sqlite3.connect(self.percorso, timeout=attesa_s)
         con.execute("PRAGMA journal_mode=WAL")
         con.execute("PRAGMA secure_delete=ON")   # consegnata = cancellata anche dai byte
         con.execute("CREATE TABLE IF NOT EXISTS coda_email (id INTEGER PRIMARY KEY "
@@ -182,6 +183,76 @@ class CodaEmail:
         finally:
             con.close()
         return True
+
+    def accoda_in_volo(self, destinatario: Any, oggetto: Any, html: Any, template: Any = "",
+                       riferimento: Any = "") -> Optional[int]:
+        """Un'email che un postino di fase83 manda SUBITO si scrive QUI prima: la fila dei
+        postini e' in memoria e un riavvio la perde (python e' il processo 1 del contenitore e
+        viene ucciso, nessun gancio di spegnimento gira: code-review 21/11). Il giro la tocca
+        solo dopo PRESA_SCADE_S; prima il postino la `prendi`, la manda e la `chiudi`.
+        Ritorna l'id della riga, None se il destinatario non e' valido. Gira nel filo della
+        richiesta: con l'archivio occupato si rinuncia dopo ATTESA_IN_VOLO_S e si solleva
+        (chi chiama manda dalla memoria), invece di far aspettare l'ospite 30 s."""
+        if not (isinstance(destinatario, str) and "@" in destinatario):
+            return None
+        ora = int(self._ora())
+        con = self._apri(ATTESA_IN_VOLO_S)
+        try:
+            with con:
+                cur = con.execute("INSERT INTO coda_email (a, oggetto, html, template, "
+                                  "riferimento, prossimo_ts, creato_ts) VALUES (?,?,?,?,?,?,?)",
+                                  (destinatario, str(oggetto), str(html), str(template or ""),
+                                   str(riferimento or ""), ora + PRESA_SCADE_S, ora))
+            return cur.lastrowid
+        finally:
+            con.close()
+
+    def prendi(self, id_riga: int) -> Optional[int]:
+        """La riga e' del postino che la manda adesso, con la stessa regola del giro (era in
+        attesa, o presa da un processo morto). Ritorna il BIGLIETTO della presa (l'ora scritta
+        in `presa_ts`), che `chiudi` pretende; None se la riga non e' sua."""
+        ora = int(self._ora())
+        con = self._apri()
+        try:
+            with con:
+                cur = con.execute("UPDATE coda_email SET stato='presa', presa_ts=? WHERE id=? "
+                                  "AND (stato='attesa' OR (stato='presa' AND presa_ts<=?))",
+                                  (ora, id_riga, ora - PRESA_SCADE_S))
+            return ora if cur.rowcount == 1 else None
+        finally:
+            con.close()
+
+    def chiudi(self, id_riga: int, consegnata: bool, presa_ts: Optional[int]) -> None:
+        """Esito dell'invio di chi ha PRESO la riga col biglietto `presa_ts`: un postino in
+        ritardo, la cui presa e' scaduta e ripresa dal giro, non tocca niente (code-review
+        21/11). Consegnata = cancellata, anche dal file di appoggio -wal (dati personali: reset
+        della password, PIN del voucher); fallita = un tentativo in piu' e torna in attesa
+        dopo ATTESA_PRIMA_S, come i fallimenti del giro."""
+        con = self._apri()
+        try:
+            with con:
+                if consegnata:
+                    con.execute("DELETE FROM coda_email WHERE id=? AND stato='presa' AND "
+                                "presa_ts=?", (id_riga, presa_ts))
+                else:
+                    con.execute("UPDATE coda_email SET stato='attesa', tentativi=tentativi+1, "
+                                "prossimo_ts=? WHERE id=? AND stato='presa' AND presa_ts=?",
+                                (int(self._ora()) + ATTESA_PRIMA_S, id_riga, presa_ts))
+            if consegnata:
+                con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        finally:
+            con.close()
+
+    def anticipa(self, id_riga: int) -> None:
+        """Una riga in volo che il postino non mandera' (fila piena in fase83) parte al prossimo
+        giro, non dopo la presa: 10 minuti di ritardo muto (code-review 21/11)."""
+        con = self._apri()
+        try:
+            with con:
+                con.execute("UPDATE coda_email SET prossimo_ts=? WHERE id=? AND stato='attesa'",
+                            (int(self._ora()), id_riga))
+        finally:
+            con.close()
 
     def _prendi(self, id_riga: int) -> bool:
         """CAS: la riga e' mia solo se era in attesa, o presa da un processo morto."""

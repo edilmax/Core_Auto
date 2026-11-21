@@ -146,9 +146,15 @@ class TestLaChatEDellaPrenotazioneEDelSuoHost(unittest.TestCase):
         def _guasto(*_a, **_k):
             raise RuntimeError("catalogo giu'")
         self.sis.catalogo.host_di_alloggio = _guasto
-        s, c = self._post(self.tok_a, {"prenotazione_id": "RIF-A", "guest_id": "ospite",
-                                       "testo": "ciao"})
-        self.assertEqual((403, {"errore": "non_tua"}), (s, c))
+        # 20/11 (variante del punto (1)): si nega ancora, ma col VERO motivo -- l'archivio non
+        # risponde, riprova (503) -- e non «non e' tua» a chi la chat ce l'ha davvero; il
+        # registro dice codice e prenotazione
+        with self.assertLogs("core_auto.server", level="WARNING") as reg:
+            s, c = self._post(self.tok_a, {"prenotazione_id": "RIF-A", "guest_id": "ospite",
+                                           "testo": "ciao"})
+        self.assertEqual((503, "storage_non_disponibile"), (s, c.get("errore")))
+        self.assertTrue(any("codice: proprietario_non_verificabile" in r and "RIF-A" in r
+                            for r in reg.output), reg.output)
         self.assertEqual([], self.msg.thread("RIF-A", self.hid_a))
 
     def test_SENZA_UN_PADRONE_LEGGIBILE_NESSUN_HOST_ENTRA(self):
