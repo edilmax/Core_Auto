@@ -664,6 +664,12 @@ class TestGiroOstileTutteLeRotte(unittest.TestCase):
                     body={"email": "host@ostile.it", "lang": "it"}, headers=IP,
                     valore={"ok": True})
         tok_reset = ""
+        # l'email parte in background (in fila dal 20/11, punto (7)): si aspetta che arrivi,
+        # fino a 10 s, invece di leggere subito e contare sulla gara
+        for _ in range(1000):
+            if any("#reset=" in (h or "") for _d, _o, h in self.mail.inviate):
+                break
+            time.sleep(0.01)
         for _dest, _ogg, html in self.mail.inviate:
             if "#reset=" in (html or ""):
                 tok_reset = html.split("#reset=")[1].split('"')[0].split("<")[0].strip()

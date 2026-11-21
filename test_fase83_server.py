@@ -1363,6 +1363,13 @@ class TestRecensioni(unittest.TestCase):
             {"alloggio_id": "casa", "check_in": "2026-09-01", "check_out": "2026-09-02"}))
         r.gestisci("POST", "/api/concierge/book", body=json.dumps(
             {"quote_token": q[1]["quote_token"], "email": "g@x.it"}))
+        # l'email parte in sottofondo (un postino, punto (7) del 20/11): si ASPETTA la consegna
+        # invece di pretenderla nell'istante dopo -- sotto carico (giro di 1558 prove, 21/11) il
+        # postino arrivava un attimo dopo e la prova cadeva «0 != 1» a codice sano
+        for _ in range(200):
+            if inviate:
+                break
+            time.sleep(0.05)
         self.assertEqual(len(inviate), 1)
         self.assertEqual(inviate[0][0], "g@x.it")
         self.assertIn("https://bookinvip.com/voucher/", inviate[0][2])  # link nel corpo
@@ -11701,6 +11708,25 @@ class TestUnAnnuncioVaOnlineSoloSeDiceDoveSta(unittest.TestCase):
         self.assertEqual((200, "pubblicato"), (s, o.get("stato")))
 
 
+class _Registro(logging.Handler):
+    """Raccoglie le righe del registro del server senza pretendere che ce ne siano
+    (`assertLogs` fallisce se non ne arriva nessuna; `assertNoLogs` c'e' solo da Python 3.10)."""
+
+    def __init__(self):
+        super().__init__(level=logging.WARNING)
+        self.righe = []
+
+    def emit(self, record):
+        self.righe.append(record.getMessage())
+
+    def __enter__(self):
+        logging.getLogger("core_auto.server").addHandler(self)
+        return self
+
+    def __exit__(self, *_a):
+        logging.getLogger("core_auto.server").removeHandler(self)
+
+
 def _aspetta_i_giri_seo(caso):
     """Aspetta i fili «seo-*» ancora in volo (di qualunque prova) e pretende che siano finiti."""
     for f in threading.enumerate():
@@ -11735,6 +11761,7 @@ class TestUnSalvataggioLentoNonFaDoppioni(unittest.TestCase):
         # la memoria degli invii e' del processo: ogni prova parte pulita (code-review 19/11)
         for nome in ("_SLUG_PRENOTATI", "_INVII_PUBBLICA", "_IN_VOLO", "_SEO_PER_HOST"):
             getattr(fase83_server, nome).clear()
+        getattr(fase83_server, "_SEO_IN_ATTESA", {}).clear()     # punto (5) del 20/11
         # ...e anche i posti del motore SEO (code-review 19/11 sera). Il motore e' finto e non
         # aspetta niente: le prove non chiedono ai servizi veri.
         fase83_server._POSTI_SEO = threading.BoundedSemaphore(fase83_server._TETTO_SEO_IN_CORSO)
@@ -11751,6 +11778,7 @@ class TestUnSalvataggioLentoNonFaDoppioni(unittest.TestCase):
         try:
             _aspetta_i_giri_seo(self)
             self.assertEqual({}, fase83_server._SEO_PER_HOST)
+            self.assertEqual({}, getattr(fase83_server, "_SEO_IN_ATTESA", {}))
             self.assertEqual(fase83_server._TETTO_SEO_IN_CORSO, fase83_server._POSTI_SEO._value)
         finally:
             shutil.rmtree(self.dir, ignore_errors=True)
@@ -11984,7 +12012,9 @@ class TestUnSalvataggioLentoNonFaDoppioni(unittest.TestCase):
                                side_effect=sqlite3.OperationalError("database is locked")):
             with self.assertLogs("core_auto.server", level="ERROR") as reg:
                 s, _o = self._nuovo("invio-catalogo-77")
-        self.assertEqual(403, s)        # proprieta' non verificabile: si nega (fail-closed)
+        # proprieta' non verificabile: si nega (fail-closed), col motivo vero -- 503 «riprova»,
+        # non piu' 403 «non e' tuo» sul suo annuncio nuovo (punto (1) del 20/11)
+        self.assertEqual(503, s)
         self.assertTrue(any("invio_non_verificabile" in r for r in reg.output), reg.output)
         # mutazione 20/11: i due `exc_info=True` cambiavano senza che nessuno lo vedesse; un
         # ERROR senza traccia dice «catalogo muto» ma non dove ne' perche'
@@ -12029,7 +12059,7 @@ class TestUnSalvataggioLentoNonFaDoppioni(unittest.TestCase):
             #    aspettava un posto TENENDO la serratura dei posti, e i quattro giri SEO, per
             #    chiudere, aspettavano quella serratura: blocco eterno, giro di mutazione «non
             #    determinabile». In un filo a tempo; se resta appeso lo si sblocca dal semaforo.
-            with self.assertLogs("core_auto.server", level="WARNING") as reg:
+            with _Registro() as reg:
                 filo = threading.Thread(target=lambda: self._nuovo(
                     "invio-tetto-oltre", titolo="Casa oltre", tk=oltre), daemon=True)
                 filo.start()
@@ -12044,8 +12074,15 @@ class TestUnSalvataggioLentoNonFaDoppioni(unittest.TestCase):
         finally:
             libera.set()
         self.assertEqual(tetto, in_volo, chiamati)
-        self.assertTrue(any("seo_saltato" in r and "tetto_pieno" in r and "casa-oltre" in r
-                            for r in reg.output), reg.output)
+        # punto (5) del 20/11: a tetto pieno la casa NON salta i motori (prima: `seo_saltato`
+        # «tetto_pieno»): aspetta il suo turno e ci arriva quando un giro finisce
+        self.assertEqual([], [r for r in reg.righe if "seo_saltato" in r])
+        for _ in range(100):
+            if "casa-oltre" in chiamati:
+                break
+            time.sleep(0.05)
+        self.assertIn("casa-oltre", chiamati, "a tetto pieno la casa di un host nuovo non e' "
+                                             "mai arrivata ai motori")
         # finiti i lavori, il posto torna libero (si riprova per un po': i fili chiudono da soli)
         for i in range(40):
             self._nuovo("invio-tetto-dopo-%02d" % i, titolo="Casa dopo %d" % i)
@@ -12070,7 +12107,13 @@ class TestUnSalvataggioLentoNonFaDoppioni(unittest.TestCase):
             filo.join(5)
             self.assertFalse(filo.is_alive(), "a tetto pieno il salvataggio ASPETTA un posto: "
                              "la richiesta del pannello resta appesa")
-            self.assertEqual(["tetto_pieno"], esito)
+            # punto (5) del 20/11: non salta, va in sala d'attesa (e il filo risponde subito)
+            self.assertEqual(["in_attesa"], esito)
+            self.assertEqual({"oltre": {"casa-oltre": None}}, fase83_server._SEO_IN_ATTESA)
+            # il primo giro che finisce passa il posto a chi aspetta, senza renderlo
+            self.assertEqual(("oltre", "casa-oltre"), self.r._prossimo_seo("pieno-0"))
+            self.assertEqual({}, fase83_server._SEO_IN_ATTESA)
+            self.assertEqual(0, fase83_server._POSTI_SEO._value)
         finally:
             # Il filo appeso tiene la serratura dei posti: `_prossimo_seo` lo aspetterebbe per
             # sempre (prova appesa invece che rossa). Lo si sblocca da fuori, sul semaforo.
@@ -12078,13 +12121,74 @@ class TestUnSalvataggioLentoNonFaDoppioni(unittest.TestCase):
             if sbloccato:
                 fase83_server._POSTI_SEO.release()
                 filo.join(5)
+            for h in list(fase83_server._SEO_PER_HOST):
+                fase83_server._SEO_PER_HOST.pop(h)
+            getattr(fase83_server, "_SEO_IN_ATTESA", {}).clear()
+            fase83_server._POSTI_SEO = threading.BoundedSemaphore(tetto)
+
+    def test_la_sala_d_attesa_ha_un_tetto_e_oltre_si_dice(self):
+        tetto = fase83_server._TETTO_SEO_IN_CORSO
+        try:
             for i in range(tetto):
-                self.r._prossimo_seo("pieno-%d" % i)
-            if "parti" in esito:
-                if sbloccato:          # il suo posto e' quello reso a mano qui sopra
-                    fase83_server._SEO_PER_HOST.pop("oltre", None)
-                else:
-                    self.r._prossimo_seo("oltre")
+                self.assertEqual("parti", self.r._prendi_posto_seo("p-%d" % i, "c-%d" % i))
+            with mock.patch.object(fase83_server, "_HOST_SEO_IN_ATTESA", 1, create=True):
+                self.assertEqual("in_attesa", self.r._prendi_posto_seo("a1", "x"))
+                self.assertEqual("in_attesa", self.r._prendi_posto_seo("a1", "y"))
+                self.assertEqual("tetto_pieno", self.r._prendi_posto_seo("a2", "z"))
+        finally:
+            fase83_server._SEO_PER_HOST.clear()
+            getattr(fase83_server, "_SEO_IN_ATTESA", {}).clear()
+            fase83_server._POSTI_SEO = threading.BoundedSemaphore(tetto)
+
+    def test_la_sala_d_attesa_di_un_host_si_ferma_al_confine_esatto(self):
+        # mutazione PR #335 (riga 13080, `>=` -> `>`): con la coda d'attesa dell'host gia' a
+        # _CODA_SEO_PER_HOST case, una casa NUOVA e' «coda_piena»; una gia' in attesa no
+        tetto, coda = fase83_server._TETTO_SEO_IN_CORSO, fase83_server._CODA_SEO_PER_HOST
+        try:
+            for i in range(tetto):
+                self.assertEqual("parti", self.r._prendi_posto_seo("p-%d" % i, "c-%d" % i))
+            for i in range(coda):
+                self.assertEqual("in_attesa", self.r._prendi_posto_seo("a1", "casa-%d" % i))
+            self.assertEqual("coda_piena", self.r._prendi_posto_seo("a1", "casa-oltre"))
+            self.assertEqual("in_attesa", self.r._prendi_posto_seo("a1", "casa-0"))
+            self.assertEqual(coda, len(fase83_server._SEO_IN_ATTESA["a1"]))
+        finally:
+            fase83_server._SEO_PER_HOST.clear()
+            getattr(fase83_server, "_SEO_IN_ATTESA", {}).clear()
+            fase83_server._POSTI_SEO = threading.BoundedSemaphore(tetto)
+
+    def test_un_filo_che_non_parte_passa_il_posto_a_chi_aspetta(self):
+        # mutazione PR #335 (riga 13055, `is None` -> `is not None`): se il filo non parte e il
+        # posto passa a un host in attesa, si fa partire il SUO giro (col guasto restava appeso
+        # per sempre); senza nessuno in attesa il posto torna libero e si esce senza errori
+        tetto = fase83_server._TETTO_SEO_IN_CORSO
+        chiamate = []
+
+        def filo(target, args, name, daemon):
+            chiamate.append(args)
+            if len(chiamate) == 1:
+                raise RuntimeError("can't start new thread")
+            return types.SimpleNamespace(start=lambda: None)
+
+        try:
+            for i in range(tetto):
+                self.assertEqual("parti", self.r._prendi_posto_seo("p-%d" % i, "c-%d" % i))
+            self.assertEqual("in_attesa", self.r._prendi_posto_seo("chi-aspetta", "casa-w"))
+            with mock.patch.object(fase83_server, "_FILO_SEO", filo):
+                with self.assertLogs("core_auto.server", level="WARNING"):
+                    self.r._lancia_giro_seo(None, "c-0", "p-0")
+            self.assertEqual([(None, "c-0", "p-0"), (None, "casa-w", "chi-aspetta")], chiamate)
+            self.assertIn("chi-aspetta", fase83_server._SEO_PER_HOST)
+            chiamate.clear()
+            with mock.patch.object(fase83_server, "_FILO_SEO", filo):
+                with self.assertLogs("core_auto.server", level="WARNING"):
+                    self.r._lancia_giro_seo(None, "c-1", "p-1")
+            self.assertEqual([(None, "c-1", "p-1")], chiamate)
+            self.assertNotIn("p-1", fase83_server._SEO_PER_HOST)
+        finally:
+            fase83_server._SEO_PER_HOST.clear()
+            getattr(fase83_server, "_SEO_IN_ATTESA", {}).clear()
+            fase83_server._POSTI_SEO = threading.BoundedSemaphore(tetto)
 
     def test_un_giro_seo_fermato_da_un_errore_grave_rende_il_posto(self):
         """Mutazione n.6 (20/11), punto SOPRAVVISSUTO: `if prossimo is not None` nel `finally`
@@ -12206,7 +12310,7 @@ class TestUnSalvataggioLentoNonFaDoppioni(unittest.TestCase):
 
     def test_un_filo_seo_che_non_parte_lo_dice_e_rende_il_posto(self):
         tetto = getattr(fase83_server, "_TETTO_SEO_IN_CORSO", 4)
-        with mock.patch.object(fase83_server.threading, "Thread",
+        with mock.patch.object(fase83_server, "_FILO_SEO",
                                side_effect=RuntimeError("can't start new thread")):
             with self.assertLogs("core_auto.server", level="WARNING") as reg:
                 s, o = self._nuovo("invio-filo-0002")
@@ -12219,24 +12323,25 @@ class TestUnSalvataggioLentoNonFaDoppioni(unittest.TestCase):
     def test_la_memoria_di_un_invio_dura_ventiquattro_ore_giuste(self):
         # mutazione 19/11 sera: `>` -> `>=` sul confine delle 24 ore non lo vedeva nessuno
         durata = fase83_server._DURATA_INVIO_S
-        with mock.patch("time.monotonic", return_value=1000.0):
+        with mock.patch.object(fase83_server, "_adesso_invii", return_value=1000.0):
             _, prima = self._nuovo("invio-orologio-1")
-        with mock.patch("time.monotonic", return_value=1000.0 + durata):
+        with mock.patch.object(fase83_server, "_adesso_invii", return_value=1000.0 + durata):
             _, stessa = self._nuovo("invio-orologio-1")
         self.assertEqual(prima["slug"], stessa["slug"], "allo scoccare delle 24 ore e' ancora "
                                                          "lo stesso invio")
-        with mock.patch("time.monotonic", return_value=1001.0 + 2 * durata):
+        with mock.patch.object(fase83_server, "_adesso_invii",
+                               return_value=1001.0 + 2 * durata):
             _, dopo = self._nuovo("invio-orologio-1")
         self.assertNotEqual(prima["slug"], dopo["slug"], "dopo le 24 ore e' un invio nuovo")
 
     def test_un_indirizzo_prenotato_resta_tale_fino_alle_ventiquattro_ore(self):
         durata = fase83_server._DURATA_INVIO_S
         fase83_server._SLUG_PRENOTATI["test-non-prenotabile"] = 1000.0
-        with mock.patch("time.monotonic", return_value=1000.0 + durata):
+        with mock.patch.object(fase83_server, "_adesso_invii", return_value=1000.0 + durata):
             _, o = self._nuovo(None)
         self.assertEqual("test-non-prenotabile-2", o["slug"])
         fase83_server._SLUG_PRENOTATI["test-non-prenotabile"] = 1000.0
-        with mock.patch("time.monotonic", return_value=1001.0 + durata):
+        with mock.patch.object(fase83_server, "_adesso_invii", return_value=1001.0 + durata):
             _, o = self._nuovo(None, titolo="Test non prenotabile")
         self.assertEqual("test-non-prenotabile", o["slug"], "la prenotazione scaduta resta")
 
@@ -12321,7 +12426,7 @@ class TestUnSalvataggioLentoNonFaDoppioni(unittest.TestCase):
                     break
                 time.sleep(0.05)
             self.assertEqual(tetto, len(chiamati), chiamati)
-            with self.assertLogs("core_auto.server", level="WARNING") as reg:
+            with _Registro() as reg:
                 t = threading.Thread(target=lambda: esito.append(self._nuovo(
                     "invio-pieno-oltre", titolo="Casa oltre", tk=nuovo)), daemon=True)
                 t.start()
@@ -12334,7 +12439,13 @@ class TestUnSalvataggioLentoNonFaDoppioni(unittest.TestCase):
             libera.set()
         self.assertFalse(appeso, "a posti pieni il salvataggio aspettava un posto SEO")
         self.assertEqual(201, esito[0][0], esito)
-        self.assertTrue(any("seo_saltato" in r for r in reg.output), reg.output)
+        # punto (5) del 20/11: risponde subito E la casa aspetta il turno invece di saltare
+        self.assertEqual([], [r for r in reg.righe if "seo_saltato" in r])
+        for _ in range(100):
+            if "casa-oltre" in chiamati:
+                break
+            time.sleep(0.05)
+        self.assertIn("casa-oltre", chiamati)
 
     def test_un_invio_riuscito_non_interroga_il_catalogo_alla_fine(self):
         # `_chiudi_invio`: dopo un 201 l'annuncio e' nel catalogo e la chiave resta sua; non
@@ -12602,6 +12713,30 @@ class TestUnSalvataggioLentoNonFaDoppioni(unittest.TestCase):
         self.assertEqual(201, s, o)
         self.assertEqual([o["slug"]], self._annunci())
 
+    def test_queste_prove_non_cambiano_orologio_e_fili_a_tutto_il_processo(self):
+        """Punto (9) del 20/11: `mock.patch("time.monotonic")` e `threading.Thread` sostituiti
+        in `fase83_server.threading` cambiano l'orologio e i fili di TUTTO il processo per la
+        durata della prova (limitatori, fili delle email, giri SEO di altre prove). Il server
+        ha i suoi due punti per le prove: `_adesso_invii` e `_FILO_SEO`."""
+        import ast
+        import inspect
+        import textwrap
+        # l'ALBERO, non il testo (sbaglio S6): un commento che nomina la patch non conta
+        albero = ast.parse(textwrap.dedent(inspect.getsource(TestUnSalvataggioLentoNonFaDoppioni)))
+        trovati = []
+        for n in ast.walk(albero):
+            if not (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                    and n.func.attr in ("patch", "object") and n.args):
+                continue
+            primo = ast.unparse(n.args[0]) if hasattr(ast, "unparse") else ""
+            secondo = n.args[1].value if (len(n.args) > 1
+                                          and isinstance(n.args[1], ast.Constant)) else None
+            if (isinstance(n.args[0], ast.Constant) and n.args[0].value == "time.monotonic") \
+                    or (secondo == "Thread" and primo == "fase83_server.threading"):
+                trovati.append(n.lineno)
+        self.assertEqual([], trovati, "righe della classe che cambiano orologio o fili a tutto "
+                                      "il processo")
+
 
 class TestGliInviiASequenzeCasuali(unittest.TestCase):
     """19/11, skill property-based-testing (Trail of Bits): sequenze CASUALI di invii nuovi,
@@ -12703,12 +12838,15 @@ class TestLaCodaSeoASequenzeCasuali(unittest.TestCase):
                 # i fili SEO di altre prove renderebbero il posto sul semaforo di questa
                 # (code-reviewer 20/11): si aspettano prima
                 _aspetta_i_giri_seo(caso)
-                self.vecchi = (fase83_server._POSTI_SEO, dict(fase83_server._SEO_PER_HOST))
+                self.vecchi = (fase83_server._POSTI_SEO, dict(fase83_server._SEO_PER_HOST),
+                               dict(fase83_server._SEO_IN_ATTESA))
                 fase83_server._SEO_PER_HOST.clear()
+                fase83_server._SEO_IN_ATTESA.clear()
                 fase83_server._POSTI_SEO = threading.BoundedSemaphore(
                     fase83_server._TETTO_SEO_IN_CORSO)
                 self.giro = {}      # host -> casa che il motore sta facendo
                 self.coda = {}      # host -> {casa: None}, in ordine d'arrivo
+                self.attesa = {}    # host -> {casa: None}: aspettano un posto (punto (5) 20/11)
                 self.ultima = {}    # (host, casa) -> ultima versione salvata (il catalogo)
                 self.arrivata = {}  # (host, casa) -> ultima versione arrivata al motore
                 self.persa = set()  # (host, casa) dichiarate non avvisate
@@ -12731,9 +12869,11 @@ class TestLaCodaSeoASequenzeCasuali(unittest.TestCase):
                 return esito[0]
 
             def teardown(self):
-                fase83_server._POSTI_SEO, vecchia = self.vecchi
+                fase83_server._POSTI_SEO, vecchia, attesa = self.vecchi
                 fase83_server._SEO_PER_HOST.clear()
                 fase83_server._SEO_PER_HOST.update(vecchia)
+                fase83_server._SEO_IN_ATTESA.clear()
+                fase83_server._SEO_IN_ATTESA.update(attesa)
 
             @rule(h=st.sampled_from("abcdef"), casa=st.sampled_from("xyz") | st.integers(0, 25),
                   v=st.integers(0, 9))
@@ -12742,9 +12882,11 @@ class TestLaCodaSeoASequenzeCasuali(unittest.TestCase):
                 esito = self.prendi_entro_5_secondi(h, casa)
                 self.ultima[(h, casa)] = v
                 self.persa.discard((h, casa))
+                tetto_coda = fase83_server._CODA_SEO_PER_HOST
                 coda = self.coda.get(h, {})
+                attesa = self.attesa.get(h)
                 if h in self.giro:
-                    if casa not in coda and len(coda) >= fase83_server._CODA_SEO_PER_HOST:
+                    if casa not in coda and len(coda) >= tetto_coda:
                         caso.assertEqual("coda_piena", esito)
                         self.persa.add((h, casa))
                     else:
@@ -12752,39 +12894,66 @@ class TestLaCodaSeoASequenzeCasuali(unittest.TestCase):
                         coda[casa] = None
                         self.coda[h] = coda
                 elif len(self.giro) >= fase83_server._TETTO_SEO_IN_CORSO:
-                    caso.assertEqual("tetto_pieno", esito)
-                    self.persa.add((h, casa))
+                    # punto (5) del 20/11: niente salto, si aspetta il turno
+                    if attesa is None and len(self.attesa) >= fase83_server._HOST_SEO_IN_ATTESA:
+                        caso.assertEqual("tetto_pieno", esito)
+                        self.persa.add((h, casa))
+                    elif attesa is not None and casa not in attesa and len(attesa) >= tetto_coda:
+                        caso.assertEqual("coda_piena", esito)
+                        self.persa.add((h, casa))
+                    else:
+                        caso.assertEqual("in_attesa", esito)
+                        self.attesa.setdefault(h, {})[casa] = None
                 else:
                     caso.assertEqual("parti", esito)
+                    resto = self.attesa.pop(h, {})
+                    resto.pop(casa, None)
+                    self.coda[h] = resto
                     self.giro[h] = casa
                     self.arrivata[(h, casa)] = v
+
+            def passa_il_posto(self):
+                # il primo host in attesa prende il posto: (host, prima casa), il resto in coda
+                if not self.attesa:
+                    return None
+                b = next(iter(self.attesa))
+                case = self.attesa.pop(b)
+                prima = next(iter(case))
+                del case[prima]
+                self.coda[b] = case
+                self.giro[b] = prima
+                self.arrivata[(b, prima)] = self.ultima[(b, prima)]
+                return b, prima
+
+            def dopo_il_giro(self, h, dopo):
+                coda = self.coda.get(h, {})
+                if coda:
+                    casa = next(iter(coda))
+                    del coda[casa]
+                    caso.assertEqual((h, casa), dopo)
+                    self.giro[h] = casa
+                    # il filo rilegge la casa adesso: arriva l'ultima versione salvata
+                    self.arrivata[(h, casa)] = self.ultima[(h, casa)]
+                else:
+                    del self.giro[h]
+                    self.coda.pop(h, None)
+                    caso.assertEqual(self.passa_il_posto(), dopo)
 
             @precondition(lambda self: self.giro)
             @rule(data=st.data())
             def finisce_un_giro(self, data):
                 h = data.draw(st.sampled_from(sorted(self.giro)))
-                dopo = R._prossimo_seo(h)
-                coda = self.coda.get(h, {})
-                if coda:
-                    casa = next(iter(coda))
-                    del coda[casa]
-                    caso.assertEqual(casa, dopo)
-                    self.giro[h] = casa
-                    # il filo rilegge la casa adesso: arriva l'ultima versione salvata
-                    self.arrivata[(h, casa)] = self.ultima[(h, casa)]
-                else:
-                    caso.assertIsNone(dopo)
-                    del self.giro[h]
-                    self.coda.pop(h, None)
+                self.dopo_il_giro(h, R._prossimo_seo(h))
 
             @precondition(lambda self: self.giro)
             @rule(data=st.data())
             def un_giro_si_interrompe(self, data):
                 h = data.draw(st.sampled_from(sorted(self.giro)))
-                R._rendi_posto_seo(h)
+                dopo = R._rendi_posto_seo(h)
                 for casa in self.coda.pop(h, {}):
                     self.persa.add((h, casa))
                 del self.giro[h]
+                caso.assertEqual(self.passa_il_posto(), dopo)
 
             @invariant()
             def posti_e_code(self):
@@ -12795,17 +12964,16 @@ class TestLaCodaSeoASequenzeCasuali(unittest.TestCase):
                 caso.assertEqual({h: list(self.coda.get(h, {})) for h in self.giro}, vera)
                 for q in vera.values():
                     caso.assertLessEqual(len(q), fase83_server._CODA_SEO_PER_HOST)
+                # la sala d'attesa, nello stesso ordine d'arrivo, e mai con un posto libero
+                caso.assertEqual([(h, list(q)) for h, q in self.attesa.items()],
+                                 [(h, list(q)) for h, q in fase83_server._SEO_IN_ATTESA.items()])
+                if self.attesa:
+                    caso.assertEqual(tetto, len(self.giro), "c'e' chi aspetta col posto libero")
 
             def finisce_tutto(self):
                 while self.giro:
                     h = sorted(self.giro)[0]
-                    dopo = R._prossimo_seo(h)
-                    if dopo is None:
-                        del self.giro[h]
-                        self.coda.pop(h, None)
-                    else:
-                        self.coda[h].pop(dopo)
-                        self.arrivata[(h, dopo)] = self.ultima[(h, dopo)]
+                    self.dopo_il_giro(h, R._prossimo_seo(h))
 
             @rule()
             def alla_fine_ogni_casa_arriva_nell_ultima_versione(self):
@@ -12814,6 +12982,7 @@ class TestLaCodaSeoASequenzeCasuali(unittest.TestCase):
                     if chiave not in self.persa:
                         caso.assertEqual(v, self.arrivata.get(chiave), chiave)
                 caso.assertEqual({}, fase83_server._SEO_PER_HOST)
+                caso.assertEqual({}, fase83_server._SEO_IN_ATTESA)
 
         # ⛔ SENZA la fase che riduce il controesempio, come la prova degli invii qui sopra
         #    (CI 20/11, PR #334): col mutante blocking=False -> True ogni sequenza ridotta
@@ -12822,7 +12991,1005 @@ class TestLaCodaSeoASequenzeCasuali(unittest.TestCase):
         Coda.TestCase.settings = settings(max_examples=300, stateful_step_count=60,
                                           deadline=None, derandomize=True, database=None,
                                           phases=(Phase.explicit, Phase.generate))
-        Coda.TestCase("runTest").runTest()
+        # la sala d'attesa a 2 host (6 host nel modello): cosi' le sequenze passano anche dalla
+        # sala piena, «tetto_pieno», che con 100 host non si raggiungerebbe mai
+        with mock.patch.object(fase83_server, "_HOST_SEO_IN_ATTESA", 2):
+            Coda.TestCase("runTest").runTest()
+
+
+class TestArchivioMutoNonDiceNonETuo(unittest.TestCase):
+    """20/11, punto (1) fuori lavoro dei doppioni: `_verifica_proprieta` col catalogo che non
+    risponde diceva all'host «non_tuo» (403) sul SUO annuncio -- anche su quello che stava
+    creando -- e scriveva un WARNING senza codice ne' annuncio. Il rifiuto resta (nessuna
+    scrittura passa se il padrone non si legge), ma la risposta deve dire il vero: archivio
+    non disponibile, riprova (503), e il registro dice quale annuncio e perche'."""
+
+    S = "casa-mia"
+
+    def setUp(self):
+        d = self.dir = tempfile.mkdtemp()
+        self.sis = crea_sistema(ConfigCasaVIP(
+            abilitato=True, segreto_hmac=b"S" * 32, con_registrazione_host=True,
+            db_catalogo=f"{d}/c.db", db_inventario=f"{d}/i.db", db_registro_host=f"{d}/r.db",
+            db_accettazioni=f"{d}/a.db", db_pendenti=f"{d}/p.db"))
+        self.r = crea_router(self.sis, host_key="hk", admin_key="ak",
+                             base_url="https://bookinvip.com")
+
+        class MotoreFermo:
+            def su_pubblicazione(self, *_a, **_k):
+                return None
+
+        self.r._motore_seo_cache = MotoreFermo()
+        self.tk = self._registra("padrone@muto.it")
+        s, c = self.g("POST", "/api/host/pubblica", self._scheda(), self.tk)
+        _deve(s == 201, s, c)
+        _aspetta_i_giri_seo(self)
+
+    def tearDown(self):
+        _aspetta_i_giri_seo(self)
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def g(self, m, p, b=None, h=None, q=None):
+        return self.r.gestisci(m, p, q or {}, json.dumps(b) if b is not None else None, h or {})
+
+    def _registra(self, email):
+        s, c = self.g("POST", "/api/host/registrazione",
+                      {"email": email, "password": "password1", "accetta_termini": True,
+                       "accetta_clausole": True, "accetta_privacy": True,
+                       "doc_sha256": doc_sha256(), "versione": CONTRATTO_HOST_VERSIONE})
+        _deve(s == 201, s, c)
+        return {"X-Host-Token": c["token"]}
+
+    def _scheda(self):
+        return {"slug": self.S, "titolo": "Casa mia", "citta": "Livigno", "paese": "ES",
+                "prezzo_notte_cents": 200, "capacita": 2}
+
+    def _rotte(self):
+        S = self.S
+        giorni = {"da": "2027-03-01", "a": "2027-03-05"}
+        prezzo = {"unita_totali": 1, "prezzo_netto_cents": 10000}
+        return [
+            ("POST", "/api/host/pubblica", self._scheda(), None),
+            ("GET", "/api/host/seo_report", None, {"alloggio_id": S}),
+            ("POST", "/api/host/disponibilita",
+             dict(prezzo, alloggio_id=S, giorno="2027-03-01"), None),
+            ("POST", "/api/host/disponibilita_range", dict(prezzo, alloggio_id=S, **giorni), None),
+            ("GET", "/api/host/metriche", None, {"alloggio": S}),
+            ("GET", "/api/host/export", None, {"alloggio": S}),
+            ("GET", "/api/host/calendario_prezzi", None, {"alloggio": S}),
+            ("GET", "/api/host/ical_link", None, {"alloggio": S}),
+            ("GET", "/api/host/alloggio", None, {"slug": S}),
+            ("POST", "/api/host/stato", {"slug": S, "stato": "pausa"}, None),
+            ("POST", "/api/host/alloggio_elimina", {"slug": S}, None),
+            ("GET", "/api/host/calendario", None, dict(giorni, alloggio=S)),
+            ("POST", "/api/host/ical", {"alloggio_id": S, "ical": "BEGIN:VCALENDAR\r\n"
+                                        "END:VCALENDAR\r\n"}, None),
+        ]
+
+    def test_col_catalogo_muto_ogni_rotta_dell_host_dice_riprova_e_non_non_tuo(self):
+        def muto(*_a, **_k):
+            raise sqlite3.OperationalError("database is locked")
+
+        prima = self.sis.catalogo.dettaglio_owner(self.S)
+        sbagliate = {}
+        with mock.patch.object(self.sis.catalogo, "host_di_alloggio", muto):
+            for metodo, percorso, corpo, query in self._rotte():
+                with self.assertLogs("core_auto.server", level="WARNING") as reg:
+                    s, c = self.g(metodo, percorso, corpo, self.tk, query)
+                # `riprova` e la traccia dell'errore vero: mutazione PR #335 (righe 2422-2423,
+                # True -> False passava senza che nessuna prova se ne accorgesse)
+                if (s, c.get("errore"), c.get("riprova")) != (503, "storage_non_disponibile",
+                                                               True):
+                    sbagliate[percorso] = (s, c)
+                righe = [r for r in reg.records
+                         if "codice: proprietario_non_verificabile" in r.getMessage()]
+                # QUELL'errore, non «una traccia qualsiasi»: fuori da un `except` exc_info=True
+                # registra (None, None, None), che e' vero (code-review 21/11)
+                if not any("slug: " + self.S in r.getMessage() and r.exc_info
+                           and isinstance(r.exc_info[1], sqlite3.OperationalError)
+                           for r in righe):
+                    sbagliate[percorso + " (registro)"] = reg.output
+        self.assertEqual({}, sbagliate)
+        # niente e' cambiato: l'annuncio c'e' ancora, com'era (stato, titolo, padrone)
+        self.assertEqual(prima, self.sis.catalogo.dettaglio_owner(self.S))
+        self.assertEqual(self._host_id(), self.sis.catalogo.host_di_alloggio(self.S))
+
+    def test_col_catalogo_sano_l_annuncio_di_un_altro_resta_non_tuo(self):
+        # l'altra direzione (regola ferrea 10): il 503 non deve prendere il posto del 403 vero
+        altro = self._registra("altro@muto.it")
+        for metodo, percorso, corpo, query in self._rotte():
+            s, c = self.g(metodo, percorso, corpo, altro, query)
+            self.assertEqual((403, "non_tuo"), (s, c.get("errore")), percorso)
+
+    def test_decidere_una_richiesta_col_catalogo_muto_guarda_il_padrone_scritto(self):
+        # mutazione PR #335 (riga 7508, tre mutanti sopravvissuti): col catalogo muto vale il
+        # padrone scritto sulla richiesta. Se e' un ALTRO host: «non tua» (403), mai «riprova»;
+        # se manca: «riprova» (503), mai un «non tua» che all'host vero direbbe il falso
+        def muto(*_a, **_k):
+            raise sqlite3.OperationalError("database is locked")
+
+        hid = self._host_id()
+        for padrone, atteso in (("un-altro-host", (403, "non_tua")),
+                                (None, (503, "storage_non_disponibile"))):
+            rec = {"riferimento": "R-335", "stato": "in_attesa_host", "alloggio_id": self.S}
+            if padrone is not None:
+                rec["host_id"] = padrone
+            self.sis.pagamenti_pendenti = types.SimpleNamespace(
+                info=lambda ref, rec=rec: dict(rec) if ref == "R-335" else None)
+            with mock.patch.object(self.sis.catalogo, "host_di_alloggio", muto):
+                with self.assertLogs("core_auto.server", level="WARNING"):
+                    s, c = self.r._decidi_richiesta("R-335", hid, False)
+            self.assertEqual(atteso, (s, (c or {}).get("errore")), padrone)
+
+    def _host_id(self):
+        return self.r._host_id_da_token(self.tk)
+
+
+class TestLaChatDellOspiteConArchivioMuto(unittest.TestCase):
+    """20/11, variante del punto (1) dei doppioni nella chat dell'OSPITE: `_voucher_chat_ctx`
+    col catalogo che non risponde dava come padrone un finto host «host». Il messaggio (e la
+    foto di prova di una controversia) finiva in una conversazione che il vero host non vede
+    mai, e l'ospite leggeva «inviato». Ora: 503 riprova, registro col codice, niente scritto;
+    leggere la propria chat resta possibile (non serve sapere chi e' l'host)."""
+
+    def setUp(self):
+        from fase57_vetrina import SchedaAlloggio
+        d = self.dir = tempfile.mkdtemp()
+        self._upload = mock.patch.dict(os.environ, {"UPLOAD_DIR": d + "/up"})
+        self._upload.start()
+        self.sis = crea_sistema(ConfigCasaVIP(
+            abilitato=True, segreto_hmac=b"S" * 32, db_catalogo=f"{d}/c.db",
+            db_inventario=f"{d}/i.db", db_messaggi=f"{d}/m.db", db_pendenti=f"{d}/p.db"))
+        self.r = crea_router(self.sis, host_key="hk", admin_key="ak")
+        self.sis.catalogo.pubblica(SchedaAlloggio(host_id="h1", slug="casa", titolo="Casa",
+                                                  citta="Roma", prezzo_notte_cents=10000,
+                                                  capacita=2))
+        oggi = datetime.date.today()
+        ci, co = oggi + datetime.timedelta(days=60), oggi + datetime.timedelta(days=61)
+        self.sis.inventario.imposta_disponibilita("casa", ci.isoformat(), unita_totali=1,
+                                                  prezzo_netto_cents=10000)
+        s, q = self.g("POST", "/api/concierge/quote", {
+            "alloggio_id": "casa", "check_in": ci.isoformat(), "check_out": co.isoformat(),
+            "party": 2})
+        _deve(s == 200, s, q)
+        s, b = self.g("POST", "/api/concierge/book",
+                      {"quote_token": q["quote_token"], "email": "ospite@x.it"})
+        _deve(s in (200, 201), s, b)
+        self.v, self.rif = b["voucher_token"], b["riferimento"]
+
+    def tearDown(self):
+        self._upload.stop()
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def g(self, m, p, b=None, h=None, q=None):
+        return self.r.gestisci(m, p, q or {}, json.dumps(b) if b is not None else None, h or {})
+
+    @staticmethod
+    def _muto(*_a, **_k):
+        raise sqlite3.OperationalError("database is locked")
+
+    def _scritti(self):
+        return self.sis.messaggistica.thread(self.rif, "ospite")
+
+    def test_col_catalogo_muto_l_ospite_sente_riprova_e_non_si_scrive_niente(self):
+        png = ("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJ"
+               "RU5ErkJggg==")
+        sbagliate = {}
+        with mock.patch.object(self.sis.catalogo, "host_di_alloggio", self._muto):
+            for percorso, corpo in (
+                    ("/api/voucher/messaggio", {"voucher_token": self.v, "testo": "Ciao"}),
+                    ("/api/voucher/prova", {"voucher_token": self.v, "image_base64": png})):
+                with self.assertLogs("core_auto.server", level="WARNING") as reg:
+                    s, c = self.g("POST", percorso, corpo)
+                if (s, c.get("errore")) != (503, "storage_non_disponibile"):
+                    sbagliate[percorso] = (s, c)
+                if not any("codice: proprietario_non_verificabile" in r
+                           and "riferimento: " + self.rif in r for r in reg.output):
+                    sbagliate[percorso + " (registro)"] = reg.output
+        self.assertEqual({}, sbagliate)
+        self.assertEqual([], self._scritti())
+        self.assertEqual([], os.listdir(self.dir + "/up") if os.path.isdir(self.dir + "/up")
+                         else [])
+
+    def test_col_catalogo_muto_l_ospite_legge_la_sua_chat(self):
+        s, _ = self.g("POST", "/api/voucher/messaggio", {"voucher_token": self.v, "testo": "Ciao"})
+        self.assertEqual(201, s)
+        with mock.patch.object(self.sis.catalogo, "host_di_alloggio", self._muto):
+            s, t = self.g("GET", "/api/voucher/messaggi", q={"voucher_token": self.v})
+        self.assertEqual(200, s, t)
+        self.assertEqual(["Ciao"], [m["testo"] for m in t["messaggi"]])
+
+    def test_col_catalogo_sano_il_messaggio_arriva_al_vero_host(self):
+        # l'altra direzione (regola ferrea 10): a catalogo sano si scrive e lo vede h1
+        s, c = self.g("POST", "/api/voucher/messaggio", {"voucher_token": self.v, "testo": "Ciao"})
+        self.assertEqual((201, "inviato"), (s, c.get("stato")))
+        conv = self.sis.messaggistica.conversazioni_host("h1")
+        self.assertEqual([self.rif], [x.get("prenotazione_id") for x in conv])
+        self.assertEqual([], self.sis.messaggistica.conversazioni_host("host"))
+
+    def test_alloggio_senza_padrone_non_scrive_col_finto_host(self):
+        # silent-failure-hunter + code-review 20/11: alloggio cancellato dopo la prenotazione.
+        # Una riga col finto «host» non la legge nessuno E nasconde all'host vero TUTTA la chat
+        # (`thread` nega a chi non e' in ogni riga). Niente scritto, 410 e registro col codice.
+        s, _ = self.g("POST", "/api/voucher/messaggio", {"voucher_token": self.v, "testo": "Prima"})
+        self.assertEqual(201, s)
+        with mock.patch.object(self.sis.catalogo, "host_di_alloggio", lambda *_a, **_k: None):
+            with self.assertLogs("core_auto.server", level="WARNING") as reg:
+                s, c = self.g("POST", "/api/voucher/messaggio",
+                              {"voucher_token": self.v, "testo": "C'e' qualcuno?"})
+        self.assertEqual((410, "alloggio_non_disponibile"), (s, c.get("errore")))
+        self.assertTrue(any("codice: padrone_sconosciuto" in r and self.rif in r
+                            for r in reg.output), reg.output)
+        self.assertEqual(["Prima"], [m["testo"] for m in self.sis.messaggistica.thread(self.rif, "h1")])
+
+    def test_la_pagina_del_voucher_dice_all_ospite_se_il_messaggio_non_parte(self):
+        # code-review 20/11: il pulsante «manda» guardava solo il 201; 503 riprova, 410 e la rete
+        # caduta erano MUTI. Provato nel browser vero (Playwright, 503/410/rete: rosso su master,
+        # verde dopo; script in Core_Auto_GUARDIE_PRONTE\...\errori_20_11\prova.js). Qui la guardia
+        # di suite legge il gestore del pulsante nella pagina VERA: rete in try, ramo d'errore.
+        from fase83_server import pagina_voucher_html
+        with mock.patch.object(self.sis, "pagamenti_pendenti",
+                               types.SimpleNamespace(info=lambda _r: {"stato": "pagato"})):
+            html = pagina_voucher_html(self.sis, self.v, "it")
+        inizio = html.index("chSend').onclick")
+        gestore = html[inizio:html.index("chFile')", inizio)]
+        for pezzo in ("try{", "catch(", "else{", "BVL.riprova", "BVL.op_ko", "status>=500"):
+            self.assertIn(pezzo, gestore, gestore)
+
+    def test_venti_prove_nello_stesso_istante_non_superano_il_tetto(self):
+        # GARA (cassetta degli attrezzi 20/11): il tetto si contava PRIMA di salvare, senza
+        # serratura -- 20 caricamenti insieme con la chat a una prova dal tetto ne facevano
+        # passare 19 (misurato: 28 prove su un tetto di 10). Il tetto e' la difesa del disco.
+        png = ("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJ"
+               "RU5ErkJggg==")
+        corpo = {"voucher_token": self.v, "image_base64": png}
+        for _ in range(fase83_server.MAX_PROVE_FOTO - 1):
+            self.assertEqual(201, self.g("POST", "/api/voucher/prova", corpo)[0])
+        barriera, stati = threading.Barrier(20), []
+
+        def uno():
+            barriera.wait()
+            stati.append(self.g("POST", "/api/voucher/prova", corpo)[0])
+
+        # la finestra fra «conto» e «salvo» si allarga a mano (50 ms): senza, la gara dipende
+        # dai tempi della macchina e la guardia potrebbe non vederla (nella suite era verde
+        # anche sul codice difettoso)
+        vero = fase83_server.RouterHTTP._salva_foto_raw
+
+        def lento(router, *a, **k):
+            time.sleep(0.05)
+            return vero(router, *a, **k)
+
+        with mock.patch.object(fase83_server.RouterHTTP, "_salva_foto_raw", lento):
+            fili = [threading.Thread(target=uno) for _ in range(20)]
+            for f in fili:
+                f.start()
+            for f in fili:
+                f.join(30)
+        prove = [m for m in self._scritti() if "/uploads/" in m["testo"]]
+        self.assertEqual(fase83_server.MAX_PROVE_FOTO, len(prove), sorted(stati))
+        self.assertEqual((1, 19), (stati.count(201), stati.count(429)), sorted(stati))
+        self.assertEqual(len(prove), len(os.listdir(self.dir + "/up")))
+
+    def test_le_prove_non_contate_chiudono(self):
+        # code-review 20/11: il tetto alle foto di prova e' cio' che impedisce di riempire il
+        # disco. Se la chat non si legge il tetto non si conta: si nega (503), non si salva niente.
+        png = ("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJ"
+               "RU5ErkJggg==")
+        with mock.patch.object(self.sis.messaggistica, "thread", self._muto):
+            with self.assertLogs("core_auto.server", level="WARNING") as reg:
+                s, c = self.g("POST", "/api/voucher/prova",
+                              {"voucher_token": self.v, "image_base64": png})
+        # `riprova` e la traccia dell'errore vero: mutazione PR #335 (righe 3230-3231)
+        self.assertEqual((503, "storage_non_disponibile", True),
+                         (s, c.get("errore"), c.get("riprova")))
+        self.assertTrue(any("codice: prove_non_contate" in r.getMessage()
+                            and self.rif in r.getMessage() and r.exc_info
+                            and isinstance(r.exc_info[1], sqlite3.OperationalError)
+                            for r in reg.records), reg.output)
+        self.assertEqual([], os.listdir(self.dir + "/up") if os.path.isdir(self.dir + "/up")
+                         else [])
+
+
+class TestIlTettoDeiPreventiviEmailReggeLaGara(unittest.TestCase):
+    """GARA (cassetta degli attrezzi 20/11, variante della gara sulle foto di prova): il tetto
+    per indirizzo di POST /api/preventivo/email si contava, poi si mandava l'email e SOLO DOPO si
+    registrava l'invio, senza serratura -- 20 richieste insieme allo stesso indirizzo (date
+    diverse) passavano tutte: 20 email a una persona ignara dal nostro dominio. Il tetto esiste
+    proprio contro questo (test_abuso_email)."""
+
+    def setUp(self):
+        from fase57_vetrina import SchedaAlloggio
+        self.sis = crea_sistema(ConfigCasaVIP(abilitato=True, segreto_hmac=b"0" * 32))
+        inviate, serratura = self.inviate, self.serratura = [], threading.Lock()
+
+        class Lento:
+            def invia(self, dest, _ogg, _html):
+                time.sleep(0.05)      # la finestra fra «conto» e «registro» si allarga a mano
+                with serratura:
+                    inviate.append(dest)
+                return True
+
+        self.sis.email_provider = Lento()
+        self.sis.catalogo.pubblica(SchedaAlloggio(host_id="h", slug="casa-x", titolo="T",
+                                                  citta="Roma", prezzo_notte_cents=10000,
+                                                  capacita=2))
+        self.oggi = datetime.date.today()
+        for g in range(30, 60):
+            self.sis.inventario.imposta_disponibilita(
+                "casa-x", (self.oggi + datetime.timedelta(days=g)).isoformat(),
+                unita_totali=1, prezzo_netto_cents=10000)
+        self.r = crea_router(self.sis)
+
+    def _chiedi(self, g):
+        ci = self.oggi + datetime.timedelta(days=30 + g)
+        return self.r.gestisci("POST", "/api/preventivo/email", body=json.dumps({
+            "email": "vittima@estraneo.example", "alloggio_id": "casa-x",
+            "check_in": ci.isoformat(),
+            "check_out": (ci + datetime.timedelta(days=1)).isoformat()}))[0]
+
+    def test_venti_richieste_insieme_non_superano_il_tetto(self):
+        barriera, stati = threading.Barrier(20), []
+
+        def una(g):
+            barriera.wait()
+            stati.append(self._chiedi(g))
+
+        fili = [threading.Thread(target=una, args=(g,)) for g in range(20)]
+        for f in fili:
+            f.start()
+        for f in fili:
+            f.join(30)
+        self.assertEqual(fase83_server.MAX_PREVENTIVI_EMAIL_ORA, len(self.inviate), sorted(stati))
+        self.assertEqual(fase83_server.MAX_PREVENTIVI_EMAIL_ORA, stati.count(200), sorted(stati))
+
+    def test_il_tetto_regge_qualunque_sequenza(self):
+        # property-based-testing (Trail of Bits) 20/11: invariante su sequenze casuali di
+        # (indirizzo, date, invio riuscito o no, tempo che passa): per indirizzo mai piu' di
+        # MAX_PREVENTIVI_EMAIL_ORA email partite in un'ora, stesse date mai due volte in 10
+        # minuti, e un invio fallito non consuma il tetto (dopo, a posto libero, si passa).
+        from hypothesis import given, settings, strategies as st
+        tetto = fase83_server.MAX_PREVENTIVI_EMAIL_ORA
+        passo = st.tuples(st.sampled_from(["a@x.example", "b@x.example"]), st.integers(0, 5),
+                          st.booleans(), st.integers(0, 4000))
+
+        @settings(max_examples=150, deadline=None, derandomize=True, database=None)
+        @given(st.lists(passo, max_size=25))
+        def prova(passi):
+            self.r = crea_router(self.sis)
+            orologio, partite = [1_900_000_000.0], []
+            for em, g, ok, avanti in passi:
+                orologio[0] += avanti
+                self.sis.email_provider = types.SimpleNamespace(invia=lambda *_a, _ok=ok: _ok)
+                ci = self.oggi + datetime.timedelta(days=30 + g)
+                with mock.patch("time.time", lambda: orologio[0]):
+                    s, _ = self.r.gestisci("POST", "/api/preventivo/email", body=json.dumps({
+                        "email": em, "alloggio_id": "casa-x", "check_in": ci.isoformat(),
+                        "check_out": (ci + datetime.timedelta(days=1)).isoformat()}))
+                ora = orologio[0]
+                ultima_ora = [t for e, _g, t in partite if e == em and ora - t < 3600]
+                stesse = [t for e, gg, t in partite if e == em and gg == g and ora - t < 600]
+                if s == 200:
+                    self.assertTrue(ok, passi)
+                    self.assertLess(len(ultima_ora), tetto, passi)
+                    self.assertEqual([], stesse, passi)
+                    partite.append((em, g, ora))
+                elif ok and len(ultima_ora) < tetto and not stesse:
+                    self.fail("posto libero ma rifiutato (%s): un fallimento ha consumato il "
+                              "tetto? %s" % (s, passi))
+
+        prova()
+
+    def test_un_invio_fallito_non_consuma_il_tetto(self):
+        # l'altra direzione: la prenotazione del posto si restituisce se l'email non parte
+        self.sis.email_provider = types.SimpleNamespace(invia=lambda *_a: False)
+        self.assertEqual(502, self._chiedi(0))
+        self.sis.email_provider = types.SimpleNamespace(invia=lambda *_a: True)
+        esiti = [self._chiedi(g) for g in range(1, 8)]
+        self.assertEqual(fase83_server.MAX_PREVENTIVI_EMAIL_ORA, esiti.count(200), esiti)
+
+    def test_la_pulizia_toglie_solo_le_voci_di_piu_di_un_ora(self):
+        # mutazione PR #335 (riga 10454, `>` -> `>=`): una voce di ESATTAMENTE un'ora resta,
+        # una di un'ora e un secondo se ne va
+        ora = 1_900_000_000.0
+        giusta = ("a@x.example", "casa-x", "2030-01-01", "2030-01-02")
+        oltre = ("b@x.example", "casa-x", "2030-01-01", "2030-01-02")
+        self.r._prev_email_ts = {giusta: ora - 3600, oltre: ora - 3601}
+        with mock.patch("time.time", lambda: ora):
+            self.assertEqual(200, self._chiedi(0))
+        self.assertIn(giusta, self.r._prev_email_ts)
+        self.assertNotIn(oltre, self.r._prev_email_ts)
+
+    def test_un_invio_che_esplode_lascia_la_traccia_e_rende_il_posto(self):
+        # mutazione PR #335 (riga 10463, `exc_info=True` -> False): la riga dell'invio esploso
+        # porta l'errore vero; e il posto prenotato torna libero (le stesse date ripartono)
+        with mock.patch.object(self.r, "_manda_preventivo_email",
+                               side_effect=RuntimeError("smtp esploso")):
+            with self.assertLogs("core_auto.server", level="ERROR") as reg:
+                self.assertEqual(500, self._chiedi(0))
+        righe = [r for r in reg.records if "invio ISOLATO fallito" in r.getMessage()]
+        self.assertEqual(["smtp esploso"], [r.exc_info and str(r.exc_info[1]) for r in righe],
+                         reg.output)
+        self.assertEqual(200, self._chiedi(0))
+
+
+def _ferma_i_postini_non_demoni():
+    """Mutazione PR #335, riga 196 (`daemon=True` -> False) NON DETERMINABILE in CI: un postino
+    NON daemon tiene vivo il processo per sempre, e il giro dei test non finiva -- ne' rosso ne'
+    verde. La guardia vera e' `test_i_postini_non_trattengono_lo_spegnimento`; questa funzione
+    fa solo si' che il processo, col guasto dentro, FINISCA e dica rosso: allo spegnimento, prima
+    che Python aspetti i fili non daemon, a ogni postino non daemon si da' una lettera che lo
+    chiude (SystemExit, che `_invia_tracciato` non prende). A codice sano non fa niente.
+    Vale per TUTTO il processo che importa questo file (registrata all'import) e usa un'API
+    privata di CPython: se sparisse, `test_il_gancio_dei_postini_e_registrato` diventa rosso."""
+    postini = [f for f in threading.enumerate() if f.name.startswith("email-") and f.is_alive()]
+    if all(f.daemon for f in postini):
+        return
+    vivi = postini          # una lettera per OGNI postino: la puo' prendere uno qualunque
+
+    class Fine:
+        def invia(self, *_a):
+            raise SystemExit
+
+    with fase83_server._SEGNALE_EMAIL:
+        for _ in vivi:
+            fase83_server._FILA_EMAIL.append((Fine(), "", "", "", "", "", None))
+        fase83_server._SEGNALE_EMAIL.notify_all()
+
+
+if hasattr(threading, "_register_atexit"):      # Python 3.9+: gira PRIMA dell'attesa dei fili
+    threading._register_atexit(_ferma_i_postini_non_demoni)
+
+
+class TestLeEmailHannoUnTetto(unittest.TestCase):
+    """20/11, punto (7) fuori lavoro dei doppioni (variant-analysis): ogni email partiva nel
+    SUO filo, senza tetto -- una raffica (prenotazioni, reset password) apriva un filo e una
+    connessione al server di posta per ciascuna. Ora poche alla volta, le altre aspettano in
+    fila; a fila piena l'email va nella coda durevole dei ritentativi e il registro lo dice.
+    Nessuna si perde."""
+
+    class Posta:
+        def __init__(self):
+            self.serratura, self.via = threading.Lock(), threading.Event()
+            self.in_corso = self.massimo = 0
+            self.consegnate, self.accodate = [], []
+            posta = self
+
+            class Coda:
+                def accoda(self, dest, *_a):
+                    posta.accodate.append(dest)
+                    return True
+            self.coda_email = Coda()
+
+        def invia(self, dest, *_a):
+            with self.serratura:
+                self.in_corso += 1
+                self.massimo = max(self.massimo, self.in_corso)
+            self.via.wait(10)
+            with self.serratura:
+                self.in_corso -= 1
+                self.consegnate.append(dest)
+            return True
+
+    def setUp(self):
+        self.posta = self.Posta()
+        sis = types.SimpleNamespace(email_provider=self.posta)
+        self.r = fase83_server.RouterHTTP.__new__(fase83_server.RouterHTTP)
+        self.r._sys = sis
+
+    def tearDown(self):
+        self.posta.via.set()
+
+    def _aspetta(self, condizione, secondi=10):
+        for _ in range(int(secondi / 0.05)):
+            if condizione():
+                return True
+            time.sleep(0.05)
+        return condizione()
+
+    def test_una_raffica_non_apre_un_filo_per_email(self):
+        for i in range(30):
+            self.r._email_bg("ospite%d@x.it" % i, "o", "<p>x</p>", "voucher", "R%d" % i)
+        time.sleep(0.5)
+        massimo = self.posta.massimo
+        self.posta.via.set()
+        self.assertTrue(self._aspetta(lambda: len(self.posta.consegnate) == 30),
+                        "email consegnate: %d su 30" % len(self.posta.consegnate))
+        self.assertLessEqual(massimo, getattr(fase83_server, "_FILI_EMAIL", 4),
+                             "invii aperti insieme: %d" % massimo)
+
+    def test_a_fila_piena_l_email_va_nei_ritentativi_e_si_dice(self):
+        with mock.patch.object(fase83_server, "_TETTO_EMAIL_IN_ATTESA", 2, create=True):
+            with self.assertLogs("core_auto.server", level="ERROR") as reg:
+                for i in range(4):          # occupano i fili, uno per volta: con la fila a 2,
+                    # mandate di corsa la terza troverebbe la fila piena prima che un filo la
+                    # prenda (gara della prova, non del codice)
+                    self.r._email_bg("primo%d@x.it" % i, "o", "<p>x</p>", "voucher", "P%d" % i)
+                    self.assertTrue(self._aspetta(lambda n=i + 1: self.posta.in_corso == n))
+                for i in range(6):          # 2 in fila, 4 oltre
+                    self.r._email_bg("poi%d@x.it" % i, "o", "<p>x</p>", "voucher", "Q%d" % i)
+        self.assertEqual(4, len(self.posta.accodate), self.posta.accodate)
+        self.assertTrue(any("codice: coda_email_piena" in r for r in reg.output), reg.output)
+        self.posta.via.set()
+        self.assertTrue(self._aspetta(lambda: len(self.posta.consegnate) == 6))
+        self.assertEqual(10, len(self.posta.consegnate) + len(self.posta.accodate))
+
+    def _con_fili_finti(self, filo):
+        """Fila, fili e segnale NUOVI (i postini veri di altre prove aspettano sul segnale
+        vecchio: non prendono la lettera di prova), e dentro fase83_server un `threading` uguale
+        al vero tranne `Thread` (code-review 21/11: senza Lock e Condition un filo rimasto da
+        un'altra prova cadeva con AttributeError)."""
+        th = types.SimpleNamespace(**dict(vars(threading), Thread=filo))
+        return (mock.patch.object(fase83_server, "_FILI_EMAIL_VIVI", []),
+                mock.patch.object(fase83_server, "_FILA_EMAIL", []),
+                mock.patch.object(fase83_server, "_SEGNALE_EMAIL", threading.Condition()),
+                mock.patch.object(fase83_server, "threading", th))
+
+    def test_se_nessun_filo_parte_l_email_va_nei_ritentativi_e_si_dice(self):
+        # mutazione PR #335 (righe 201 e 206): senza un filo che la mandi l'email va nei
+        # ritentativi (`piena = True`; col guasto restava fuori da tutto: persa in silenzio),
+        # e la riga del filo non partito porta l'errore vero
+        class FiloCheNonParte:
+            def __init__(self, *_a, **_k):
+                pass
+
+            def start(self):
+                raise RuntimeError("can't start new thread")
+
+        vivi, fila, segnale, th = self._con_fili_finti(FiloCheNonParte)
+        with vivi, fila, segnale, th:
+            with self.assertLogs("core_auto.server", level="ERROR") as reg:
+                self.r._email_bg("solo@x.it", "o", "<p>x</p>", "voucher", "S1")
+            self.assertEqual([], fase83_server._FILA_EMAIL, "lettera in una fila senza fili")
+        self.assertEqual(["solo@x.it"], self.posta.accodate)
+        non_partito = [r for r in reg.records if "codice: postino_non_avviato" in r.getMessage()]
+        self.assertEqual(["can't start new thread"],
+                         [r.exc_info and str(r.exc_info[1]) for r in non_partito], reg.output)
+        self.assertTrue(any("codice: coda_email_piena" in r for r in reg.output), reg.output)
+
+    def test_i_postini_non_trattengono_lo_spegnimento(self):
+        # mutazione PR #335 (riga 196, `daemon=True` -> False, NON DETERMINABILE in CI): un
+        # postino non daemon tiene vivo il processo per sempre (il deploy aspetta). Vedi
+        # `_ferma_i_postini_non_demoni` per come la prova finisce anche col guasto dentro.
+        nati = []
+
+        class FiloSpia:
+            def __init__(self, *_a, daemon=None, **_k):
+                nati.append(daemon)
+
+            def start(self):
+                pass
+
+            def is_alive(self):
+                return True
+
+        vivi, fila, segnale, th = self._con_fili_finti(FiloSpia)
+        with vivi, fila, segnale, th:
+            self.r._email_bg("demone@x.it", "o", "<p>x</p>", "voucher", "D1")
+        self.assertEqual([True] * fase83_server._FILI_EMAIL, nati)
+
+    def test_il_gancio_dei_postini_e_registrato(self):
+        # D18 punto 4: il controllo che fa finire il giro col guasto 196 e' sotto guardia. Se
+        # l'API privata sparisse o qualcuno togliesse la registrazione, questo diventa rosso
+        # subito, non il giorno in cui la riga 196 cambia e il giro torna ad appendersi
+        ganci = getattr(threading, "_threading_atexits", None)
+        self.assertIsNotNone(ganci, "threading._threading_atexits non c'e' piu'")
+        self.assertTrue(any(getattr(g, "func", g) is _ferma_i_postini_non_demoni
+                            for g in ganci), ganci)
+
+    # ── 21/11, code-review della PR #335: un'email in fila non si perde a un riavvio ──────────
+    def _posta_con_coda_vera(self):
+        """Un fornitore che risponde subito, con la coda DUREVOLE vera di fase86 su disco e un
+        orologio nostro."""
+        from fase86_email import CodaEmail
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        self.t = [1_900_000_000.0]
+
+        class Prov:
+            def __init__(self):
+                self.mandate, self.esito = [], True
+
+            def invia(self, dest, *_a):
+                self.mandate.append(dest)
+                return self.esito
+
+        prov = Prov()
+        prov.coda_email = CodaEmail(os.path.join(d, "coda.db"), prov.invia,
+                                    ora=lambda: self.t[0])
+        prov.coda_email.inizializza_schema()
+        self.r._sys = types.SimpleNamespace(email_provider=prov)
+        return prov
+
+    def _righe(self, prov):
+        con = prov.coda_email._apri()
+        try:
+            return con.execute("SELECT a, stato FROM coda_email ORDER BY id").fetchall()
+        finally:
+            con.close()
+
+    def test_un_email_in_fila_non_si_perde_se_il_processo_muore(self):
+        # il difetto: la fila stava solo in memoria. Qui i postini non partono mai (il processo
+        # «muore» prima dell'invio): dopo la presa, il giro dei ritentativi la deve mandare
+        from fase86_email import PRESA_SCADE_S
+        prov = self._posta_con_coda_vera()
+
+        class FiloMorto:
+            def __init__(self, *_a, **_k):
+                pass
+
+            def start(self):
+                pass
+
+            def is_alive(self):
+                return True
+
+        vivi, fila, segnale, th = self._con_fili_finti(FiloMorto)
+        with vivi, fila, segnale, th:
+            self.r._email_bg("ospite@x.it", "o", "<p>x</p>", "voucher", "R1")
+        self.assertEqual([], prov.mandate)
+        self.t[0] += PRESA_SCADE_S
+        self.assertEqual(1, prov.coda_email.un_giro(), "email persa col processo")
+        self.assertEqual(["ospite@x.it"], prov.mandate)
+
+    def test_venticinque_email_nello_stesso_istante_partono_una_volta_ciascuna(self):
+        # gara (cassetta degli attrezzi 21/11): 25 invii insieme con la barriera, coda vera e
+        # postini veri: ognuna parte UNA volta e su disco non resta niente
+        prov = self._posta_con_coda_vera()
+        barriera = threading.Barrier(25)
+
+        def uno(i):
+            barriera.wait()
+            self.r._email_bg("g%d@x.it" % i, "o", "<p>x</p>", "voucher", "G%d" % i)
+
+        fili = [threading.Thread(target=uno, args=(i,)) for i in range(25)]
+        for f in fili:
+            f.start()
+        for f in fili:
+            f.join(30)
+        attese = sorted("g%d@x.it" % i for i in range(25))
+        self.assertTrue(self._aspetta(lambda: len(prov.mandate) >= 25
+                                      and self._righe(prov) == []),
+                        (len(prov.mandate), self._righe(prov)))
+        self.assertEqual(attese, sorted(prov.mandate), "doppioni o email mancanti")
+
+    def test_il_postino_manda_la_riga_e_la_cancella(self):
+        prov = self._posta_con_coda_vera()
+        self.r._email_bg("ospite@x.it", "o", "<p>x</p>", "voucher", "R2")
+        self.assertTrue(self._aspetta(lambda: prov.mandate == ["ospite@x.it"]
+                                      and self._righe(prov) == []),
+                        (prov.mandate, self._righe(prov)))
+
+    def test_se_la_coda_non_si_scrive_l_email_parte_lo_stesso_e_si_dice(self):
+        prov = self._posta_con_coda_vera()
+        with mock.patch.object(prov.coda_email, "accoda_in_volo", create=True,
+                               side_effect=sqlite3.OperationalError("disk I/O error")):
+            with self.assertLogs("core_auto.server", level="ERROR") as reg:
+                self.r._email_bg("ospite@x.it", "o", "<p>x</p>", "voucher", "R3")
+        righe = [r for r in reg.records if "codice: coda_non_scritta" in r.getMessage()]
+        self.assertEqual([True], [bool(r.exc_info) and isinstance(r.exc_info[1],
+                                                                   sqlite3.OperationalError)
+                                  for r in righe], reg.output)
+        self.assertTrue(self._aspetta(lambda: prov.mandate == ["ospite@x.it"]), prov.mandate)
+
+    def test_a_fila_piena_la_riga_gia_su_disco_non_si_raddoppia(self):
+        prov = self._posta_con_coda_vera()
+        with mock.patch.object(fase83_server, "_TETTO_EMAIL_IN_ATTESA", 0):
+            with self.assertLogs("core_auto.server", level="ERROR") as reg:
+                self.r._email_bg("ospite@x.it", "o", "<p>x</p>", "voucher", "R4")
+        self.assertTrue(any("codice: coda_email_piena" in r for r in reg.output), reg.output)
+        self.assertEqual([("ospite@x.it", "attesa")], self._righe(prov))
+        # ...e parte al prossimo giro, non dopo la presa (code-review 21/11: 10 minuti muti)
+        self.assertEqual(1, prov.coda_email.un_giro())
+        self.assertEqual(["ospite@x.it"], prov.mandate)
+
+    def test_a_fila_piena_se_la_riga_non_si_anticipa_si_dice(self):
+        prov = self._posta_con_coda_vera()
+        with mock.patch.object(fase83_server, "_TETTO_EMAIL_IN_ATTESA", 0), \
+                mock.patch.object(prov.coda_email, "anticipa", create=True,
+                                  side_effect=sqlite3.OperationalError("database is locked")):
+            with self.assertLogs("core_auto.server", level="ERROR") as reg:
+                self.r._email_bg("ospite@x.it", "o", "<p>x</p>", "voucher", "R9")
+        righe = [r for r in reg.records if "codice: coda_non_anticipata" in r.getMessage()]
+        self.assertEqual([True], [bool(r.exc_info) and isinstance(r.exc_info[1],
+                                                                   sqlite3.OperationalError)
+                                  for r in righe], reg.output)
+
+    def test_coda_illeggibile_e_invio_fallito_non_raddoppia_la_riga(self):
+        # code-review 21/11: la riga su disco c'e' gia' (la ritenta il giro): un fallimento con
+        # la coda illeggibile non ne scrive una seconda (due voucher all'ospite)
+        prov = self._posta_con_coda_vera()
+        prov.esito = False
+        id_riga = prov.coda_email.accoda_in_volo("ospite@x.it", "o", "<p>x</p>", "voucher", "R10")
+        with mock.patch.object(prov.coda_email, "prendi",
+                               side_effect=sqlite3.OperationalError("database is locked")):
+            with self.assertLogs("core_auto.server", level="ERROR"):
+                fase83_server._invia_lettera(*self._lettera(prov, id_riga))
+        self.assertEqual([("ospite@x.it", "attesa")], self._righe(prov))
+
+    def _lettera(self, prov, id_riga):
+        return (prov, "ospite@x.it", "o", "<p>x</p>", "voucher", "R5", id_riga)
+
+    def test_il_postino_con_la_riga_su_disco(self):
+        prov = self._posta_con_coda_vera()
+        coda = prov.coda_email
+        # invio fallito: la STESSA riga torna in attesa (nessuna seconda riga) e si dice
+        prov.esito = False
+        id_riga = coda.accoda_in_volo("ospite@x.it", "o", "<p>x</p>", "voucher", "R5")
+        with self.assertLogs("core_auto.server", level="ERROR") as reg:
+            fase83_server._invia_lettera(*self._lettera(prov, id_riga))
+        self.assertEqual([("ospite@x.it", "attesa")], self._righe(prov))
+        self.assertTrue(any("EMAIL NON CONSEGNATA" in r for r in reg.output), reg.output)
+        # riga gia' presa dal giro: il postino non la manda
+        prov.esito, prov.mandate = True, []
+        self.assertTrue(coda.prendi(id_riga))
+        fase83_server._invia_lettera(*self._lettera(prov, id_riga))
+        self.assertEqual([], prov.mandate)
+
+    def test_il_postino_con_la_coda_illeggibile_manda_lo_stesso(self):
+        prov = self._posta_con_coda_vera()
+        id_riga = prov.coda_email.accoda_in_volo("ospite@x.it", "o", "<p>x</p>", "voucher", "R6")
+        with mock.patch.object(prov.coda_email, "prendi",
+                               side_effect=sqlite3.OperationalError("database is locked")):
+            with self.assertLogs("core_auto.server", level="ERROR") as reg:
+                fase83_server._invia_lettera(*self._lettera(prov, id_riga))
+        self.assertEqual(["ospite@x.it"], prov.mandate, "email persa con la coda illeggibile")
+        righe = [r for r in reg.records if "codice: coda_illeggibile" in r.getMessage()]
+        self.assertEqual([True], [bool(r.exc_info) and isinstance(r.exc_info[1],
+                                                                   sqlite3.OperationalError)
+                                  for r in righe], reg.output)
+
+    def test_il_postino_che_non_chiude_la_riga_lo_dice(self):
+        prov = self._posta_con_coda_vera()
+        id_riga = prov.coda_email.accoda_in_volo("ospite@x.it", "o", "<p>x</p>", "voucher", "R7")
+        with mock.patch.object(prov.coda_email, "chiudi",
+                               side_effect=sqlite3.OperationalError("database is locked")):
+            with self.assertLogs("core_auto.server", level="ERROR") as reg:
+                fase83_server._invia_lettera(*self._lettera(prov, id_riga))
+        self.assertEqual(["ospite@x.it"], prov.mandate)
+        righe = [r for r in reg.records if "codice: coda_non_chiusa" in r.getMessage()]
+        self.assertEqual([True], [bool(r.exc_info) and isinstance(r.exc_info[1],
+                                                                   sqlite3.OperationalError)
+                                  for r in righe], reg.output)
+
+    def test_senza_coda_durevole_un_invio_fallito_va_nei_ritentativi(self):
+        # la strada di prima resta per i fornitori senza `accoda_in_volo`
+        prov = types.SimpleNamespace(invia=lambda *_a: False, coda_email=self.posta.coda_email)
+        with self.assertLogs("core_auto.server", level="ERROR"):
+            self.assertFalse(fase83_server._invia_tracciato(prov, "vecchia@x.it", "o", "h",
+                                                            "voucher", "R8"))
+        self.assertEqual(["vecchia@x.it"], self.posta.accodate)
+
+
+class TestLaPubblicazioneHaIFreni(unittest.TestCase):
+    """20/11, punti (2) (3) (4) fuori lavoro dei doppioni, sicurezza: (4) l'indirizzo di un
+    annuncio nuovo si sceglieva PRIMA di controllare la scheda, con fino a 79 letture del
+    catalogo sotto la serratura che tutti gli invii condividono; (2) nessun tetto di annunci
+    per host; (3) nessun limite di frequenza. Insieme: un host solo rallentava le
+    pubblicazioni di tutti."""
+
+    def setUp(self):
+        _aspetta_i_giri_seo(self)
+        d = self.dir = tempfile.mkdtemp()
+        self.sis = crea_sistema(ConfigCasaVIP(
+            abilitato=True, segreto_hmac=b"S" * 32, con_registrazione_host=True,
+            db_catalogo=f"{d}/c.db", db_inventario=f"{d}/i.db", db_registro_host=f"{d}/r.db",
+            db_accettazioni=f"{d}/a.db", db_pendenti=f"{d}/p.db"))
+        self.r = crea_router(self.sis, host_key="hk", admin_key="ak",
+                             base_url="https://bookinvip.com")
+        for nome in ("_SLUG_PRENOTATI", "_INVII_PUBBLICA", "_IN_VOLO", "_SEO_PER_HOST"):
+            getattr(fase83_server, nome).clear()
+
+        class MotoreFermo:
+            def su_pubblicazione(self, *_a, **_k):
+                return None
+
+        self.r._motore_seo_cache = MotoreFermo()
+        self.tk = self._registra("freni@pubblica.it")
+
+    def tearDown(self):
+        _aspetta_i_giri_seo(self)
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def g(self, m, p, b=None, h=None):
+        return self.r.gestisci(m, p, {}, json.dumps(b) if b is not None else None, h or {})
+
+    def _registra(self, email):
+        s, c = self.g("POST", "/api/host/registrazione",
+                      {"email": email, "password": "password1", "accetta_termini": True,
+                       "accetta_clausole": True, "accetta_privacy": True,
+                       "doc_sha256": doc_sha256(), "versione": CONTRATTO_HOST_VERSIONE})
+        _deve(s == 201, s, c)
+        return {"X-Host-Token": c["token"]}
+
+    def _nuovo(self, titolo="Casa freni", tk=None, **extra):
+        corpo = {"slug": "", "titolo": titolo, "citta": "Livigno", "paese": "ES",
+                 "prezzo_notte_cents": 200, "capacita": 2}
+        corpo.update(extra)
+        return self.g("POST", "/api/host/pubblica", corpo, tk or self.tk)
+
+    def _spia_catalogo(self):
+        """Ogni lettura «di chi e' questo indirizzo?» col suo indirizzo e se avveniva sotto la
+        serratura comune degli invii."""
+        letture, vera = [], self.sis.catalogo.host_di_alloggio
+
+        def spia(slug):
+            # serratura rientrante: «la tengo io?» (le letture avvengono nel filo dell'invio)
+            letture.append((slug, fase83_server._SERRATURA_INVII._is_owned()))
+            return vera(slug)
+        return letture, mock.patch.object(self.sis.catalogo, "host_di_alloggio", spia)
+
+    def test_una_scheda_sbagliata_non_sceglie_l_indirizzo(self):
+        letture, spia = self._spia_catalogo()
+        with spia:
+            s, c = self._nuovo(prezzo_notte_cents=-5)
+        self.assertEqual(422, s, c)
+        self.assertEqual([], letture, "una scheda rifiutata ha letto il catalogo per scegliere "
+                                      "l'indirizzo")
+        self.assertEqual({}, fase83_server._SLUG_PRENOTATI)
+
+    def test_sotto_la_serratura_comune_una_lettura_sola(self):
+        for _ in range(6):
+            s, c = self._nuovo()
+            _deve(s == 201, s, c)
+        letture, spia = self._spia_catalogo()
+        with spia:
+            s, c = self._nuovo()
+        self.assertEqual(201, s, c)
+        self.assertEqual("casa-freni-7", c.get("slug"), c)
+        sotto = [x for x, serrata in letture if serrata]
+        self.assertLessEqual(len(sotto), 1, "letture del catalogo sotto la serratura comune "
+                                            "degli invii: %s" % sotto)
+
+    def test_c_e_un_tetto_di_annunci_per_host(self):
+        with mock.patch.object(fase83_server, "_TETTO_ANNUNCI_PER_HOST", 3, create=True):
+            for i in range(3):
+                s, c = self._nuovo(titolo="Casa %d" % i)
+                _deve(s == 201, s, c)
+            with self.assertLogs("core_auto.server", level="WARNING") as reg:
+                s, c = self._nuovo(titolo="Casa oltre")
+            self.assertEqual((422, "troppi_annunci"), (s, c.get("errore")))
+            self.assertTrue(any("codice: troppi_annunci" in r for r in reg.output), reg.output)
+            # al tetto si AGGIORNA ancora un annuncio proprio
+            s, c = self.g("POST", "/api/host/pubblica",
+                          {"slug": "casa-0", "titolo": "Casa 0 nuova", "citta": "Livigno",
+                           "paese": "ES", "prezzo_notte_cents": 300, "capacita": 2}, self.tk)
+            self.assertEqual(201, s, c)
+            # ...e il tetto e' per host: un altro ne crea
+            altro = self._registra("altro@pubblica.it")
+            s, c = self._nuovo(titolo="Casa altrui", tk=altro)
+            self.assertEqual(201, s, c)
+
+    def test_c_e_un_limite_di_frequenza_per_host(self):
+        with mock.patch.object(fase83_server, "_PUBBLICA_PER_FINESTRA", 3, create=True):
+            r = crea_router(self.sis, host_key="hk", admin_key="ak",
+                            base_url="https://bookinvip.com")
+            r._motore_seo_cache = self.r._motore_seo_cache
+        self.r = r
+        for i in range(3):
+            s, c = self._nuovo(titolo="Fretta %d" % i)
+            _deve(s == 201, s, c)
+        with self.assertLogs("core_auto.server", level="WARNING") as reg:
+            s, c = self._nuovo(titolo="Fretta oltre")
+        self.assertEqual(429, s, c)
+        self.assertEqual("troppe_pubblicazioni", c.get("errore"))
+        self.assertGreater(c.get("riprova_tra_sec", 0), 0)
+        self.assertTrue(any("codice: troppe_pubblicazioni" in r for r in reg.output), reg.output)
+        # il limite e' per host: un altro host pubblica
+        altro = self._registra("lento@pubblica.it")
+        s, c = self._nuovo(titolo="Calma", tk=altro)
+        self.assertEqual(201, s, c)
+
+    def test_il_blocco_non_cresce_a_ogni_raffica(self):
+        # code-reviewer 20/11: il conto dei blocchi del limitatore non cala mai; col raddoppio
+        # un host vero che salva molto aspettava 60, 120, 240... fino a 600 s
+        with mock.patch.object(fase83_server, "_PUBBLICA_PER_FINESTRA", 2, create=True):
+            r = crea_router(self.sis, host_key="hk", admin_key="ak",
+                            base_url="https://bookinvip.com")
+        r._motore_seo_cache = self.r._motore_seo_cache
+        self.r = r
+        ora = [1000.0]
+        attese = []
+        with mock.patch.object(r._tetto_pubblica, "_now", lambda: ora[0]):
+            for giro in range(3):
+                for i in range(2):
+                    s, c = self._nuovo(titolo="Raffica %d %d" % (giro, i))
+                    _deve(s == 201, s, c)
+                s, c = self._nuovo(titolo="Raffica oltre %d" % giro)
+                self.assertEqual(429, s, c)
+                attese.append(c["riprova_tra_sec"])
+                ora[0] += c["riprova_tra_sec"] + 1
+        self.assertEqual(attese[0], attese[2], attese)
+        self.assertLessEqual(attese[2], 61, attese)
+
+    def test_il_conto_degli_annunci_che_fallisce_dice_riprova(self):
+        # silent-failure-hunter 20/11: diventava un 500 generico senza codice
+        with mock.patch.object(self.sis.catalogo, "conta_alloggi_host",
+                               side_effect=sqlite3.OperationalError("database is locked")):
+            with self.assertLogs("core_auto.server", level="WARNING") as reg:
+                s, c = self._nuovo(titolo="Casa conto")
+        self.assertEqual((503, "storage_non_disponibile"), (s, c.get("errore")))
+        self.assertTrue(any("sottocodice: tetto_annunci" in r for r in reg.output), reg.output)
+        self.assertEqual({}, fase83_server._SLUG_PRENOTATI)
+
+    def test_se_l_indirizzo_scelto_nasce_intanto_si_prende_il_libero_dopo(self):
+        # code-reviewer e silent-failure-hunter 20/11: si saltava al suffisso casuale senza
+        # provare gli altri liberi gia' trovati
+        vera, viste = self.sis.catalogo.host_di_alloggio, []
+
+        def nasce_intanto(slug):
+            viste.append(slug)
+            if slug == "casa-intanto" and viste.count(slug) >= 2:
+                return "altro-host"
+            return vera(slug)
+
+        with mock.patch.object(self.sis.catalogo, "host_di_alloggio", nasce_intanto):
+            s, c = self._nuovo(titolo="Casa intanto")
+        self.assertEqual(201, s, c)
+        self.assertEqual("casa-intanto-2", c.get("slug"), c)
+
+    def test_il_suffisso_casuale_si_scrive_nel_registro(self):
+        with mock.patch.object(self.sis.catalogo, "host_di_alloggio",
+                               lambda slug: "altro-host" if slug.startswith("casa-piena")
+                               else None):
+            with self.assertLogs("core_auto.server", level="WARNING") as reg:
+                slug = self.r._slug_unico("Casa piena", "Livigno")
+        self.assertRegex(slug, r"^casa-piena-[0-9a-f]{6}$")
+        self.assertTrue(any("codice: slug_casuale" in r for r in reg.output), reg.output)
+
+    def test_un_freno_che_non_parte_si_scrive_nel_registro(self):
+        # silent-failure-hunter 20/11: il freno delle prenotazioni non pagate si spegneva muto
+        import fase179_rate_limit
+        with mock.patch.object(fase179_rate_limit, "crea_rate_limiter",
+                               side_effect=RuntimeError("rotto")):
+            with self.assertLogs("core_auto.server", level="ERROR") as reg:
+                crea_router(self.sis, host_key="hk", admin_key="ak",
+                            base_url="https://bookinvip.com")
+        freni = [r for r in reg.records if "codice: freno_non_attivo" in r.getMessage()]
+        self.assertEqual({"prenotazioni_non_pagate", "pubblicazioni"},
+                         {r.getMessage().split("freno: ")[1].split(" ")[0] for r in freni},
+                         reg.output)
+        # ...e ogni riga porta l'errore vero: mutazione PR #335 (righe 2478 e 2492)
+        self.assertEqual(["rotto", "rotto"],
+                         [r.exc_info and str(r.exc_info[1]) for r in freni], reg.output)
+
+    def test_aggiornare_un_annuncio_proprio_non_dipende_dal_conto_degli_annunci(self):
+        # mutazione PR #335 (riga 12928, `and` -> `or`): il conto serve solo a un annuncio
+        # NUOVO; un aggiornamento non lo chiede, e non fallisce se il conto non risponde
+        s, c = self._nuovo(titolo="Casa da aggiornare")
+        _deve(s == 201, s, c)
+        with mock.patch.object(self.sis.catalogo, "conta_alloggi_host",
+                               side_effect=sqlite3.OperationalError("database is locked")):
+            s, c2 = self.g("POST", "/api/host/pubblica",
+                           {"slug": c["slug"], "titolo": "Casa aggiornata", "citta": "Livigno",
+                            "paese": "ES", "prezzo_notte_cents": 300, "capacita": 2}, self.tk)
+        self.assertEqual(201, s, c2)
+        self.assertEqual("Casa aggiornata", self.sis.catalogo.dettaglio(c["slug"])["titolo"])
+
+    def test_la_ricerca_degli_indirizzi_liberi_si_ferma_a_cinque(self):
+        # mutazione PR #335 (riga 13493, `>=` -> `>`): fuori dalla serratura comune si leggono
+        # solo gli indirizzi che servono -- cinque liberi, poi basta -- e sotto la serratura uno
+        letture, spia = self._spia_catalogo()
+        with spia:
+            slug = self.r._slug_unico("Casa cinque", "Livigno")
+        self.assertEqual("casa-cinque", slug)
+        self.assertEqual(["casa-cinque"] + ["casa-cinque-%d" % i for i in range(2, 6)],
+                         [x for x, serrata in letture if not serrata])
+        self.assertEqual(["casa-cinque"], [x for x, serrata in letture if serrata])
+
+    def test_l_email_di_benvenuto_porta_l_indirizzo_del_pannello(self):
+        # mutazione PR #335 (riga 12525, `or` -> `and`): senza indirizzo del sito configurato il
+        # link e' quello di bookinvip.com; con l'indirizzo configurato, quello
+        spedite = {}
+        self.sis.email_provider = types.SimpleNamespace(invia=lambda *_a: True)
+        with mock.patch.object(fase83_server, "_spedisci_email",
+                               lambda _p, dest, _o, corpo, *_a: spedite.update({dest: corpo})):
+            for base, email in (("", "senza@base.it"), ("https://prova.bookinvip.com",
+                                                        "con@base.it")):
+                self.r = crea_router(self.sis, host_key="hk", admin_key="ak", base_url=base)
+                self._registra(email)
+        self.assertIn('https://bookinvip.com/host.html', spedite.get("senza@base.it", ""))
+        self.assertIn('https://prova.bookinvip.com/host.html', spedite.get("con@base.it", ""))
 
 
 if __name__ == "__main__":

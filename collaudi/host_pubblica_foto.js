@@ -264,6 +264,122 @@ function sorveglia(page, dove, sacco) {
   esigi(msgRange.includes('✅') && !msgRange.includes('❌'),
     `l'apertura del periodo e' FALLITA sul pannello host: ${JSON.stringify(msgRange.slice(0, 300))}`);
   console.log(`[HOST] periodo aperto: ${msgRange.slice(0, 120)}`);
+
+  // ── (6) del 20/11: TITOLO CAMBIATO DOPO UN INVIO SENZA RISPOSTA. Il server riconosce il
+  //    «riprova» da chiave + titolo + citta': cambiandoli nasce un annuncio NUOVO, e l'host deve
+  //    saperlo prima. Tutto intercettato qui: nessuna richiesta arriva al server, nessun annuncio
+  //    nasce. Due direzioni (regola ferrea 10): l'avviso GRIDA col titolo cambiato dopo un invio
+  //    senza risposta, e TACE col titolo uguale e dopo un «no» del server (422, niente creato).
+  const TITOLO_6 = 'Loft A2 Senza Risposta';
+  const inviati6 = [];
+  const avvisi6 = [];
+  const suDialogo = async d => { avvisi6.push(d.message()); await d.dismiss(); };   // «Annulla»
+  ph.on('dialog', suDialogo);
+  let modo6 = 'abort';
+  await ph.route('**/api/host/pubblica', async route => {
+    let ch = 'illeggibile';
+    try { ch = (route.request().postDataJSON() || {}).chiave_invio; } catch (e) { /* resta illeggibile */ }
+    inviati6.push(ch);
+    if (modo6 === 'abort') { await route.abort('failed'); return; }
+    if (modo6 === '201') {
+      await route.fulfill({ status: 201, contentType: 'application/json',
+                            body: JSON.stringify({ slug: slug, stato: 'pubblicato' }) });
+      return;
+    }
+    await route.fulfill({ status: 422, contentType: 'application/json',
+                          body: JSON.stringify({ errore: 'campi_non_validi' }) });
+  });
+  const esito6 = async () => {
+    let t = '';
+    for (let i = 0; i < 20 && !t.includes('❌') && !t.includes('✅'); i++) {
+      await ph.waitForTimeout(250);
+      t = ((await ph.innerText('#msgPub').catch(() => '')) || '').trim();
+    }
+    return t;
+  };
+  const pulisci6 = () => ph.evaluate(() => { document.getElementById('msgPub').textContent = ''; });
+  await ph.fill('#p_titolo', TITOLO_6);
+  await ph.fill('#p_citta', CITTA_NUOVA);
+  await ph.selectOption('#p_paese', 'IT');
+  await ph.fill('#p_cin', CIN);
+  await ph.fill('#p_prezzo', '80');
+  await pulisci6();
+  await ph.click('#btnPubblica');                                   // (a) nessuna risposta
+  const msgA = await esito6();
+  esigi(msgA.includes('❌'), `(6a) l'invio senza risposta non ha dato «riprova»: ${JSON.stringify(msgA.slice(0, 120))}`);
+  await ph.fill('#p_titolo', TITOLO_6 + ' bis');                   // (b) titolo cambiato
+  await pulisci6();
+  await ph.click('#btnPubblica');
+  await ph.waitForTimeout(1200);
+  esigi(avvisi6.length === 1 && avvisi6[0].startsWith('⚠️'),
+    `(6b) titolo cambiato dopo un invio senza risposta: NESSUN avviso all'host (avvisi: ${JSON.stringify(avvisi6)})`);
+  esigi(inviati6.length === 1,
+    `(6b) con «Annulla» l'invio e' partito lo stesso: ${inviati6.length} invii`);
+  // (c) e (d) contano da dove sono partiti: ogni messaggio dice il SUO guasto, non quello di (b)
+  await ph.fill('#p_titolo', TITOLO_6);                            // (c) titolo di nuovo uguale
+  modo6 = '422';
+  let avvisiPrima = avvisi6.length;
+  let inviiPrima = inviati6.length;
+  await pulisci6();
+  await ph.click('#btnPubblica');
+  await esito6();
+  esigi(avvisi6.length === avvisiPrima,
+    `(6c) col titolo uguale l'avviso grida per niente: ${JSON.stringify(avvisi6.slice(avvisiPrima))}`);
+  esigi(inviati6.length === inviiPrima + 1 && inviati6[inviiPrima] === inviati6[0]
+        && String(inviati6[0]).length >= 8,
+    `(6c) il riprova col titolo uguale non e' partito o non riusa la chiave: ${JSON.stringify(inviati6)}`);
+  // (d) code-review 20/11: un «no» del server (422) dice che QUELL'invio non ha creato niente,
+  //     non quello senza risposta di prima: cambiando titolo l'avviso deve esserci ancora
+  await ph.fill('#p_titolo', TITOLO_6 + ' ter');
+  avvisiPrima = avvisi6.length;
+  inviiPrima = inviati6.length;
+  await pulisci6();
+  await ph.click('#btnPubblica');
+  await ph.waitForTimeout(1200);
+  esigi(avvisi6.length === avvisiPrima + 1,
+    `(6d) dopo un 422 il ricordo dell'invio senza risposta e' sparito: nessun avviso col titolo cambiato`);
+  esigi(inviati6.length === inviiPrima, `(6d) con «Annulla» l'invio e' partito lo stesso`);
+  // (e) code-review 20/11: l'avviso manda a guardare «I miei alloggi»; aprire un annuncio
+  //     esistente e tornare al nuovo NON deve cancellare il ricordo (ne' la chiave)
+  await ph.evaluate(s => caricaModifica(s), slug);
+  await ph.waitForTimeout(1500);
+  await ph.click('#btnAnnullaMod');
+  await ph.fill('#p_titolo', TITOLO_6 + ' ter');
+  await ph.fill('#p_citta', CITTA_NUOVA);
+  await ph.selectOption('#p_paese', 'IT');
+  await ph.fill('#p_cin', CIN);
+  await ph.fill('#p_prezzo', '80');
+  avvisiPrima = avvisi6.length;
+  inviiPrima = inviati6.length;
+  await pulisci6();
+  await ph.click('#btnPubblica');
+  await ph.waitForTimeout(1200);
+  esigi(avvisi6.length === avvisiPrima + 1,
+    `(6e) dopo aver aperto un annuncio esistente il ricordo dell'invio senza risposta e' sparito`);
+  // (f) silenzio (regola ferrea 10): dopo un salvataggio RIUSCITO (201 finto, niente creato
+  //     davvero) i soli «no» del server non avvisano, anche cambiando titolo
+  modo6 = '201';
+  await ph.fill('#p_titolo', TITOLO_6);                            // titolo gia' tentato: tace
+  avvisiPrima = avvisi6.length;
+  inviiPrima = inviati6.length;
+  await pulisci6();
+  await ph.click('#btnPubblica');
+  await esito6();
+  modo6 = '422';
+  for (const t of [' quater', ' quinquies']) {
+    await ph.fill('#p_titolo', TITOLO_6 + t);
+    await ph.fill('#p_cin', CIN);
+    await ph.fill('#p_prezzo', '80');
+    await pulisci6();
+    await ph.click('#btnPubblica');
+    await esito6();
+  }
+  esigi(avvisi6.length === avvisiPrima,
+    `(6f) avviso per niente (titolo gia' tentato, o solo «no» del server dopo un salvataggio): ${JSON.stringify(avvisi6.slice(avvisiPrima))}`);
+  esigi(inviati6.length === inviiPrima + 3, `(6f) invii partiti: ${inviati6.length - inviiPrima} su 3`);
+  await ph.unroute('**/api/host/pubblica');
+  ph.off('dialog', suDialogo);
+  console.log(`[HOST] (6) avvisi: ${avvisi6.length}, invii intercettati: ${inviati6.length}`);
   await host.close();
 
   // ── L'OSPITE, in un ALTRO browser: cerca Milano e deve trovare QUELLO ----------------
