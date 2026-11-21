@@ -12133,6 +12133,56 @@ class TestUnSalvataggioLentoNonFaDoppioni(unittest.TestCase):
             getattr(fase83_server, "_SEO_IN_ATTESA", {}).clear()
             fase83_server._POSTI_SEO = threading.BoundedSemaphore(tetto)
 
+    def test_la_sala_d_attesa_di_un_host_si_ferma_al_confine_esatto(self):
+        # mutazione PR #335 (riga 13080, `>=` -> `>`): con la coda d'attesa dell'host gia' a
+        # _CODA_SEO_PER_HOST case, una casa NUOVA e' «coda_piena»; una gia' in attesa no
+        tetto, coda = fase83_server._TETTO_SEO_IN_CORSO, fase83_server._CODA_SEO_PER_HOST
+        try:
+            for i in range(tetto):
+                self.assertEqual("parti", self.r._prendi_posto_seo("p-%d" % i, "c-%d" % i))
+            for i in range(coda):
+                self.assertEqual("in_attesa", self.r._prendi_posto_seo("a1", "casa-%d" % i))
+            self.assertEqual("coda_piena", self.r._prendi_posto_seo("a1", "casa-oltre"))
+            self.assertEqual("in_attesa", self.r._prendi_posto_seo("a1", "casa-0"))
+            self.assertEqual(coda, len(fase83_server._SEO_IN_ATTESA["a1"]))
+        finally:
+            fase83_server._SEO_PER_HOST.clear()
+            getattr(fase83_server, "_SEO_IN_ATTESA", {}).clear()
+            fase83_server._POSTI_SEO = threading.BoundedSemaphore(tetto)
+
+    def test_un_filo_che_non_parte_passa_il_posto_a_chi_aspetta(self):
+        # mutazione PR #335 (riga 13055, `is None` -> `is not None`): se il filo non parte e il
+        # posto passa a un host in attesa, si fa partire il SUO giro (col guasto restava appeso
+        # per sempre); senza nessuno in attesa il posto torna libero e si esce senza errori
+        tetto = fase83_server._TETTO_SEO_IN_CORSO
+        chiamate = []
+
+        def filo(target, args, name, daemon):
+            chiamate.append(args)
+            if len(chiamate) == 1:
+                raise RuntimeError("can't start new thread")
+            return types.SimpleNamespace(start=lambda: None)
+
+        try:
+            for i in range(tetto):
+                self.assertEqual("parti", self.r._prendi_posto_seo("p-%d" % i, "c-%d" % i))
+            self.assertEqual("in_attesa", self.r._prendi_posto_seo("chi-aspetta", "casa-w"))
+            with mock.patch.object(fase83_server, "_FILO_SEO", filo):
+                with self.assertLogs("core_auto.server", level="WARNING"):
+                    self.r._lancia_giro_seo(None, "c-0", "p-0")
+            self.assertEqual([(None, "c-0", "p-0"), (None, "casa-w", "chi-aspetta")], chiamate)
+            self.assertIn("chi-aspetta", fase83_server._SEO_PER_HOST)
+            chiamate.clear()
+            with mock.patch.object(fase83_server, "_FILO_SEO", filo):
+                with self.assertLogs("core_auto.server", level="WARNING"):
+                    self.r._lancia_giro_seo(None, "c-1", "p-1")
+            self.assertEqual([(None, "c-1", "p-1")], chiamate)
+            self.assertNotIn("p-1", fase83_server._SEO_PER_HOST)
+        finally:
+            fase83_server._SEO_PER_HOST.clear()
+            getattr(fase83_server, "_SEO_IN_ATTESA", {}).clear()
+            fase83_server._POSTI_SEO = threading.BoundedSemaphore(tetto)
+
     def test_un_giro_seo_fermato_da_un_errore_grave_rende_il_posto(self):
         """Mutazione n.6 (20/11), punto SOPRAVVISSUTO: `if prossimo is not None` nel `finally`
         del giro SEO. Un errore che `except Exception` non prende (qui un BaseException) ferma
@@ -13019,10 +13069,18 @@ class TestArchivioMutoNonDiceNonETuo(unittest.TestCase):
             for metodo, percorso, corpo, query in self._rotte():
                 with self.assertLogs("core_auto.server", level="WARNING") as reg:
                     s, c = self.g(metodo, percorso, corpo, self.tk, query)
-                if (s, c.get("errore")) != (503, "storage_non_disponibile"):
+                # `riprova` e la traccia dell'errore vero: mutazione PR #335 (righe 2422-2423,
+                # True -> False passava senza che nessuna prova se ne accorgesse)
+                if (s, c.get("errore"), c.get("riprova")) != (503, "storage_non_disponibile",
+                                                               True):
                     sbagliate[percorso] = (s, c)
-                righe = [r for r in reg.output if "codice: proprietario_non_verificabile" in r]
-                if not any("slug: " + self.S in r for r in righe):
+                righe = [r for r in reg.records
+                         if "codice: proprietario_non_verificabile" in r.getMessage()]
+                # QUELL'errore, non «una traccia qualsiasi»: fuori da un `except` exc_info=True
+                # registra (None, None, None), che e' vero (code-review 21/11)
+                if not any("slug: " + self.S in r.getMessage() and r.exc_info
+                           and isinstance(r.exc_info[1], sqlite3.OperationalError)
+                           for r in righe):
                     sbagliate[percorso + " (registro)"] = reg.output
         self.assertEqual({}, sbagliate)
         # niente e' cambiato: l'annuncio c'e' ancora, com'era (stato, titolo, padrone)
@@ -13035,6 +13093,26 @@ class TestArchivioMutoNonDiceNonETuo(unittest.TestCase):
         for metodo, percorso, corpo, query in self._rotte():
             s, c = self.g(metodo, percorso, corpo, altro, query)
             self.assertEqual((403, "non_tuo"), (s, c.get("errore")), percorso)
+
+    def test_decidere_una_richiesta_col_catalogo_muto_guarda_il_padrone_scritto(self):
+        # mutazione PR #335 (riga 7508, tre mutanti sopravvissuti): col catalogo muto vale il
+        # padrone scritto sulla richiesta. Se e' un ALTRO host: «non tua» (403), mai «riprova»;
+        # se manca: «riprova» (503), mai un «non tua» che all'host vero direbbe il falso
+        def muto(*_a, **_k):
+            raise sqlite3.OperationalError("database is locked")
+
+        hid = self._host_id()
+        for padrone, atteso in (("un-altro-host", (403, "non_tua")),
+                                (None, (503, "storage_non_disponibile"))):
+            rec = {"riferimento": "R-335", "stato": "in_attesa_host", "alloggio_id": self.S}
+            if padrone is not None:
+                rec["host_id"] = padrone
+            self.sis.pagamenti_pendenti = types.SimpleNamespace(
+                info=lambda ref, rec=rec: dict(rec) if ref == "R-335" else None)
+            with mock.patch.object(self.sis.catalogo, "host_di_alloggio", muto):
+                with self.assertLogs("core_auto.server", level="WARNING"):
+                    s, c = self.r._decidi_richiesta("R-335", hid, False)
+            self.assertEqual(atteso, (s, (c or {}).get("errore")), padrone)
 
     def _host_id(self):
         return self.r._host_id_da_token(self.tk)
@@ -13195,9 +13273,13 @@ class TestLaChatDellOspiteConArchivioMuto(unittest.TestCase):
             with self.assertLogs("core_auto.server", level="WARNING") as reg:
                 s, c = self.g("POST", "/api/voucher/prova",
                               {"voucher_token": self.v, "image_base64": png})
-        self.assertEqual((503, "storage_non_disponibile"), (s, c.get("errore")))
-        self.assertTrue(any("codice: prove_non_contate" in r and self.rif in r
-                            for r in reg.output), reg.output)
+        # `riprova` e la traccia dell'errore vero: mutazione PR #335 (righe 3230-3231)
+        self.assertEqual((503, "storage_non_disponibile", True),
+                         (s, c.get("errore"), c.get("riprova")))
+        self.assertTrue(any("codice: prove_non_contate" in r.getMessage()
+                            and self.rif in r.getMessage() and r.exc_info
+                            and isinstance(r.exc_info[1], sqlite3.OperationalError)
+                            for r in reg.records), reg.output)
         self.assertEqual([], os.listdir(self.dir + "/up") if os.path.isdir(self.dir + "/up")
                          else [])
 
@@ -13299,6 +13381,58 @@ class TestIlTettoDeiPreventiviEmailReggeLaGara(unittest.TestCase):
         esiti = [self._chiedi(g) for g in range(1, 8)]
         self.assertEqual(fase83_server.MAX_PREVENTIVI_EMAIL_ORA, esiti.count(200), esiti)
 
+    def test_la_pulizia_toglie_solo_le_voci_di_piu_di_un_ora(self):
+        # mutazione PR #335 (riga 10454, `>` -> `>=`): una voce di ESATTAMENTE un'ora resta,
+        # una di un'ora e un secondo se ne va
+        ora = 1_900_000_000.0
+        giusta = ("a@x.example", "casa-x", "2030-01-01", "2030-01-02")
+        oltre = ("b@x.example", "casa-x", "2030-01-01", "2030-01-02")
+        self.r._prev_email_ts = {giusta: ora - 3600, oltre: ora - 3601}
+        with mock.patch("time.time", lambda: ora):
+            self.assertEqual(200, self._chiedi(0))
+        self.assertIn(giusta, self.r._prev_email_ts)
+        self.assertNotIn(oltre, self.r._prev_email_ts)
+
+    def test_un_invio_che_esplode_lascia_la_traccia_e_rende_il_posto(self):
+        # mutazione PR #335 (riga 10463, `exc_info=True` -> False): la riga dell'invio esploso
+        # porta l'errore vero; e il posto prenotato torna libero (le stesse date ripartono)
+        with mock.patch.object(self.r, "_manda_preventivo_email",
+                               side_effect=RuntimeError("smtp esploso")):
+            with self.assertLogs("core_auto.server", level="ERROR") as reg:
+                self.assertEqual(500, self._chiedi(0))
+        righe = [r for r in reg.records if "invio ISOLATO fallito" in r.getMessage()]
+        self.assertEqual(["smtp esploso"], [r.exc_info and str(r.exc_info[1]) for r in righe],
+                         reg.output)
+        self.assertEqual(200, self._chiedi(0))
+
+
+def _ferma_i_postini_non_demoni():
+    """Mutazione PR #335, riga 196 (`daemon=True` -> False) NON DETERMINABILE in CI: un postino
+    NON daemon tiene vivo il processo per sempre, e il giro dei test non finiva -- ne' rosso ne'
+    verde. La guardia vera e' `test_i_postini_non_trattengono_lo_spegnimento`; questa funzione
+    fa solo si' che il processo, col guasto dentro, FINISCA e dica rosso: allo spegnimento, prima
+    che Python aspetti i fili non daemon, a ogni postino non daemon si da' una lettera che lo
+    chiude (SystemExit, che `_invia_tracciato` non prende). A codice sano non fa niente.
+    Vale per TUTTO il processo che importa questo file (registrata all'import) e usa un'API
+    privata di CPython: se sparisse, `test_il_gancio_dei_postini_e_registrato` diventa rosso."""
+    postini = [f for f in threading.enumerate() if f.name.startswith("email-") and f.is_alive()]
+    if all(f.daemon for f in postini):
+        return
+    vivi = postini          # una lettera per OGNI postino: la puo' prendere uno qualunque
+
+    class Fine:
+        def invia(self, *_a):
+            raise SystemExit
+
+    with fase83_server._SEGNALE_EMAIL:
+        for _ in vivi:
+            fase83_server._FILA_EMAIL.append((Fine(), "", "", "", "", ""))
+        fase83_server._SEGNALE_EMAIL.notify_all()
+
+
+if hasattr(threading, "_register_atexit"):      # Python 3.9+: gira PRIMA dell'attesa dei fili
+    threading._register_atexit(_ferma_i_postini_non_demoni)
+
 
 class TestLeEmailHannoUnTetto(unittest.TestCase):
     """20/11, punto (7) fuori lavoro dei doppioni (variant-analysis): ogni email partiva nel
@@ -13372,6 +13506,69 @@ class TestLeEmailHannoUnTetto(unittest.TestCase):
         self.posta.via.set()
         self.assertTrue(self._aspetta(lambda: len(self.posta.consegnate) == 6))
         self.assertEqual(10, len(self.posta.consegnate) + len(self.posta.accodate))
+
+    def _con_fili_finti(self, filo):
+        """Fila, fili e segnale NUOVI (i postini veri di altre prove aspettano sul segnale
+        vecchio: non prendono la lettera di prova), e dentro fase83_server un `threading` uguale
+        al vero tranne `Thread` (code-review 21/11: senza Lock e Condition un filo rimasto da
+        un'altra prova cadeva con AttributeError)."""
+        th = types.SimpleNamespace(**dict(vars(threading), Thread=filo))
+        return (mock.patch.object(fase83_server, "_FILI_EMAIL_VIVI", []),
+                mock.patch.object(fase83_server, "_FILA_EMAIL", []),
+                mock.patch.object(fase83_server, "_SEGNALE_EMAIL", threading.Condition()),
+                mock.patch.object(fase83_server, "threading", th))
+
+    def test_se_nessun_filo_parte_l_email_va_nei_ritentativi_e_si_dice(self):
+        # mutazione PR #335 (righe 201 e 206): senza un filo che la mandi l'email va nei
+        # ritentativi (`piena = True`; col guasto restava fuori da tutto: persa in silenzio),
+        # e la riga del filo non partito porta l'errore vero
+        class FiloCheNonParte:
+            def __init__(self, *_a, **_k):
+                pass
+
+            def start(self):
+                raise RuntimeError("can't start new thread")
+
+        vivi, fila, segnale, th = self._con_fili_finti(FiloCheNonParte)
+        with vivi, fila, segnale, th:
+            with self.assertLogs("core_auto.server", level="ERROR") as reg:
+                self.r._email_bg("solo@x.it", "o", "<p>x</p>", "voucher", "S1")
+            self.assertEqual([], fase83_server._FILA_EMAIL, "lettera in una fila senza fili")
+        self.assertEqual(["solo@x.it"], self.posta.accodate)
+        non_partito = [r for r in reg.records if "codice: postino_non_avviato" in r.getMessage()]
+        self.assertEqual(["can't start new thread"],
+                         [r.exc_info and str(r.exc_info[1]) for r in non_partito], reg.output)
+        self.assertTrue(any("codice: coda_email_piena" in r for r in reg.output), reg.output)
+
+    def test_i_postini_non_trattengono_lo_spegnimento(self):
+        # mutazione PR #335 (riga 196, `daemon=True` -> False, NON DETERMINABILE in CI): un
+        # postino non daemon tiene vivo il processo per sempre (il deploy aspetta). Vedi
+        # `_ferma_i_postini_non_demoni` per come la prova finisce anche col guasto dentro.
+        nati = []
+
+        class FiloSpia:
+            def __init__(self, *_a, daemon=None, **_k):
+                nati.append(daemon)
+
+            def start(self):
+                pass
+
+            def is_alive(self):
+                return True
+
+        vivi, fila, segnale, th = self._con_fili_finti(FiloSpia)
+        with vivi, fila, segnale, th:
+            self.r._email_bg("demone@x.it", "o", "<p>x</p>", "voucher", "D1")
+        self.assertEqual([True] * fase83_server._FILI_EMAIL, nati)
+
+    def test_il_gancio_dei_postini_e_registrato(self):
+        # D18 punto 4: il controllo che fa finire il giro col guasto 196 e' sotto guardia. Se
+        # l'API privata sparisse o qualcuno togliesse la registrazione, questo diventa rosso
+        # subito, non il giorno in cui la riga 196 cambia e il giro torna ad appendersi
+        ganci = getattr(threading, "_threading_atexits", None)
+        self.assertIsNotNone(ganci, "threading._threading_atexits non c'e' piu'")
+        self.assertTrue(any(getattr(g, "func", g) is _ferma_i_postini_non_demoni
+                            for g in ganci), ganci)
 
 
 class TestLaPubblicazioneHaIFreni(unittest.TestCase):
@@ -13562,6 +13759,47 @@ class TestLaPubblicazioneHaIFreni(unittest.TestCase):
         self.assertEqual({"prenotazioni_non_pagate", "pubblicazioni"},
                          {r.getMessage().split("freno: ")[1].split(" ")[0] for r in freni},
                          reg.output)
+        # ...e ogni riga porta l'errore vero: mutazione PR #335 (righe 2478 e 2492)
+        self.assertEqual(["rotto", "rotto"],
+                         [r.exc_info and str(r.exc_info[1]) for r in freni], reg.output)
+
+    def test_aggiornare_un_annuncio_proprio_non_dipende_dal_conto_degli_annunci(self):
+        # mutazione PR #335 (riga 12928, `and` -> `or`): il conto serve solo a un annuncio
+        # NUOVO; un aggiornamento non lo chiede, e non fallisce se il conto non risponde
+        s, c = self._nuovo(titolo="Casa da aggiornare")
+        _deve(s == 201, s, c)
+        with mock.patch.object(self.sis.catalogo, "conta_alloggi_host",
+                               side_effect=sqlite3.OperationalError("database is locked")):
+            s, c2 = self.g("POST", "/api/host/pubblica",
+                           {"slug": c["slug"], "titolo": "Casa aggiornata", "citta": "Livigno",
+                            "paese": "ES", "prezzo_notte_cents": 300, "capacita": 2}, self.tk)
+        self.assertEqual(201, s, c2)
+        self.assertEqual("Casa aggiornata", self.sis.catalogo.dettaglio(c["slug"])["titolo"])
+
+    def test_la_ricerca_degli_indirizzi_liberi_si_ferma_a_cinque(self):
+        # mutazione PR #335 (riga 13493, `>=` -> `>`): fuori dalla serratura comune si leggono
+        # solo gli indirizzi che servono -- cinque liberi, poi basta -- e sotto la serratura uno
+        letture, spia = self._spia_catalogo()
+        with spia:
+            slug = self.r._slug_unico("Casa cinque", "Livigno")
+        self.assertEqual("casa-cinque", slug)
+        self.assertEqual(["casa-cinque"] + ["casa-cinque-%d" % i for i in range(2, 6)],
+                         [x for x, serrata in letture if not serrata])
+        self.assertEqual(["casa-cinque"], [x for x, serrata in letture if serrata])
+
+    def test_l_email_di_benvenuto_porta_l_indirizzo_del_pannello(self):
+        # mutazione PR #335 (riga 12525, `or` -> `and`): senza indirizzo del sito configurato il
+        # link e' quello di bookinvip.com; con l'indirizzo configurato, quello
+        spedite = {}
+        self.sis.email_provider = types.SimpleNamespace(invia=lambda *_a: True)
+        with mock.patch.object(fase83_server, "_spedisci_email",
+                               lambda _p, dest, _o, corpo, *_a: spedite.update({dest: corpo})):
+            for base, email in (("", "senza@base.it"), ("https://prova.bookinvip.com",
+                                                        "con@base.it")):
+                self.r = crea_router(self.sis, host_key="hk", admin_key="ak", base_url=base)
+                self._registra(email)
+        self.assertIn('https://bookinvip.com/host.html', spedite.get("senza@base.it", ""))
+        self.assertIn('https://prova.bookinvip.com/host.html', spedite.get("con@base.it", ""))
 
 
 if __name__ == "__main__":
