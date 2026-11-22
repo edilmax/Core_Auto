@@ -494,9 +494,11 @@ jobs:
           python-version: '3.9'
           cache: pip
       # Le stesse della suite intera: gli esami rifatti e i sorveglianti della mutazione
-      # importano quello che importano i test.
+      # importano quello che importano i test. Piu' mypy, alla versione del job qualita:
+      # `--riesegui` rifa' anche collaudi/esame_mypy.py, che senza mypy si ferma con uscita 2
+      # (visto il 22/11 sulla PR #341: la casella «rifatta in CI no», cancello rosso).
       - name: Dipendenze di test
-        run: pip install -r requirements.txt hypothesis pyyaml coverage z3-solver
+        run: pip install -r requirements.txt hypothesis pyyaml coverage z3-solver mypy==1.19.1
       - name: Il cricchetto delle caselle (e le misure della PR rifatte qui)
         run: python collaudi/scheda.py --cricchetto HEAD^1 --riesegui
       - name: Mutazione sulle righe cambiate

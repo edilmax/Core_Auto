@@ -16113,6 +16113,31 @@ class TestLEsameMypyNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
                              "col passo spento (%s) l'esame lo dichiara ancora bloccante"
                              % come)
 
+    @staticmethod
+    def _mypy_inchiodato(testo_ci, job):
+        """La versione di mypy installata da `job` (None se non lo installa inchiodato)."""
+        import re
+        import yaml
+        passi = (yaml.safe_load(testo_ci).get("jobs", {}).get(job, {}) or {}).get("steps") or []
+        for s in passi:
+            m = re.search(r"\bmypy==([0-9][0-9.]*)", str((s or {}).get("run", "")))
+            if m:
+                return m.group(1)
+        return None
+
+    def test_OGNI_JOB_CHE_RIFA_L_ESAME_HA_MYPY_ALLA_STESSA_VERSIONE(self):
+        """Il 22/11 (PR #341) il job `caselle` rifaceva l'esame con `--riesegui` senza mypy:
+        uscita 2, casella «rifatta in CI no», cancello rosso. `qualita` lo esegue, `caselle`
+        lo rifa': tutti e due lo installano, inchiodato alla STESSA versione (una versione
+        diversa conterebbe errori diversi sullo stesso codice)."""
+        ci = self._ci()
+        q = self._mypy_inchiodato(ci, "qualita")
+        c = self._mypy_inchiodato(ci, "caselle")
+        self.assertIsNotNone(q, "il job qualita non installa mypy inchiodato (mypy==X)")
+        self.assertEqual(c, q, "il job caselle installa mypy %r, qualita %r: l'esame rifatto "
+                               "dal cricchetto delle caselle si fermerebbe o conterebbe "
+                               "un'altra cosa" % (c, q))
+
     def test_L_ELENCO_DEI_MODULI_E_QUELLO_DELLA_CASELLA(self):
         """La casella nomina i cinque del percorso del denaro e tre motori: l'elenco non si
         accorcia in silenzio (un modulo tolto e' un modulo i cui errori non si contano)."""
