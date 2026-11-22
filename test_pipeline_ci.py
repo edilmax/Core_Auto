@@ -16061,6 +16061,114 @@ class TestLEsameMoneyFloatNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
                          "sa piu' vedere il proprio guasto")
 
 
+class TestLEsameMypyNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
+    """⛔ D18 PUNTO 4 per `collaudi/esame_mypy.py`, l'attrezzo della casella «mypy controlla i
+    tipi dei moduli che muovono soldi e BLOCCA l'unione» del blocco dei soldi (22/11).
+    I modi di barare: rimettere `|| true` o `continue-on-error` sul passo della CI (torna
+    «report-only» com'era fino al 22/11), toglierlo dal gate, accorciare l'elenco dei moduli,
+    o prendere per «zero errori» un mypy che non ha girato. Queste prove NON chiedono mypy
+    installato: girano in ogni job; l'autoprova vera con mypy la fa l'esame stesso, in CI."""
+
+    def _esame(self):
+        return self._carica("esame_mypy.py", "_esame_mypy_sotto_guardia")
+
+    def _ci(self):
+        with io.open(CI_YML, encoding="utf-8") as f:
+            return f.read()
+
+    def test_IL_PASSO_IN_CI_BLOCCA_E_OGNI_MODO_DI_SPEGNERLO_SI_VEDE(self):
+        esame = self._esame()
+        ci = self._ci()
+        ok, dettaglio = esame.passo_ci_bloccante(ci)
+        self.assertTrue(ok, dettaglio)
+        passo = "run: python collaudi/esame_mypy.py\n"
+        self.assertIn(passo, ci)
+        spenti = {
+            "|| true": ci.replace(passo, "run: python collaudi/esame_mypy.py || true\n"),
+            "continue-on-error": ci.replace(
+                "      - name: Mypy sui moduli che muovono soldi (BLOCCA)\n",
+                "      - name: Mypy sui moduli che muovono soldi (BLOCCA)\n"
+                "        continue-on-error: true\n"),
+            "fuori dal gate": ci.replace("      - caselle\n      - qualita\n", "      - caselle\n"),
+            "passo tolto": ci.replace(passo, "run: echo niente\n"),
+            # Le cinque qui sotto le ha trovate il cacciatore di errori silenziosi il 22/11:
+            # il primo controllo (sottostringhe) le dava tutte per «bloccante».
+            "--autoprova": ci.replace(passo, "run: python collaudi/esame_mypy.py --autoprova\n"),
+            "; true": ci.replace(passo, "run: python collaudi/esame_mypy.py; true\n"),
+            "if sul passo": ci.replace(
+                "      - name: Mypy sui moduli che muovono soldi (BLOCCA)\n",
+                "      - name: Mypy sui moduli che muovono soldi (BLOCCA)\n"
+                "        if: false\n"),
+            "if sul job": ci.replace(
+                "  qualita:\n", "  qualita:\n    if: false\n", 1),
+            "continue-on-error tra virgolette": ci.replace(
+                "      - name: Mypy sui moduli che muovono soldi (BLOCCA)\n",
+                "      - name: Mypy sui moduli che muovono soldi (BLOCCA)\n"
+                "        continue-on-error: 'true'\n"),
+        }
+        for come, testo in spenti.items():
+            self.assertNotEqual(testo, ci, "l'iniezione %r non ha cambiato niente: la prova "
+                                           "non sta guardando il passo vero" % come)
+            self.assertFalse(esame.passo_ci_bloccante(testo)[0],
+                             "col passo spento (%s) l'esame lo dichiara ancora bloccante"
+                             % come)
+
+    def test_L_ELENCO_DEI_MODULI_E_QUELLO_DELLA_CASELLA(self):
+        """La casella nomina i cinque del percorso del denaro e tre motori: l'elenco non si
+        accorcia in silenzio (un modulo tolto e' un modulo i cui errori non si contano)."""
+        esame = self._esame()
+        piano = self._carica("piano.py", "_piano_per_esame_mypy")
+        b1 = [b for b in piano.BLOCCHI if b["ordine"] == 1][0]
+        attesi = {m + ".py" for m in b1["moduli_mutazione"]} | {
+            "fase98_policy_commissione.py", "fase111_cancellazione.py",
+            "fase188_paga_struttura.py"}
+        self.assertEqual(set(esame.MODULI), attesi)
+        self.assertEqual(len(esame.MODULI), 8)
+        self.assertIn("--python-version", esame.OPZIONI)
+        self.assertEqual(esame.OPZIONI[esame.OPZIONI.index("--python-version") + 1], "3.11")
+
+    def test_UN_MYPY_CHE_NON_HA_GIRATO_NON_E_ZERO_ERRORI(self):
+        """S7: mypy che esce 2 (opzione sbagliata) o 1 senza righe riconosciute non ha
+        guardato niente: la misura e' NON valida, non verde."""
+        esame = self._esame()
+        vero = esame.esegui_mypy
+        try:
+            for finto in ((2, [], "usage: mypy [-h]"), (1, [], "qualcosa"), (0, [("x.py", 1,
+                                                                                 "e")], "")):
+                esame.esegui_mypy = lambda file, f=finto: f
+                esito, _den, motivo, _err = esame.misura()
+                self.assertFalse(esito, "uscita %r presa per verde" % (finto,))
+                self.assertTrue(motivo)
+            esame.esegui_mypy = lambda file: (0, [], "")
+            self.assertTrue(esame.misura()[0])
+        finally:
+            esame.esegui_mypy = vero
+
+    def test_SENZA_AUTOPROVA_O_CON_IL_PIANO_ILLEGGIBILE_SI_FERMA_E_NON_SCRIVE(self):
+        esame = self._esame()
+        vera = esame.scheda.registra
+        scritture = []
+        esame.scheda.registra = lambda *a, **k: scritture.append((a, k))
+        vere = (esame.precondizioni, esame.autoprova, esame.esegui_mypy)
+        try:
+            sane = [("la casella si legge dal piano, una volta sola", True, "x"),
+                    ("gli otto moduli esistono", True, "8"), ("mypy si esegue", True, "mypy"),
+                    ("in CI il controllo BLOCCA", True, "ok")]
+            esame.precondizioni = lambda: (True, sane)
+            esame.esegui_mypy = lambda file: (0, [], "")
+            esame.autoprova = lambda: (False, True)
+            self.assertEqual(esame.main(["--scrivi"]), 2,
+                             "con un mypy che non grida sul guasto l'esame misura lo stesso")
+            esame.autoprova = lambda: (True, True)
+            esame.precondizioni = lambda: (False, [(sane[0][0], False, "piano illeggibile")]
+                                           + sane[1:])
+            self.assertEqual(esame.main(["--scrivi"]), 2)
+            self.assertEqual(scritture, [])
+        finally:
+            esame.precondizioni, esame.autoprova, esame.esegui_mypy = vere
+            esame.scheda.registra = vera
+
+
 class TestLEsameRimborsoScrittoNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
     """⛔ D18 PUNTO 4 per `collaudi/esame_rimborso_scritto.py`, l'attrezzo della casella
     «chi paga cosa in un rimborso e' SCRITTO». Due modi facili di barare: guardare meno

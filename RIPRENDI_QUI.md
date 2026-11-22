@@ -4194,7 +4194,9 @@ stata toccata per farli tacere: solo configurazione, workflow, e un attrezzo nuo
 > forma»: erano lo stato misurato, e toglierle era un passo indietro. Rimesse lo stesso giorno.
 
 ```
-CONSEGNE AGGIORNATE A: a5f5926
+CONSEGNE AGGIORNATE A: 4c0a70b
+
+- AGGIORNAMENTO 22/11 notte, BLOCCO 1 SOLDI, tecnica 1 di 8 -- MYPY CHE BLOCCA (ramo soldi-mypy-22-11): la PR #340 e' in produzione (CI 16 success + zap skipped, CodeQL «No new alerts»; VPS `git merge --ff-only` -> 4c0a70b, health 200, bunker 403). Nuovo `collaudi/esame_mypy.py` (dettaglio in REGISTRO_INGEGNERIA 22/11 sera). Misurato prima: 29 errori di mypy in 5 degli 8 moduli, NESSUNO un difetto vivo; corretti con annotazioni e `cast`, senza cambiare il comportamento (differential review riga per riga: Core_Auto_GUARDIE_PRONTE\S_20261108_campagna_soldi\errori_20_11\DIFFERENTIAL_REVIEW_mypy_22_11.md). Il passo in CI ora BLOCCA (job qualita, nel gate). Prove sul PC: i 118 file che nominano i cinque moduli 3113/3113 OK (7306 s); dopo le ultime due correzioni (fase98 `assert` -> `cast` per ruff S101, fase101 `getattr` col default per ruff B009) i 26 file che nominano fase98/fase101 1362/1362 OK; `python collaudi/cricchetto_statico.py tutti`: ruff, bandit, gitleaks, semgrep ok, pip-audit 5 «nuovi» su anyio e urllib3 (Python 3.9 del PC; dipendenze non toccate: il giudice e' la CI a 3.11, da rileggere). Il cacciatore di errori silenziosi ha trovato un buco VERO nel primo `passo_ci_bloccante` (a sottostringhe): `--autoprova` nel passo dava «bloccante» senza misurare niente, e cosi' `; true`, `if: false` sul passo o sul job, `continue-on-error: 'true'`; guardia estesa vista ROSSA, poi il controllo riscritto leggendo il YAML, verde. SUITE ATTUALE 8314 (+4, contate dal caricatore). Casella mypy scritta da `python collaudi/esame_mypy.py --scrivi`. Prossima tecnica: TLA+ in CI.
 
 - AGGIORNAMENTO 22/11 sera, BLOCCO 1 SOLDI (sessione e3b56f8f; il fondatore: «finiamo la parte dei soldi», e prima «correzione test e fine blocco»): la PR #339 e' in produzione (CI 16 success + zap skipped, CodeQL «No new alerts»; VPS `git merge --ff-only` -> a5f5926, health 200, bunker 403; master = GitHub = VPS = a5f5926). Entrano in `collaudi/piano.py`, in coda al blocco 1, le OTTO tecniche della mappa del fondatore del 15/11 che sul blocco soldi non girano (misurato con git grep su test_*.py, collaudi/ e .github/workflows): mypy che BLOCCA (oggi 3 file e `|| true`), TLA+ in CI (oggi solo strumenti_verifica\tla), Toxiproxy (0 usi), Locust (0), CrossHair (0), confronto delle schermate (0), macchina a stati di Hypothesis SUI SOLDI (quelle esistenti, test_stateful_api e test_fase83_server, guidano prenotazioni e annunci), confronto col formato pubblicato da Stripe (0). La nota del 19/11 ne contava 6: le due in piu' (Hypothesis a stati, contratto Stripe) erano nella mappa del 15/11 e non risultano fatte. `python collaudi/scheda.py --blocco 1` -> 15 su 23. Si fanno nello stesso lavoro, una dopo l'altra, ognuna con la guardia vista rossa; ogni errore che trovano si corregge (D20); il blocco e' chiuso solo quando la scheda dice 23 su 23.
 
@@ -6781,7 +6783,7 @@ primi host. MANDATO PERMANENTE del fondatore (2026-09-21): commit, unione dopo g
 deploy dopo sonde verdi AUTORIZZATI senza richiedere conferma; fermarsi su rosso/denaro nuovo/strategia.
 
 
-SUITE ATTUALE: Ran 8310 test
+SUITE ATTUALE: Ran 8314 test
    ^^^^^^^^^^^^^^^^^^^^^^^^^ ⛔ QUESTA RIGA E' UN AGGANCIO, NON UNA FRASE. La parola «Ran»
    la pretende alla lettera la guardia test_IL_NUMERO_DELLA_SUITE_DICHIARATO_E_QUELLO_VERO
    (in `test_pipeline_ci.py`, regex `SUITE ATTUALE: Ran (\d+) test`), che confronta questo

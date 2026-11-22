@@ -38,7 +38,7 @@ def _importo_per_registro(minori: int, valuta: str) -> str:
         return "%r unita' minori di %r" % (minori, valuta)
 
 
-def costruisci_params(prezzo_guest_cents: int, application_fee_cents: int,
+def costruisci_params(prezzo_guest_cents: Any, application_fee_cents: Any,
                       host_account: str, *, valuta: str = "eur",
                       riferimento: str = "", success_url: str = "",
                       cancel_url: str = "") -> Optional[Dict[str, str]]:
@@ -129,7 +129,8 @@ class ProviderConnect:
     TRANSFERS = "https://api.stripe.com/v1/transfers"
 
     def __init__(self, secret_key: str, *,
-                 fetch: Optional[Callable[[str, bytes, Dict[str, str]], Dict[str, Any]]]
+                 fetch: Optional[Callable[[str, Optional[bytes], Dict[str, str]],
+                                          Dict[str, Any]]]
                  = None, fetch_get: Optional[Callable[[str, Dict[str, str]],
                                                       Dict[str, Any]]] = None) -> None:
         self._key = secret_key or ""
@@ -180,7 +181,7 @@ class ProviderConnect:
             tipo = codice = msg = ""
             stato = "?"
             try:
-                stato = e.code
+                stato = getattr(e, "code", stato)    # se manca resta "?", come prima
             except Exception:
                 pass
             try:
