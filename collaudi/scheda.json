@@ -736,10 +736,10 @@
  "a36e3373da1d": {
   "blocco": 8,
   "comando": "python collaudi/esame_sentinella.py --arrivi <registro nginx 24h> --scrivi",
-  "commit": "8a9cc92",
+  "commit": "fbff978",
   "condizione": "una sentinella ESTERNA (non nostra) si accorge se il sito muore",
   "denominatore": 10,
-  "esito": false,
+  "esito": true,
   "impronta": "194e20138ca6",
   "impronte_moduli": {
    "fase13_protocollo_finale": "2dce22f058cc",
@@ -757,8 +757,8 @@
    "fase83_server": "5f01ce29a46c",
    "fase86_email": "71ba17ea5775"
   },
-  "motivo": "[sveglia] nelle ultime 24 ore i controlli del monitor non hanno buchi > 15 minuti e l'ultimo ha meno di 15 minuti (controlli NON MISURATI: servono gli arrivi al sito (`--arrivi`, registro di nginx); i tempi di risposta dell'API (123 campioni) non sono uno per controllo); [sveglia] GitHub (seconda linea): ultimo giro entro 60 minuti e buco massimo nelle 24 ore sotto i 60 minuti — DECIDE, perche' il monitor esterno manca o non e' sveglio (ultimo giro 2026-11-21 18:33 UTC (222 minuti fa), giri nelle 24 ore: 4, buco massimo 493 minuti)",
-  "quando": "2026-11-21T23:15:23"
+  "motivo": "",
+  "quando": "2026-11-22T16:30:18"
  },
  "a5c77ac6c76a": {
   "blocco": 5,
