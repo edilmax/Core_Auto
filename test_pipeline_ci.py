@@ -15104,8 +15104,12 @@ class TestLEsameDellaSentinellaNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
             esame._post_json = _post_finta
             os.environ[esame.VARIABILE_CHIAVE] = chiave
             uscita = io.StringIO()
+            # 21/11/2026: senza `--arrivi` i tempi di risposta dell'API non bastano a dire che il monitor e' sveglio
+            # (erano la premessa del falso allarme): l'esito e' ROSSO «NON MISURATI»; il verde con gli arrivi lo
+            # prova test_I_TEMPI_DI_RISPOSTA_BUCATI_NON_SONO_UN_MONITOR_ADDORMENTATO
             with contextlib.redirect_stdout(uscita):
-                self.assertEqual(esame.main(["--monitor", "uptimerobot", "--da-file", percorso]), 0)
+                self.assertEqual(esame.main(["--monitor", "uptimerobot", "--da-file", percorso]), 1)
+            self.assertIn("NON MISURATI", uscita.getvalue())
             self.assertEqual(len(chiamate), 1)
             self.assertEqual(chiamate[0][0], esame.API_UPTIMEROBOT)
             self.assertEqual(chiamate[0][1].get("api_key"), chiave)
@@ -15117,6 +15121,167 @@ class TestLEsameDellaSentinellaNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
             os.environ.update(vero_environ)
             shutil.rmtree(d, ignore_errors=True)
         self.assertEqual(dict(os.environ), vero_environ)
+
+    def test_I_TEMPI_DI_RISPOSTA_BUCATI_NON_SONO_UN_MONITOR_ADDORMENTATO(self):
+        """⛔ IL FALSO ALLARME DEL 21/11/2026. La casella era ROSSA «buco massimo 454 min» perche' l'esame contava i
+        controlli dai `response_times` di getMonitors, e UptimeRobot non ne conserva uno per controllo: l'API dava
+        126 punti in 24 ore con buchi che iniziavano tutti a hh:25 (12:25 -> 19:20 UTC = 415 min), mentre il
+        registro di nginx aveva 11-12 `HEAD /api/health` all'ora dagli indirizzi del monitor in TUTTE le ore.
+        I controlli si contano dagli ARRIVI al sito (`--arrivi`, righe del registro di nginx), e solo da indirizzi
+        della lista UFFICIALE di UptimeRobot; senza arrivi il passo non e' verde (S7), e i tempi di risposta non
+        bastano mai a dire «addormentato». Regola ferrea 10: un falso allarme e' un difetto."""
+        esame = self._esame()
+        oggi = dict(buco=333, n=8, minuti_fa=40)
+        ts = int(esame.ADESSO_FINTO.timestamp())
+        bucati = [ts - 60 * (2 + 5 * i) for i in range(288) if not 300 <= 2 + 5 * i <= 715]   # 415 min senza tempi
+        risposta = {"stat": "ok", "monitors": [{"friendly_name": "salute", "url": "https://" + esame.SALUTE,
+                                                "interval": 300, "status": 2,
+                                                "response_times": [{"datetime": t, "value": 90} for t in bucati],
+                                                "logs": [{"type": 1, "datetime": ts - 86400}], "alert_contacts": [{"id": "1"}]}]}
+        ip_buono, ip_estraneo = "5.161.177.47", "203.0.113.9"
+
+        def _riga(minuti_fa, ip):
+            t = esame.ADESSO_FINTO - datetime.timedelta(minutes=minuti_fa)   # mese in inglese come nginx, non %b
+            quando = "%02d/%s/%s" % (t.day, esame.MESI_NGINX[t.month - 1], t.strftime("%Y:%H:%M:%S +0000"))
+            return ('%s - - [%s] "HEAD /api/health HTTP/1.1" 200 0 "https://bookinvip.com/api/health" '
+                    '"Mozilla/5.0+(compatible; UptimeRobot/2.0; http://www.uptimerobot.com/)" "-"' % (ip, quando))
+        vera_post, vero_environ = esame._post_json, dict(os.environ)
+        vere_ips = getattr(esame, "ips_ufficiali", None)
+        d = tempfile.mkdtemp()
+        try:
+            esame._post_json = lambda url, dati: (200, risposta)
+            esame.ips_ufficiali = lambda: {ip_buono}
+            os.environ[esame.VARIABILE_CHIAVE] = "ur-chiave-di-prova-000"
+            letture = os.path.join(d, "letture.json")
+            with io.open(letture, "w", encoding="utf-8") as f:
+                json.dump(esame.letture_finte(esterno=None, **oggi), f)
+
+            def _arrivi(nome, righe):
+                p = os.path.join(d, nome)
+                with io.open(p, "w", encoding="utf-8") as f:
+                    f.write("\n".join(righe) + "\n")
+                return p
+            fitti = _arrivi("fitti.log", [_riga(2 + 5 * i, ip_buono) for i in range(288)])
+            bucati_40 = _arrivi("buco40.log", [_riga(2 + 5 * i, ip_buono) for i in range(288)
+                                               if not 300 <= 2 + 5 * i <= 340])
+            estranei = _arrivi("estranei.log", [_riga(2 + 5 * i, ip_estraneo) for i in range(288)])
+            esiti = {}
+            for nome, extra in (("fitti", ["--arrivi", fitti]), ("buco 40", ["--arrivi", bucati_40]),
+                                ("estranei", ["--arrivi", estranei]), ("senza arrivi", [])):
+                del esame.PASSI[:]
+                uscita = io.StringIO()
+                with contextlib.redirect_stdout(uscita):
+                    codice = esame.main(["--monitor", "uptimerobot", "--da-file", letture] + extra)
+                esiti[nome] = (codice, uscita.getvalue())
+            self.assertEqual({k: v[0] for k, v in esiti.items()},
+                             {"fitti": 0, "buco 40": 1, "estranei": 1, "senza arrivi": 1},
+                             {k: v[1][-1500:] for k, v in esiti.items()})
+            self.assertNotIn("buco massimo 415", esiti["senza arrivi"][1])
+            self.assertIn("NON MISURATI", esiti["senza arrivi"][1])
+            self.assertIn("buco massimo 45 min", esiti["buco 40"][1])        # 297 -> 342 minuti fa
+            self.assertNotIn("NON MISURATI", esiti["buco 40"][1])
+            self.assertIn("scartati 288", esiti["estranei"][1])
+        finally:
+            esame._post_json = vera_post
+            if vere_ips is None:
+                if hasattr(esame, "ips_ufficiali"):
+                    del esame.ips_ufficiali
+            else:
+                esame.ips_ufficiali = vere_ips
+            os.environ.clear()
+            os.environ.update(vero_environ)
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_GLI_ARRIVI_NON_DANNO_UN_VERDE_SENZA_PROVA(self):
+        """Le revisioni del 21/11 (code-review, silent-failure-hunter) sulla riparazione qui sopra: (1) un registro
+        di dieci minuti dava un buco di cinque e un VERDE, perche' il buco dall'inizio delle 24 ore al primo arrivo
+        non si contava; (2) le letture salvate prima (controlli dai tempi di risposta) o scritte a mano valevano come
+        misurate: ora serve il marchio che mette `--arrivi`; (3) un registro in un'altra forma era «0 controlli»
+        senza dire che nessuna riga era stata riconosciuta; (4) `--arrivi` senza monitor era ignorato in silenzio;
+        (5) una pagina d'errore al posto della lista ufficiale non fermava niente; (6) `--arrivi` senza file."""
+        esame = self._esame()
+        oggi = dict(buco=333, n=8, minuti_fa=40)
+        ts = int(esame.ADESSO_FINTO.timestamp())
+        risposta = {"stat": "ok", "monitors": [{"friendly_name": "salute", "url": "https://" + esame.SALUTE,
+                                                "interval": 300, "status": 2, "response_times": [],
+                                                "logs": [{"type": 1, "datetime": ts - 86400}], "alert_contacts": [{"id": "1"}]}]}
+        ip_buono = "5.161.177.47"
+
+        def _riga(minuti_fa, ip=ip_buono):
+            t = esame.ADESSO_FINTO - datetime.timedelta(minutes=minuti_fa)
+            quando = "%02d/%s/%s" % (t.day, esame.MESI_NGINX[t.month - 1], t.strftime("%Y:%H:%M:%S +0000"))
+            return ('%s - - [%s] "HEAD /api/health HTTP/1.1" 200 0 "-" '
+                    '"Mozilla/5.0+(compatible; UptimeRobot/2.0; http://www.uptimerobot.com/)" "-"' % (ip, quando))
+        vera_post, vero_environ = esame._post_json, dict(os.environ)
+        vere_ips = esame.ips_ufficiali
+        d = tempfile.mkdtemp()
+        try:
+            esame._post_json = lambda url, dati: (200, risposta)
+            esame.ips_ufficiali = lambda: {ip_buono}
+
+            def _file(nome, contenuto):
+                p = os.path.join(d, nome)
+                with io.open(p, "w", encoding="utf-8") as f:
+                    f.write(contenuto if isinstance(contenuto, str) else json.dumps(contenuto))
+                return p
+
+            def _giro(argv, con_chiave=True):
+                del esame.PASSI[:]
+                os.environ.pop(esame.VARIABILE_CHIAVE, None)
+                if con_chiave:
+                    os.environ[esame.VARIABILE_CHIAVE] = "ur-chiave-di-prova-000"
+                uscita = io.StringIO()
+                with contextlib.redirect_stdout(uscita):
+                    codice = esame.main(argv)
+                return codice, uscita.getvalue()
+            senza_monitor = _file("senza.json", esame.letture_finte(esterno=None, **oggi))
+            # (2) controlli perfetti ma SENZA marchio di provenienza: come un file salvato prima del 21/11
+            vecchio = esame.monitor_finto()
+            vecchio.pop("fonte_controlli", None)
+            codice, testo = _giro(["--da-file", _file("vecchio.json", esame.letture_finte(esterno=vecchio, **oggi))],
+                                  con_chiave=False)
+            self.assertEqual((codice, "NON MISURATI" in testo), (1, True), testo[-1200:])
+            # (1) un registro di dieci minuti: gli arrivi sono fitti ma coprono 10 minuti su 24 ore
+            codice, testo = _giro(["--da-file", senza_monitor, "--arrivi",
+                                   _file("corto.log", "\n".join(_riga(m) for m in (2, 7, 12)) + "\n")])
+            self.assertEqual(codice, 1, testo[-1200:])
+            self.assertRegex(testo, r"buco massimo 14\d\d min", testo[-1200:])
+            # (3) righe in un'altra forma: nessuna riconosciuta, e l'uscita lo dice coi numeri
+            codice, testo = _giro(["--da-file", senza_monitor, "--arrivi",
+                                   _file("altro.log", "\n".join("2026-09-07T17:%02d:00Z GET /api/health 200" % m
+                                                                for m in range(50)) + "\n")])
+            self.assertEqual(codice, 1)
+            self.assertIn("riconosciute 0", testo)
+            self.assertIn("righe 50", testo)
+            # (4) --arrivi senza un monitor a cui attaccarsi: rosso col perche', non ignorato
+            codice, testo = _giro(["--da-file", senza_monitor, "--arrivi", _file("x.log", _riga(2) + "\n")],
+                                  con_chiave=False)
+            self.assertEqual(codice, 1)
+            self.assertIn("NON letto", testo)
+            # (6) --arrivi in fondo, senza file
+            self.assertEqual(_giro(["--da-file", senza_monitor, "--arrivi"])[0], 2)
+        finally:
+            esame._post_json = vera_post
+            esame.ips_ufficiali = vere_ips
+            os.environ.clear()
+            os.environ.update(vero_environ)
+            shutil.rmtree(d, ignore_errors=True)
+        # (5) la lista ufficiale VERA, letta da una pagina d'errore: si ferma, non scarta tutto in silenzio
+        from unittest import mock
+
+        class _Pagina(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+        with mock.patch.object(esame.urllib.request, "urlopen",
+                               lambda *a, **k: _Pagina(b"<html><body>502 Bad Gateway</body></html>\n")):
+            with self.assertRaises(RuntimeError):
+                esame.ips_ufficiali()
+        with mock.patch.object(esame.urllib.request, "urlopen",
+                               lambda *a, **k: _Pagina(b"5.161.177.47\n2a01:4f8:c0c:83fa::1\nnon-un-indirizzo\n")):
+            self.assertEqual(esame.ips_ufficiali(), {"5.161.177.47", "2a01:4f8:c0c:83fa::1"})
 
     def test_IL_TESTO_DELLA_CASELLA_NON_E_RICOPIATO_E_NON_GUARDA_E_DICHIARATO(self):
         esame = self._esame()
