@@ -25,7 +25,7 @@ come split (`ripartisci_host_guest`, host_bps+guest_bps=1000). Nessuna regola fi
 """
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, cast
 
 # Parametri della strategia (configurabili dal chiamante; default = blindatura 15%).
 SOGLIA_FONDATORI = 1000          # (legacy) soglia ordinale storica; la strategia ora e' a rampa temporale
@@ -186,6 +186,9 @@ def stato_scaglione(giorni_da_registrazione: Any, *, promo_attiva: bool = True,
                 "giorni_anzianita": None, "giorni_al_prossimo": None, "prossimo_bps": None,
                 "bps_diretto": max(0, min(10000, _intero(bps_diretto, BPS_DIRETTO))),
                 "anzianita_nota": False}
+    # cast: qui g e' un intero, lo garantisce `valido` qui sopra (mypy non lega due nomi
+    # diversi). Nessun controllo a tempo di esecuzione -- serve solo a mypy (esame_mypy, 22/11)
+    g = cast(int, g)
     if g < gg:
         scaglione, bps, al_prossimo, prossimo = "promo", 0, gg - g, fase1
     elif g < gf:

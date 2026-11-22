@@ -494,9 +494,11 @@ jobs:
           python-version: '3.9'
           cache: pip
       # Le stesse della suite intera: gli esami rifatti e i sorveglianti della mutazione
-      # importano quello che importano i test.
+      # importano quello che importano i test. Piu' mypy, alla versione del job qualita:
+      # `--riesegui` rifa' anche collaudi/esame_mypy.py, che senza mypy si ferma con uscita 2
+      # (visto il 22/11 sulla PR #341: la casella «rifatta in CI no», cancello rosso).
       - name: Dipendenze di test
-        run: pip install -r requirements.txt hypothesis pyyaml coverage z3-solver
+        run: pip install -r requirements.txt hypothesis pyyaml coverage z3-solver mypy==1.19.1
       - name: Il cricchetto delle caselle (e le misure della PR rifatte qui)
         run: python collaudi/scheda.py --cricchetto HEAD^1 --riesegui
       - name: Mutazione sulle righe cambiate
@@ -539,7 +541,9 @@ jobs:
       # strumento che si aggiorna da solo cambia i propri rilievi e farebbe
       # comparire "segnalazioni nuove" senza che nessuno abbia toccato il codice.
       # Si alzano di proposito, rifacendo la fotografia e leggendo cosa e' cambiato.
-      - run: pip install ruff==0.15.22 bandit==1.8.6 pip-audit==2.9.0 semgrep==1.136.0 mypy
+      # pyyaml: collaudi/esame_mypy.py legge questo file come YAML per sapere se il suo passo
+      # blocca davvero (senza, si ferma con uscita 2 e il passo e' rosso).
+      - run: pip install ruff==0.15.22 bandit==1.8.6 pip-audit==2.9.0 semgrep==1.136.0 mypy==1.19.1 pyyaml==6.0.2
       # --- GATE VERO 1 -------------------------------------------------------
       # Selezione STRETTA: solo regole da "bug certo" o "buco di sicurezza certo".
       # Oggi vale ZERO rilievi su tutto il prodotto -> se si accende, e' un difetto
@@ -559,8 +563,15 @@ jobs:
       # --- report-only (il quadro completo resta nel log, non blocca) --------
       - name: Ruff quadro completo (report-only)
         run: ruff check fase*.py main_casavip.py --statistics || true
-      - name: Mypy sui motori-soldi (report-only)
-        run: mypy fase188_paga_struttura.py fase98_policy_commissione.py fase111_cancellazione.py --ignore-missing-imports || true
+      # --- GATE VERO 1b: MYPY SUI MODULI CHE MUOVONO SOLDI (dal 2026-11-22) -------
+      # Era «report-only» su 3 file con `|| true`: non bloccava niente. Ora BLOCCA: zero
+      # errori di tipo sugli otto moduli dei soldi, a Python 3.11 (la produzione). L'elenco
+      # dei file e le opzioni NON stanno qui: li tiene collaudi/esame_mypy.py, che la casella
+      # del blocco 1 legge e che controlla anche che questo passo resti bloccante.
+      # VISTO ROSSO: 29 errori sul codice del 22/11 prima delle correzioni; `--autoprova`
+      # grida su un importo Optional usato in un conto e tace sulla versione corretta.
+      - name: Mypy sui moduli che muovono soldi (BLOCCA)
+        run: python collaudi/esame_mypy.py
       # ⛔ `pip-audit` SENZA `-r` guarda l'ambiente in cui gira: qui dentro c'e'
       #    ruff, bandit, mypy e semgrep, cioe' gli ATTREZZI, non il prodotto.
       #    Misurato il 2026-08-26: 136 falle in 31 pacchetti dell'ambiente contro

@@ -37,7 +37,7 @@ import secrets
 import sqlite3
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Sequence
+from typing import Any, Callable, Dict, List, Optional, Sequence, cast
 
 logger = logging.getLogger("core_auto.split_payment")
 
@@ -323,7 +323,10 @@ def crea_gestore_split(percorso: str = ":memory:", *,
                        orologio: Optional[Callable[[], int]] = None) -> GestoreSplit:
     if percorso == ":memory:":
         con = sqlite3.connect(":memory:", check_same_thread=False)
-        return GestoreSplit(lambda: _ConnCondivisa(con), orologio=orologio)
+        # cast: la condivisa fa le veci di sqlite3.Connection (stessi metodi usati), nessun
+        # controllo a tempo di esecuzione -- serve solo a mypy (esame_mypy, 22/11)
+        return GestoreSplit(lambda: cast(sqlite3.Connection, _ConnCondivisa(con)),
+                            orologio=orologio)
     # timeout 30s: sotto burst simultaneo (tutti i membri pagano nello stesso
     # istante) il default 5s produceva 'database is locked' -> 503; i writer
     # ora si ACCODANO (bug #36, bombardamento split). Il genitore del percorso

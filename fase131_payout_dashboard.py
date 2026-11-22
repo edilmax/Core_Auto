@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 import time
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, cast
 
 logger = logging.getLogger("core_auto.payout_dashboard")
 
@@ -431,5 +431,8 @@ def _valuta(v: Any) -> bool:
 def crea_payout_dashboard(percorso: str, *, orologio: Any = None) -> PayoutDashboard:
     if percorso == ":memory:":
         con = sqlite3.connect(":memory:", check_same_thread=False)
-        return PayoutDashboard(lambda: _ConnCondivisa(con), orologio=orologio)
+        # cast: la condivisa fa le veci di sqlite3.Connection (stessi metodi usati), nessun
+        # controllo a tempo di esecuzione -- serve solo a mypy (esame_mypy, 22/11)
+        return PayoutDashboard(lambda: cast(sqlite3.Connection, _ConnCondivisa(con)),
+                               orologio=orologio)
     return PayoutDashboard(lambda: sqlite3.connect(percorso, timeout=30), orologio=orologio)

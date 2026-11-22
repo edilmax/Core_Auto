@@ -173,7 +173,8 @@ class ProviderStripe:
 
     def __init__(self, secret_key: str, success_url: str, cancel_url: str, *,
                  valuta: str = "eur",
-                 fetch: Optional[Callable[[str, bytes, Dict[str, str]], Dict[str, Any]]]
+                 fetch: Optional[Callable[[str, Optional[bytes], Dict[str, str]],
+                                          Dict[str, Any]]]
                  = None) -> None:
         self._key = secret_key
         self._ok = success_url
@@ -249,7 +250,7 @@ class ProviderStripe:
             url = resp.get("url") if isinstance(resp, dict) else None
             if not (isinstance(url, str) and url):
                 return None
-            cs = resp.get("id")
+            cs: Any = resp.get("id")
             return {"url": url, "id": cs if _e_una_pagina(cs) else ""}
         except Exception:
             logger.warning("Stripe: creazione link fallita (ISOLATA -> None)",
@@ -282,7 +283,8 @@ class ProviderStripe:
                     logger.error("Stripe | codice: chiusura_pagina_negata | sottocodice: %s | "
                                  "messaggio: la chiave non puo' chiudere le pagine di pagamento, le "
                                  "stanze scadute restano tenute fino a un giorno -> %s",
-                                 exc.code, rifiuto.replace("\r\n", "\\n").replace("\n", "\\n")
+                                 getattr(exc, "code", None),
+                                 rifiuto.replace("\r\n", "\\n").replace("\n", "\\n")
                                  .replace("\r", "\\r"))   # testo di Stripe: PR #320, come PR #317
                 s = self._fetch(STRIPE_URL + "/" + sessione, None, intestazione)
             if not (isinstance(s, dict) and s.get("id") == sessione
@@ -742,7 +744,7 @@ class ProviderStripe:
         try:
             if not isinstance(dati, dict):
                 return None
-            anticipo = dati.get("anticipo_cents")
+            anticipo: Any = dati.get("anticipo_cents")
             if not _intero_pos(anticipo):
                 return None
             saldo = dati.get("saldo_cents")
@@ -791,7 +793,7 @@ class ProviderStripe:
             url = resp.get("url") if isinstance(resp, dict) else None
             if not (isinstance(url, str) and url):
                 return None
-            cs = resp.get("id")
+            cs: Any = resp.get("id")
             return {"url": url, "id": cs if _e_una_pagina(cs) else ""}
         except Exception:
             logger.warning("Stripe: creazione link ANTICIPO fallita (ISOLATA -> None)",
@@ -799,7 +801,7 @@ class ProviderStripe:
             return None
 
     @staticmethod
-    def _fetch_reale(url: str, body: bytes,
+    def _fetch_reale(url: str, body: Optional[bytes],
                      headers: Dict[str, str]) -> Dict[str, Any]:  # pragma: no cover
         import urllib.request
         # Il metodo lo decide il CORPO, non il chiamante: con un corpo si scrive (POST), senza
