@@ -340,6 +340,46 @@ BLOCCHI = (
             "dal pannello dell'host, da quello dell'admin e dal bunker da' lo STESSO numero al "
             "centesimo, riga per riga e non solo nei totali (due errori che si compensano danno "
             "un totale giusto), e le letture si enumerano dal codice, non a memoria",
+            # ⛔ LE OTTO RIGHE QUI SOTTO SONO ENTRATE IL 2026-11-22. Il 15/11 il fondatore ha
+            #    incollato la sua mappa delle tecniche di prova per i pagamenti («max
+            #    ingegneriatest.txt») e ha deciso: «tutti questi test bisogna farli girare sul
+            #    blocco soldi». Misurate quel giorno e rimisurate il 22/11 con git grep su
+            #    test_*.py, collaudi/ e .github/workflows: CrossHair, Locust, Toxiproxy e
+            #    confronto delle schermate 0 usi nel progetto; TLA+ solo fuori dal progetto
+            #    (strumenti_verifica\tla); mypy su 3 file e `|| true` (non blocca niente); la
+            #    macchina a stati di Hypothesis guida prenotazioni e annunci, non i soldi;
+            #    nessun confronto col formato pubblicato da Stripe. Finche' stavano solo in
+            #    memoria il blocco risultava «15 su 15» mentre il fondatore aspettava altro:
+            #    qui il blocco dice il vero. Stanno IN CODA: gli attrezzi trovano le caselle
+            #    gia' esistenti per INDICE. Ognuna nasce «mai misurata» e la scrive solo
+            #    l'attrezzo che la misura; una tecnica solo installata NON la spunta.
+            "mypy controlla i tipi dei moduli che muovono soldi (i cinque del percorso del "
+            "denaro e i tre motori di commissione, cancellazione e paga in struttura) e BLOCCA "
+            "l'unione in CI se trova anche un solo errore: niente `|| true`, niente report-only",
+            "il modello TLA+ degli stati del denaro (hold, cattura, rimborso, bonifico, "
+            "controversia) gira in CI col model checker TLC a ogni unione: le proprieta' vere "
+            "passano, e le varianti col difetto messo apposta vengono trovate (il controllo e' "
+            "visto fallire, non solo passare)",
+            "con la rete verso Stripe rallentata, tagliata o interrotta a meta' risposta "
+            "(Toxiproxy fra il server e lo Stripe di prova), nessuna prenotazione si conferma "
+            "senza pagamento e nessun pagamento riuscito si perde: tornata la rete, i conti "
+            "tornano al centesimo",
+            "sotto carico (Locust: molti ospiti che pagano e molti webhook nello stesso "
+            "momento, numero e durata dichiarati) nessun pagamento si duplica o si perde, "
+            "nessuna risposta e' un errore 5xx non gestito, e i conti tornano al centesimo",
+            "CrossHair cerca controesempi sulle funzioni che calcolano gli importi "
+            "(commissione, tariffa tecnica, divisione fra ospiti, rimborso, bonifico) contro "
+            "le loro condizioni scritte, e non ne trova nessuno entro il tempo dichiarato",
+            "le pagine dove si leggono i soldi (pagamento dell'ospite, guadagni dell'host, "
+            "conti dell'admin) si confrontano con una schermata di riferimento in un browser "
+            "vero: una cifra, una valuta o un pulsante cambiati fanno fallire la prova",
+            "una macchina a stati di Hypothesis guida i soldi con sequenze casuali -- "
+            "pagamento, webhook doppi, fuori ordine o malformati, rimborso, bonifico, "
+            "controversia -- e dopo OGNI passo gli invarianti dei soldi reggono",
+            "i campi degli oggetti di Stripe che il nostro codice legge (sessione di Checkout, "
+            "PaymentIntent, evento, rimborso, trasferimento, bonifico, contestazione) esistono "
+            "nella descrizione ufficiale pubblicata da Stripe (OpenAPI, alla versione API che "
+            "usiamo): un campo che leggiamo e Stripe non manda piu' fa fallire la prova",
         ),
     },
     {
