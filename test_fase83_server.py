@@ -5883,7 +5883,8 @@ class TestUnaControversiaApertaFermaISoldi(_BancoDeiSoldiDelServer):
         s, c = self.contestazione("pi_f2c", dp="dp_banco_chiusa")
         _deve(s == 200, "PREMESSA: contestazione della banca registrata", s, c)
         s, c = self.g("POST", "/api/admin/controversia/risolvi",
-                      {"riferimento": rif, "percentuale_ospite": 100, "la_banca_ha_deciso": True},
+                      {"riferimento": rif, "percentuale_ospite": 100, "la_banca_ha_deciso": True,
+                       "esito_banca": "vinta"},
                       {"X-Admin-Key": "ak"})
         self.assertEqual(200, s, "con la banca che ha deciso l'arbitro deve poter chiudere: %r"
                          % (c,))
@@ -5902,10 +5903,13 @@ class TestUnaControversiaApertaFermaISoldi(_BancoDeiSoldiDelServer):
         rif = b["riferimento"]
         s, c = self.contestazione("pi_st3", dp="dp_st3")
         _deve(s == 200, "PREMESSA: contestazione della banca registrata", s, c)
+        # «won» (22/11): con «lost» questa prova pretendeva proprio il buco trovato da TLA+
+        # (l'arbitro che rimborsa l'ospite gia' rimborsato dalla banca); la persa ha le sue
+        # prove qui sotto, `test_PERSA_*`
         with self.ascolta() as righe:
-            s, c = self._chiusura("pi_st3", "dp_st3", "lost")
+            s, c = self._chiusura("pi_st3", "dp_st3", "won")
         self.assertEqual(200, s, c)
-        self.assertTrue(self.errori_con(righe, "chargeback_chiuso", "dp_st3", "lost"),
+        self.assertTrue(self.errori_con(righe, "chargeback_chiuso", "dp_st3", "won"),
                         "la banca ha chiuso la contestazione e nessuno lo sa: %r" % (righe,))
         s, c = self._arbitro(rif, 100)
         self.assertEqual(200, s, "la banca ha deciso e l'arbitro resta bloccato: %r" % (c,))
@@ -5918,6 +5922,390 @@ class TestUnaControversiaApertaFermaISoldi(_BancoDeiSoldiDelServer):
         self._chiusura("pi_altro", "dp_altra", "won")
         s, c = self._arbitro(rif, 50)
         self.assertEqual((409, "decide_la_banca"), (s, (c or {}).get("errore")), c)
+
+    # ── TLA+ (22/11, strumenti_verifica\tla\Garanzia.tla, NUOVE=TRUE, invariante «Soldi»):
+    #    BancaApre -> BancaDecide «persa» (100 tornati all'ospite DALLA BANCA) -> Arbitro: la
+    #    rotta guardava solo che la banca avesse CHIUSO, non COME. Con p=0 all'host 90, con
+    #    p=100 un altro rimborso all'ospite: fino a 190 usciti su 100 incassati. Decisione
+    #    (fondatore 22/11, «tu conosci la macchina e devi tutelarmi»): contestazione PERSA =
+    #    niente rimborso, niente bonifico da questa prenotazione, il bonifico gia' partito si
+    #    recupera dall'host (Stripe: «If you lose, reverse the transfer», connect/disputes).
+    def _persa(self, slug, pi, dp):
+        b = self._pagata(slug, 2, pi)
+        rif = b["riferimento"]
+        s, c = self.contestazione(pi, dp=dp)
+        _deve(s == 200 and self.sis.garanzia.stato(rif)["stato"] == "contestato",
+              "PREMESSA: contestazione della banca registrata", s, c)
+        s, c = self._chiusura(pi, dp, "lost")
+        _deve(s == 200, "PREMESSA: la banca chiude la contestazione PERSA", s, c)
+        return rif
+
+    def _nessun_soldo_mosso_dopo_la_persa(self, rif, s, c, quale):
+        fot = self._fotografia(rif)
+        self.assertEqual([], fot["rimborsi"], "%s: RIMBORSO ALL'OSPITE DOPO UNA CONTESTAZIONE "
+                         "PERSA (la banca gli ha gia' ridato i soldi): %r %r" % (quale, fot, c))
+        self.assertEqual([], fot["bonificati"], "%s: BONIFICO ALL'HOST DOPO UNA CONTESTAZIONE "
+                         "PERSA (i soldi li ha la banca): %r %r" % (quale, fot, c))
+        self.assertNotIn(fot["bonifico"], ("in_attesa", "maturato", "in_transito", "pagato"),
+                         "%s: la riga del bonifico resta PAGABILE dal giro orario: %r" % (quale, fot))
+        st = self.sis.garanzia.stato(rif) or {}
+        self.assertEqual((0, 0), (int(st.get("host_riceve_cents") or 0),
+                                  int(st.get("ospite_rimborso_cents") or 0)),
+                         "%s: la garanzia scrive soldi dovuti dopo la persa: %r" % (quale, st))
+        self.assertNotEqual("contestato", st.get("stato"),
+                            "%s: la pratica resta aperta per sempre: %r" % (quale, st))
+        self.assertEqual((200, 0, 0), (s, (c or {}).get("rimborso_cliente_cents"),
+                                       (c or {}).get("va_all_host_cents")),
+                         "%s: la risposta non dice «niente a nessuno»: %s %r" % (quale, s, c))
+
+    def test_PERSA_l_arbitro_non_rimborsa_l_ospite_e_non_paga_l_host(self):
+        for p in (0, 50, 100):
+            with self.subTest(percentuale_ospite=p):
+                rif = self._persa("casa-persa%d" % p, "pi_persa%d" % p, "dp_persa%d" % p)
+                s, c = self._arbitro(rif, p)
+                self._nessun_soldo_mosso_dopo_la_persa(rif, s, c, "arbitro %d%%" % p)
+
+    def test_PERSA_il_bonifico_gia_partito_si_dice_da_recuperare_dall_host(self):
+        b = self._pagata("casa-persa-partito", 2, "pi_persa_partito")
+        rif = b["riferimento"]
+        pd = self.sis.payout
+        if pd.stato_di(rif) == "in_attesa":
+            _deve(pd.aggiorna_stato(rif, "maturato") is True, "PREMESSA: riga maturata")
+        _deve(pd.aggiorna_stato(rif, "in_transito") is True,
+              "PREMESSA: il bonifico parte PRIMA della contestazione", pd.info(rif))
+        self.contestazione("pi_persa_partito", dp="dp_persa_partito")
+        s, c = self._chiusura("pi_persa_partito", "dp_persa_partito", "lost")
+        _deve(s == 200, "PREMESSA: la banca chiude PERSA", s, c)
+        with self.ascolta() as righe:
+            s, c = self._arbitro(rif, 0)
+        self.assertEqual([], self._fotografia(rif)["bonificati"], "UN SECONDO BONIFICO ALL'HOST")
+        self.assertEqual([], self._fotografia(rif)["rimborsi"], "UN RIMBORSO ALL'OSPITE")
+        self.assertTrue(self.errori_con(righe, "PERSA", "recuperat", rif),
+                        "il bonifico gia' partito dopo una contestazione persa non si dice da "
+                        "recuperare dall'host: %r" % (righe,))
+
+    def test_PERSA_la_spunta_senza_l_esito_della_banca_non_muove_soldi(self):
+        """`la_banca_ha_deciso` serve quando l'avviso di Stripe non e' arrivato: allora la
+        macchina non sa COME ha deciso la banca, e deve dirlo chi arbitra (`esito_banca`)."""
+        b = self._pagata("casa-spunta", 2, "pi_spunta")
+        rif = b["riferimento"]
+        self.contestazione("pi_spunta", dp="dp_spunta")
+        prima = self._fotografia(rif)
+        s, c = self.g("POST", "/api/admin/controversia/risolvi",
+                      {"riferimento": rif, "percentuale_ospite": 0, "la_banca_ha_deciso": True},
+                      {"X-Admin-Key": "ak"})
+        self.assertEqual((422, "esito_banca_mancante"), (s, (c or {}).get("errore")),
+                         "SPUNTA SENZA ESITO: l'arbitro ha mosso soldi alla cieca: %s %r" % (s, c))
+        self.assertEqual(prima, self._fotografia(rif), "un rifiuto ha mosso soldi")
+        s, c = self.g("POST", "/api/admin/controversia/risolvi",
+                      {"riferimento": rif, "percentuale_ospite": 0, "la_banca_ha_deciso": True,
+                       "esito_banca": "persa"}, {"X-Admin-Key": "ak"})
+        self._nessun_soldo_mosso_dopo_la_persa(rif, s, c, "spunta con esito persa")
+
+    # ── COME ha chiuso la banca: l'esito si legge dall'avviso di Stripe, e quando non dice dove
+    #    sono i soldi (o non si legge) lo dice chi arbitra, mai la macchina a caso
+    def _chiusa_con(self, slug, pi, dp, esito):
+        b = self._pagata(slug, 2, pi)
+        rif = b["riferimento"]
+        s, c = self.contestazione(pi, dp=dp)
+        _deve(s == 200, "PREMESSA: contestazione della banca registrata", s, c)
+        s, c = self._chiusura(pi, dp, esito)
+        _deve(s == 200, "PREMESSA: la banca chiude", esito, s, c)
+        return rif
+
+    def _arbitro_con(self, rif, **campi):
+        corpo = {"riferimento": rif, "percentuale_ospite": 50}
+        corpo.update(campi)
+        return self.g("POST", "/api/admin/controversia/risolvi", corpo, {"X-Admin-Key": "ak"})
+
+    def test_ESITO_warning_closed_l_arbitro_divide_come_con_la_vinta(self):
+        rif = self._chiusa_con("casa-esito-wc", "pi_esito_wc", "dp_esito_wc", "warning_closed")
+        s, c = self._arbitro(rif, 50)
+        self.assertEqual((200, 8700, 8700), (s, (c or {}).get("rimborso_cliente_cents"),
+                                             (c or {}).get("va_all_host_cents")), c)
+
+    def test_ESITO_prevented_non_muove_soldi_finche_chi_arbitra_non_lo_dice(self):
+        b = self._pagata("casa-esito-prev", 2, "pi_esito_prev")
+        rif = b["riferimento"]
+        self.contestazione("pi_esito_prev", dp="dp_esito_prev")
+        with self.ascolta() as righe:
+            s, c = self._chiusura("pi_esito_prev", "dp_esito_prev", "prevented")
+        self.assertTrue(self.errori_con(righe, "chargeback_chiuso", "dp_esito_prev",
+                                        "Stripe non spiega"), righe)
+        self.assertFalse(self.errori_con(righe, "chargeback_chiuso", "Vinta o chiusa"), righe)
+        prima = self._fotografia(rif)
+        s, c = self._arbitro(rif, 50)
+        self.assertEqual((422, "esito_banca_mancante", "prevented"),
+                         (s, (c or {}).get("errore"), (c or {}).get("esito_stripe")), c)
+        self.assertEqual(prima, self._fotografia(rif), "un rifiuto ha mosso soldi")
+        s, c = self._arbitro_con(rif, esito_banca="persa")
+        self._nessun_soldo_mosso_dopo_la_persa(rif, s, c, "prevented detta persa")
+
+    def test_ESITO_chi_arbitra_non_smentisce_stripe(self):
+        for esito_stripe, detto in (("lost", "vinta"), ("won", "persa")):
+            with self.subTest(stripe=esito_stripe, detto=detto):
+                rif = self._chiusa_con("casa-smentita-" + esito_stripe, "pi_sm_" + esito_stripe,
+                                       "dp_sm_" + esito_stripe, esito_stripe)
+                prima = self._fotografia(rif)
+                s, c = self._arbitro_con(rif, esito_banca=detto)
+                self.assertEqual((409, "esito_banca_diverso_da_stripe", esito_stripe),
+                                 (s, (c or {}).get("errore"), (c or {}).get("esito_stripe")), c)
+                self.assertEqual(prima, self._fotografia(rif), "un rifiuto ha mosso soldi")
+        rif = self._chiusa_con("casa-confermata", "pi_confermata", "dp_confermata", "lost")
+        s, c = self._arbitro_con(rif, esito_banca="persa")
+        self._nessun_soldo_mosso_dopo_la_persa(rif, s, c, "persa detta persa")
+
+    def test_ESITO_scritto_male_si_rifiuta(self):
+        rif = self._chiusa_con("casa-esito-male", "pi_esito_male", "dp_esito_male", "won")
+        prima = self._fotografia(rif)
+        for detto in ("PERSA", "lost", "", 1, True):
+            with self.subTest(detto=detto):
+                s, c = self._arbitro_con(rif, esito_banca=detto)
+                self.assertEqual((422, "esito_banca_non_valido"), (s, (c or {}).get("errore")), c)
+        self.assertEqual(prima, self._fotografia(rif), "un rifiuto ha mosso soldi")
+
+    def test_ESITO_due_avvisi_che_non_dicono_la_stessa_cosa_lo_dice_chi_arbitra(self):
+        rif = self._chiusa_con("casa-due-avvisi", "pi_due_avvisi", "dp_due_avvisi", "lost")
+        s, c = self.evento("charge.dispute.closed",
+                           {"id": "dp_due_avvisi", "object": "dispute",
+                            "payment_intent": "pi_due_avvisi", "charge": "ch_banco",
+                            "amount": 20000, "currency": "eur", "status": "won"},
+                           evt_id="evt_seconda_chiusa")
+        _deve(s == 200, "PREMESSA: il secondo avviso arriva", s, c)
+        prima = self._fotografia(rif)
+        with self.ascolta() as righe:
+            s, c = self._arbitro(rif, 50)
+        self.assertEqual((422, "esito_banca_mancante", "discordanti"),
+                         (s, (c or {}).get("errore"), (c or {}).get("esito_stripe")), c)
+        self.assertTrue(self.errori_con(righe, "DISCORDANTI", "dp_due_avvisi", "lost,won"), righe)
+        self.assertEqual(prima, self._fotografia(rif), "un rifiuto ha mosso soldi")
+
+    def test_ESITO_avviso_illeggibile_lo_dice_chi_arbitra(self):
+        rif = self._chiusa_con("casa-avviso-rotto", "pi_avviso_rotto", "dp_avviso_rotto", "lost")
+        prima = self._fotografia(rif)
+        casi = {"corpo_non_json": (["{non e' json"], "illeggibile"),
+                "senza_status": (['{"data": {"object": {"id": "dp"}}}'], "illeggibile"),
+                "status_vuoto": (['{"data": {"object": {"status": ""}}}'], "illeggibile"),
+                "status_non_testo": (['{"data": {"object": {"status": 3}}}'], "illeggibile"),
+                "oggetto_non_dizionario": (['{"data": {"object": [1]}}'], "illeggibile"),
+                "una_persa_e_una_rotta": (['{"data": {"object": {"status": "lost"}}}', "{"],
+                                          "illeggibile"),
+                "senza_avvisi": ([], "")}
+        for nome, (corpi, atteso) in casi.items():
+            with self.subTest(caso=nome):
+                with mock.patch.object(self.sis.eventi_stripe, "corpi_del_fatto",
+                                       return_value=corpi), self.ascolta() as righe:
+                    s, c = self._arbitro(rif, 50)
+                self.assertEqual((422, "esito_banca_mancante", atteso),
+                                 (s, (c or {}).get("errore"), (c or {}).get("esito_stripe")), c)
+                self.assertEqual(bool(atteso), bool(self.errori_con(
+                    righe, "AVVISO DI STRIPE ILLEGGIBILE", "dp_avviso_rotto")), righe)
+                self.assertEqual(prima, self._fotografia(rif), "un rifiuto ha mosso soldi")
+
+    def test_ESITO_archivio_che_non_risponde_non_decide_nemmeno_sulla_parola(self):
+        # silent-failure-hunter (23/11): era «nessun avviso», e chi arbitra decideva a vuoto
+        # proprio quando Stripe non poteva smentirlo
+        rif = self._chiusa_con("casa-arch-giu", "pi_arch_giu", "dp_arch_giu", "lost")
+        prima = self._fotografia(rif)
+        for corpo in ({}, {"la_banca_ha_deciso": True, "esito_banca": "vinta"}):
+            with self.subTest(corpo=corpo):
+                with mock.patch.object(self.sis.eventi_stripe, "corpi_del_fatto",
+                                       side_effect=RuntimeError("archivio giu'")), \
+                        self.ascolta() as righe:
+                    s, c = self._arbitro_con(rif, **corpo)
+                self.assertEqual((503, "archivio_illeggibile"), (s, (c or {}).get("errore")), c)
+                self.assertTrue(self.errori_con(righe, "ARCHIVIO DEI WEBHOOK ILLEGGIBILE",
+                                                "dp_arch_giu", "|exc_info:RuntimeError"), righe)
+                self.assertEqual(prima, self._fotografia(rif), "un rifiuto ha mosso soldi")
+
+    def test_ESITO_senza_archivio_dei_webhook_lo_dice_chi_arbitra(self):
+        # mutazione mirata (23/11): un sistema senza archivio non e' un archivio rotto (503):
+        # non c'e' avviso, e con la spunta l'esito lo dice chi arbitra
+        b = self._pagata("casa-senza-archivio", 2, "pi_senza_archivio")
+        rif = b["riferimento"]
+        self.contestazione("pi_senza_archivio", dp="dp_senza_archivio")
+        with mock.patch.object(self.sis, "eventi_stripe", None):
+            s, c = self._arbitro(rif, 50)
+            self.assertEqual((409, "decide_la_banca"), (s, (c or {}).get("errore")), c)
+            s, c = self._arbitro_con(rif, la_banca_ha_deciso=True)
+            self.assertEqual((422, "esito_banca_mancante", ""),
+                             (s, (c or {}).get("errore"), (c or {}).get("esito_stripe")), c)
+            s, c = self._arbitro_con(rif, la_banca_ha_deciso=True, esito_banca="persa")
+        self._nessun_soldo_mosso_dopo_la_persa(rif, s, c, "senza archivio, detta persa")
+
+    def test_la_percentuale_fuori_misura_si_rifiuta_e_non_muove_soldi(self):
+        # mutazione mirata (23/11): la riga e' solo andata a capo, ma e' nel diff e nessuna
+        # prova di queste ne guardava i confini
+        b = self._pagata("casa-pct-fuori", 2, "pi_pct_fuori")
+        rif = b["riferimento"]
+        self._segnalata(rif)
+        prima = self._fotografia(rif)
+        for pct in (150, 100.5, -1, True, "50", None):
+            with self.subTest(percentuale_ospite=pct):
+                s, c = self._arbitro(rif, pct)
+                self.assertEqual((422, "percentuale_o_importo_mancante"),
+                                 (s, (c or {}).get("errore")), c)
+        self.assertEqual(prima, self._fotografia(rif), "un rifiuto ha mosso soldi")
+        s, c = self._arbitro(rif, 100)
+        self.assertEqual((200, 17400, 0), (s, (c or {}).get("rimborso_cliente_cents"),
+                                           (c or {}).get("va_all_host_cents")), c)
+
+    def test_GARA_la_garanzia_illeggibile_sotto_il_lucchetto_ferma_tutto(self):
+        b = self._pagata("casa-rilettura-rotta", 2, "pi_rilettura_rotta")
+        rif = b["riferimento"]
+        self._segnalata(rif)
+        prima = self._fotografia(rif)
+        vero, chiamate = self.sis.garanzia.stato, []
+
+        def la_seconda_esplode(r):
+            chiamate.append(r)
+            if len(chiamate) == 2:
+                raise RuntimeError("archivio della garanzia giu'")
+            return vero(r)
+        with mock.patch.object(self.sis.garanzia, "stato", side_effect=la_seconda_esplode), \
+                self.ascolta() as righe:
+            s, c = self._arbitro(rif, 50)
+        self.assertEqual((503, "service_unavailable"), (s, (c or {}).get("errore")), c)
+        self.assertTrue(self.errori_con(righe, "sotto il lucchetto", "|exc_info:RuntimeError"),
+                        righe)
+        self.assertEqual(prima, self._fotografia(rif), "un rifiuto ha mosso soldi")
+        self.assertEqual("contestato", vero(rif)["stato"])
+
+    def test_ESITO_la_traccia_dell_admin_dice_chi_ha_detto_l_esito(self):
+        rif = self._chiusa_con("casa-traccia", "pi_traccia", "dp_traccia", "lost")
+        with self.ascolta() as righe:
+            s, c = self._arbitro(rif, 30)
+        _deve(s == 200, "PREMESSA: persa chiusa", s, c)
+        self.assertTrue([r for r in righe if "ADMIN_ACTION" in r and "RIMBORSO_CENTS: 0" in r
+                         and "ESITO_BANCA: persa (stripe: lost)" in r], righe)
+        # e la perdita da scrivere a mano la dice un ERROR, non solo la risposta (code-review)
+        self.assertTrue(self.errori_con(righe, "CONTESTAZIONE PERSA CHIUSA", rif, "dp_traccia",
+                                        "a mano"), righe)
+        self.assertIn("la divisione scelta non conta", (c or {}).get("nota", ""))
+
+    def test_ESITO_detto_su_una_controversia_che_la_macchina_crede_dell_ospite(self):
+        # silent-failure-hunter (23/11): `esito_banca` qui era ignorato e «persa» diventava una
+        # divisione. L'avviso d'apertura della banca puo' non essere mai arrivato.
+        b = self._pagata("casa-detta-persa", 2, "pi_detta_persa")
+        rif = b["riferimento"]
+        self._segnalata(rif)
+        with self.ascolta() as righe:
+            s, c = self._arbitro_con(rif, esito_banca="persa")
+        self._nessun_soldo_mosso_dopo_la_persa(rif, s, c, "persa detta dall'arbitro")
+        self.assertTrue([r for r in righe if "ADMIN_ACTION" in r and "nessun avviso" in r], righe)
+        self.assertEqual("chargeback_persa:detta_dall_arbitro",
+                         self.sis.garanzia.stato(rif)["motivo"])
+        b = self._pagata("casa-detta-vinta", 2, "pi_detta_vinta")
+        rif = b["riferimento"]
+        self._segnalata(rif)
+        s, c = self._arbitro_con(rif, esito_banca="vinta")
+        self.assertEqual((200, 8700, 8700), (s, (c or {}).get("rimborso_cliente_cents"),
+                                             (c or {}).get("va_all_host_cents")), c)
+
+    # ── variant-analysis (Trail of Bits, 23/11) sulla stessa radice: la rotta dell'arbitro sa
+    #    della banca SOLO dal motivo della garanzia, e il motivo poteva mentire nei due versi
+    def test_VARIANTE_la_banca_che_contesta_DOPO_la_segnalazione_dell_ospite_ferma_l_arbitro(self):
+        """Segnalazione dell'ospite (garanzia 'contestato', motivo suo) e POI la contestazione
+        della banca: `contesta` non riparte da 'contestato', il motivo restava quello
+        dell'ospite e l'arbitro, che della banca non sapeva niente, pagava l'host con la
+        contestazione aperta (e, persa, i soldi erano gia' tornati all'ospite dalla banca)."""
+        b = self._pagata("casa-seg-banca", 2, "pi_seg_banca")
+        rif = b["riferimento"]
+        self._segnalata(rif)
+        s, c = self.contestazione("pi_seg_banca", dp="dp_seg_banca")
+        _deve(s == 200, "PREMESSA: contestazione della banca registrata", s, c)
+        prima = self._fotografia(rif)
+        s, c = self._arbitro(rif, 50)
+        self.assertEqual((409, "decide_la_banca"), (s, (c or {}).get("errore")),
+                         "LA BANCA CONTESTA E L'ARBITRO DIVIDE LO STESSO: %s %r %r"
+                         % (s, c, self._fotografia(rif)))
+        self.assertEqual(prima, self._fotografia(rif), "un rifiuto ha mosso soldi")
+        s, c = self._chiusura("pi_seg_banca", "dp_seg_banca", "lost")
+        _deve(s == 200, "PREMESSA: la banca chiude PERSA", s, c)
+        s, c = self._arbitro(rif, 50)
+        self._nessun_soldo_mosso_dopo_la_persa(rif, s, c, "segnalata e poi persa in banca")
+
+    def test_GARA_la_banca_che_contesta_mentre_l_arbitro_decide_lo_ferma(self):
+        """code-review (23/11): la rotta legge il motivo della garanzia FUORI dal lucchetto dei
+        bonifici, e `risolvi` guarda solo lo stato. La contestazione della banca che arriva fra
+        quella lettura e il lucchetto cambia il motivo (resta 'contestato') e l'arbitro divide
+        lo stesso, con la banca che contesta. Qui la banca arriva DENTRO la lettura: l'arbitro
+        ha in mano la fotografia di prima."""
+        b = self._pagata("casa-gara-banca", 2, "pi_gara_banca")
+        rif = b["riferimento"]
+        self._segnalata(rif)
+        vero, fatto = self.sis.garanzia.stato, []
+
+        def stato_poi_la_banca(r):
+            st = vero(r)
+            if not fatto:
+                fatto.append(1)
+                _deve(self.contestazione("pi_gara_banca", dp="dp_gara_banca")[0] == 200,
+                      "PREMESSA: la banca contesta in mezzo")
+            return st
+        with mock.patch.object(self.sis.garanzia, "stato", side_effect=stato_poi_la_banca):
+            s, c = self._arbitro(rif, 50)
+        _deve(fatto, "PREMESSA: la banca doveva arrivare durante la decisione")
+        self.assertEqual(("contestato", "chargeback:dp_gara_banca"),
+                         (vero(rif)["stato"], vero(rif)["motivo"].split("|")[0]),
+                         "L'ARBITRO HA DECISO CON LA BANCA CHE CONTESTA: %s %r %r"
+                         % (s, c, self._fotografia(rif)))
+        self.assertEqual((409, "controversia_cambiata"), (s, (c or {}).get("errore")), c)
+        self.assertEqual([], self._fotografia(rif)["bonificati"])
+        self.assertEqual([], self._fotografia(rif)["rimborsi"])
+
+    def test_VARIANTE_la_banca_sopra_la_segnalazione_tiene_il_testo_dell_ospite(self):
+        # code-review (23/11): il motivo dell'ospite spariva dalla lista delle controversie, e
+        # con la banca VINTA l'arbitro decide proprio quella segnalazione
+        b = self._pagata("casa-testo-ospite", 2, "pi_testo_ospite")
+        rif = b["riferimento"]
+        self._segnalata(rif)
+        self.contestazione("pi_testo_ospite", dp="dp_testo_ospite")
+        self.assertEqual("chargeback:dp_testo_ospite|ospite:non corrisponde",
+                         self.sis.garanzia.stato(rif)["motivo"])
+        s, c = self._chiusura("pi_testo_ospite", "dp_testo_ospite", "won")
+        s, c = self._arbitro(rif, 50)
+        self.assertEqual((200, 8700, 8700), (s, (c or {}).get("rimborso_cliente_cents"),
+                                             (c or {}).get("va_all_host_cents")), c)
+
+    def test_VARIANTE_una_seconda_contestazione_non_cancella_la_prima(self):
+        b = self._pagata("casa-due-banche", 2, "pi_due_banche")
+        rif = b["riferimento"]
+        self.contestazione("pi_due_banche", dp="dp_prima")
+        with self.ascolta() as righe:
+            s, c = self.contestazione("pi_due_banche", dp="dp_seconda")
+        self.assertEqual(200, s, "una seconda contestazione non si ritenta: ritentare non la cambia")
+        self.assertEqual("chargeback:dp_prima", self.sis.garanzia.stato(rif)["motivo"])
+        self.assertTrue(self.errori_con(righe, "seconda_contestazione", "dp_seconda", rif), righe)
+
+    def test_VARIANTE_la_banca_non_segnata_sopra_la_segnalazione_si_ritenta(self):
+        b = self._pagata("casa-segno-fallito", 2, "pi_segno_fallito")
+        rif = b["riferimento"]
+        self._segnalata(rif)
+        with mock.patch.object(self.sis.garanzia, "segna_contestazione_banca",
+                               return_value={"ok": False, "motivo": "stato_non_valido",
+                                             "stato": "risolto"}):
+            s, c = self.contestazione("pi_segno_fallito", dp="dp_segno_fallito")
+        self.assertEqual((503, "garanzia_non_fermata"), (s, (c or {}).get("sottocodice")), c)
+
+    def test_VARIANTE_il_motivo_scritto_dall_ospite_non_si_traveste_da_banca(self):
+        """Il motivo della segnalazione e' testo libero dell'ospite, e la rotta dell'arbitro
+        riconosce la banca da `chargeback:` in testa al motivo: un ospite che lo scrive ferma
+        l'arbitro («decide la banca») su una banca che non c'e'."""
+        b = self._pagata("casa-travestita", 2, "pi_travestita")
+        rif = b["riferimento"]
+        sblocco = int(self.sis.garanzia.stato(rif)["sblocco_auto_ts"])
+        with mock.patch("time.time", return_value=float(sblocco - 3600)):
+            s, c = self.g("POST", "/api/garanzia/contesta",
+                          {"voucher_token": b["voucher_token"], "motivo": "chargeback:dp_finta"})
+        _deve(s == 200 and self.sis.garanzia.stato(rif)["stato"] == "contestato",
+              "PREMESSA: segnalazione dell'ospite registrata", s, c)
+        self.assertFalse(str(self.sis.garanzia.stato(rif).get("motivo")).startswith("chargeback:"),
+                         "il motivo dell'ospite e' scritto come quello della banca: %r"
+                         % (self.sis.garanzia.stato(rif),))
+        s, c = self._arbitro(rif, 50)
+        self.assertEqual(200, s, "l'arbitro e' fermato da una banca che non c'e': %r" % (c,))
+        self.assertEqual("risolto", self.sis.garanzia.stato(rif)["stato"])
 
     def _all_istante(self, b, secondi_dallo_sblocco, rotta):
         rif = b["riferimento"]
@@ -6915,6 +7303,124 @@ class TestUnaControversiaApertaFermaISoldi(_BancoDeiSoldiDelServer):
         self.assertNotEqual(sana, esplosa,
                             "IL FERMO E' ESPLOSO E IL REGISTRO DICE LE STESSE COSE DELLA "
                             "CONTESTAZIONE SANA (il bonifico trattenuto): %r" % (esplosa,))
+
+
+class TestLaRegolaDeiSoldiSuOgniSequenzaDellaContestazione(_BancoDeiSoldiDelServer):
+    """property-based-testing (Trail of Bits, 23/11): l'invariante «Soldi» del modello TLA+
+    (strumenti_verifica\\tla\\Garanzia.tla) sul codice VERO, su sequenze casuali di gesti:
+    segnalazione dell'ospite, contestazione della banca, decisione della banca (won, lost,
+    warning_closed, prevented), avviso di Stripe che arriva o no, arbitro con qualunque
+    percentuale e con o senza la spunta (detta ONESTA: chi arbitra dice l'esito vero, e su
+    'prevented' non dice niente). Regola: da questa prenotazione non esce mai piu' della
+    garanzia, e se la banca l'ha PERSA non esce niente (i soldi all'ospite li ha ridati lei).
+
+    ⚠️ COSA NON GUARDA (D18 punto 3): la banca che contesta DOPO che la garanzia e' gia' stata
+    decisa o rilasciata (fuori modello anche in TLA+: il bonifico e' gia' partito e oggi si
+    recupera a mano, scritto in RIPRENDI_QUI); «tutto ok» dell'ospite e il giro orario."""
+
+    def _chiusura(self, pi, dp, esito):
+        return self.evento("charge.dispute.closed",
+                           {"id": dp, "object": "dispute", "payment_intent": pi,
+                            "charge": "ch_banco", "amount": 20000, "currency": "eur",
+                            "status": esito}, evt_id="evt_chiusa_" + dp)
+
+    def test_su_ogni_sequenza_non_esce_piu_di_quanto_e_entrato(self):
+        from hypothesis import example, given, settings, strategies as st
+        conta, arrivate = [0], [0]
+
+        # I gesti stanno nella strategia, non in un filtro (skill, generating.md): ogni esempio
+        # ha la banca che apre e decide e almeno un arbitro, in un ORDINE casuale. La prima
+        # versione (liste libere di gesti) era verde anche sul codice di master, rotto: la
+        # sequenza del difetto non usciva quasi mai.
+        @st.composite
+        def gesti(draw):
+            # lo scheletro: la banca apre, decide (persa due volte su cinque), l'avviso arriva
+            # o no, e un arbitro DOPO; poi, in punti a caso, la segnalazione dell'ospite e altri
+            # arbitri. Con le sole permutazioni a caso l'arbitro dopo una persa nota usciva in 1
+            # esempio su 60 (lo dice il conteggio qui sotto).
+            ev = [("banca_apre",),
+                  ("banca_decide", draw(st.sampled_from(["lost", "lost", "won",
+                                                         "warning_closed", "prevented"])))]
+            ev += [("avviso",)] * draw(st.integers(0, 1))
+            ev.append(("arbitro", draw(st.integers(0, 100)), draw(st.booleans())))
+            extra = [("segnala",)] * draw(st.integers(0, 1))
+            extra += [("arbitro", draw(st.integers(0, 100)), draw(st.booleans()))
+                      for _ in range(draw(st.integers(0, 2)))]
+            for e in extra:
+                ev.insert(draw(st.integers(0, len(ev))), e)
+            return ev
+
+        @settings(max_examples=60, deadline=None, derandomize=True, database=None)
+        @given(gesti())
+        # la traccia di TLA+ (22/11): persa, avviso arrivato, l'arbitro da' tutto all'host
+        @example([("banca_apre",), ("banca_decide", "lost"), ("avviso",), ("arbitro", 0, False)])
+        # la stessa senza avviso: chi arbitra spunta e dice «persa»
+        @example([("banca_apre",), ("banca_decide", "lost"), ("arbitro", 100, True)])
+        # variant-analysis (23/11): la segnalazione dell'ospite prima della banca
+        @example([("segnala",), ("banca_apre",), ("arbitro", 50, False),
+                  ("banca_decide", "lost")])
+        def prova(passi):
+            conta[0] += 1
+            n = conta[0]
+            pi, dp = "pi_pbt_%d" % n, "dp_pbt_%d" % n
+            # una casa ogni 20 esempi, date diverse per ognuno: una casa per esempio urtava il
+            # freno delle pubblicazioni («troppi salvataggi in un minuto»)
+            casa = "casa-pbt-%d" % (n // 20)
+            if n == 1 or n % 20 == 0:
+                self.pubblica(casa, "moderata")
+            b = self.prenota(casa, 2 + 2 * (n % 20))
+            rif = b["riferimento"]
+            _deve(self.paga(rif, pi)[0] == 200, "PREMESSA: pagata", passi)
+            importo = int(self.sis.garanzia.stato(rif)["importo_host_cents"])
+            aperta, verita, avvisata = False, "", False
+
+            def usciti():
+                rimb = sum(int(m.get("importo_cents") or 0)
+                           for m in self.sis.finanza.movimenti(rif) if m.get("tipo") == "rimborso")
+                return rimb, sum(int(x[1]) for x in self.connect.bonifici if x[3] == rif)
+
+            for p in passi:
+                st_g = (self.sis.garanzia.stato(rif) or {}).get("stato")
+                if p[0] == "segnala":
+                    sblocco = int(self.sis.garanzia.stato(rif)["sblocco_auto_ts"])
+                    with mock.patch("time.time", return_value=float(sblocco - 3600)):
+                        self.g("POST", "/api/garanzia/contesta",
+                               {"voucher_token": b["voucher_token"], "motivo": "non corrisponde"})
+                elif p[0] == "banca_apre":
+                    if aperta or st_g not in ("in_garanzia", "contestato"):
+                        continue          # la banca dopo la decisione: fuori modello (docstring)
+                    _deve(self.contestazione(pi, dp=dp)[0] == 200, "PREMESSA: banca", passi)
+                    aperta = True
+                elif p[0] == "banca_decide":
+                    verita = p[1] if aperta and not verita else verita
+                elif p[0] == "avviso":
+                    if verita and not avvisata:
+                        _deve(self._chiusura(pi, dp, verita)[0] == 200, "PREMESSA: avviso", passi)
+                        avvisata = True
+                else:
+                    corpo = {"riferimento": rif, "percentuale_ospite": p[1]}
+                    onesto = {"lost": "persa", "won": "vinta",
+                              "warning_closed": "vinta"}.get(verita)
+                    if p[2] and onesto:
+                        corpo.update(la_banca_ha_deciso=True, esito_banca=onesto)
+                    if verita == "lost" and (avvisata or "esito_banca" in corpo):
+                        arrivate[0] += 1      # l'arbitro dopo una persa che la macchina conosce
+                    self.g("POST", "/api/admin/controversia/risolvi", corpo, {"X-Admin-Key": "ak"})
+                rimb, bon = usciti()
+                self.assertLessEqual(rimb + bon, importo,
+                                     "USCITI %d (rimborsi) + %d (bonifici) SU %d: %r"
+                                     % (rimb, bon, importo, passi))
+            if verita == "lost":
+                self.assertEqual((0, 0), usciti(), "BANCA PERSA E SOLDI USCITI LO STESSO "
+                                 "(rimborsi, bonifici): %r" % (passi,))
+
+        prova()
+        # una prova che non arriva mai al punto e' verde per niente (AGENTS.md di Trail of Bits:
+        # «a checker that inspects zero items must fail»): oltre ai 2 esempi fissi, quelli a
+        # caso devono arrivare all'arbitro dopo una persa nota. Sul codice di master ogni arrivo
+        # muove soldi (con 0% all'host, sopra lo 0% all'ospite): arrivare = vederlo rosso.
+        self.assertGreaterEqual(arrivate[0], 2 + 5, "gli esempi a caso non arrivano quasi mai "
+                                "all'arbitro dopo una contestazione persa: %d" % arrivate[0])
 
 
 class _StripeCheConosceLAddebito(StripeColBlocco):

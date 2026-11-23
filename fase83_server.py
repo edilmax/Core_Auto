@@ -6401,33 +6401,134 @@ class RouterHTTP:
         # guarda sul pannello di Stripe) l'arbitro decide dicendolo apposta, cosi' i soldi
         # non restano fermi per sempre: `la_banca_ha_deciso`.
         _motivo = str(st.get("motivo") or "")
-        if (_motivo.startswith("chargeback:") and dati.get("la_banca_ha_deciso") is not True
-                and not self._banca_ha_chiuso(_motivo[len("chargeback:"):])):
-            return 409, {"errore": "decide_la_banca"}
+        persa, _dp, _banca = False, "", "-"
+        _detto = dati.get("esito_banca")
+        if _detto is not None and _detto not in ("vinta", "persa"):
+            return 422, {"errore": "esito_banca_non_valido"}
+        if _motivo.startswith("chargeback:"):
+            # `chargeback:<contestazione>`, con dopo «|ospite:<testo>» se l'ospite aveva gia'
+            # segnalato (`segna_contestazione_banca`)
+            _dp = _motivo[len("chargeback:"):].split("|", 1)[0]
+            if dati.get("la_banca_ha_deciso") is not True and not self._banca_ha_chiuso(_dp):
+                return 409, {"errore": "decide_la_banca"}
+            # TLA+ (22/11, strumenti_verifica\tla\Garanzia.tla, invariante «Soldi»): qui si
+            # guardava solo CHE la banca avesse chiuso, non COME. Con la contestazione PERSA la
+            # banca ha gia' ridato i soldi all'ospite e Stripe li ha tolti a noi: l'arbitro che
+            # rimborsava l'ospite o pagava l'host faceva uscire fino a 190 su 100 incassati.
+            # Decisione del fondatore (22/11): PERSA = niente rimborso, niente bonifico, il
+            # bonifico gia' partito si recupera dall'host (Stripe, connect/disputes: «If you
+            # lose, reverse the transfer»). COME ha deciso lo dice l'avviso di Stripe salvato;
+            # senza avviso (la spunta `la_banca_ha_deciso`) lo dice chi arbitra, `esito_banca`.
+            # Soldi mossi da soli solo con 'won' e 'warning_closed' (i soldi restano o tornano
+            # a noi); 'prevented' e gli stati nuovi Stripe non dice dove mettono i soldi: decide
+            # una persona. L'archivio che non risponde non e' «nessun avviso»: non si decide
+            # niente, nemmeno sulla parola di chi arbitra, che Stripe non potrebbe smentire.
+            _stripe = self._esito_della_banca(_dp)
+            if _stripe is None:
+                return 503, {"errore": "archivio_illeggibile"}
+            _letto = ("persa" if _stripe == "lost" else
+                      "vinta" if _stripe in ("won", "warning_closed") else "")
+            if _letto and _detto and _detto != _letto:
+                return 409, {"errore": "esito_banca_diverso_da_stripe", "esito_stripe": _stripe}
+            if not (_letto or _detto):
+                return 422, {"errore": "esito_banca_mancante", "esito_stripe": _stripe}
+            persa = (_letto or _detto) == "persa"
+            _banca = "%s (%s)" % (_letto or _detto,
+                                  "stripe: " + _stripe if _letto else "detto dall'arbitro")
+        elif _detto is not None:
+            # silent-failure-hunter (23/11): `esito_banca` su una controversia che la macchina
+            # crede solo dell'ospite (l'avviso di apertura della banca non e' arrivato, o era
+            # gia' contestata prima della riparazione del 23/11) era ignorato in silenzio, e
+            # «persa» diventava una divisione. Chi arbitra dice che la banca ha deciso: vale.
+            persa, _dp = _detto == "persa", "detta_dall_arbitro"
+            _banca = "%s (detto dall'arbitro, nessun avviso della banca)" % _detto
         importo = int(st.get("importo_host_cents", 0))
-        # calcolo il rimborso: da percentuale (0-100) oppure importo esatto
-        rimborso = dati.get("rimborso_ospite_cents")
-        if not (isinstance(rimborso, int) and not isinstance(rimborso, bool)):
-            pct = dati.get("percentuale_ospite")
-            if not (isinstance(pct, (int, float)) and not isinstance(pct, bool) and 0 <= pct <= 100):
-                return 422, {"errore": "percentuale_o_importo_mancante"}
-            rimborso = int(importo * pct / 100)
-        rimborso = max(0, min(int(rimborso), importo))
+        if persa:
+            rimborso = 0      # all'ospite i soldi li ha gia' ridati la banca
+        else:
+            # calcolo il rimborso: da percentuale (0-100) oppure importo esatto
+            rimborso = dati.get("rimborso_ospite_cents")
+            if not (isinstance(rimborso, int) and not isinstance(rimborso, bool)):
+                pct = dati.get("percentuale_ospite")
+                if not (isinstance(pct, (int, float)) and not isinstance(pct, bool)
+                        and 0 <= pct <= 100):
+                    return 422, {"errore": "percentuale_o_importo_mancante"}
+                rimborso = int(importo * pct / 100)
+            rimborso = max(0, min(int(rimborso), importo))
         # Busta A4 di Proton (29/10), punto (b): dalla decisione all'ultima scrittura sul bonifico
         # sotto `_BONIFICI_LOCK`, come il chargeback (voce 138 b) e il rimborso dell'admin (142).
         # Fuori, il giro orario leggeva la riga PIENA appena la garanzia era 'risolto', prima che
         # l'arbitro la riscrivesse con la quota: all'host partiva anche la parte dell'ospite.
         with _BONIFICI_LOCK:
             return self._admin_controversia_risolvi_sotto_chiave(rif, g, importo, rimborso,
-                                                                 headers)
+                                                                 headers, persa=persa, dp=_dp,
+                                                                 banca=_banca,
+                                                                 motivo_letto=_motivo)
 
-    def _admin_controversia_risolvi_sotto_chiave(self, rif, g, importo, rimborso, headers):
+    def _esito_della_banca(self, dp):
+        """COME la banca ha chiuso la contestazione `dp`: lo `status` scritto da Stripe negli
+        avvisi `charge.dispute.closed` salvati (fase204), es. 'won', 'lost', 'warning_closed'.
+        "" se non c'e' avviso; «illeggibile» se un avviso non porta uno status leggibile;
+        «discordanti» se gli avvisi non dicono tutti la stessa cosa (mai uno scelto a caso: lo
+        dice chi arbitra); None se l'archivio non risponde (chi chiama non decide niente).
+        Le ultime tre le dice un ERROR: e' il punto da cui dipende se l'ospite riceve soldi.
+        ⚠️ Legge anche gli avvisi non ancora segnati «elaborato», apposta: `_banca_ha_chiuso`
+        (SE la banca ha chiuso) conta solo gli elaborati, ma COME ha chiuso lo dice Stripe nel
+        corpo, firmato prima del salvataggio; un avviso in piu' puo' solo far rifiutare."""
+        archivio = getattr(self._sys, "eventi_stripe", None)
+        if archivio is None or not dp:
+            return ""
+        try:
+            corpi = archivio.corpi_del_fatto(tipo="charge.dispute.closed", oggetto_id=dp)
+        except Exception:
+            logger.error("ARCHIVIO DEI WEBHOOK ILLEGGIBILE | contestazione %s | non si sa come "
+                         "ha chiuso la banca: l'arbitro non muove soldi, riprovare dopo",
+                         _rif_per_registro(dp), exc_info=True)
+            return None
+        esiti = set()
+        for corpo in corpi:
+            try:
+                s = json.loads(corpo)["data"]["object"].get("status")
+            except Exception:
+                s = None
+            esiti.add(s if isinstance(s, str) and s else "?")
+        if "?" in esiti:
+            logger.error("AVVISO DI STRIPE ILLEGGIBILE | contestazione %s | un avviso di chiusura "
+                         "non porta un esito leggibile: lo dice chi arbitra", _rif_per_registro(dp))
+            return "illeggibile"
+        if len(esiti) > 1:
+            logger.error("AVVISI DI STRIPE DISCORDANTI | contestazione %s | esiti %s: lo dice chi "
+                         "arbitra", _rif_per_registro(dp),
+                         _testo_per_registro(",".join(sorted(esiti))))
+            return "discordanti"
+        return next(iter(esiti)) if esiti else ""
+
+    def _admin_controversia_risolvi_sotto_chiave(self, rif, g, importo, rimborso, headers, *,
+                                                 persa, dp, banca, motivo_letto):
         """Il corpo di `_admin_controversia_risolvi` dalla decisione in poi; lo chiama tenendo
-        `_BONIFICI_LOCK`."""
+        `_BONIFICI_LOCK`. `persa`: la banca ha dato ragione all'ospite, non e' dovuto niente a
+        nessuno (`rimborso` arriva 0) e la riga del bonifico si toglie come nel rimborso pieno.
+        `motivo_letto`: il motivo su cui e' stata presa la decisione, letto FUORI dal lucchetto."""
         if self._corpo_rotto(rif, "controversia_risolvi"):
             return 503, {"errore": "corpo_illeggibile"}
+        # code-review (23/11): la decisione e' stata presa su una lettura fatta FUORI dal
+        # lucchetto, e la contestazione della banca cambia il motivo sotto lo stesso lucchetto
+        # lasciando lo stato 'contestato' (`segna_contestazione_banca`): `risolvi` guarda solo lo
+        # stato, e l'arbitro divideva con la banca che contesta. Si rilegge qui dentro; se e'
+        # cambiato si rifiuta e chi arbitra ripete, sulla controversia di adesso.
+        if motivo_letto is not None:
+            try:
+                _ora = g.stato(rif)
+            except Exception:
+                logger.error("admin controversia risolvi: garanzia illeggibile sotto il lucchetto "
+                             "(ISOLATO)", exc_info=True)
+                return 503, {"errore": "service_unavailable"}
+            if not (isinstance(_ora, dict) and _ora.get("stato") == "contestato"
+                    and str(_ora.get("motivo") or "") == motivo_letto):
+                return 409, {"errore": "controversia_cambiata"}
         try:
-            out = g.risolvi(rif, rimborso_ospite_cents=rimborso)
+            out = (g.chiudi_contestazione_persa(rif, motivo="chargeback_persa:" + str(dp))
+                   if persa else g.risolvi(rif, rimborso_ospite_cents=rimborso))
         except Exception:
             logger.error("admin controversia risolvi: eccezione ISOLATA", exc_info=True)
             return 503, {"errore": "service_unavailable"}
@@ -6473,7 +6574,10 @@ class RouterHTTP:
                              _rif_per_registro(rif), self._fmt_importo(_rimb, _valuta))
         # payout dell'host: azzerato se il cliente prende tutto, altrimenti resta (parziale)
         penale_oltre = penale_pari = partito = False
-        pieno, tolta = rimborso >= importo, True
+        # con la contestazione PERSA all'host non va niente, come nel rimborso pieno
+        pieno, tolta = persa or rimborso >= importo, True
+        _chi = ("la banca ha dato ragione all'ospite (contestazione PERSA: i soldi li ha "
+                "ripresi la banca)" if persa else "l'arbitro ha dato tutto all'ospite")
         if pieno:
             # Busta A2 di Proton (28/10), colpo 5: all'host non va niente. La riga del bonifico si
             # toglie E si guarda che sia tolta: rimasta 'maturato', il giro orario la pagava con
@@ -6488,26 +6592,27 @@ class RouterHTTP:
                 # come nella divisione (A4_3f): una riga gia' partita non si cancella, e lo si dice
                 partito = (riga or {}).get("stato") in ("in_transito", "pagato")
                 if partito:
-                    logger.error("BONIFICO DELL'HOST GIA' PARTITO | RIF: %s | l'arbitro ha dato "
-                                 "tutto all'ospite, ma il bonifico della riga e' gia' partito: NON "
-                                 "pagarlo di nuovo; va recuperato dall'host",
-                                 _rif_per_registro(rif))
+                    logger.error("BONIFICO DELL'HOST GIA' PARTITO | RIF: %s | %s, ma il bonifico "
+                                 "della riga e' gia' partito: NON pagarlo di nuovo; va recuperato "
+                                 "dall'host%s", _rif_per_registro(rif), _chi,
+                                 " (storno del trasferimento su Stripe, contestazione %s)"
+                                 % _rif_per_registro(dp) if persa else "")
                 else:
                     tolta = pd.rimuovi(rif) is True
                 if not tolta:
                     fermo = (pd.aggiorna_stato(rif, "trattenuto") is True
                              or pd.stato_di(rif) == "trattenuto")
-                    logger.error("RIGA DEL BONIFICO DELL'HOST NON TOLTA | RIF: %s | l'arbitro ha "
-                                 "dato tutto all'ospite ma la riga resta nel registro dei "
-                                 "bonifici: NON pagarla%s", _rif_per_registro(rif),
+                    logger.error("RIGA DEL BONIFICO DELL'HOST NON TOLTA | RIF: %s | %s ma la riga "
+                                 "resta nel registro dei bonifici: NON pagarla%s",
+                                 _rif_per_registro(rif), _chi,
                                  "" if fermo else " | e la riga NON e' stata fermata: il giro "
                                  "orario la paga, fermarla a mano")
                 penale_oltre = _preso > 0
                 if penale_oltre:
-                    logger.error("PENALE COMPENSATA OLTRE LA QUOTA DELL'HOST | RIF: %s | l'arbitro "
-                                 "da' tutto all'ospite ma una penale ha gia' usato %s di questa "
-                                 "riga: all'host non spetta niente e alla penale mancano %s, da "
-                                 "riaprire a mano", _rif_per_registro(rif),
+                    logger.error("PENALE COMPENSATA OLTRE LA QUOTA DELL'HOST | RIF: %s | %s ma una "
+                                 "penale ha gia' usato %s di questa riga: all'host non spetta "
+                                 "niente e alla penale mancano %s, da riaprire a mano",
+                                 _rif_per_registro(rif), _chi,
                                  self._fmt_importo(_preso, _valuta),
                                  self._fmt_importo(_preso, _valuta))
         else:
@@ -6601,14 +6706,46 @@ class RouterHTTP:
                                  "la lettura): la quota NON parte da sola, la paga una persona "
                                  "dopo il controllo%s", _rif_per_registro(rif),
                                  self._fmt_importo(int(quota_host), _valuta), avviso)
-        self._email_esito_controversia(rif, out.get("ospite_rimborso_cents", rimborso))
+        if not persa:
+            # con la PERSA niente email «ti rimborsiamo 0»: l'esito all'ospite l'ha gia' dato la
+            # sua banca, che gli ha ridato i soldi
+            self._email_esito_controversia(rif, out.get("ospite_rimborso_cents", rimborso))
+        else:
+            # code-review (23/11): dopo la PERSA il giornale dice ancora incassati importo e
+            # commissione, e la sola traccia era la risposta. ERROR (lo legge il Guardiano): c'e'
+            # un gesto da fare a mano, non e' un allarme su una cosa normale.
+            logger.error("CONTESTAZIONE PERSA CHIUSA | RIF: %s | contestazione: %s | niente "
+                         "rimborso e niente bonifico: nel giornale incasso e commissione restano "
+                         "come incassati, la perdita va scritta a mano; se la banca ha ripreso solo "
+                         "una parte del pagamento, la parte non contestata la decide una persona",
+                         _rif_per_registro(rif), _rif_per_registro(dp))
         # TRACCIA DEL GESTO (vedi `_admin_alloggio_stato`): questa rotta DECIDE quanto torna
         # all'ospite, e la cifra fa parte del «cosa» -- una riga senza l'importo non dice cosa e'
         # stato deciso. Guardia: `test_pipeline_ci.TestOgniGestoDellAdminLasciaLaSuaRiga`.
+        # ESITO_BANCA (silent-failure-hunter, 23/11): l'esito della banca decide se esce qualcosa,
+        # e chi l'ha detto (Stripe o chi arbitra) fa parte del «cosa»
         logger.warning("ADMIN_ACTION | OGGETTO: %s | AZIONE: Controversia risolta | "
-                       "RIMBORSO_CENTS: %d | IP: %s", _rif_per_registro(rif),
+                       "RIMBORSO_CENTS: %d | ESITO_BANCA: %s | IP: %s", _rif_per_registro(rif),
                        int(out.get("ospite_rimborso_cents", rimborso) or 0),
-                       self._client_ip(headers))
+                       _testo_per_registro(banca), self._client_ip(headers))
+        if persa:
+            return 200, {"stato": "risolta", "riferimento": rif, "esito_banca": "persa",
+                         "rimborso_cliente_cents": out.get("ospite_rimborso_cents"),
+                         "va_all_host_cents": out.get("host_riceve_cents"),
+                         "nota": ("contestazione della banca PERSA: all'ospite i soldi li ha gia' "
+                                  "ridati la banca, quindi niente rimborso e niente bonifico "
+                                  "all'host, e la divisione scelta non conta; "
+                                  + ("ATTENZIONE: il bonifico dell'host era gia' partito, va "
+                                     "recuperato dall'host (storno del trasferimento su Stripe); "
+                                     if partito else
+                                     "ATTENZIONE: la riga del bonifico dell'host NON e' stata "
+                                     "tolta: non pagarla; " if not tolta else "")
+                                  + ("ATTENZIONE: una penale aveva gia' usato parte di questa "
+                                     "riga, e alla penale manca quella parte: da riaprire a mano; "
+                                     if penale_oltre else "")
+                                  + "se la banca ha ripreso solo una parte del pagamento, la parte "
+                                  "non contestata la decide una persona; la perdita (importo e "
+                                  "commissione tenuti da Stripe) va scritta a mano nel giornale")}
         return 200, {"stato": "risolta", "riferimento": rif,
                      "rimborso_cliente_cents": out.get("ospite_rimborso_cents", rimborso),
                      "va_all_host_cents": out.get("host_riceve_cents", importo - rimborso),
@@ -9061,7 +9198,13 @@ class RouterHTTP:
         fuori = self._fuori_dalla_finestra(g, res[0], res[1])
         if fuori:
             return 409, {"errore": fuori}
-        out = g.contesta(res[0], str(res[1].get("motivo", "")))
+        # variant-analysis (23/11): il motivo e' testo libero dell'ospite, e la rotta dell'arbitro
+        # riconosce la contestazione della banca da `chargeback:` in testa. Scritto dall'ospite
+        # fermava l'arbitro su una banca che non c'e': non puo' cominciare come quello della banca.
+        _mot = str(res[1].get("motivo", ""))
+        if _mot.startswith("chargeback"):
+            _mot = "ospite:" + _mot
+        out = g.contesta(res[0], _mot)
         if out.get("ok"):
             # DISPUTA APERTA -> il payout esce dal giro pagamenti ('trattenuto'). BUG
             # PROVATO: restava 'maturato' -> `da_pagare` lo includeva e il bonifico
@@ -11076,10 +11219,30 @@ class RouterHTTP:
             with _BONIFICI_LOCK:
                 esito = (gz.contesta(rif, motivo="chargeback:" + dp) if gz is not None
                          else {"motivo": "non_trovata"})
+                # variant-analysis (23/11): gia' 'contestato' dalla segnalazione dell'ospite, il
+                # motivo restava il suo e l'arbitro divideva con la banca che contesta. Il motivo
+                # diventa quello della banca: «Risolvi» aspetta la banca anche qui.
+                if (gz is not None and not esito.get("ok")
+                        and esito.get("motivo") == "stato_non_valido"
+                        and esito.get("stato") == "contestato"):
+                    esito = gz.segna_contestazione_banca(rif, motivo="chargeback:" + dp)
+                    if esito.get("motivo") == "gia_della_banca":
+                        # una seconda contestazione sulla stessa garanzia: la prima resta quella
+                        # che l'arbitro aspetta, e una persona guarda tutte e due su Stripe
+                        logger.error("CHARGEBACK | codice: chargeback | sottocodice: "
+                                     "seconda_contestazione | contestazione: %s | RIF: %s | la "
+                                     "garanzia aspetta gia' un'altra contestazione della banca: "
+                                     "guardarle tutte e due su Stripe prima di «Risolvi»", dp,
+                                     _rif_per_registro(rif))
+                    elif not esito.get("ok"):
+                        # il motivo non e' diventato quello della banca: l'arbitro potrebbe
+                        # dividere con la banca che contesta. Si chiede a Stripe di ritentare.
+                        perso = "garanzia_non_fermata"
                 # gia' decisa (rilasciata, risolta, gia' contestata) o mai aperta non si
                 # ritenta: ritentare non la cambia. Un altro fallimento (l'archivio) si'.
                 if not esito.get("ok") and esito.get("motivo") not in ("stato_non_valido",
-                                                                       "non_trovata"):
+                                                                       "non_trovata",
+                                                                       "gia_della_banca"):
                     perso = "garanzia_non_fermata"
                 pd = getattr(self._sys, "payout", None)
                 bonifico = pd.stato_di(rif) if pd is not None else ""
@@ -11124,8 +11287,12 @@ class RouterHTTP:
                      _rif_per_registro(obj.get("amount", "")),
                      _rif_per_registro(obj.get("currency", "")),
                      "PERSA: Stripe ha tenuto importo e commissione, la perdita va scritta a mano "
-                     "nel giornale" if obj.get("status") == "lost" else
-                     "Vinta o chiusa: i soldi tornano su Stripe")
+                     "nel giornale; «Risolvi» chiude la garanzia senza rimborso all'ospite e "
+                     "senza bonifico all'host" if obj.get("status") == "lost" else
+                     "Vinta o chiusa: i soldi tornano su Stripe"
+                     if obj.get("status") in ("won", "warning_closed") else
+                     "Esito che Stripe non spiega: «Risolvi» chiede a chi arbitra se e' vinta "
+                     "o persa")
 
     def _banca_ha_chiuso(self, dp):
         """True se Stripe ci ha detto che la contestazione `dp` e' chiusa (evento elaborato)."""

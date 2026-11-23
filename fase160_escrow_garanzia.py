@@ -180,6 +180,57 @@ class EscrowGaranzia:
         return self._muta(prenotazione_id, ("contestato",), "risolto",
                           host=imp - rimb, rimborso=rimb)
 
+    def segna_contestazione_banca(self, prenotazione_id: Any, *,
+                                  motivo: str) -> Dict[str, Any]:
+        """La banca contesta una garanzia GIA' 'contestato' dalla segnalazione dell'ospite:
+        `contesta` non riparte da 'contestato', e il motivo restava quello dell'ospite, cosi'
+        l'arbitro (che della banca sa solo dal motivo) divideva con la contestazione aperta
+        (variant-analysis, 23/11). Qui il motivo diventa quello della banca
+        (`chargeback:<contestazione>`, seguito da «|ospite:<testo di prima>»); lo stato resta
+        'contestato'. Dal solo 'contestato', e
+        MAI sopra un'altra contestazione della banca (`gia_della_banca`): riscritto, il motivo
+        avrebbe fatto guardare all'arbitro solo la seconda, e una prima PERSA sarebbe sparita
+        (silent-failure-hunter, 23/11). Lo stesso CAS di `_muta`, con il motivo nella guardia."""
+        if not isinstance(prenotazione_id, str):
+            return {"ok": False, "motivo": "id_non_valido"}
+        con = self._apri()
+        try:
+            with con:
+                con.execute("BEGIN IMMEDIATE")
+                r = con.execute("SELECT stato, motivo FROM garanzia WHERE prenotazione_id=?",
+                                (prenotazione_id,)).fetchone()
+                if r is None:
+                    return {"ok": False, "motivo": "non_trovata"}
+                if r["stato"] != "contestato":
+                    return {"ok": False, "motivo": "stato_non_valido", "stato": r["stato"]}
+                vecchio = str(r["motivo"] or "")
+                if vecchio.startswith("chargeback:"):
+                    return {"ok": False, "motivo": "gia_della_banca", "stato": "contestato"}
+                # il testo dell'ospite RESTA, dopo «|»: con la banca vinta l'arbitro decide
+                # proprio quella segnalazione (code-review, 23/11)
+                nuovo = str(motivo or "")
+                if vecchio:
+                    nuovo += "|" + ("" if vecchio.startswith("ospite:") else "ospite:") + vecchio
+                con.execute("UPDATE garanzia SET motivo=?, aggiornato_ts=? "
+                            "WHERE prenotazione_id=?", (nuovo, self._now(), prenotazione_id))
+            return {"ok": True, "stato": "contestato"}
+        finally:
+            con.close()
+
+    def chiudi_contestazione_persa(self, prenotazione_id: Any, *,
+                                   motivo: str = "") -> Dict[str, Any]:
+        """La banca ha dato ragione all'ospite (contestazione PERSA): i soldi glieli ha gia'
+        ridati LEI, e Stripe li ha tolti a noi. Da questa garanzia non e' dovuto niente a
+        nessuno: ZERO all'host e ZERO di rimborso (TLA+ 22/11, invariante «Soldi»: con
+        `risolvi` uscivano fino a 190 su 100 incassati). Dal solo stato 'contestato'.
+        ⛔ 'risolto' e NON 'annullato': `apri` resuscita gli 'annullato' su un pagamento
+        tardivo e li rimette in rilascio all'host; questa storia e' chiusa. `motivo` dice
+        perche' (fase83 scrive `chargeback_persa:<contestazione>`)."""
+        if not isinstance(prenotazione_id, str):
+            return {"ok": False, "motivo": "id_non_valido"}
+        return self._muta(prenotazione_id, ("contestato",), "risolto", host=0, rimborso=0,
+                          motivo=str(motivo or ""))
+
     def auto_rilascia(self, *, ora_ts: Any = None, dettagli: bool = False,
                       salta_se: Any = None) -> Any:
         """Rilascia all'host tutte le garanzie 'in_garanzia' con finestra scaduta e nessuna

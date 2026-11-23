@@ -224,6 +224,27 @@ class ArchivioEventiStripe:
         finally:
             con.close()
 
+    def corpi_del_fatto(self, *, tipo: str, oggetto_id: str) -> List[str]:
+        """I corpi GREZZI di TUTTI gli eventi salvati che portano il fatto (stesso tipo, stesso
+        oggetto), dal piu' vecchio; [] se non ce n'e'. Sono corpi GIA' VERIFICATI (la firma li
+        giudica prima del salvataggio, vedi `corpo`).
+
+        Serve all'arbitro (fase83, TLA+ 22/11): `fatto_gia_presente` dice SE la banca ha
+        chiuso una contestazione, non COME. Tutti e non solo l'ultimo: due avvisi dello stesso
+        fatto che dicono cose diverse non si scelgono a caso, li giudica chi chiama.
+        Oggetto vuoto -> [] (un fatto senza oggetto non si riconosce). ⛔ Un guasto
+        dell'archivio NON diventa []: solleva, e chi chiama non muove soldi."""
+        if not (isinstance(oggetto_id, str) and oggetto_id.strip()):
+            return []
+        con = self._apri()
+        try:
+            righe = con.execute(
+                "SELECT corpo_json FROM eventi_stripe WHERE tipo=? AND oggetto_id=? "
+                "ORDER BY ricevuto_ts, evt_id", (str(tipo or ""), str(oggetto_id))).fetchall()
+            return [str(r[0] or "") for r in righe]
+        finally:
+            con.close()
+
     def corpo(self, evt_id: Any) -> str:
         """Il corpo GREZZO salvato all'ingresso (o "": riga assente). E' un corpo GIA'
         VERIFICATO (la firma lo giudica prima del salvataggio): lo sweeper lo ridelivera'
