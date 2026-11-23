@@ -5452,6 +5452,339 @@ class TestIlRimborsoDellAdminColBloccoIncassatoDopo(_OraVeraPerIlPreventivo, _Sp
                          "IMPORTO DOVUTO DI ZERO SEGNATO NEL BLOCCO: %r" % (self.corpo(rif),))
 
 
+class TestLAutorizzazioneScadutaNonFaDividereSoldiMaiEntrati(_OraVeraPerIlPreventivo, _SpieDelBlocco):
+    """IL SOSPETTO DEL 23/11 (consegne della PR #343, RIPRENDI «AGGIORNAMENTO 23/11 pomeriggio»):
+    `_admin_controversia_risolvi` e `_rimborso_dovuto_scheda` non guardano il blocco sulla carta.
+    Con l'autorizzazione SCADUTA (Stripe `canceled`, blocco 'annullato', prenotazione ancora
+    'pagato', l'ERROR `autorizzazione_scaduta` gia' scritto) i soldi dell'ospite non sono mai
+    entrati: non c'e' niente da dividere. L'arbitro non scrive un rimborso nel giornale e non
+    divide la garanzia; una riga di rimborso arrivata da qualunque strada (D19: costruita a mano)
+    non accende il pulsante; il pulsante non chiede a Stripe di restituire soldi mai presi;
+    all'host non parte niente. La riga d'arrivo e' quella di `_chiudi_blocco`: soldi mai entrati,
+    NIENTE riga di rimborso."""
+
+    def setUp(self):
+        super().setUp()
+        self.connect = _tbc.ConnectFinto()
+        self.sis.connect = self.connect
+        self.sis.registro_host.info_host = lambda h: {"stripe_account_id": "acct_finto"}
+
+    def _scaduta_e_contestata(self, ci, co, n):
+        rif, _vt, tot = self.prenota(ci, co)
+        _s, _c, pi = self.paga_bloccato(rif, tot, n=n)
+        self.assertEqual(self.stato(rif), "pagato", "PREMESSA: il blocco ha confermato")
+        self.stripe.pagamenti[pi] = "canceled"      # Stripe ha lasciato scadere l'autorizzazione
+        with self.assertLogs("core_auto.server", level="ERROR") as reg:
+            self.r._incassa_blocchi(ora_ts=int(time.time()) + fase83_server.SECONDI_RIPENSAMENTO
+                                    + 60)
+        self.assertTrue(any("autorizzazione_scaduta" in t for t in reg.output),
+                        "PREMESSA: l'autorizzazione scaduta doveva gridare %r" % (reg.output,))
+        self.assertTrue(self.corpo(rif).get("blocco_annullato_ts"), "PREMESSA: blocco annullato")
+        self.assertEqual((self.stato(rif), self.movimenti(rif, "incasso")), ("pagato", []),
+                         "PREMESSA: prenotazione ancora 'pagato' e nessun incasso nel giornale")
+        self.assertTrue(self.sis.garanzia.contesta(rif, "non corrisponde").get("ok"),
+                        "PREMESSA: la garanzia doveva poter diventare contestata")
+        return rif, tot, pi
+
+    def test_l_arbitro_non_divide_soldi_mai_entrati(self):
+        for n, (ci, co, pct) in enumerate((("2027-04-10", "2027-04-12", 0),
+                                           ("2027-04-14", "2027-04-16", 50),
+                                           ("2027-04-18", "2027-04-20", 100)), start=1):
+            with self.subTest(percentuale_ospite=pct):
+                rif, tot, _pi = self._scaduta_e_contestata(ci, co, n)
+                with self.assertLogs("core_auto.server", level="INFO") as reg:
+                    s, c = self.g("POST", "/api/admin/controversia/risolvi",
+                                  {"riferimento": rif, "percentuale_ospite": pct}, _AK_BLOCCO)
+                rimborsi = [int(m["importo_cents"]) for m in self.movimenti(rif, "rimborso")]
+                self.assertEqual(rimborsi, [],
+                                 "RIMBORSO NEL GIORNALE PER SOLDI MAI ENTRATI (p=%d): pagati sulla "
+                                 "carta 0 di %d, righe %r, risposta %r %r" % (pct, tot, rimborsi,
+                                                                             s, c))
+                self.assertEqual(self.connect.bonifici, [],
+                                 "BONIFICO ALL'HOST SU SOLDI MAI ENTRATI (p=%d): %r"
+                                 % (pct, self.connect.bonifici))
+                self.assertEqual((s, c.get("errore")), (409, "pagamento_non_incassato"),
+                                 "l'arbitro deve rifiutare e dirlo (p=%d): %r %r" % (pct, s, c))
+                self.assertEqual(self.sis.garanzia.stato(rif)["stato"], "contestato",
+                                 "la garanzia e' stata chiusa su soldi mai entrati (p=%d)" % pct)
+                self.assertTrue(any(r.levelname == "ERROR" and "pagamento_non_incassato"
+                                    in r.getMessage() for r in reg.records),
+                                "il rifiuto non lo grida nessuno (p=%d): %r"
+                                % (pct, [r.getMessage()[:120] for r in reg.records]))
+
+    def test_una_riga_di_rimborso_su_soldi_mai_entrati_non_accende_il_pulsante(self):
+        # D19: lo stato si costruisce a mano, da qualunque strada arrivi (oggi: l'arbitro qui
+        # sopra). La garanzia divisa e la riga con la STESSA cifra sono cio' che l'arbitro
+        # scrive: senza, il freno «date liberate» spegne il pulsante e la prova non vede niente.
+        # Due Stripe. VERO, misurato su Stripe di prova il 23/11 (scratchpad daf527f0,
+        # misura_rimborso_su_annullato.py): annullando un pagamento bloccato Stripe crea da se' un
+        # rimborso INTERO con balance_transaction None sul charge mai incassato -- lo sblocco, zero
+        # soldi -- e `rimborsi_di` lo conta come restituito. MUTO: Stripe non vede niente.
+        for n, (ci, co, sblocco) in enumerate((("2027-04-22", "2027-04-24", True),
+                                               ("2027-04-26", "2027-04-28", False)), start=4):
+            with self.subTest(stripe_vede_lo_sblocco=sblocco):
+                rif, tot, _pi = self._scaduta_e_contestata(ci, co, n)
+                out = self.sis.garanzia.risolvi(rif, rimborso_ospite_cents=tot // 2)
+                self.assertTrue(out.get("ok"), "PREMESSA: la garanzia doveva dividersi: %r" % (out,))
+                self.r._giornale(tipo="rimborso", riferimento=rif, soggetto="ospite:" + rif,
+                                 importo_cents=int(out["ospite_rimborso_cents"]), valuta="EUR",
+                                 evento_id="rimborso_controversia:" + rif,
+                                 causale="riga costruita a mano dalla prova")
+                self.assertEqual(len(self.movimenti(rif, "rimborso")), 1, "PREMESSA: la riga c'e'")
+                visto = tot if sblocco else 0
+                self.stripe.rimborsi_di = lambda pi, v=visto: {
+                    "ok": True, "rimborsi": [], "rimborsato_cents": v, "in_corso_cents": 0,
+                    "motivo": ""}
+                riga, stripe_ok = self.r._rimborso_dovuto_scheda(rif)
+                self.assertTrue(stripe_ok, "PREMESSA: Stripe risponde")
+                self.assertFalse(riga["bottone"], "PULSANTE ACCESO SU SOLDI MAI ENTRATI: %r" % (riga,))
+                self.assertFalse(riga["gia_rimborsato"],
+                                 "«GIA' RIMBORSATO» SU SOLDI MAI PRESI: lo sblocco della carta "
+                                 "contato come rimborso %r" % (riga,))
+                self.assertIn("pagamento_non_incassato", riga["manca"], "%r" % (riga,))
+                rimborsi_prima = list(self.stripe.rimborsi)
+                s, c = self.g("POST", "/api/admin/rimborsa_dovuto", {"riferimento": rif},
+                              _AK_BLOCCO)
+                self.assertEqual(self.stripe.rimborsi, rimborsi_prima,
+                                 "IL PULSANTE HA CHIESTO A STRIPE DI RESTITUIRE SOLDI MAI PRESI: "
+                                 "%r %r %r" % (self.stripe.rimborsi, s, c))
+                self.assertEqual((s, c.get("stato")), (409, "rifiutato"),
+                                 "il pulsante deve rifiutare e dire perche': %r %r" % (s, c))
+
+    def _allarmi_della_lista(self, visto):
+        self.stripe.rimborsi_di = lambda pi, v=visto: {
+            "ok": True, "rimborsi": [], "rimborsato_cents": v, "in_corso_cents": 0, "motivo": ""}
+        with _tbc._Registro() as reg:       # come assertLogs, ma il silenzio e' un esito valido
+            s, c = self.g("GET", "/api/admin/rimborsi_dovuti", None, _AK_BLOCCO)
+        self.assertEqual((s, c.get("controllabile")), (200, True), "PREMESSA: %r %r" % (s, c))
+        return c["allarmi"], [r.getMessage() for r in reg.records if r.levelname == "ERROR"]
+
+    def test_V1_lo_sblocco_della_carta_non_e_una_divergenza_dei_conti(self):
+        # Variante 1 del sospetto (variant-analysis, 23/11): la lista grida «Stripe ha restituito
+        # dei soldi su una prenotazione PAGATA» se Stripe mostra un rimborso che il giornale non
+        # ha. Con l'autorizzazione scaduta Stripe mostra lo SBLOCCO (rimborso intero, zero soldi:
+        # misurato su Stripe di prova il 23/11) e la prenotazione resta 'pagato': falso allarme a
+        # ogni apertura della lista (ferrea 10).
+        rif, tot, _pi = self._scaduta_e_contestata("2027-05-02", "2027-05-04", 6)
+        allarmi, errori = self._allarmi_della_lista(tot)
+        self.assertEqual([a for a in allarmi if a.get("riferimento") == rif], [],
+                         "FALSO ALLARME: lo sblocco della carta contato come rimborso su una "
+                         "prenotazione mai incassata %r" % (allarmi,))
+        self.assertEqual([e for e in errori if "DIVERGENZA CONTI" in e], [], "%r" % (errori,))
+
+    def test_un_ALTRO_pagamento_sulla_stessa_prenotazione_non_e_lo_sblocco(self):
+        # silent-failure-hunter (23/11): un secondo pagamento riscrive `stripe_pi` (fase162
+        # `salva_stripe_session`) e lascia il blocco vecchio 'annullato'. Le tre guardie valgono
+        # SOLO sul pagamento annullato: sull'altro si divide, la scheda non dice «mai entrati» e
+        # un rimborso che il giornale non conosce resta una divergenza.
+        import sqlite3
+        rif, _tot, _pi = self._scaduta_e_contestata("2027-05-10", "2027-05-12", 7)
+        corpo = dict(self.corpo(rif), stripe_pi="pi_altro_incassato")
+        con = sqlite3.connect(self.dir + "/p.db")
+        with con:
+            con.execute("UPDATE pendenti SET corpo_json=? WHERE riferimento=?",
+                        (json.dumps(corpo), rif))
+        con.close()
+        s, c = self.g("POST", "/api/admin/controversia/risolvi",
+                      {"riferimento": rif, "percentuale_ospite": 50}, _AK_BLOCCO)
+        self.assertEqual(s, 200, "l'arbitro rifiuta su un pagamento che NON e' quello annullato: "
+                                 "%r %r" % (s, c))
+        riga, _ok = self.r._rimborso_dovuto_scheda(rif)
+        self.assertNotIn("pagamento_non_incassato", (riga or {}).get("manca", []), "%r" % (riga,))
+        allarmi, _err = self._allarmi_della_lista(99999)
+        self.assertEqual([a.get("riferimento") for a in allarmi if a.get("riferimento") == rif],
+                         [rif], "UN RIMBORSO SU UN ALTRO PAGAMENTO NASCOSTO DALLA GUARDIA: %r"
+                         % (allarmi,))
+
+    def test_gemello_con_la_carta_solo_AUTORIZZATA_l_arbitro_divide(self):
+        # ferrea 10, l'altra direzione: blocco 'aperto' (autorizzato, non scaduto) = i soldi
+        # entreranno all'incasso; l'arbitro divide come sempre e la riga del rimborso nasce.
+        rif, _vt, tot = self.prenota("2027-05-14", "2027-05-16")
+        _s, _c, _pi = self.paga_bloccato(rif, tot, n=8)
+        self.assertTrue(self.sis.garanzia.contesta(rif, "non corrisponde").get("ok"), "PREMESSA")
+        s, c = self.g("POST", "/api/admin/controversia/risolvi",
+                      {"riferimento": rif, "percentuale_ospite": 50}, _AK_BLOCCO)
+        self.assertEqual((s, c.get("stato")), (200, "risolta"), "%r %r" % (s, c))
+        self.assertEqual([int(m["importo_cents"]) for m in self.movimenti(rif, "rimborso")],
+                         [int(c["rimborso_cliente_cents"])], "la riga del rimborso deciso non c'e'")
+
+    def test_V1_gemello_un_rimborso_vero_non_deciso_da_noi_grida_ancora(self):
+        # ferrea 10, l'altra direzione: su una prenotazione INCASSATA e viva un rimborso che il
+        # giornale non conosce resta una divergenza, e si grida.
+        rif, _tot = self._pagata("2027-05-06", "2027-05-08", "cs_v1", "pi_v1")
+        allarmi, errori = self._allarmi_della_lista(5000)
+        self.assertEqual([a.get("rimborsato_su_stripe_cents") for a in allarmi
+                          if a.get("riferimento") == rif], [5000], "%r" % (allarmi,))
+        self.assertTrue([e for e in errori if "DIVERGENZA CONTI" in e], "%r" % (errori,))
+
+    # ── code-review del 23/11 sera sulla riparazione (5 rilievi, ognuno visto ROSSO prima) ──
+    def _riga_di_rimborso_a_mano(self, rif, tot):
+        out = self.sis.garanzia.risolvi(rif, rimborso_ospite_cents=tot // 2)
+        self.assertTrue(out.get("ok"), "PREMESSA: la garanzia doveva dividersi: %r" % (out,))
+        self.r._giornale(tipo="rimborso", riferimento=rif, soggetto="ospite:" + rif,
+                         importo_cents=int(out["ospite_rimborso_cents"]), valuta="EUR",
+                         evento_id="rimborso_controversia:" + rif,
+                         causale="riga costruita a mano dalla prova")
+
+    def _riscrivi_stripe_pi(self, rif, pi):
+        import sqlite3
+        con = sqlite3.connect(self.dir + "/p.db")
+        with con:
+            con.execute("UPDATE pendenti SET corpo_json=? WHERE riferimento=?",
+                        (json.dumps(dict(self.corpo(rif), stripe_pi=pi)), rif))
+        con.close()
+
+    def test_CR1_nessuno_aspetta_soldi_mai_presi_ma_la_riga_resta_in_vista(self):
+        # Rilievo 1: la riga di rimborso su soldi mai entrati (arbitro con la carta ancora
+        # autorizzata, poi l'autorizzazione scade) si contava fra chi aspetta i suoi soldi
+        # (`in_attesa`): un falso conteggio (ferrea 10). Ma la riga NON sparisce: il pannello
+        # legge `rimborsi` e la mostra senza pulsante, col motivo (silent-failure-hunter 23/11);
+        # la lista la nomina anche in `soldi_mai_entrati` (D18 punto 3).
+        rif, tot, _pi = self._scaduta_e_contestata("2027-05-18", "2027-05-20", 9)
+        self._riga_di_rimborso_a_mano(rif, tot)
+        self.stripe.rimborsi_di = lambda pi: {"ok": True, "rimborsi": [], "rimborsato_cents": tot,
+                                              "in_corso_cents": 0, "motivo": ""}
+        s, c = self.g("GET", "/api/admin/rimborsi_dovuti", None, _AK_BLOCCO)
+        self.assertEqual((s, c.get("controllabile")), (200, True), "PREMESSA: %r %r" % (s, c))
+        mie = [r for r in c["rimborsi"] if r["riferimento"] == rif]
+        self.assertEqual(len(mie), 1, "LA RIGA E' SPARITA DAL PANNELLO: %r" % (c,))
+        self.assertFalse(mie[0]["bottone"], "%r" % (mie[0],))
+        self.assertIn("pagamento_non_incassato", mie[0]["manca"], "%r" % (mie[0],))
+        self.assertEqual(c["in_attesa"], len(c["rimborsi"]) - 1,
+                         "FRA CHI ASPETTA I SUOI SOLDI SI CONTA CHI NON HA MAI PAGATO: %r" % (c,))
+        self.assertEqual(c.get("soldi_mai_entrati"), [rif], "%r" % (c,))
+        # e il pulsante, chiesto direttamente, rifiuta ancora (la scheda non cambia)
+        riga, _ok = self.r._rimborso_dovuto_scheda(rif)
+        self.assertIn("pagamento_non_incassato", riga["manca"], "%r" % (riga,))
+
+    def test_CR2_senza_stripe_pi_salvato_il_blocco_e_l_unico_pagamento(self):
+        # Rilievo 2: il webhook segna il blocco anche quando `salva_stripe_session` fallisce
+        # (esito_perso -> 503, Stripe ritenta): fino al ritentativo `stripe_pi` e' vuoto. Con
+        # l'autorizzazione scaduta l'arbitro confrontava il blocco con «» e divideva soldi mai entrati.
+        rif, _tot, _pi = self._scaduta_e_contestata("2027-05-18", "2027-05-20", 10)
+        self._riscrivi_stripe_pi(rif, "")
+        s, c = self.g("POST", "/api/admin/controversia/risolvi",
+                      {"riferimento": rif, "percentuale_ospite": 50}, _AK_BLOCCO)
+        self.assertEqual([int(m["importo_cents"]) for m in self.movimenti(rif, "rimborso")], [],
+                         "RIMBORSO NEL GIORNALE PER SOLDI MAI ENTRATI (stripe_pi vuoto): %r %r"
+                         % (s, c))
+        self.assertEqual((s, c.get("errore")), (409, "pagamento_non_incassato"), "%r %r" % (s, c))
+        self.assertEqual(self.sis.garanzia.stato(rif)["stato"], "contestato")
+        riga, _ok = self.r._rimborso_dovuto_scheda(rif)
+        self.assertIsNone(riga, "nessuna riga: niente si e' scritto nel giornale %r" % (riga,))
+
+    def test_CR4_un_pendente_che_non_si_rilegge_sotto_il_lucchetto_ferma_l_arbitro(self):
+        # Rilievo 4 (D19, lo stato impossibile costruito a mano): la rilettura del pagamento
+        # sotto il lucchetto che esplode finiva in un 500 senza codice; ora 503 col suo nome,
+        # niente diviso, niente scritto (ferrea 9). (Il rilievo 3, `_chiudi_blocco` col blocco
+        # annullato di un ALTRO pagamento, c'era gia' prima e ha varianti in altri quattro punti:
+        # lavoro a se', in RIPRENDI_QUI.md col suo posto.)
+        rif, _tot, _pi = self._scaduta_e_contestata("2027-05-18", "2027-05-20", 11)
+        with mock.patch.object(fase83_server, "_blocco",
+                               side_effect=RuntimeError("archivio bloccato")), \
+                self.assertLogs("core_auto.server", level="ERROR") as reg:
+            s, c = self.g("POST", "/api/admin/controversia/risolvi",
+                          {"riferimento": rif, "percentuale_ospite": 50}, _AK_BLOCCO)
+        self.assertEqual((s, c.get("errore")), (503, "service_unavailable"), "%r %r" % (s, c))
+        gridi = [r for r in reg.records if "pendente_illeggibile" in r.getMessage()]
+        self.assertTrue(gridi, "%r" % ([r.getMessage()[:120] for r in reg.records],))
+        # il grido porta la causa VERA (non «non e' nullo»: il tipo dell'eccezione iniettata)
+        self.assertIs((gridi[0].exc_info or (None,))[0], RuntimeError,
+                      "il grido non dice perche': %r" % (gridi[0].exc_info,))
+        self.assertEqual(self.movimenti(rif, "rimborso"), [])
+        self.assertEqual(self.sis.garanzia.stato(rif)["stato"], "contestato")
+
+    def test_CR4_un_corpo_che_non_si_rilegge_vale_mai_entrati(self):
+        # D19: `_blocco` ha appena letto il corpo, quindi rileggerlo non fallisce; se fallisse,
+        # nel dubbio vale «mai entrati» (niente si divide, nessun pulsante si accende).
+        rec = {"corpo_json": json.dumps({"blocco_pi": "pi_a", "blocco_annullato_ts": 5,
+                                         "stripe_pi": "pi_altro"})}
+        self.assertIs(fase83_server._blocco_mai_incassato(rec), False,
+                      "PREMESSA: con il corpo leggibile e un altro pagamento non e' «mai entrati»")
+        with mock.patch.object(fase83_server, "_leggi_corpo", side_effect=ValueError("rotto")):
+            self.assertIs(fase83_server._blocco_mai_incassato(rec), True,
+                          "un corpo che non si rilegge deve valere «mai entrati»")
+
+    def test_CR1_gemello_una_riga_gia_rimborsata_resta_fuori_dalla_lista(self):
+        # ferrea 10, l'altra direzione di CR1: una riga che Stripe dice gia' restituita per
+        # intero non entra ne' fra chi aspetta ne' fra i soldi mai entrati.
+        rif, tot = self._pagata("2027-05-18", "2027-05-20", "cs_g1", "pi_g1")
+        self.r._giornale(tipo="rimborso", riferimento=rif, soggetto="ospite:" + rif,
+                         importo_cents=tot, valuta="EUR", evento_id="rimborso_prova:" + rif,
+                         causale="riga costruita a mano dalla prova")
+        self.stripe.rimborsi_di = lambda pi: {"ok": True, "rimborsi": [], "rimborsato_cents": tot,
+                                              "in_corso_cents": 0, "motivo": ""}
+        riga, _ok = self.r._rimborso_dovuto_scheda(rif)
+        self.assertTrue(riga["gia_rimborsato"], "PREMESSA: Stripe dice restituito: %r" % (riga,))
+        s, c = self.g("GET", "/api/admin/rimborsi_dovuti", None, _AK_BLOCCO)
+        self.assertEqual(s, 200, "%r" % (c,))
+        self.assertEqual([r["riferimento"] for r in c["rimborsi"] if r["riferimento"] == rif], [],
+                         "UNA RIGA GIA' RIMBORSATA E' TORNATA FRA CHI ASPETTA: %r" % (c,))
+        self.assertNotIn(rif, c.get("soldi_mai_entrati", []), "%r" % (c,))
+
+    def _venti_arbitri_insieme(self, rif):
+        # GARA (cassetta degli attrezzi): 20 «Risolvi» nello STESSO istante, e la finestra fra
+        # la domanda sul blocco e la divisione allargata a mano (20 ms): una gara non forzata e'
+        # verde anche sul codice rotto.
+        vera = fase83_server._blocco_mai_incassato
+
+        def lenta(rec):
+            esito = vera(rec)
+            time.sleep(0.02)
+            return esito
+
+        cancello, esiti = threading.Barrier(20), []
+
+        def uno():
+            try:
+                cancello.wait(5)
+                s, c = self.g("POST", "/api/admin/controversia/risolvi",
+                              {"riferimento": rif, "percentuale_ospite": 50}, _AK_BLOCCO)
+                esiti.append((s, c.get("errore") or c.get("stato")))
+            except Exception as e:                  # un guasto nel filo si scrive nell'esito
+                esiti.append(("eccezione", repr(e)))
+
+        with mock.patch.object(fase83_server, "_blocco_mai_incassato", side_effect=lenta):
+            fili = [threading.Thread(target=uno) for _ in range(20)]
+            for f in fili:
+                f.start()
+            for f in fili:
+                f.join(30)
+        self.assertEqual(len(esiti), 20, "PREMESSA: 20 esiti %r" % (esiti,))
+        return esiti
+
+    def test_GARA_venti_arbitri_insieme_su_soldi_mai_entrati_nessuno_divide(self):
+        rif, _tot, _pi = self._scaduta_e_contestata("2027-05-18", "2027-05-20", 13)
+        with self.assertLogs("core_auto.server", level="ERROR"):
+            esiti = self._venti_arbitri_insieme(rif)
+        self.assertEqual(sorted(set(esiti)), [(409, "pagamento_non_incassato")],
+                         "VENTI ARBITRI INSIEME SU SOLDI MAI ENTRATI: %r" % (esiti,))
+        self.assertEqual(self.movimenti(rif, "rimborso"), [])
+        self.assertEqual(self.connect.bonifici, [])
+        self.assertEqual(self.sis.garanzia.stato(rif)["stato"], "contestato")
+
+    def test_GARA_gemello_venti_arbitri_con_la_carta_autorizzata_uno_solo_divide(self):
+        # l'altra direzione: con la carta solo autorizzata si divide, ma UNA volta sola
+        rif, _vt, tot = self.prenota("2027-05-18", "2027-05-20")
+        self.paga_bloccato(rif, tot, n=14)
+        self.assertTrue(self.sis.garanzia.contesta(rif, "non corrisponde").get("ok"), "PREMESSA")
+        esiti = self._venti_arbitri_insieme(rif)
+        self.assertEqual([e for e in esiti if e[0] == 200], [(200, "risolta")],
+                         "VENTI ARBITRI INSIEME: le divisioni non sono UNA %r" % (esiti,))
+        self.assertEqual(len(self.movimenti(rif, "rimborso")), 1,
+                         "righe di rimborso: %r" % (self.movimenti(rif, "rimborso"),))
+
+    def test_CR5_il_conto_dei_saltati_ha_un_nome_che_non_mente(self):
+        # Rilievo 5: si salta ogni pagamento col blocco annullato (scaduto O annullato da una
+        # cancellazione rimasta 'pagato'), non solo «autorizzazione scaduta». Il numero si dichiara.
+        rif, tot, _pi = self._scaduta_e_contestata("2027-05-18", "2027-05-20", 12)
+        self.stripe.rimborsi_di = lambda pi: {"ok": True, "rimborsi": [], "rimborsato_cents": tot,
+                                              "in_corso_cents": 0, "motivo": ""}
+        s, c = self.g("GET", "/api/admin/rimborsi_dovuti", None, _AK_BLOCCO)
+        self.assertEqual((s, c.get("saltati_blocco_annullato")), (200, 1), "%r %r" % (s, c))
+        self.assertNotIn("saltati_autorizzazione_scaduta", c)
+
+
 class TestUnPagamentoConfermatoNonLasciaIlBonificoFermo(_BancoDeiSoldiDelServer):
     """C53-B1-5 (busta 8): dopo la conferma il bonifico dell'host passa da 'in_attesa' a
     'maturato'. Se quel passo falliva (archivio bloccato: `aggiorna_stato` risponde False) il

@@ -809,6 +809,27 @@ def _blocco(rec: Any) -> Dict[str, Any]:
     return blocco_della_carta(rec.get("corpo_json"), rec.get("riferimento", "-"))
 
 
+def _blocco_mai_incassato(rec: Any) -> bool:
+    """Il pagamento di QUESTA prenotazione e' il blocco sulla carta finito senza incasso
+    (autorizzazione scaduta, o annullata): i soldi dell'ospite non sono mai entrati. Il sospetto
+    del 23/11 (`TestLAutorizzazioneScadutaNonFaDividereSoldiMaiEntrati`), giudicato in un posto
+    solo per l'arbitro, la scheda dei rimborsi dovuti e la lista degli allarmi. Vale solo se il
+    pagamento salvato e' PROPRIO quello bloccato: un secondo pagamento riscrive `stripe_pi`
+    (fase162 `salva_stripe_session`) e su quello valgono i freni di sempre. `stripe_pi` vuoto =
+    il blocco e' l'unico pagamento noto: il webhook segna il blocco anche quando la sessione non
+    si salva, e Stripe ritenta (code-review 23/11). Un corpo che qui non si rilegge -- `_blocco`
+    l'ha appena letto -- vale «mai entrati»: nel dubbio niente si divide e nessun pulsante si accende."""
+    b = _blocco(rec)
+    if b["stato"] != "annullato":
+        return False
+    try:
+        dj = _leggi_corpo(rec, "blocco_mai_incassato")
+    except Exception:
+        return True
+    pi = str(dj.get("stripe_pi") or "") if isinstance(dj, dict) else ""
+    return pi in ("", b["pi"])
+
+
 def _entro_ripensamento(voucher: Dict[str, Any]) -> bool:
     """Vero se dalla prenotazione sono passati meno di 172.800 secondi.
 
@@ -5926,6 +5947,14 @@ class RouterHTTP:
             # Il rilascio delle date e' la PRIMA cosa che fa la cancellazione, e senza di
             # esso non si arriva mai a questi stati: se lo stato c'e', le date sono libere.
             date_liberate = rec.get("stato") in ("rimborsato", "cancellata_host")
+        # Il sospetto del 23/11 (seconda difesa, D19): autorizzazione sulla carta finita senza
+        # incasso = soldi mai entrati, da qualunque strada arrivi la riga. Niente pulsante, e lo
+        # sblocco che Stripe crea da se' annullando (rimborso intero, balance_transaction None,
+        # misurato su Stripe di prova il 23/11) non e' «gia' rimborsato».
+        # Solo se il pagamento da rimborsare e' PROPRIO quello annullato (`_blocco_mai_incassato`).
+        mai_entrati = _blocco_mai_incassato(rec)
+        if mai_entrati:
+            manca.append("pagamento_non_incassato")
         # ── LA CONTROVERSIA: la cifra l'ha decisa una persona, dopo aver sentito le parti ──
         # Il soggiorno c'e' stato, quindi le date NON sono libere per costruzione, e non devono
         # esserlo: il freno «date liberate» protegge dal rimborsare chi ha dormito, ma qui chi
@@ -6025,6 +6054,8 @@ class RouterHTTP:
             motivo_stripe = "" if stripe_ok else str((esito or {}).get("motivo") or "")
             fatti = int((esito or {}).get("rimborsato_cents") or 0) if stripe_ok else 0
             in_corso = int((esito or {}).get("in_corso_cents") or 0) if stripe_ok else 0
+            if mai_entrati:
+                fatti = in_corso = 0           # lo sblocco della carta non ha restituito niente
             # Kimi K12 sulla #279: restituito vuol dire «copre il dovuto», non «almeno un
             # centesimo» (40 su 100 toglievano la riga e i 60 sparivano). Con un dovuto non
             # positivo resta la regola di prima (qualunque rimborso riuscito chiude).
@@ -6104,6 +6135,7 @@ class RouterHTTP:
         esaminati = dovuti[-self.RIMBORSI_TETTO:]
         righe, controllabile, motivi = [], True, []
         visti = set()
+        mai_entrati = []
         for mov in reversed(esaminati):            # i piu' recenti in cima
             rif = str(mov.get("riferimento") or "")
             if not rif or rif in visti:
@@ -6114,11 +6146,20 @@ class RouterHTTP:
                 controllabile = False
                 if riga is not None and riga.get("motivo_stripe"):
                     motivi.append("%s: %s" % (rif, riga["motivo_stripe"]))
-            if riga is not None and not riga.get("gia_rimborsato"):
-                righe.append(riga)
+            if riga is None or riga.get("gia_rimborsato"):
+                continue
+            # code-review (23/11): una riga su soldi mai entrati (l'arbitro con la carta ancora
+            # autorizzata, poi l'autorizzazione scade) non e' qualcuno che aspetta i suoi soldi, e
+            # non si conta in `in_attesa` (ferrea 10). Ma RESTA IN VISTA, senza pulsante e col
+            # motivo: il giornale dice un rimborso che nessuno deve, e la sistema una persona
+            # (silent-failure-hunter 23/11: toglierla dalla lista la faceva sparire dal pannello,
+            # che `soldi_mai_entrati` non lo legge; e la lista nasce per non perdere nessuno).
+            if "pagamento_non_incassato" in (riga.get("manca") or []):
+                mai_entrati.append(rif)
+            righe.append(riga)
         # ⛔ NEI DUE SENSI: se Stripe ha restituito dei soldi su una prenotazione che per noi
         # e' ancora viva, i conti divergono e nessuno se ne accorgerebbe mai.
-        allarmi = []
+        allarmi, saltati = [], 0
         try:
             pp = getattr(self._sys, "pagamenti_pendenti", None)
             recenti = pp.pagati_recenti(limit=self.RIMBORSI_TETTO) \
@@ -6133,6 +6174,18 @@ class RouterHTTP:
                 continue
             pi_ = str(dj.get("stripe_pi") or "")
             if not pi_:
+                continue
+            # Variante 1 del sospetto del 23/11: con l'autorizzazione sulla carta finita senza
+            # incasso Stripe mostra lo SBLOCCO come un rimborso intero (zero soldi, misurato su
+            # Stripe di prova il 23/11): non e' una divergenza, l'ha gia' gridata
+            # `_incassa_blocco` («autorizzazione_scaduta»). Qui era un falso allarme a ogni apertura.
+            # Solo se il pagamento e' PROPRIO quello annullato (silent-failure-hunter, 23/11): un
+            # secondo pagamento riscrive `stripe_pi` (fase162 `salva_stripe_session`), e su quello
+            # il confronto resta. Quante se ne saltano lo dice la risposta (D18 punto 3), col nome
+            # di cio' che conta: OGNI blocco annullato su una prenotazione 'pagato' (scaduto, o
+            # annullato da una cancellazione rimasta a meta'), non solo l'autorizzazione scaduta.
+            if _blocco_mai_incassato(rec):
+                saltati += 1
                 continue
             esito = sp.rimborsi_di(pi_)
             if not (isinstance(esito, dict) and esito.get("ok")):
@@ -6176,10 +6229,12 @@ class RouterHTTP:
             "controllabile": controllabile,
             "motivo_non_controllabile": ("non si e' potuto verificare su Stripe: "
                                          + "; ".join(motivi[:5])) if not controllabile else "",
-            "in_attesa": len(righe), "rimborsi": righe, "allarmi": allarmi,
+            "in_attesa": len(righe) - len(mai_entrati), "rimborsi": righe, "allarmi": allarmi,
             # D18 condizione 3: si dichiara cosa NON e' stato guardato.
             "tetto": self.RIMBORSI_TETTO,
             "non_esaminati": max(0, len(dovuti) - len(esaminati)),
+            "saltati_blocco_annullato": saltati,
+            "soldi_mai_entrati": mai_entrati,
             "nota": ("i soldi NON partono da soli: ogni riga si esegue a mano col pulsante. "
                      "Una riga senza pulsante non e' pronta: dice cosa manca.")}
 
@@ -6526,6 +6581,36 @@ class RouterHTTP:
             if not (isinstance(_ora, dict) and _ora.get("stato") == "contestato"
                     and str(_ora.get("motivo") or "") == motivo_letto):
                 return 409, {"errore": "controversia_cambiata"}
+        # Il sospetto del 23/11, misurato (TestLAutorizzazioneScadutaNonFaDividereSoldiMaiEntrati e
+        # Stripe di prova): con l'autorizzazione sulla carta FINITA senza incasso (blocco
+        # 'annullato') i soldi dell'ospite non sono mai entrati e non c'e' niente da dividere. Si
+        # divideva lo stesso: un rimborso nel giornale per soldi mai presi, e la risposta «la quota
+        # dell'host parte da sola» mentre `_trasferisci_sotto_chiave` la ferma. Come `_chiudi_blocco`:
+        # soldi mai entrati, niente riga. La garanzia resta contestata e decide una persona: oggi
+        # nessun pulsante la chiude (anche «Rimborsa» si ferma su `controversia_aperta`), come la
+        # contestazione 'prevented': soldi fermi perche' non ce ne sono, nessuno perso. Si
+        # legge qui, sotto `_BONIFICI_LOCK`: il giro orario annulla il blocco tenendo lo stesso.
+        # Solo se il pagamento della prenotazione e' PROPRIO quello annullato
+        # (`_blocco_mai_incassato`: un secondo pagamento riscrive `stripe_pi`). Un pendente che
+        # non si rilegge qui ferma tutto PRIMA di ogni scrittura, col suo nome (code-review 23/11:
+        # prima era un 500 senza codice, ferrea 9).
+        _pp = getattr(self._sys, "pagamenti_pendenti", None)
+        try:
+            _mai = _blocco_mai_incassato(_pp.info(rif) if _pp is not None else None)
+        except Exception:
+            logger.error("CONTROVERSIA NON DIVISA | codice: pendente_illeggibile | riferimento: %s "
+                         "| messaggio: il pagamento non si rilegge sotto il lucchetto: niente "
+                         "diviso, niente scritto; si ripete", _rif_per_registro(rif), exc_info=True)
+            return 503, {"errore": "service_unavailable"}
+        if _mai:
+            logger.error("CONTROVERSIA NON DIVISA | codice: pagamento_non_incassato | riferimento: "
+                         "%s | messaggio: l'autorizzazione sulla carta e' finita senza incasso, i "
+                         "soldi dell'ospite non sono mai entrati: niente da dividere. La "
+                         "controversia resta aperta e la chiude una persona, a mano (nessun "
+                         "pulsante lo fa oggi)", _rif_per_registro(rif))
+            return 409, {"errore": "pagamento_non_incassato", "riferimento": rif,
+                         "nota": "i soldi dell'ospite non sono mai stati incassati (autorizzazione "
+                                 "sulla carta scaduta): non c'e' niente da dividere"}
         try:
             out = (g.chiudi_contestazione_persa(rif, motivo="chargeback_persa:" + str(dp))
                    if persa else g.risolvi(rif, rimborso_ospite_cents=rimborso))
