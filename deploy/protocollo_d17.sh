@@ -221,6 +221,12 @@ if [ "$FASE" = "dopo" ]; then
   echo "  commit dei file: $(git rev-parse --short HEAD)"
   echo "  immagine viva:   $(docker inspect --format='{{.Image}}' casavip_app | cut -c1-20)"
   echo "  paracadute prec: $(docker inspect --format='{{.Id}}' casavip-app:prec | cut -c1-20)"
+  echo
+  echo "=== [3e] ADESSO, DAL PC: LA SCANSIONE ZAP SUL SITO APPENA CAMBIATO"
+  echo "  (decisione del fondatore 23/11/2026: ZAP ogni giorno E subito dopo ogni messa"
+  echo "  online). Il VPS non ha e non deve avere una chiave di GitHub: dal PC si avvia il"
+  echo "  workflow 'BookinVIP CI' a mano (workflow_dispatch su master) e se ne legge il job"
+  echo "  'zap' dall'API. Come si fa: DEPLOY.md, «Dopo il deploy: la ZAP»."
   exit 0
 fi
 

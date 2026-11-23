@@ -1319,59 +1319,48 @@ class TestLaSuiteSuMasterGiraOGNIGIORNO(unittest.TestCase):
             "costruzione. Espressioni dichiarate: %r"
             % (mancanti, [v.get("cron") for v in self.schedule]))
 
-    def test_la_ZAP_resta_SETTIMANALE_anche_col_giro_giornaliero(self):
-        """La ZAP e' l'unico job che tocca la PRODUZIONE: alzarla a ogni notte sarebbe un
-        crawl quotidiano sul sito vivo, che nessuno ha chiesto e che si paga in traffico."""
+    def test_la_ZAP_gira_OGNI_GIORNO_non_solo_il_lunedi(self):
+        """Decisione del fondatore, 23/11/2026 sera: «zap solo il lunedi', tutti i giorni se
+        deve segnalare errori» (la frequenza l'ha lasciata decidere a Claude: ogni giorno, e
+        a mano subito dopo ogni messa online, DEPLOY.md). Fino a quel giorno la condizione
+        sceglieva il cron del lunedi' e cio' che vede solo ZAP (cookie, informazioni esposte,
+        le regole di `.zap/regole.tsv`) si vedeva fino a sei giorni dopo. La ZAP baseline e'
+        PASSIVA (non attacca) e dura un paio di minuti; il repository e' pubblico, i minuti
+        di GitHub non costano. Ora: la ZAP si accende su OGNI giro programmato, e i giri
+        programmati coprono tutti e sette i giorni."""
         cond = self.doc["jobs"]["zap"].get("if", "")
-        self.assertIn(
+        self.assertNotIn(
             "github.event.schedule", cond,
-            "il job `zap` gira su QUALUNQUE giro programmato: con piu' di un `cron` "
-            "vuol dire scansionare il sito vivo ogni notte. La condizione deve dire "
-            "QUALE cron la accende. Condizione letta: %r" % (cond,))
-        citati = re.findall(r"github\.event\.schedule\s*==\s*'([^']*)'", cond)
-        self.assertTrue(
-            citati,
-            "la condizione nomina `github.event.schedule` ma non lo confronta con nessuna "
-            "espressione fra apici: cosi' non seleziona niente. Condizione letta: %r"
-            % (cond,))
-        giorni = set()
-        for espressione in citati:
-            giorni |= _giorni_del_cron(espressione)
-        self.assertEqual(
-            len(giorni), 1,
-            "il job `zap` e' agganciato a giri programmati che coprono %d giorni (%r): "
-            "doveva restare settimanale" % (len(giorni), sorted(giorni)))
+            "la condizione del job `zap` sceglie UN cron: gli altri giorni la ZAP non gira. "
+            "Condizione letta: %r" % (cond,))
+        self.assertRegex(
+            cond, r"github\.event_name\s*==\s*'schedule'",
+            "la condizione del job `zap` non si accende sui giri programmati: la ZAP non "
+            "girerebbe mai da sola. Condizione letta: %r" % (cond,))
+        coperti = set()
+        for voce in self.schedule:
+            coperti |= _giorni_del_cron(voce.get("cron", ""))
+        self.assertEqual(coperti, set(range(7)),
+                         "i giri programmati (che accendono la ZAP) non coprono tutta la "
+                         "settimana: %r" % sorted(coperti))
 
-    def test_il_cron_citato_dalla_ZAP_ESISTE_DAVVERO_fra_quelli_dichiarati(self):
-        """⛔ LA GUARDIA CHE SERVE FRA SEI MESI, non oggi.
-
-        La condizione del job `zap` cita una stringa cron **alla lettera**. Il giorno che
-        qualcuno cambia l'orario del giro del lunedi' e non aggiorna la condizione, i due
-        smettono di combaciare e la ZAP **non gira piu'** -- senza nessun rosso, perche' un
-        job che non parte non fallisce. E' il modo di rompersi n. 2 (cablaggio mancante)
-        nella sua forma peggiore: silenziosa. Qui diventa rosso lo stesso giorno.
-        """
-        cond = self.doc["jobs"]["zap"].get("if", "")
-        dichiarati = [str(v.get("cron", "")) for v in self.schedule]
-        citati = re.findall(r"github\.event\.schedule\s*==\s*'([^']*)'", cond)
-        # ⛔ LA PREMESSA, e non e' una formalita': senza nemmeno una citazione il ciclo qui
-        # sotto non gira e questo test passerebbe SENZA AVER GUARDATO NIENTE (sbaglio S7).
-        # Verde per premessa mancante e' il verde peggiore. E non ci si appoggia al test
-        # fratello che pretende la citazione: una difesa non deve dipendere dal
-        # comportamento di un'altra (D19) -- il giorno che quello cambia, questo tace.
-        self.assertTrue(
-            citati,
-            "PREMESSA MANCANTE, controllo NON ESEGUITO: la condizione del job `zap` non "
-            "cita nessun `github.event.schedule == '...'`, quindi non c'e' niente da "
-            "confrontare coi cron dichiarati %r. Condizione letta: %r"
-            % (dichiarati, cond))
-        for espressione in citati:
-            self.assertIn(
-                espressione, dichiarati,
-                "la condizione del job `zap` aspetta il giro %r, che NON e' fra i cron "
-                "dichiarati %r: quel job non si accendera' mai piu', e non lo dira' "
-                "nessuno perche' un job saltato non e' un job rosso"
-                % (espressione, dichiarati))
+    def test_la_ZAP_si_lancia_anche_SUBITO_DOPO_ogni_messa_online(self):
+        """L'altra meta' della decisione del 23/11/2026: il sito cambia quando si mette online
+        una versione nuova. Il protocollo D17 lo dice alla fine della fase `dopo` ([3e]) e
+        DEPLOY.md spiega come si avvia dal computer (il VPS non ha una chiave di GitHub)."""
+        with io.open(os.path.join(QUI, "deploy", "protocollo_d17.sh"), encoding="utf-8") as f:
+            protocollo = f.read()
+        dopo = protocollo[protocollo.index('if [ "$FASE" = "dopo" ]'):] \
+            if 'if [ "$FASE" = "dopo" ]' in protocollo else ""
+        self.assertTrue(dopo, "PREMESSA MANCANTE: nel protocollo non trovo la fase `dopo`")
+        self.assertIn("[3e]", dopo, "la fase `dopo` del protocollo D17 non ricorda la ZAP")
+        self.assertIn("workflow_dispatch", dopo, "la fase `dopo` non dice come si avvia la ZAP")
+        with io.open(os.path.join(QUI, "DEPLOY.md"), encoding="utf-8") as f:
+            deploy = f.read()
+        self.assertIn("### Dopo il deploy: la ZAP", deploy,
+                      "DEPLOY.md non spiega come si avvia la ZAP dopo la messa online")
+        self.assertIn("workflows/ci.yml/dispatches", deploy,
+                      "DEPLOY.md non da' il comando che avvia il giro della ZAP")
 
     def test_i_MINUTI_non_sono_nell_ora_di_punta_COME_GIA_PRETESO_dalla_sentinella(self):
         """⛔ LA STESSA REGOLA CHE IL PROGETTO APPLICAVA A UN FILE SU DUE.
