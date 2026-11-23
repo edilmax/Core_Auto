@@ -256,7 +256,8 @@ class TestAdminRimborsoMoney(unittest.TestCase):
                 rimuovi.assert_not_called()
                 with self.assertLogs("core_auto.server", level="ERROR"):
                     s, res = self.r._admin_controversia_risolvi_sotto_chiave(
-                        "BVIP-I9", arbitro, 1000, 1000, {})
+                        "BVIP-I9", arbitro, 1000, 1000, {}, persa=False, dp="", banca="-",
+                        motivo_letto=None)
                 self.assertEqual((s, res), (503, {"errore": "corpo_illeggibile"}))
                 arbitro.risolvi.assert_not_called()
 

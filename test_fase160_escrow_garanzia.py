@@ -109,6 +109,84 @@ class TestModulo(unittest.TestCase):
         self.clock["t"] = 10 ** 9
         self.assertEqual(self.g.auto_rilascia(), 0)
 
+    # ── TLA+ (22/11) e variant-analysis (23/11): la contestazione della banca ─────────────
+    def test_PERSA_chiude_risolto_con_zero_a_tutti_e_il_motivo(self):
+        self.g.apri("PP1", 10000, ora_checkin_ts=1000)
+        self.g.contesta("PP1", "chargeback:dp_1")
+        out = self.g.chiudi_contestazione_persa("PP1", motivo="chargeback_persa:dp_1")
+        self.assertEqual({"ok": True, "stato": "risolto", "host_riceve_cents": 0,
+                          "ospite_rimborso_cents": 0}, out)
+        st = self.g.stato("PP1")
+        self.assertEqual(("risolto", 0, 0, "chargeback_persa:dp_1"),
+                         (st["stato"], st["host_riceve_cents"], st["ospite_rimborso_cents"],
+                          st["motivo"]))
+
+    def test_PERSA_solo_da_contestato(self):
+        self.g.apri("PP2", 10000, ora_checkin_ts=1000)
+        self.assertEqual({"ok": False, "motivo": "stato_non_valido", "stato": "in_garanzia"},
+                         self.g.chiudi_contestazione_persa("PP2", motivo="x"))
+        self.assertEqual("in_garanzia", self.g.stato("PP2")["stato"])
+        self.assertEqual({"ok": False, "motivo": "id_non_valido"},
+                         self.g.chiudi_contestazione_persa(7, motivo="x"))
+
+    def test_PERSA_un_pagamento_tardivo_non_la_riapre(self):
+        # il perche' di 'risolto' e non 'annullato': `apri` resuscita solo gli 'annullato'
+        self.g.apri("PP3", 10000, ora_checkin_ts=1000)
+        self.g.contesta("PP3", "chargeback:dp_3")
+        self.g.chiudi_contestazione_persa("PP3", motivo="chargeback_persa:dp_3")
+        self.assertTrue(self.g.apri("PP3", 10000, ora_checkin_ts=1000))
+        self.clock["t"] = 10 ** 9
+        self.assertEqual(0, self.g.auto_rilascia())
+        self.assertEqual(("risolto", 0), (self.g.stato("PP3")["stato"],
+                                          self.g.stato("PP3")["host_riceve_cents"]))
+
+    def test_la_banca_sopra_la_segnalazione_cambia_solo_il_motivo(self):
+        self.g.apri("PB1", 10000, ora_checkin_ts=1000)
+        self.g.contesta("PB1", "non corrisponde")
+        self.clock["t"] = 2000
+        out = self.g.segna_contestazione_banca("PB1", motivo="chargeback:dp_9")
+        self.assertEqual({"ok": True, "stato": "contestato"}, out)
+        st = self.g.stato("PB1")
+        self.assertEqual(("contestato", "chargeback:dp_9|ospite:non corrisponde", 0, 0),
+                         (st["stato"], st["motivo"], st["host_riceve_cents"],
+                          st["ospite_rimborso_cents"]))
+        self.assertEqual(2000, self._aggiornato("PB1"))
+
+    def _aggiornato(self, pid):
+        con = self.g._apri()
+        try:
+            return con.execute("SELECT aggiornato_ts FROM garanzia WHERE prenotazione_id=?",
+                               (pid,)).fetchone()[0]
+        finally:
+            con.close()
+
+    def test_la_banca_sopra_la_segnalazione_senza_testo_e_col_prefisso(self):
+        for pid, prima, dopo in (("PB3", "", "chargeback:dp"),
+                                 ("PB4", "ospite:chargeback:x", "chargeback:dp|ospite:chargeback:x")):
+            with self.subTest(prima=prima):
+                self.g.apri(pid, 10000, ora_checkin_ts=1000)
+                self.g.contesta(pid, prima)
+                self.assertTrue(self.g.segna_contestazione_banca(pid, motivo="chargeback:dp")["ok"])
+                self.assertEqual(dopo, self.g.stato(pid)["motivo"])
+
+    def test_la_banca_non_scrive_sopra_un_altra_banca(self):
+        self.g.apri("PB5", 10000, ora_checkin_ts=1000)
+        self.g.contesta("PB5", "chargeback:dp_prima")
+        self.assertEqual({"ok": False, "motivo": "gia_della_banca", "stato": "contestato"},
+                         self.g.segna_contestazione_banca("PB5", motivo="chargeback:dp_seconda"))
+        self.assertEqual("chargeback:dp_prima", self.g.stato("PB5")["motivo"])
+        self.assertEqual({"ok": False, "motivo": "non_trovata"},
+                         self.g.segna_contestazione_banca("PB_mai", motivo="chargeback:dp"))
+
+    def test_la_banca_sopra_la_segnalazione_solo_da_contestato(self):
+        self.g.apri("PB2", 10000, ora_checkin_ts=1000)
+        self.assertEqual({"ok": False, "motivo": "stato_non_valido", "stato": "in_garanzia"},
+                         self.g.segna_contestazione_banca("PB2", motivo="chargeback:dp"))
+        self.assertEqual(("in_garanzia", ""), (self.g.stato("PB2")["stato"],
+                                               self.g.stato("PB2")["motivo"]))
+        self.assertEqual({"ok": False, "motivo": "id_non_valido"},
+                         self.g.segna_contestazione_banca(None, motivo="chargeback:dp"))
+
     def test_chiudi_proporzionale_host_tiene_penale(self):
         # cancellazione CON penale: l'host tiene la sua quota, il resto torna all'ospite (conservazione)
         self.g.apri("P8", 10000, ora_checkin_ts=1000)
