@@ -6,9 +6,8 @@ name: BookinVIP CI
 # rosso e la causa era un test che marcisce con la data -- nessun commit l'aveva toccato.
 # Con un solo giro settimanale la stessa rottura, capitata di martedi', avrebbe aspettato
 # fino a sette giorni.
-# La scansione OWASP ZAP del sito vivo resta SETTIMANALE: la accende solo il cron del
-# lunedi', non gli altri sei (vedi la condizione del job `zap`), perche' un crawl
-# quotidiano sulla produzione nessuno l'ha chiesto.
+# La scansione OWASP ZAP del sito vivo gira OGNI giorno con la suite (decisione del
+# fondatore, 23/11/2026: prima solo il lunedi') e a mano dopo ogni messa online.
 on:
   push:
     branches: [ master ]
@@ -20,8 +19,8 @@ on:
     # dove programmano tutti. E' la stessa ragione per cui `sentinella.yml` gira ai minuti
     # 7/22/37/52, ed e' gia' pretesa da una guardia: qui il file era rimasto fuori.
     - cron: '17 3 * * 1'            # lunedi' 03:17 UTC -> suite intera + scansione ZAP
-    - cron: '17 3 * * 0,2,3,4,5,6'  # gli altri sei giorni -> solo la suite, niente ZAP
-  workflow_dispatch: {}       # avvio manuale (utile per lanciare la ZAP a richiesta)
+    - cron: '17 3 * * 0,2,3,4,5,6'  # gli altri sei giorni -> suite intera + scansione ZAP
+  workflow_dispatch: {}       # avvio manuale: lo si fa subito dopo ogni messa online (DEPLOY.md)
 
 # ============================================================================
 #  CONCORRENZA — non si bruciano minuti su codice gia' superato
@@ -1292,24 +1291,22 @@ jobs:
         if: always()
         run: docker rm -f casavip_ci || true
 
-  # OWASP ZAP: scansione DAST BASELINE (passiva, NON attacca) del sito live. Gira solo sul
-  # giro programmato del LUNEDI' o su avvio manuale -> niente crawl della produzione ad ogni
-  # commit, e niente crawl quotidiano da quando i giri programmati sono diventati sette.
+  # OWASP ZAP: scansione DAST BASELINE (passiva, NON attacca) del sito live. Gira su OGNI
+  # giro programmato (ogni giorno) e su avvio manuale (subito dopo ogni messa online) ->
+  # niente crawl della produzione ad ogni commit.
   # ROSSO quando il sito PEGGIORA su una regola di sicurezza: le regole stanno in
   # `.zap/regole.tsv` (voce 261 di RIPRENDI). Il rosso arriva su Telegram dal guardiano del
   # VPS (`deploy/watchdog.sh` legge ogni 10 minuti i controlli di master).
   # FUORI dal "gate" di proposito: su push/PR questo job non gira proprio, e un job saltato
   # non puo' essere una condizione per far passare o bocciare un commit.
   zap:
-    # gira il lunedi' sul sito vivo: piu' lungo degli altri, ma non infinito
+    # gira ogni giorno sul sito vivo: piu' lungo degli altri, ma non infinito
     timeout-minutes: 40
     runs-on: ubuntu-24.04
-    # `github.event.schedule` porta l'espressione cron CHE HA FATTO SCATTARE il giro: e' il
-    # modo documentato da GitHub per distinguere piu' `cron` nello stesso file. Attenzione:
-    # la stringa qui sotto deve combaciare ALLA LETTERA con quella dichiarata in `on:`,
-    # altrimenti questo job non si accende mai piu' e non lo dice nessuno (un job che non
-    # parte non fallisce). Contro questo c'e' una guardia in `test_pipeline_ci.py`.
-    if: (github.event_name == 'schedule' && github.event.schedule == '17 3 * * 1') || github.event_name == 'workflow_dispatch'
+    # OGNI giro programmato (tutti e sette i giorni) e l'avvio manuale, che si fa subito dopo
+    # ogni messa online (DEPLOY.md). Decisione del fondatore del 23/11/2026: prima girava
+    # solo il lunedi'. Guardia: test_pipeline_ci, test_la_ZAP_gira_OGNI_GIORNO_non_solo_il_lunedi.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v5
       # FINO AL 5/11/2026 QUESTO JOB NON POTEVA DIVENTARE ROSSO PER UN BUCO. Senza file di

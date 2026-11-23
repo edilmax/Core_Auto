@@ -201,6 +201,26 @@ ssh ... 'cd /var/www/bookinvip && git rev-parse --short HEAD'   # VPS
 
 I tre valori **devono coincidere**.
 
+### Dopo il deploy: la ZAP
+
+Decisione del fondatore del 23/11/2026: la scansione OWASP ZAP (passiva, non attacca) gira
+**ogni giorno** da sola e **subito dopo ogni messa online**, perché il sito cambia proprio lì.
+Il VPS non ha e non deve avere una chiave di GitHub: si avvia **dal computer** il workflow
+`BookinVIP CI` su master (`workflow_dispatch`), col gettone letto da `git credential fill` e
+**mai stampato**, poi si legge dall'API il job `zap` di quel giro (atteso: `success`; un
+`failure` vuol dire che una regola di `.zap/regole.tsv` è peggiorata sul sito vivo).
+
+```powershell
+# dal computer, PowerShell: avvia il giro e poi leggi il job `zap` del giro appena partito
+$cred = "protocol=https`nhost=github.com`n`n" | git credential fill
+$tok = ($cred | Where-Object { $_ -like 'password=*' }) -replace '^password=',''
+$h = @{ Authorization = "token $tok"; Accept = "application/vnd.github+json" }
+$api = "https://api.github.com/repos/edilmax/Core_Auto/actions"
+Invoke-RestMethod -Method Post -Uri "$api/workflows/ci.yml/dispatches" -Headers $h -Body '{"ref":"master"}'
+$giro = (Invoke-RestMethod -Uri "$api/workflows/ci.yml/runs?event=workflow_dispatch&per_page=1" -Headers $h).workflow_runs[0]
+(Invoke-RestMethod -Uri "$api/runs/$($giro.id)/jobs" -Headers $h).jobs | Where-Object name -eq 'zap' | Select-Object status, conclusion
+```
+
 ## 5. Variabili d'ambiente nuove
 
 Se il lavoro introduce una variabile nuova che governa **denaro o percorsi di database**,
