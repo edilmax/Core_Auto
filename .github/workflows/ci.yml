@@ -499,7 +499,19 @@ jobs:
       # (visto il 22/11 sulla PR #341: la casella «rifatta in CI no», cancello rosso).
       - name: Dipendenze di test
         run: pip install -r requirements.txt hypothesis pyyaml coverage z3-solver mypy==1.19.1
+      # Java e TLC, come nel job qualita: `--riesegui` rifa' anche collaudi/esame_tla.py, che
+      # senza Java o col jar sbagliato si ferma con uscita 2 (la lezione del 22/11 su mypy).
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: TLC inchiodato (tla2tools v1.7.4, impronta controllata)
+        run: |
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/tla2tools.jar" https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar
+          echo "936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88  $RUNNER_TEMP/tla2tools.jar" | sha256sum -c -
       - name: Il cricchetto delle caselle (e le misure della PR rifatte qui)
+        env:
+          TLA2TOOLS_JAR: ${{ runner.temp }}/tla2tools.jar
         run: python collaudi/scheda.py --cricchetto HEAD^1 --riesegui
       - name: Mutazione sulle righe cambiate
         run: python collaudi/mutazione_prodotto.py --diff HEAD^1 --tetto 80
@@ -572,6 +584,26 @@ jobs:
       # grida su un importo Optional usato in un conto e tace sulla versione corretta.
       - name: Mypy sui moduli che muovono soldi (BLOCCA)
         run: python collaudi/esame_mypy.py
+      # --- GATE VERO 1c: TLA+ SUGLI STATI DEL DENARO (dal 2026-11-23) ---------------
+      # Il modello collaudi/tla/Soldi.tla (pagamento, blocco sulla carta, incasso, rimborso,
+      # bonifico, contestazione della banca) lo esplora TLC, il model checker di TLA+, su OGNI
+      # sequenza di passi. L'esame pretende le regole vere che passano E undici varianti col
+      # difetto messo apposta che vengono trovate (il controllo si vede fallire a ogni giro).
+      # TLC e' il jar della versione stabile v1.7.4, scaricato dal rilascio ufficiale e
+      # controllato per impronta: la stessa che collaudi/esame_tla.py pretende.
+      # VISTO ROSSO: le undici varianti escono 12 (regola violata) sulla regola attesa.
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: TLC inchiodato (tla2tools v1.7.4, impronta controllata)
+        run: |
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/tla2tools.jar" https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar
+          echo "936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88  $RUNNER_TEMP/tla2tools.jar" | sha256sum -c -
+      - name: TLA+ sugli stati del denaro, TLC su ogni sequenza (BLOCCA)
+        env:
+          TLA2TOOLS_JAR: ${{ runner.temp }}/tla2tools.jar
+        run: python collaudi/esame_tla.py
       # ⛔ `pip-audit` SENZA `-r` guarda l'ambiente in cui gira: qui dentro c'e'
       #    ruff, bandit, mypy e semgrep, cioe' gli ATTREZZI, non il prodotto.
       #    Misurato il 2026-08-26: 136 falle in 31 pacchetti dell'ambiente contro

@@ -16194,6 +16194,222 @@ class TestLEsameMypyNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
             esame.scheda.registra = vera
 
 
+class TestLEsameTlaNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
+    """⛔ D18 PUNTO 4 per `collaudi/esame_tla.py`, l'attrezzo della casella «il modello TLA+
+    degli stati del denaro gira in CI col model checker TLC a ogni unione» del blocco dei
+    soldi (23/11, tecnica 2 di 8). I modi di barare: spegnere il passo della CI, scaricare
+    un TLC diverso da quello inchiodato, togliere una variante col difetto (il controllo non
+    si vede piu' fallire), prendere per verde un TLC che non ha girato o che ha trovato un
+    errore diverso da quello atteso, e togliere dal codice una guardia che il modello da'
+    per scontata. Queste prove NON chiedono Java: girano in ogni job; TLC vero lo fa girare
+    l'esame stesso, nei job `qualita` e `caselle`."""
+
+    def _esame(self):
+        return self._carica("esame_tla.py", "_esame_tla_sotto_guardia")
+
+    def _ci(self):
+        with io.open(CI_YML, encoding="utf-8") as f:
+            return f.read()
+
+    def test_IL_PASSO_IN_CI_BLOCCA_E_OGNI_MODO_DI_SPEGNERLO_SI_VEDE(self):
+        esame = self._esame()
+        ci = self._ci()
+        ok, dettaglio = esame.passo_ci_bloccante(ci)
+        self.assertTrue(ok, dettaglio)
+        passo = "run: python collaudi/esame_tla.py\n"
+        nome = "      - name: TLA+ sugli stati del denaro, TLC su ogni sequenza (BLOCCA)\n"
+        self.assertIn(passo, ci)
+        self.assertIn(nome, ci)
+        spenti = {
+            "|| true": ci.replace(passo, "run: python collaudi/esame_tla.py || true\n"),
+            "continue-on-error": ci.replace(nome, nome + "        continue-on-error: true\n"),
+            "continue-on-error tra virgolette": ci.replace(
+                nome, nome + "        continue-on-error: 'true'\n"),
+            "if sul passo": ci.replace(nome, nome + "        if: false\n"),
+            "if sul job": ci.replace("  qualita:\n", "  qualita:\n    if: false\n", 1),
+            "fuori dal gate": ci.replace("      - caselle\n      - qualita\n", "      - caselle\n"),
+            "passo tolto": ci.replace(passo, "run: echo niente\n"),
+            "--autoprova": ci.replace(passo, "run: python collaudi/esame_tla.py --autoprova\n"),
+            "; true": ci.replace(passo, "run: python collaudi/esame_tla.py; true\n"),
+            "TLC non indicato": ci.replace(
+                nome + "        env:\n          TLA2TOOLS_JAR: ${{ runner.temp }}/tla2tools.jar\n",
+                nome),
+        }
+        for come, testo in spenti.items():
+            self.assertNotEqual(testo, ci, "l'iniezione %r non ha cambiato niente: la prova "
+                                           "non sta guardando il passo vero" % come)
+            self.assertFalse(esame.passo_ci_bloccante(testo)[0],
+                             "col passo spento (%s) l'esame lo dichiara ancora bloccante" % come)
+
+    def test_OGNI_JOB_CHE_RIFA_L_ESAME_SCARICA_LO_STESSO_TLC_CONTROLLATO(self):
+        """`qualita` esegue l'esame e `caselle` lo rifa' (`--riesegui`): tutti e due scaricano
+        il jar di TLC dall'indirizzo inchiodato e ne controllano l'impronta sha256, la stessa
+        che l'esame pretende. Un TLC diverso potrebbe dare un altro verdetto sullo stesso
+        modello; un job che non lo scarica fermerebbe la casella («rifatta in CI no»)."""
+        import yaml
+        esame = self._esame()
+        jobs = yaml.safe_load(self._ci())["jobs"]
+        for job in ("qualita", "caselle"):
+            testo = "\n".join(str(s.get("run", "")) for s in jobs[job]["steps"]
+                              if isinstance(s, dict))
+            self.assertIn(esame.JAR_URL, testo, "il job %s non scarica TLC da %s"
+                          % (job, esame.JAR_URL))
+            self.assertIn(esame.JAR_SHA256, testo, "il job %s non controlla l'impronta di TLC"
+                          % job)
+            self.assertIn("sha256sum -c", testo, "il job %s scarica TLC senza controllarlo" % job)
+            usa = [s for s in jobs[job]["steps"] if isinstance(s, dict)
+                   and str(s.get("uses", "")).startswith("actions/setup-java@")]
+            self.assertEqual(len(usa), 1, "il job %s non prepara Java" % job)
+        rifa = [s for s in jobs["caselle"]["steps"] if isinstance(s, dict)
+                and "scheda.py --cricchetto" in str(s.get("run", ""))]
+        self.assertEqual(len(rifa), 1)
+        self.assertEqual((rifa[0].get("env") or {}).get("TLA2TOOLS_JAR"),
+                         "${{ runner.temp }}/tla2tools.jar",
+                         "il cricchetto delle caselle rifa' l'esame senza sapere dov'e' TLC")
+
+    def test_LE_VARIANTI_SONO_TUTTE_QUELLE_DEL_MODELLO_E_OGNUNA_HA_LA_SUA_REGOLA(self):
+        """Una variante del modello che l'esame non lancia e' un difetto che nessuno prova piu'
+        a far trovare; una regola attesa che il modello non ha e' un'attesa che non puo'
+        avverarsi. Lo si legge dal file del modello, non da una copia."""
+        esame = self._esame()
+        with io.open(esame.MODELLO, encoding="utf-8") as f:
+            testo = f.read()
+        self.assertEqual(esame.difetti_del_modello(testo), set(esame.VARIANTI) | {"nessuno"})
+        self.assertGreaterEqual(len(esame.VARIANTI), 11)
+        definite = esame.definizioni_del_modello(testo)
+        for regola in esame.REGOLE:
+            self.assertIn(regola, definite, "la regola %s non e' definita nel modello" % regola)
+        for difetto, (regola, ancore) in esame.VARIANTI.items():
+            self.assertIn(regola, esame.REGOLE, difetto)
+            self.assertTrue(ancore, "la variante %s non nomina la guardia del codice" % difetto)
+        for passo in esame.PASSI:
+            self.assertIn(passo, definite, "il passo %s non e' nel modello" % passo)
+
+    def test_UN_TLC_CHE_NON_HA_GIRATO_O_HA_TROVATO_ALTRO_NON_E_VERDE(self):
+        """S7: il giro buono vale solo con uscita 0, la frase «No error has been found», gli
+        stati contati e OGNI passo del modello scattato almeno una volta (un passo che non
+        scatta mai e' un controllo vuoto); una variante vale solo con uscita 12, la regola
+        ATTESA violata e una sequenza di almeno due stati."""
+        esame = self._esame()
+        cop = "".join("<%s line 1, col 1 to line 1, col 2 of module Soldi>: 3:5\n" % p
+                      for p in esame.PASSI)
+        sano = ("Model checking completed. No error has been found.\n"
+                "599 states generated, 341 distinct states found, 0 states left on queue.\n"
+                + cop)
+        self.assertTrue(esame.giudica_buono(0, sano)[0])
+        for come, (uscita, testo) in {
+                "uscita 1": (1, sano),
+                "uscita 12": (12, sano),
+                "senza la frase": (0, sano.replace("No error has been found", "")),
+                "zero stati": (0, sano.replace("341 distinct", "0 distinct")),
+                "stati non contati": (0, sano.replace("341 distinct states found", "")),
+                "un passo mai scattato": (0, sano.replace(
+                    "<Bonifico line 1, col 1 to line 1, col 2 of module Soldi>: 3:5",
+                    "<Bonifico line 1, col 1 to line 1, col 2 of module Soldi>: 0:0")),
+                "un passo assente": (0, sano.replace(
+                    "<ArbitroPersa line 1, col 1 to line 1, col 2 of module Soldi>: 3:5\n", "")),
+                "vuoto": (0, "")}.items():
+            self.assertFalse(esame.giudica_buono(uscita, testo)[0], "preso per verde: %s" % come)
+        # «distinti:generati»: un passo che porta solo a stati gia' visti (0 distinti) e' SCATTATO
+        # lo stesso (silent-failure-hunter, 23/11): non e' un passo vuoto
+        solo_gia_visti = sano.replace(
+            "<Bonifico line 1, col 1 to line 1, col 2 of module Soldi>: 3:5",
+            "<Bonifico line 1, col 1 to line 1, col 2 of module Soldi>: 0:4")
+        self.assertTrue(esame.giudica_buono(0, solo_gia_visti)[0],
+                        "un passo scattato verso stati gia' visti preso per mai scattato")
+        trovato = ("Error: Invariant Totale is violated.\nError: The behavior up to this point "
+                   "is:\nState 1: <Initial predicate>\n/\\ bon = 0\n\nState 2: <Bonifico line "
+                   "1>\n/\\ bon = 90\n")
+        self.assertTrue(esame.giudica_variante(12, trovato, "Totale")[0])
+        for come, (uscita, testo, attesa) in {
+                "uscita 0": (0, trovato, "Totale"),
+                "uscita 10 (ASSUME)": (10, trovato, "Totale"),
+                "un'altra regola": (12, trovato, "SoldiNostri"),
+                "uno stato solo": (12, trovato.split("State 2")[0], "Totale"),
+                "vuoto": (12, "", "Totale")}.items():
+            self.assertFalse(esame.giudica_variante(uscita, testo, attesa)[0],
+                             "variante presa per trovata: %s" % come)
+
+    def test_LE_ANCORE_NEL_CODICE_CI_SONO_E_SI_VEDONO_SPARIRE(self):
+        """Il modello da' per scontate delle guardie del codice: ognuna e' un'ancora (file,
+        funzione, pezzo di codice eseguibile). Sul codice di oggi ci sono tutte; la stessa
+        guardia ridotta a commento o a docstring, o la funzione sparita, la fanno mancare
+        (S6: la si vede rossa togliendo la cosa vera)."""
+        esame = self._esame()
+        mancanti = esame.ancore_mancanti()
+        self.assertEqual(mancanti, [], "guardie che il modello da' per scontate e il codice "
+                                       "non ha piu': %s" % mancanti)
+        vero = ("def f(x):\n    if x in ('a', 'b'):\n        return 1\n    return 0\n")
+        self.assertTrue(esame.ancora_presente(vero, "f", "x in ('a', 'b')"))
+        for come, testo in {
+                "solo commento": "def f(x):\n    # if x in ('a', 'b'):\n    return 0\n",
+                "solo docstring": "def f(x):\n    \"\"\"x in ('a', 'b')\"\"\"\n    return 0\n",
+                "altra funzione": "def g(x):\n    if x in ('a', 'b'):\n        return 1\n",
+                "funzione doppia": vero + vero,
+                # 23/11 (differential-review): nel rilascio automatico la stessa frase stava in
+                # DUE righe, e togliendo la guardia vera l'ancora restava trovata nell'altra.
+                "frammento in due righe": ("def f(x):\n    if x in ('a', 'b'):\n        return 1\n"
+                                           "    if x in ('a', 'b'):\n        return 2\n"),
+                # le quattro qui sotto le ha trovate il silent-failure-hunter il 23/11: col
+                # confronto per sottostringa senza spazi erano tutte «ancora presente»
+                "rovesciata con not": "def f(x):\n    if not x in ('a', 'b'):\n        return 1\n",
+                "attaccata a un altro nome": "def f(x):\n    if yx in ('a', 'b'):\n        return 1\n",
+                "in una funzione annidata": ("def f(x):\n    def g():\n        return x in ('a', 'b')"
+                                             "\n    return 0\n"),
+                "nella seconda stringa della docstring": ("def f(x):\n    \"guardia: \" \"x in ('a',"
+                                                          " 'b')\"\n    return 0\n")}.items():
+            self.assertFalse(esame.ancora_presente(testo, "f", "x in ('a', 'b')"),
+                             "ancora trovata in: %s" % come)
+        # la guardia vera del rilascio automatico: tolto il CAS dalla riga che RILASCIA (non da
+        # quella che annulla), l'ancora deve mancare
+        with io.open(os.path.join(QUI, "fase160_escrow_garanzia.py"), encoding="utf-8") as f:
+            sorgente = f.read()
+        riga = ("\"aggiornato_ts=? WHERE prenotazione_id=? AND stato='in_garanzia'\",\n"
+                "                        (r[\"importo_host_cents\"], ora, rif))")
+        self.assertEqual(sorgente.count(riga), 1, "la riga del rilascio e' cambiata: la prova "
+                                                 "non sta guardando la guardia vera")
+        senza_cas = sorgente.replace(riga, "\"aggiornato_ts=? WHERE prenotazione_id=?\",\n"
+                                           "                        (r[\"importo_host_cents\"], "
+                                           "ora, rif))")
+        _f, funzione, frammento = esame.VARIANTI["rilascio_su_contestato"][1][0]
+        self.assertTrue(esame.ancora_presente(sorgente, funzione, frammento))
+        self.assertFalse(esame.ancora_presente(senza_cas, funzione, frammento),
+                         "tolto il CAS dal rilascio, l'ancora lo trova ancora")
+
+    def test_SENZA_PRECONDIZIONI_O_COL_METRO_STORTO_SI_FERMA_E_NON_SCRIVE(self):
+        esame = self._esame()
+        vera = esame.scheda.registra
+        scritture = []
+        esame.scheda.registra = lambda *a, **k: scritture.append((a, k))
+        vere = (esame.precondizioni, esame.misura)
+        try:
+            esame.precondizioni = lambda: (False, [("TLC si esegue", False, "java assente")])
+            esame.misura = lambda: self.fail("con le precondizioni rotte l'esame misura lo stesso")
+            self.assertEqual(esame.main(["--scrivi"]), 2)
+            # anche l'autoprova: con un jar che non e' quello inchiodato farebbe girare un altro TLC
+            esame.precondizioni = lambda: (False, [("il jar di TLC e' quello inchiodato", False,
+                                                    "sha256 diverso")])
+            self.assertEqual(esame.main(["--autoprova"]), 2)
+            self.assertEqual(scritture, [])
+        finally:
+            esame.precondizioni, esame.misura = vere
+            esame.scheda.registra = vera
+
+    def test_IL_JAR_MISURATO_E_QUELLO_CHE_TLC_CARICA(self):
+        """TLC parte in una cartella temporanea: un TLA2TOOLS_JAR relativo veniva misurato qui
+        e cercato li' (silent-failure-hunter, 23/11). Il percorso diventa assoluto."""
+        esame = self._esame()
+        prima = os.environ.get("TLA2TOOLS_JAR")
+        try:
+            os.environ["TLA2TOOLS_JAR"] = "tla2tools.jar"
+            self.assertEqual(esame.trova_jar(), os.path.abspath("tla2tools.jar"))
+        finally:
+            if prima is None:
+                os.environ.pop("TLA2TOOLS_JAR", None)
+            else:
+                os.environ["TLA2TOOLS_JAR"] = prima
+
+
 class TestLEsameRimborsoScrittoNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
     """⛔ D18 PUNTO 4 per `collaudi/esame_rimborso_scritto.py`, l'attrezzo della casella
     «chi paga cosa in un rimborso e' SCRITTO». Due modi facili di barare: guardare meno
