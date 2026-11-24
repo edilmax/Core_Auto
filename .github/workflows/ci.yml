@@ -48,6 +48,7 @@ permissions:
 #  NON BLOCCANTI (fuori dal "gate", di proposito):
 #    lint-severo  -> lint severo su codice gia' scritto: informativo, si legge il log
 #    zap          -> gira solo a schedule/manuale, non ad ogni commit
+#    avvisi       -> idem: legge ogni notte gli avvisi ufficiali delle falle delle immagini
 #
 #  `browser` E' ENTRATO NEL GATE IL 2026-09-29. Era stato aggiunto il 2026-08-18 FUORI dal
 #  gate, per decisione e a termine: e' l'unico controllo che accende un server vero e pilota
@@ -1324,6 +1325,30 @@ jobs:
           chmod -R a+rwX "$RUNNER_TEMP/zap"
           docker run --rm -t -v "$RUNNER_TEMP/zap:/zap/wrk/:rw" ghcr.io/zaproxy/zaproxy:stable \
             zap-baseline.py -t https://bookinvip.com -c regole.tsv -I -a
+
+  # AVVISI UFFICIALI DELLE FALLE nelle immagini prese da fuori che il server esegue (blocco 3,
+  # 24/11/2026). Ogni notte legge nginx.org, l'archivio della PSF (via OSV.dev, per commit) e
+  # gli avvisi di Alpine sui pacchetti dentro nginx: ROSSO se ne esce uno con la riparazione
+  # gia' pubblicata, anche se Dependabot tace (la sua attesa di tre giorni). Il rosso arriva su
+  # Telegram dal guardiano del VPS, come quello della ZAP. Le immagini le legge dal compose e
+  # dal Dockerfile: non c'e' un elenco da tenere allineato qui. FUORI dal gate come la ZAP:
+  # interroga siti esterni, e su push/PR non gira.
+  # Guardia: test_pipeline_ci, TestLEsameDegliAvvisiNonPuoBARARE.
+  avvisi:
+    name: avvisi (falle ufficiali di nginx, Python e Alpine nelle immagini del server)
+    timeout-minutes: 20
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      # pyyaml: l'esame legge il compose e questo file come YAML.
+      - name: Dipendenze dell'esame
+        run: pip install pyyaml
+      - name: Avvisi delle falle nelle immagini del server (ROSSO se una ha la riparazione pronta)
+        run: python collaudi/esame_avvisi_immagini.py
 
   # ==========================================================================
   #  GATE — l'ESITO UNICO. E' questo il check da rendere "required" su GitHub.

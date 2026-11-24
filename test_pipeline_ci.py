@@ -1564,7 +1564,9 @@ class TestNeedsDelGateCompleto(unittest.TestCase):
                          "lista di proposito, dopo esserti accertato che sia anche "
                          "nei needs del gate: e' il punto in cui la decisione si "
                          "prende invece di scivolare")
-        self.assertEqual(sorted(self.non_bloccanti), ["lint-severo", "zap"],
+        # `avvisi` (24/11/2026) come la ZAP: gira solo di notte e a mano, interroga siti
+        # esterni; il suo rosso non ferma un'unione ma arriva su Telegram dal guardiano.
+        self.assertEqual(sorted(self.non_bloccanti), ["avvisi", "lint-severo", "zap"],
                          "un job non bloccante in piu' significa un controllo il cui "
                          "rosso non ferma nessuno: deve essere una scelta esplicita")
 
@@ -17002,6 +17004,144 @@ class TestIlGiroDiMutazioneInstallaCioCheLeSueProveImportano(unittest.TestCase):
         self.assertEqual([], senza, "un job lancia la mutazione ma non installa le librerie "
                                     "che le sue prove importano: la base e' rossa e nessun "
                                     "punteggio vale")
+
+
+class TestLEsameDegliAvvisiNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
+    """⛔ D18 PUNTO 4 per `collaudi/esame_avvisi_immagini.py`, l'attrezzo della casella del
+    blocco 3 «ogni immagine presa da fuori ... non sta in nessuna fascia Vulnerable» (24/11).
+    I modi di barare: spegnere il job notturno (`|| true`, `--autoprova`, `continue-on-error`,
+    `if: false`), farlo girare un giorno a settimana, far passare un'immagine presa da fuori
+    che l'esame non legge, o contare una risposta vuota di OSV come un avviso (o il contrario).
+    Queste prove NON usano la rete: le fonti vere le interroga l'esame stesso, con le sue
+    controprove a ogni giro."""
+
+    PASSO = "        run: python collaudi/esame_avvisi_immagini.py\n"
+    NOME = ("      - name: Avvisi delle falle nelle immagini del server (ROSSO se una ha la "
+            "riparazione pronta)\n")
+    TESTA = ("    timeout-minutes: 20\n    runs-on: ubuntu-24.04\n"
+             "    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'\n")
+
+    def _esame(self):
+        return self._carica("esame_avvisi_immagini.py", "_esame_avvisi_sotto_guardia")
+
+    def _ci(self):
+        with io.open(CI_YML, encoding="utf-8") as f:
+            return f.read()
+
+    def test_IL_JOB_NOTTURNO_GIRA_E_OGNI_MODO_DI_SPEGNERLO_SI_VEDE(self):
+        esame = self._esame()
+        ci = self._ci()
+        ok, dettaglio = esame.job_ci_quotidiano(ci)
+        self.assertTrue(ok, dettaglio)
+        for pezzo in (self.PASSO, self.NOME, self.TESTA):
+            self.assertEqual(ci.count(pezzo), 1, "pezzo del job non trovato una volta: %r" % pezzo)
+        cmd = "python collaudi/esame_avvisi_immagini.py"
+        spenti = {
+            "|| true": ci.replace(self.PASSO, "        run: %s || true\n" % cmd),
+            "; true": ci.replace(self.PASSO, "        run: %s; true\n" % cmd),
+            "--autoprova": ci.replace(self.PASSO, "        run: %s --autoprova\n" % cmd),
+            "passo tolto": ci.replace(self.PASSO, "        run: echo niente\n"),
+            "continue-on-error sul passo": ci.replace(
+                self.NOME, self.NOME + "        continue-on-error: true\n"),
+            "if sul passo": ci.replace(self.NOME, self.NOME + "        if: false\n"),
+            "if: false sul job": ci.replace(
+                self.TESTA, self.TESTA.replace("    if: github.event_name == 'schedule' || "
+                                               "github.event_name == 'workflow_dispatch'",
+                                               "    if: false")),
+            "solo a mano": ci.replace(
+                self.TESTA, self.TESTA.replace("github.event_name == 'schedule' || ", "")),
+            "un giorno a settimana": ci.replace("    - cron: '17 3 * * 0,2,3,4,5,6'", "#"),
+            "niente avvio a mano": ci.replace("  workflow_dispatch: {}", "  #"),
+            # Trovati dalla revisione del 24/11: spengono il comando senza toccarlo.
+            "needs sul job": ci.replace(self.TESTA, self.TESTA + "    needs: [zap]\n"),
+            "env sul job": ci.replace(self.TESTA, self.TESTA + "    env: {PYTHONPATH: /tmp}\n"),
+            "defaults sul job": ci.replace(
+                self.TESTA, self.TESTA + "    defaults: {run: {shell: 'bash -c true {0}'}}\n"),
+            "env sul passo": ci.replace(self.NOME, self.NOME + "        env: {HTTPS_PROXY: x}\n"),
+            "un passo dopo": ci.replace(self.PASSO, self.PASSO + "      - run: echo dopo\n"),
+            "defaults del workflow": ci.replace("permissions:\n  contents: read\n",
+                                                "permissions:\n  contents: read\n"
+                                                "defaults:\n  run:\n    shell: bash\n", 1),
+        }
+        for come, testo in spenti.items():
+            self.assertNotEqual(testo, ci, "l'iniezione %r non ha cambiato niente" % come)
+            self.assertFalse(esame.job_ci_quotidiano(testo)[0],
+                             "col job spento (%s) l'esame lo dichiara ancora acceso" % come)
+
+    def test_OGNI_IMMAGINE_PRESA_DA_FUORI_E_LETTA_O_FERMA_L_ESAME(self):
+        esame = self._esame()
+        with io.open(esame.COMPOSE, encoding="utf-8") as f:
+            compose = f.read()
+        with io.open(esame.DOCKERFILE, encoding="utf-8") as f:
+            dockerfile = f.read()
+        trovate = esame.immagini_dal_codice(compose, dockerfile)
+        self.assertEqual([t[0] for t in trovate], ["nginx", "python"])
+        img = [r.strip() for r in compose.splitlines() if r.strip().startswith("image: nginx:")]
+        self.assertEqual(len(img), 1)
+        guasti = {
+            "una terza immagine": compose.replace(
+                "  backup:\n", "  spia:\n    image: redis:7-alpine\n  backup:\n", 1),
+            "nginx senza impronta": compose.replace(img[0], "image: nginx:alpine"),
+        }
+        for come, testo in guasti.items():
+            self.assertNotEqual(testo, compose, come)
+            with self.assertRaises(ValueError, msg=come):
+                esame.immagini_dal_codice(testo, dockerfile)
+        with self.assertRaises(ValueError):
+            esame.immagini_dal_codice(compose, dockerfile + "\nFROM alpine:3.24\n")
+
+    def test_IL_METRO_SI_PROVA_DA_SOLO_E_LA_RISPOSTA_VUOTA_E_ZERO(self):
+        esame = self._esame()
+        self.assertEqual(esame.autoprova(), (True, True))
+        self.assertEqual(esame.vulns_da_risposta({}), [])
+        with self.assertRaises(esame.FonteMuta):
+            esame.vulns_da_risposta([])
+        self.assertTrue(esame.NON_GUARDA)
+        self.assertEqual(esame.CONTROPROVA_NGINX, "1.31.8")
+        self.assertEqual(esame.CONTROPROVA_PYTHON, "3.11.0")
+
+    def test_LE_FASCE_DI_NGINX_SI_LEGGONO_COME_LE_SCRIVE_NGINX_ORG(self):
+        """Una voce vera della pagina (CVE-2026-132779, copiata il 24/11): la 1.31.9 e la 1.30.7
+        cadono dentro, la 1.31.10 e la 1.30.8 sono coperte dal «X+» del loro ramo."""
+        esame = self._esame()
+        voce = esame.avvisi_nginx(
+            "<li><p>Excessive CPU usage in TLS 1.3 with ssl_early_data<br>Severity: medium<br>"
+            "<a href=\"https://www.cve.org/CVERecord?id=CVE-2026-132779\">CVE-2026-132779</a><br>"
+            "Not vulnerable: 1.31.10+, 1.30.8+<br>Vulnerable: 1.21.4-1.31.9</p></li>")[0]
+        self.assertEqual(voce["cve"], "CVE-2026-132779")
+        self.assertTrue(esame.e_vulnerabile("1.31.9", voce))
+        self.assertTrue(esame.e_vulnerabile("1.30.7", voce))
+        self.assertFalse(esame.e_vulnerabile("1.31.10", voce))
+        self.assertFalse(esame.e_vulnerabile("1.30.8", voce))
+        self.assertFalse(esame.e_vulnerabile("1.21.3", voce))
+        self.assertTrue(esame.nginx_ha_riparazione(voce))
+
+    def test_OGNI_ECCEZIONE_PORTA_LA_SUA_PROVA_E_UNA_SCADENZA(self):
+        """Un'eccezione senza simboli da cercare, senza motivo o senza scadenza sarebbe un
+        interruttore per spegnere l'allarme. Nessuna data qui dentro: la prova non marcisce."""
+        esame = self._esame()
+        for chiave, ecc in esame.ECCEZIONI.items():
+            self.assertEqual(len(chiave), 2, chiave)
+            self.assertTrue(ecc.get("motivo"), chiave)
+            self.assertTrue(ecc.get("file"), chiave)
+            self.assertTrue(ecc.get("simboli_assenti"), chiave)
+            self.assertRegex(ecc.get("scadenza", ""), r"^\d{4}-\d{2}-\d{2}$")
+            import datetime
+            durata = (datetime.date.fromisoformat(ecc["scadenza"])
+                      - datetime.date.fromisoformat(ecc["dal"])).days
+            self.assertTrue(0 < durata <= 45, "%s dura %d giorni: un'eccezione lunga e' un "
+                                              "allarme spento" % (chiave, durata))
+            self.assertTrue(ecc.get("versione"), "%s non e' legata a una versione" % (chiave,))
+            self.assertRegex(ecc["file"], r"^[a-z0-9_/.+-]+/[a-z0-9_+-]+\.so\.?$",
+                             "il file della prova dev'essere UNA libreria, non una cartella")
+            prima = "0000-01-01"
+            self.assertFalse(esame.eccezione_regge(ecc, {}, prima)[0],
+                             "%s regge senza il file: un file assente non prova niente" % (chiave,))
+            veleno = {ecc["file"] + ".1": ecc["simboli_assenti"][0].encode()}
+            self.assertFalse(esame.eccezione_regge(ecc, veleno, prima)[0],
+                             "%s regge col codice difettoso dentro" % (chiave,))
+            self.assertFalse(esame.eccezione_regge(ecc, {ecc["file"] + ".1": b"x"}, "9999-12-31")[0],
+                             "%s regge dopo la scadenza" % (chiave,))
 
 
 if __name__ == "__main__":
