@@ -197,6 +197,7 @@ class TestNessunCodiceInternoInFacciaAllOspite(unittest.TestCase):
         'quote_scaduta',               # il preventivo e' scaduto guardando la pagina
         'quote_non_valida',
         'preventivo_scaduto',          # ha lasciato la pagina aperta e poi ha premuto Prenota
+        'prenotazione_in_corso',       # doppio clic, o due schede, sullo stesso preventivo (24/11)
         'prenotazione_annullata',      # torna su un link di pagamento ormai morto
         'non_quotabile',               # il prezzo non si riesce a calcolare per quelle date
         'date_non_valide',             # partenza prima dell'arrivo
