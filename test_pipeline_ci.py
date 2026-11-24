@@ -107,18 +107,60 @@ COMANDI_CHE_DEVONO_BLOCCARE = {
     "atheris": "collaudi/fuzz_soldi.py",
 }
 
-# Versione MINIMA accettabile per le azioni di GitHub usate qui. Sotto queste versioni
-# l'azione gira su un runtime Node ritirato (node12/node16) o e' stata proprio spenta
-# (upload-artifact v3, chiuso a gennaio 2025): sono azioni deprecate.
+# Versione MINIMA accettabile per le azioni di GitHub usate nei NOSTRI workflow (tutti i file
+# di .github/workflows, non solo ci.yml). Fino al 24/11/2026 era il pavimento delle azioni
+# deprecate (runtime Node ritirato, upload-artifact v3 spento a gennaio 2025). Il 24/11 si e'
+# misurato che la CI girava 5 attrezzi una o piu' versioni principali indietro (checkout v4/v5
+# contro la v7, setup-python v6 contro la v7, setup-node v5 contro la v7, setup-java v5 contro
+# la v6, upload-artifact v4/v5 contro la v7: API GitHub, `releases/latest`), perche' Dependabot
+# aveva il limite di 2 proposte aperte per le Actions e le due ferme da settembre (#190 e #192)
+# tenevano chiusa la porta a tutte le altre. Il pavimento ora e' la versione principale piu'
+# recente misurata quel giorno, anche per le due che oggi non usiamo (download-artifact v8,
+# cache v6) e per github/codeql-action (v4: non esiste un tag v5, `git/matching-refs/tags/v5`
+# vuoto): si puo' solo salire (le proposte di Dependabot), mai tornare indietro.
 VERSIONE_MINIMA_AZIONI = {
-    "actions/checkout": 4,
-    "actions/setup-python": 5,
-    "actions/setup-node": 4,
-    "actions/setup-java": 4,
-    "actions/upload-artifact": 4,
-    "actions/download-artifact": 4,
-    "actions/cache": 4,
+    "actions/checkout": 7,
+    "actions/setup-python": 7,
+    "actions/setup-node": 7,
+    "actions/setup-java": 6,
+    "actions/upload-artifact": 7,
+    "actions/download-artifact": 8,
+    "actions/cache": 6,
+    "github/codeql-action": 4,
 }
+
+WORKFLOW_DIR = os.path.join(QUI, ".github", "workflows")
+DEPENDABOT_YML = os.path.join(QUI, ".github", "dependabot.yml")
+
+
+def _usi_dei_workflow():
+    """[(file, valore di `uses`)] di OGNI workflow, letti come li legge GitHub: col parser YAML,
+    quindi senza i commenti e senza le virgolette. Prende i `uses` dei passi E quelli dei job
+    (un workflow riutilizzabile: `jobs.<id>.uses`). 24/11/2026: prima le prove cercavano
+    `uses:` nel TESTO di ci.yml soltanto, e un `uses` fra virgolette, uno con un sotto-percorso
+    (`actions/cache/restore@v3`) o uno agganciato a un'impronta non li vedevano."""
+    usi = []
+    nomi = sorted(n for n in os.listdir(WORKFLOW_DIR) if n.endswith((".yml", ".yaml")))
+    for nome in nomi:
+        with io.open(os.path.join(WORKFLOW_DIR, nome), encoding="utf-8") as f:
+            doc = yaml.safe_load(f) or {}
+        for job in (doc.get("jobs") or {}).values():
+            if not isinstance(job, dict):
+                continue
+            if "uses" in job:
+                usi.append((nome, str(job["uses"])))
+            for passo in job.get("steps") or []:
+                if isinstance(passo, dict) and "uses" in passo:
+                    usi.append((nome, str(passo["uses"])))
+    return nomi, usi
+
+
+def _azione_e_riferimento(uso):
+    """'Actions/Cache/restore@v3' -> ('actions/cache', 'v3'). GitHub non distingue maiuscole e
+    minuscole nel nome del repository; l'azione e' il repository (primi due pezzi), il resto e'
+    la cartella dentro di lui."""
+    nome, _, rif = uso.partition("@")
+    return "/".join(nome.lower().split("/")[:2]), rif
 
 # Comandi di workflow ritirati da GitHub: se ricompaiono, il passo che li usa non fa
 # piu' quello che crede di fare (e non fallisce: peggio).
@@ -1073,6 +1115,33 @@ class TestTrigger(unittest.TestCase):
         self.assertEqual(self.doc["permissions"], {"contents": "read"},
                          "il token della CI deve poter solo LEGGERE il repository")
 
+    def test_OGNI_workflow_e_OGNI_job_hanno_i_permessi_minimi(self):
+        """24/11/2026, caccia alle varianti (skill variant-analysis) dopo le prove che leggevano
+        solo ci.yml: la prova qui sopra guarda i permessi di ci.yml e basta. Nessuno guardava
+        codeql.yml e sentinella.yml, e nemmeno un `permissions:` scritto DENTRO un job, che li
+        alza per quel job anche se il file in cima dice «solo lettura». Valori letti il 24/11:
+        codeql deve scrivere i risultati (`security-events: write`, documentazione di
+        github/codeql-action), gli altri solo leggere."""
+        attesi = {
+            "ci.yml": {"contents": "read"},
+            "sentinella.yml": {"contents": "read"},
+            "codeql.yml": {"contents": "read", "security-events": "write"},
+        }
+        cartella = os.path.join(QUI, ".github", "workflows")
+        nomi = sorted(n for n in os.listdir(cartella) if n.endswith((".yml", ".yaml")))
+        self.assertEqual(sorted(attesi), nomi,
+                         "un workflow nuovo (o tolto) va dichiarato qui coi suoi permessi")
+        for nome in nomi:
+            with io.open(os.path.join(cartella, nome), encoding="utf-8") as f:
+                doc = yaml.safe_load(f)
+            with self.subTest(workflow=nome):
+                self.assertEqual(doc.get("permissions"), attesi[nome],
+                                 "%s: permessi del gettone diversi da quelli minimi" % nome)
+                alzati = sorted(j for j, corpo in (doc.get("jobs") or {}).items()
+                                if isinstance(corpo, dict) and "permissions" in corpo)
+                self.assertEqual(alzati, [], "%s: job con permessi propri, che scavalcano "
+                                 "quelli del file: %s" % (nome, alzati))
+
 
 REGOLE_ZAP = os.path.join(QUI, ".zap", "regole.tsv")
 
@@ -1378,6 +1447,25 @@ class TestLaSuiteSuMasterGiraOGNIGIORNO(unittest.TestCase):
                 "giro programmato al minuto %r, l'ora di punta di GitHub: e' li' che i "
                 "giri vengono ritardati o saltati, ed e' esattamente cio' che "
                 "`sentinella.yml` evita gia' da mesi" % (minuti,))
+
+    def test_NESSUN_workflow_gira_nell_ora_di_punta(self):
+        """24/11/2026 (code-review): la prova qui sopra guarda ci.yml, quella dei minuti dispari
+        sentinella.yml, e codeql.yml stava al minuto 0 senza che nessuna lo vedesse: la stessa
+        protezione collegata a due posti su tre. Qui si leggono TUTTI i workflow."""
+        nomi, _ = _usi_dei_workflow()
+        visti = []
+        for nome in nomi:
+            with io.open(os.path.join(WORKFLOW_DIR, nome), encoding="utf-8") as f:
+                trig = _trigger(yaml.safe_load(f) or {}) or {}
+            for voce in (trig.get("schedule") or []) if isinstance(trig, dict) else []:
+                minuti = str(voce.get("cron", "")).split(" ")[0]
+                visti.append(nome)
+                with self.subTest(workflow=nome, cron=voce.get("cron")):
+                    self.assertFalse(set(minuti.split(",")) & {"0", "30", "*"},
+                                     "%s: giro programmato ai minuti %r, l'ora di punta di "
+                                     "GitHub" % (nome, minuti))
+        for atteso in ("ci.yml", "codeql.yml", "sentinella.yml"):
+            self.assertIn(atteso, visti, "premessa: %s ha un `schedule`" % atteso)
 
 
 class TestIlLettoreDeiGiorniNonRISPONDEQuandoNonSA(unittest.TestCase):
@@ -1914,37 +2002,112 @@ class TestNienteScappatoie(unittest.TestCase):
                     "codice, o il codice e' cambiato senza aggiornare il commento."
                     % (nome, senza_denti, MARCATORE_SENZA_DENTI, dichiarato))
 
+    def _usi(self):
+        """Premessa: i tre workflow che conosciamo ci sono e OGNUNO ha almeno un `uses` letto
+        (sentinella no: lavora con curl). Una cartella spostata, un file rinominato o un formato
+        che il parser non capisce fa ROSSO invece di un giro su zero righe."""
+        nomi, usi = _usi_dei_workflow()
+        for atteso in ("ci.yml", "codeql.yml", "sentinella.yml"):
+            self.assertIn(atteso, nomi, "premessa: %s in .github/workflows" % atteso)
+        for atteso in ("ci.yml", "codeql.yml"):
+            self.assertTrue([u for n, u in usi if n == atteso],
+                            "premessa: nessun `uses` letto in %s" % atteso)
+        return usi
+
     def test_nessuna_azione_deprecata(self):
-        usati = re.findall(r"uses:\s*([\w.-]+/[\w.-]+)@v(\d+)", self.testo)
-        self.assertTrue(usati, "nessun `uses:` trovato: il file non e' quello atteso")
-        vecchie = []
-        for azione, versione in usati:
+        vecchie, illeggibili = [], []
+        for nome, uso in self._usi():
+            azione, rif = _azione_e_riferimento(uso)
             minima = VERSIONE_MINIMA_AZIONI.get(azione)
-            if minima is not None and int(versione) < minima:
-                vecchie.append("%s@v%s (minimo v%d)" % (azione, versione, minima))
+            if minima is None:
+                continue
+            m = re.match(r"^v(\d+)(\.\d+)*$", rif)
+            if not m:
+                # un'impronta (o altro) al posto di vN: la versione non si legge dal YAML, e un
+                # commento `# v7` accanto non lo vede nessun parser. Rosso, non silenzio: chi
+                # passa alle impronte cambia questa prova, non la scavalca.
+                illeggibili.append("%s: %s" % (nome, uso))
+            elif int(m.group(1)) < minima:
+                vecchie.append("%s: %s (minimo v%d)" % (nome, uso, minima))
+        self.assertEqual(illeggibili, [], "azioni con una versione minima scritte senza `@vN`: "
+                         "il pavimento non si puo' controllare. %s" % illeggibili)
         self.assertEqual(vecchie, [],
-                         "azioni deprecate: girano su un runtime Node ritirato o sono "
-                         "state spente da GitHub. %s" % vecchie)
-        for azione in VERSIONE_MINIMA_AZIONI:
-            if azione in self.testo:
-                self.assertIn(azione + "@v", self.testo,
-                              "%r usata senza versione esplicita" % azione)
+                         "azioni sotto la versione minima (deprecate, o indietro rispetto alla "
+                         "versione misurata il 24/11/2026): %s" % vecchie)
 
     def test_nessun_comando_di_workflow_ritirato(self):
-        for ritirato in COMANDI_RITIRATI:
-            self.assertNotIn(ritirato, self.testo,
-                             "%r e' stato ritirato da GitHub: il passo che lo usa non "
-                             "fa piu' quello che crede, e non fallisce" % ritirato)
+        """Si guardano i comandi (`run`) di ogni passo di ogni workflow, letti col parser YAML:
+        un commento che nomina un comando ritirato non e' un comando (falso rosso, regola
+        ferrea 10). Maiuscole e minuscole non contano."""
+        nomi, _ = _usi_dei_workflow()
+        trovati, letti = [], 0
+        for nome in nomi:
+            with io.open(os.path.join(WORKFLOW_DIR, nome), encoding="utf-8") as f:
+                doc = yaml.safe_load(f) or {}
+            for job in (doc.get("jobs") or {}).values():
+                for passo in (job or {}).get("steps") or []:
+                    comando = str((passo or {}).get("run", "")).lower()
+                    letti += bool(comando)
+                    trovati += ["%s: %s" % (nome, r) for r in COMANDI_RITIRATI if r in comando]
+        self.assertGreater(letti, 0, "premessa: nessun `run` letto nei workflow")
+        self.assertEqual(trovati, [], "comandi ritirati da GitHub: il passo che li usa non fa "
+                         "piu' quello che crede, e non fallisce. %s" % trovati)
 
     def test_ogni_azione_e_agganciata_a_una_versione_non_a_un_ramo(self):
-        riferimenti = re.findall(r"uses:\s*(\S+)", self.testo)
-        self.assertTrue(riferimenti)
-        mobili = [r for r in riferimenti
-                  if not re.search(r"@(v\d+(\.\d+)*|[0-9a-f]{40})$", r)]
+        mobili = ["%s: %s" % (nome, uso) for nome, uso in self._usi()
+                  if not re.search(r"@(v\d+(\.\d+)*|[0-9a-f]{40})$", uso)]
         self.assertEqual(mobili, [],
                          "queste azioni sono agganciate a un ramo mobile (@main, "
                          "@master, @latest): il contenuto puo' cambiare sotto i piedi "
                          "della CI senza che nessuno tocchi il repo. %s" % mobili)
+
+    def test_dependabot_propone_TUTTE_le_Actions_a_gruppi(self):
+        """24/11/2026. Con `open-pull-requests-limit: 2` e una proposta per attrezzo, le due
+        proposte ferme da settembre (#190 checkout, #192 setup-java) hanno tenuto chiusa la porta
+        a tutte le altre per due mesi: setup-python, setup-node e upload-artifact sono rimasti
+        indietro di una o piu' versioni principali senza che nessuno lo proponesse. La
+        documentazione di GitHub (dependabot-options-reference, `groups`, letta il 24/11 dal
+        sorgente github/docs): «All updates for dependencies that match a rule are combined in
+        a single pull request»; e «Any outdated dependencies that do not match a rule are
+        updated in individual pull requests». Quindi OGNI Action e OGNI salto (major, minor,
+        patch) deve cadere in un gruppo con `patterns: ["*"]`: i salti grandi possono stare in un
+        gruppo a parte (esempio 3 della guida «optimizing-pr-creation»), cosi' uno che rompe la CI
+        non ferma le correzioni piccole; ma non da soli, o il limite si riempie di nuovo.
+        Le chiavi dei gruppi sono un elenco di AMMESSE: una chiave che restringe il gruppo
+        (`dependency-type`, `exclude-patterns`, `group-by`) fa rosso invece di passare."""
+        with io.open(DEPENDABOT_YML, encoding="utf-8") as f:
+            doc = yaml.safe_load(f)
+        voci = [u for u in (doc.get("updates") or [])
+                if u.get("package-ecosystem") == "github-actions"]
+        self.assertEqual(len(voci), 1, "premessa: una voce `github-actions` in dependabot.yml")
+        voce = voci[0]
+        self.assertNotIn("ignore", voce, "un `ignore` sulle Actions toglie proposte in silenzio")
+        gruppi = voce.get("groups") or {}
+        self.assertTrue(gruppi, "le Actions non stanno in nessun gruppo: una proposta per "
+                        "attrezzo, e il limite delle proposte aperte blocca le altre")
+        ammesse = {"patterns", "update-types", "applies-to"}
+        tutti_i_salti = {"major", "minor", "patch"}
+        coperti = set()
+        for nome, g in gruppi.items():
+            g = g or {}
+            with self.subTest(gruppo=nome):
+                self.assertEqual(sorted(set(g) - ammesse), [],
+                                 "chiavi che restringono il gruppo o sconosciute")
+                self.assertIsInstance(g.get("patterns"), list, "`patterns` dev'essere un elenco")
+                self.assertIn("*", g["patterns"], "il gruppo deve prendere tutte le Actions")
+                self.assertEqual(g.get("applies-to", "version-updates"), "version-updates")
+                salti = g.get("update-types", sorted(tutti_i_salti))
+                self.assertIsInstance(salti, list, "`update-types` dev'essere un elenco")
+                self.assertTrue(set(salti) <= tutti_i_salti, "salti sconosciuti: %r" % salti)
+                coperti |= set(salti)
+        self.assertEqual(coperti, tutti_i_salti,
+                         "salti che non cadono in nessun gruppo (aprono proposte singole): %s"
+                         % sorted(tutti_i_salti - coperti))
+        limite = voce.get("open-pull-requests-limit", 5)
+        self.assertIsInstance(limite, int, "`open-pull-requests-limit` dev'essere un numero")
+        self.assertGreaterEqual(limite, len(gruppi),
+                                "il limite delle proposte aperte e' sotto il numero dei gruppi: "
+                                "un gruppo resterebbe senza posto")
 
     def test_i_job_bloccanti_non_hanno_condizioni_che_li_facciano_sparire(self):
         for nome in self.needs:

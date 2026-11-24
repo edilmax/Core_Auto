@@ -110,8 +110,8 @@ jobs:
     timeout-minutes: 15
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.9'
           cache: pip                      # riusa i pacchetti gia' scaricati
@@ -176,8 +176,8 @@ jobs:
           echo "memoria:      $(free -h | awk '/^Mem:/{print $2}')"
           echo "disco_libero: $(df -h / | awk 'NR==2{print $4}')"
           echo "carico:       $(cat /proc/loadavg)"
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.9'
           cache: pip
@@ -269,7 +269,7 @@ jobs:
       # E il registro INTERO come allegato, per quando il riepilogo non basta.
       - name: Il registro intero come allegato
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: suite-log-full-suite
           path: suite.log
@@ -332,8 +332,8 @@ jobs:
           echo "memoria:      $(free -h | awk '/^Mem:/{print $2}')"
           echo "disco_libero: $(df -h / | awk 'NR==2{print $4}')"
           echo "carico:       $(cat /proc/loadavg)"
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
           cache: pip
@@ -383,8 +383,8 @@ jobs:
       # ------------------------------------------------------------------
       COVERAGE_MIN: '82'
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.9'
           cache: pip
@@ -419,7 +419,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Carica il report HTML come artifact
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: copertura-html
           path: |
@@ -438,10 +438,10 @@ jobs:
     timeout-minutes: 25
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       # Nessuna "cache: pip" qui: questo job installa solo Hypothesis (sotto), la cache
       # sarebbe tempo perso a salvarla e ricaricarla.
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.9'
       # ⛔ 20/11 (PR #334): test_fase83_server porta prove a sequenze casuali con Hypothesis;
@@ -485,10 +485,10 @@ jobs:
     timeout-minutes: 300
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 2                  # HEAD^1 deve esistere: e' la base del confronto
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.9'
           cache: pip
@@ -500,7 +500,7 @@ jobs:
         run: pip install -r requirements.txt hypothesis pyyaml coverage z3-solver mypy==1.19.1
       # Java e TLC, come nel job qualita: `--riesegui` rifa' anche collaudi/esame_tla.py, che
       # senza Java o col jar sbagliato si ferma con uscita 2 (la lezione del 22/11 su mypy).
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '21'
@@ -533,10 +533,10 @@ jobs:
       # l'ultimo commit: una chiave revocata resta pubblica in ogni commit in cui
       # e' passata. Con la copia superficiale di serie (depth 1) lo strumento
       # girerebbe su 1 commit su 926 e direbbe "pulito".
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           # 3.11 (il Python della produzione, come full-suite-311 e atheris) dal 2026-09-19:
           # il pip-audit del cricchetto trovava i due GHSA di anyio (5p39-cfhj-2xmp,
@@ -591,7 +591,7 @@ jobs:
       # TLC e' il jar della versione stabile v1.7.4, scaricato dal rilascio ufficiale e
       # controllato per impronta: la stessa che collaudi/esame_tla.py pretende.
       # VISTO ROSSO: le undici varianti escono 12 (regola violata) sulla regola attesa.
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '21'
@@ -655,8 +655,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.9'
           cache: pip
@@ -706,12 +706,12 @@ jobs:
     timeout-minutes: 15
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.9'
           cache: pip
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
@@ -736,8 +736,8 @@ jobs:
     timeout-minutes: 20
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '20'
           # NIENTE `cache: npm`: la cache npm PRETENDE un lock file (package-lock.json /
@@ -859,15 +859,15 @@ jobs:
     # finire e la rete anti-intoppo non serve a niente. Il giro vero costa ~1 min 30 s.
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       # Python 3.9: e' lo stesso del job full-suite e del computer dove la batteria
       # si lancia a mano. Qui serve solo ad ACCENDERE il server visivo, non a
       # giudicare il prodotto: il giudizio lo da' il browser.
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.9'
           cache: pip
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: '20'
           # NIENTE `cache: npm`: questo repo non versiona un lock file e la cache npm
@@ -1089,7 +1089,7 @@ jobs:
 
       - name: I registri dei banchi come allegato (quando va storta)
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: server-visivo-log
           path: |
@@ -1111,11 +1111,11 @@ jobs:
     # riparata li' e non cercata altrove: un difetto riparato in un posto solo torna.
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       # Python 3.11: su 3.9 non c'e' la wheel di Atheris e la build da sorgente fallisce
       # (usa Py_IsNone, funzione della CPython >=3.10). I motori-soldi sono Python puro:
       # stesso identico comportamento. clang resta come rete di sicurezza per la build.
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
           cache: pip
@@ -1183,7 +1183,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Costruisci l'immagine di produzione
         run: docker build -f Dockerfile.casavip -t casavip-app:ci .
       # TRIVY SULL'IMMAGINE (15/11/2026). Nessuna falla che ha gia' una correzione arriva in
@@ -1308,7 +1308,7 @@ jobs:
     # solo il lunedi'. Guardia: test_pipeline_ci, test_la_ZAP_gira_OGNI_GIORNO_non_solo_il_lunedi.
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       # FINO AL 5/11/2026 QUESTO JOB NON POTEVA DIVENTARE ROSSO PER UN BUCO. Senza file di
       # regole ZAP tratta ogni avviso come WARN ("By default all alerts found by ZAP will be
       # treated as WARNings", zaproxy.org, "ZAP - Baseline Scan") e `-I` ("do not return

@@ -39,4 +39,25 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    # 24/11/2026: con una proposta per attrezzo e il limite a 2, le due ferme da settembre (#190
+    # checkout, #192 setup-java) hanno bloccato per due mesi tutte le altre; setup-python,
+    # setup-node e upload-artifact sono rimasti indietro di versioni principali senza proposta.
+    # I gruppi mettono TUTTE le Actions in due proposte al massimo («All updates for dependencies
+    # that match a rule are combined in a single pull request», dependabot-options-reference,
+    # `groups`): le correzioni piccole insieme, i salti di versione principale a parte, cosi' un
+    # salto che rompe la CI non ferma le correzioni (esempio 3 della guida «optimizing-pr-creation»,
+    # ma col salto grande ANCH'ESSO in gruppo: da solo riempirebbe di nuovo il limite).
+    # Guardia: test_pipeline_ci.TestNienteScappatoie.test_dependabot_propone_TUTTE_le_Actions_a_gruppi
+    groups:
+      attrezzi-della-ci-piccoli:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      attrezzi-della-ci-maggiori:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
     open-pull-requests-limit: 2
