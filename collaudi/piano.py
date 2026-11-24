@@ -461,6 +461,14 @@ BLOCCHI = (
             "centesimo · in quale archivio si scrive, se ci resta, se si cancella e per quale legge) "
             "e la catena PERCORSA anello per anello, dove ogni anello e' una differenza fra prima e "
             "dopo; una voce nuova senza catena e' rossa lo stesso giorno",
+            # In coda (2026-11-24, trovata leggendo le proposte di Dependabot). In produzione girava
+            # nginx 1.31.8 sei giorni dopo la 1.31.9, che ripara due falle «major» sulla nostra
+            # strada (HTTP/2 e TLS 1.3): Dependabot aveva proposto solo l'impronta nuova della 1.31.8.
+            # La guardia in test_deploy_casavip impedisce di TORNARE indietro; nessuna macchina si
+            # accorge di un avviso NUOVO. Questa riga e' quella macchina.
+            "ogni immagine presa da fuori che il server esegue (oggi nginx) non sta in nessuna "
+            "fascia «Vulnerable» degli avvisi ufficiali del suo progetto, letti OGNI GIORNO da una "
+            "macchina: un avviso nuovo e' rosso lo stesso giorno, non quando Dependabot propone",
         ),
     },
     {

@@ -175,6 +175,35 @@ class TestCompose(unittest.TestCase):
                  or fnmatch.fnmatch("docker-compose.casavip.yml", e.replace("**/", ""))]
         self.assertEqual(presi, [], "il compose di produzione e' escluso da Dependabot: %s" % presi)
 
+    def test_nginx_non_torna_sotto_la_versione_che_chiude_le_falle_note(self):
+        """24/11/2026: in produzione girava nginx 1.31.8 mentre nginx.org aveva gia' pubblicato la
+        1.31.9 (18/11) e la 1.31.10 (23/11), che riparano 11 falle, fra cui CVE-2026-123007 (HTTP/2,
+        memoria del worker, «attackers can execute code» nel record di F5 su cveawg.mitre.org) e
+        CVE-2026-118899 (ciclo infinito sul corpo della richiesta in TLS 1.3): la nostra conf usa
+        `http2 on` e TLS 1.3. Dependabot non l'aveva proposta. Fonti: nginx.org/en/CHANGES e
+        security_advisories («Not vulnerable: 1.31.10+, 1.30.8+», lette il 24/11).
+        Il pavimento si alza a mano quando esce un avviso nuovo: questa prova impedisce di TORNARE
+        indietro, non scopre le falle future (quello e' un limite dichiarato in RIPRENDI)."""
+        import re
+        immagini, _ = _immagini_del_compose(self.testo)
+        self.assertIsNotNone(immagini, "manca la sezione `services:` nel compose")
+        img = immagini.get("nginx", "")
+        m = re.match(r"^(?:docker\.io/)?(?:library/)?nginx:(\d+)\.(\d+)\.(\d+)(?:-[\w.]+)?"
+                     r"@sha256:[0-9a-f]{64}$", img)
+        self.assertIsNotNone(m, "premessa: nginx scritto `nginx:X.Y.Z[-variante]@sha256:...`, "
+                             "trovato %r" % img)
+        versione = tuple(int(x) for x in m.groups())
+        # Per ogni ramo di nginx la prima versione fuori dalle falle note (security_advisories).
+        pavimenti = {(1, 31): (1, 31, 10), (1, 30): (1, 30, 8)}
+        if versione[:2] > max(pavimenti):
+            return  # un ramo piu' nuovo di quelli letti: un aggiornamento, non si blocca
+        self.assertIn(versione[:2], pavimenti,
+                      "nginx %d.%d e' un ramo vecchio senza riparazioni: tutte le fasce degli "
+                      "avvisi lo coprono" % versione[:2])
+        minima = pavimenti[versione[:2]]
+        self.assertGreaterEqual(versione, minima, "nginx %s e' dentro falle note riparate in %s"
+                                % (".".join(map(str, versione)), ".".join(map(str, minima))))
+
 
 class TestOgniComposeCheUnoScriptDiDeployAvviaHaLeImpronte(unittest.TestCase):
     """Voce 263 di RIPRENDI, 6/11/2026 sera (trovata dalla revisione del codice dopo la #308).
