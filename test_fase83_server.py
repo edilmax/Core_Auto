@@ -15046,7 +15046,8 @@ class TestUnPreventivoDaUnaSolaPaginaDiPagamento(_OraVeraPerIlPreventivo, unitte
         rif = self._secondo_pagamento()
         with self.assertLogs("core_auto.server", level="INFO") as reg:
             s, esito = self._paga(rif, "cs_altra_pagina", self.PI_SECONDO, "evt_2")
-        self.assertEqual(200, s, "%r" % (esito,))
+        self.assertEqual((200, {"ricevuto": True, "tipo": "checkout.session.completed",
+                                "secondo_pagamento": True}), (s, esito))
         _rec, dj = self._pendente(rif)
         self.assertEqual(self.PI_PRIMO, dj.get("stripe_pi"),
                          "IL SECONDO PAGAMENTO HA CANCELLATO IL PRIMO: i rimborsi partirebbero dal "
@@ -15117,9 +15118,85 @@ class TestUnPreventivoDaUnaSolaPaginaDiPagamento(_OraVeraPerIlPreventivo, unitte
         self.assertEqual((503, "lettura_pendente_fallita"), (s, esito.get("sottocodice")),
                          "archivio muto e risposta 2xx: Stripe non ritenta e il secondo pagamento "
                          "passa senza controllo (%r)" % (esito,))
-        self.assertTrue(any("lettura_pendente_fallita" in x.getMessage() for x in reg.records))
+        gridato = [x for x in reg.records if "lettura_pendente_fallita" in x.getMessage()]
+        self.assertEqual(1, len(gridato), "%r" % ([x.getMessage() for x in reg.records],))
+        # il TIPO vero nella traccia: «non e' nullo» non basta, `exc_info=False` vale False
+        self.assertIs(sqlite3.OperationalError, (gridato[0].exc_info or (None,))[0],
+                      "il guasto dell'archivio senza la sua traccia")
         _rec, dj = self._pendente(rif)
         self.assertEqual(self.PI_PRIMO, dj.get("stripe_pi"))
+
+    def test_senza_archivio_dei_pendenti_il_webhook_non_inventa_un_guasto(self):
+        # giudice della mutazione (CI #349, riga del `_pp_gia ... and rif`): un sistema senza
+        # l'archivio dei pendenti non e' un archivio guasto -- niente 503 inventato
+        s, c = self._book()
+        rif, cs = c["riferimento"], c["payment_url"].rsplit("/", 1)[-1]
+        with mock.patch.object(self.sis, "pagamenti_pendenti", None):
+            s, esito = self._paga(rif, cs, self.PI_PRIMO, "evt_1")
+        self.assertNotEqual("lettura_pendente_fallita", esito.get("sottocodice"), "%r" % (esito,))
+        self.assertEqual(200, s, "%r" % (esito,))
+
+    def test_il_409_guarda_il_blocco_solo_se_e_quello_del_preventivo(self):
+        # giudice della mutazione (CI #349, righe del 409): rami che la gara non percorre. D19: lo
+        # stato si costruisce a mano -- fase59 risponde «gia' tuo» e il pendente non c'e'
+        idem = self.qt.split(".")[-1]
+        corpo = {"idempotente": True, "payment_url": "https://checkout.stripe.test/cs_x",
+                 "stripe_cs": "cs_x", "stato": "confermata"}
+        concierge = self.sis.concierge
+        # (1) un riferimento che NON e' l'inizio della chiave: il blocco non si legge
+        with mock.patch.object(concierge, "prenota", return_value=types.SimpleNamespace(
+                status=201, corpo=dict(corpo, riferimento="R-NON-DEL-PREVENTIVO"))), \
+                mock.patch.object(self.sis.inventario, "stato_blocco",
+                                  return_value="rilasciato") as letto:
+            s, c = self._book()
+        self.assertEqual((409, "prenotazione_in_corso"), (s, c.get("errore")), "%r" % (c,))
+        self.assertEqual([], letto.call_args_list, "letto il blocco di un'altra chiave")
+        # (2) un inventario che non sa leggere il blocco: «riprova», senza avvisi inventati
+        with mock.patch.object(concierge, "prenota", return_value=types.SimpleNamespace(
+                status=201, corpo=dict(corpo, riferimento=idem[:24]))), \
+                mock.patch.object(self.sis.inventario, "stato_blocco", None), \
+                self.assertLogs("core_auto.server", level="INFO") as reg:
+            s, c = self._book()
+        self.assertEqual((409, "prenotazione_in_corso"), (s, c.get("errore")), "%r" % (c,))
+        self.assertEqual([], [x.getMessage() for x in reg.records
+                              if "stato del blocco non letto" in x.getMessage()])
+        # (3) la lettura del blocco esplode: «riprova», e il guasto si dice con la sua traccia
+        with mock.patch.object(concierge, "prenota", return_value=types.SimpleNamespace(
+                status=201, corpo=dict(corpo, riferimento=idem[:24]))), \
+                mock.patch.object(self.sis.inventario, "stato_blocco",
+                                  side_effect=sqlite3.OperationalError("database is locked")), \
+                self.assertLogs("core_auto.server", level="INFO") as reg:
+            s, c = self._book()
+        self.assertEqual((409, "prenotazione_in_corso"), (s, c.get("errore")), "%r" % (c,))
+        guasto = [x for x in reg.records if "stato del blocco non letto" in x.getMessage()]
+        self.assertEqual(1, len(guasto), "%r" % ([x.getMessage() for x in reg.records],))
+        self.assertIs(sqlite3.OperationalError, (guasto[0].exc_info or (None,))[0],
+                      "il guasto della lettura senza la sua traccia")
+
+    def test_la_pagina_in_piu_si_chiude_solo_se_c_e_e_il_guasto_si_vede(self):
+        # giudice della mutazione (CI #349, `_chiudi_pagina_in_piu`)
+        chiamate = []
+        with mock.patch.object(self.sis, "stripe",
+                               types.SimpleNamespace(chiudi_sessione=chiamate.append)):
+            self.r._chiudi_pagina_in_piu("")
+            self.r._chiudi_pagina_in_piu(None)
+            self.r._chiudi_pagina_in_piu("cs_vera")
+        self.assertEqual(["cs_vera"], chiamate, "chiusa una pagina che non c'e', o non quella vera")
+        with mock.patch.object(self.sis, "stripe", types.SimpleNamespace()), \
+                self.assertLogs("core_auto.server", level="INFO") as reg:
+            logging.getLogger("core_auto.server").info("segnale della prova")
+            self.r._chiudi_pagina_in_piu("cs_vera")      # un gateway che non sa chiudere: niente
+        self.assertEqual(["segnale della prova"], [x.getMessage() for x in reg.records])
+
+        def esplode(_cs):
+            raise RuntimeError("Stripe non risponde")
+        with mock.patch.object(self.sis, "stripe", types.SimpleNamespace(chiudi_sessione=esplode)), \
+                self.assertLogs("core_auto.server", level="WARNING") as reg:
+            self.r._chiudi_pagina_in_piu("cs_vera")
+        guasto = [x for x in reg.records if "pagina in piu' non chiusa" in x.getMessage()]
+        self.assertEqual(1, len(guasto), "%r" % ([x.getMessage() for x in reg.records],))
+        self.assertIs(RuntimeError, (guasto[0].exc_info or (None,))[0],
+                      "il guasto della chiusura senza la sua traccia")
 
     def test_dopo_un_blocco_mai_incassato_il_secondo_pagamento_e_quello_vero(self):
         rif = self._secondo_pagamento()
