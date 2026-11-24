@@ -45,9 +45,11 @@ on:
   pull_request:
     branches: [ master ]
   schedule:
-    # lunedi' 04:00 UTC: un'ora DOPO la scansione ZAP di `ci.yml` (03:00), cosi'
-    # le due non si contendono la macchina ne' si confondono nei rapporti.
-    - cron: '0 4 * * 1'
+    # lunedi' 04:41 UTC: dopo il giro notturno di `ci.yml` (suite intera + ZAP, ogni giorno
+    # alle 03:17), cosi' non si contendono la macchina ne' si confondono nei rapporti. Fino al
+    # 24/11/2026 era al minuto 0, l'ora di punta in cui GitHub ritarda o salta i giri
+    # programmati: la regola dei minuti valeva solo per ci.yml e sentinella.yml.
+    - cron: '41 4 * * 1'
   workflow_dispatch: {}
 
 # Il minimo indispensabile, niente di piu': sono le due righe che la
@@ -70,7 +72,7 @@ jobs:
 
     steps:
       - name: Prendi il codice
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Prepara CodeQL
         uses: github/codeql-action/init@v4
