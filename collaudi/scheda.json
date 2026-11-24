@@ -862,6 +862,28 @@
   "motivo": "",
   "quando": "2026-11-23T04:34:19"
  },
+ "b594067f6dce": {
+  "blocco": 3,
+  "comando": "python collaudi/esame_avvisi_immagini.py --scrivi",
+  "commit": "ed3172f",
+  "condizione": "ogni immagine presa da fuori che il server esegue (oggi nginx) non sta in nessuna fascia «Vulnerable» degli avvisi ufficiali del suo progetto, letti OGNI GIORNO da una macchina: un avviso nuovo e' rosso lo stesso giorno, non quando Dependabot propone",
+  "denominatore": 2,
+  "esito": true,
+  "impronta": "9bdbc3bd845f",
+  "impronte_moduli": {
+   "fase105_identity_gate": "a3ab7f1e6819",
+   "fase127_checkin_digitale": "c8afe04f623b",
+   "fase143_kyc_host": "6219556b0088",
+   "fase179_rate_limit": "d676ae5e7797",
+   "fase180_bunker": "12b50f910968",
+   "fase192_admin_accounts": "da0a9425adcf",
+   "fase64_smartpass": "62f32d2a9183",
+   "fase73_firma_agile": "16cd09e0ed5d",
+   "fase80_sentinel": "ebc8a451110f"
+  },
+  "motivo": "",
+  "quando": "2026-11-24T17:54:38"
+ },
  "bf93b1c1b0ce": {
   "blocco": 7,
   "comando": "python collaudi/esame_pannello_soldi.py --scrivi",
