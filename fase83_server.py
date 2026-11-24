@@ -7210,11 +7210,15 @@ class RouterHTTP:
                 # Guardia: test_fase83_server.TestUnPreventivoDaUnaSolaPaginaDiPagamento.
                 if corpo.get("payment_url"):
                     self._chiudi_pagina_in_piu(corpo.get("stripe_cs"))
-                    idem =str(dati.get("quote_token") or "").split(".")[-1]   # come fase59
+                    # la chiave del blocco e' la firma del preventivo, come in fase59: nasce li',
+                    # prima di qualunque riblocco, quindi non porta mai il prefisso dei pagamenti
+                    # tardivi; il riferimento ne e' l'inizio
+                    idem = str(dati.get("quote_token") or "").split(".")[-1]
+                    rif_book = str(corpo.get("riferimento") or "")
                     stato_blocco = getattr(getattr(self._sys, "inventario", None),
                                            "stato_blocco", None)
                     liberato = False
-                    if stato_blocco is not None and idem[:24] == corpo.get("riferimento"):
+                    if stato_blocco is not None and rif_book and idem.startswith(rif_book):
                         try:
                             liberato = stato_blocco(idem) == "rilasciato"
                         except Exception:
@@ -11229,18 +11233,23 @@ class RouterHTTP:
             try:
                 _pp_gia = getattr(self._sys, "pagamenti_pendenti", None)
                 _gia = _pp_gia.info(rif) if (_pp_gia is not None and rif) else None
-                _pi_tenuto = ""
-                if isinstance(_gia, dict) and _gia.get("stato") in ("in_attesa", "scaduto",
-                                                                   "pagato"):
-                    _pi_tenuto = str(_leggi_corpo(_gia, "secondo_pagamento").get("stripe_pi")
-                                     or "")
             except Exception:
-                # non si sa se c'e' gia' un altro pagamento: proseguire poteva cancellarlo
+                # l'archivio non risponde: non si sa se c'e' gia' un altro pagamento, e proseguire
+                # poteva cancellarlo
                 logger.error("webhook | codice: esito_non_applicato | sottocodice: "
                              "lettura_pendente_fallita | riferimento: %s | messaggio: rispondo 503 "
                              "perche' Stripe ritenti", _rif_per_registro(rif), exc_info=True)
                 return 503, {"errore": "esito_non_applicato",
                              "sottocodice": "lettura_pendente_fallita"}
+            _pi_tenuto = ""
+            if isinstance(_gia, dict) and _gia.get("stato") in ("in_attesa", "scaduto", "pagato"):
+                try:
+                    _pi_tenuto = str(_leggi_corpo(_gia, "secondo_pagamento").get("stripe_pi")
+                                     or "")
+                except Exception:
+                    # corpo rotto: lo dice col suo nome la strada di sempre (I9, `corpo_illeggibile`,
+                    # 503) e `salva_stripe_session` non riscrive un corpo rotto
+                    _pi_tenuto = ""
             if (_pi_tenuto.startswith("pi_") and _pi_arrivato.startswith("pi_")
                     and _pi_arrivato != _pi_tenuto):
                 _dopo_blocco = _blocco_mai_incassato(_gia)
