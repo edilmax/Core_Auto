@@ -315,6 +315,36 @@ class TestGiroTroncatoNonEUnVerdetto(_Base):
             "troncato=%r · senza chiave=%r" % (mio, suo))
 
 
+class TestIlDoppioPagamentoArrivaAlGuardiano(_Base):
+    """g2 (25/11, «autorizzato»): fase182 nomina la prenotazione pagata piu' volte, e il
+    Guardiano la deve portare nella sua email col nome delle sessioni. Nessuna prova lo
+    guardava: misurato il 25/11 sui guasti che il giudice della CI genera sulle righe cambiate.
+    Stripe CONFIGURATO e `riconcilia` sostituita da un referto: nessuna rete."""
+
+    def test_il_doppio_pagamento_finisce_nell_email_col_nome_delle_sessioni(self):
+        import fase182_riconciliazione as R
+        # la stessa stringa piena e finta della classe del giro troncato, presa per nome:
+        # scritta qui come testo, bandit la leggeva come una password nel codice (B106, CI 25/11)
+        self.sys = crea_sistema(dataclasses.replace(
+            self.sys.config, stripe_secret_key=TestGiroTroncatoNonEUnVerdetto._NON_UNA_CHIAVE))
+        self.assertIsNotNone(getattr(self.sys, "finanza", None),
+                             "PREMESSA: senza giornale il confronto non parte nemmeno")
+        doppio = [{"riferimento": "R1", "sessioni": ["cs_a", "cs_b"], "cents": [25000, 25000],
+                   "valuta": "EUR", "nota": "piu' sessioni pagate sulla stessa prenotazione"}]
+        self.addCleanup(setattr, R, "riconcilia", R.riconcilia)
+        R.riconcilia = lambda *a, **k: {
+            "ok": False, "parziale": False, "fantasmi": 1, "solo_stripe": [],
+            "solo_giornale": [], "importo_diverso": [], "doppio_pagamento": doppio,
+            "confronti": {}}
+        rep = G.scansiona(self.sys, ora=lambda: self.now)
+        visto = (rep["anomalie"].get("riconciliazione_stripe") or {}).get("doppio_pagamento")
+        self.assertEqual(doppio, visto,
+                         "LA PRENOTAZIONE PAGATA DUE VOLTE NON ARRIVA AL GUARDIANO: %r"
+                         % (rep["anomalie"],))
+        self.assertIn("cs_b", G.riassunto_html(rep),
+                      "l'email del Guardiano non dice QUALE pagamento e' doppio")
+
+
 class TestGuastiIsolatiNelRegistro(_Base):
     """I GUASTI ISOLATI NON POSSONO FINIRE DOVE NESSUNO GUARDA.
 

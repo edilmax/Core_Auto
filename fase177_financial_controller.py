@@ -59,7 +59,10 @@ TIPI_GIORNALE = ("nota_debito", "nota_credito", "penale_offset", "penale_incassa
                  "storno_commissione",  # rimborso totale: la commissione non e' piu' dovuta
                  # 2026-09-30: la ritenuta sulle locazioni brevi (art. 4 c. 5 DL 50/2017),
                  # operata al bonifico SOLO con l'interruttore acceso (fase83 `_opera_ritenuta`)
-                 "ritenuta")
+                 "ritenuta",
+                 # 25/11 (g1, «autorizzato»): un SECONDO pagamento sulla stessa prenotazione, da
+                 # rendere tutto all'ospite (fase83 webhook, causale «restituire» o «annullare»)
+                 "secondo_pagamento")
 
 # mappatura tipo -> (conto_dare, conto_avere) per i movimenti ordinari: partita doppia
 # leggibile a colpo d'occhio nell'audit (cassa piattaforma vs debiti verso host/ospite/comune).
@@ -120,6 +123,11 @@ _CONTI_MOVIMENTO = {
     # (sostituto d'imposta). Resta in cassa finche' non si versa con l'F24: il bonifico
     # all'host cala, la cassa no -- e il saldo del gestore lo conferma.
     "ritenuta":           ("debiti_vs_host", "debiti_vs_erario"),
+    # `secondo_pagamento` (25/11, g1): l'ospite ha pagato DUE volte la stessa prenotazione e il
+    # secondo va reso tutto. A SALDO ZERO, come `payout_manuale`: entra e riesce intero, quindi non
+    # e' cassa nostra ne' debito verso l'host; la riga e' la memoria immutabile del SUO pagamento
+    # (evento_id `secondo_pagamento:<pi_>`), da cui la lista dei rimborsi dovuti lo ritrova.
+    "secondo_pagamento":  ("promemoria_secondo_pagamento", "promemoria_secondo_pagamento"),
 }
 
 

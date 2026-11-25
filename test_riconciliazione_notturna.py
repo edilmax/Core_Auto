@@ -7,10 +7,12 @@ Due famiglie, entrambe nelle DUE direzioni (ferrea 10):
   parte ANCHE a tutto ok (la mail mancante e' l'allarme), i fantasmi mettono URGENTE
   e fanno uscire 1, senza config e' NON ESEGUITO (uscita 2, zero email, zero battito).
 """
+import json
 import os
 import shutil
 import tempfile
 import unittest
+from unittest import mock
 
 import deploy.cron_riconciliazione as cron  # noqa: E402
 import fase178_watchdog as wd  # noqa: E402
@@ -100,6 +102,72 @@ class TestIlGiroNotturno(unittest.TestCase):
         self.assertEqual(len(uscite), 1)
         self.assertIn("URGENTE", uscite[0][1])
         self.assertIn("solo stripe", uscite[0][2].lower())
+
+    # g2 (RIPRENDI, voce 24/11 sera tardi; «autorizzato» 25/11): la prenotazione R1 e' nel
+    # giornale, e Stripe ha DUE sessioni pagate per lei
+    def _giornale_con_r1(self):
+        from fase177_financial_controller import crea_financial_controller
+        fc = crea_financial_controller(self.env["DB_FINANZA"])
+        fc.inizializza_schema()
+        fc.movimento(tipo="incasso", riferimento="R1", soggetto="host:h", importo_cents=1000,
+                     valuta="EUR", causale="pagamento")
+
+    def test_g2_un_doppio_pagamento_mette_URGENTE_e_dice_quale(self):
+        self._giornale_con_r1()
+        due = [{"id": cs, "payment_status": "paid", "amount_total": 1000, "currency": "eur",
+                "metadata": {"riferimento": "R1"}, "payment_intent": {"id": pi, "status": "succeeded"}}
+               for cs, pi in (("cs_1", "pi_1"), ("cs_2", "pi_2"))]
+        cod, uscite, _ = self._giro(sessioni=due)
+        self.assertEqual((1, 1), (cod, len(uscite)))
+        self.assertIn("URGENTE", uscite[0][1], "DOPPIO PAGAMENTO E LA MAIL NON E' URGENTE")
+        self.assertIn("cs_2", uscite[0][2], "la mail non dice QUALE pagamento e' doppio")
+
+    def test_g2_i_totali_che_non_quadrano_si_leggono_nella_mail(self):
+        self._giornale_con_r1()
+        una = [{"id": "cs_1", "payment_status": "paid", "amount_total": 1000, "currency": "eur",
+                "metadata": {"riferimento": "R1"}}]
+        cod, uscite, _ = self._giro(sessioni=una)     # nessun movimento sul saldo di Stripe
+        self.assertEqual(1, cod)
+        self.assertIn("-1000", uscite[0][2],
+                      "I TOTALI NON QUADRANO E LA MAIL NON DICE DI QUANTO: %r" % (uscite[0][2],))
+
+    # giudice della CI (25/11): «-1000» da solo non distingue una cifra di Stripe persa da uno
+    # Stripe a zero, e la riga del registro non la guardava nessuno
+    def test_g2_i_totali_nella_mail_portano_TUTTE_e_due_le_cifre(self):
+        self._giornale_con_r1()
+        una = [{"id": "cs_1", "payment_status": "paid", "amount_total": 1000, "currency": "eur",
+                "metadata": {"riferimento": "R1"}}]
+
+        def fetch(percorso, params, chiave):
+            if percorso == "checkout/sessions":
+                return {"data": una, "has_more": False}
+            return {"data": [{"id": "txn_1", "reporting_category": "charge", "currency": "eur",
+                              "amount": 400}], "has_more": False}
+        cod, uscite, _ = self._giro(fetch=fetch)
+        self.assertEqual(1, cod)
+        self.assertIn("Totali incassi EUR: Stripe 400, giornale 1000, differenza -600 centesimi",
+                      uscite[0][2], "LA MAIL SBAGLIA UNA DELLE DUE CIFRE: %r" % (uscite[0][2],))
+
+    def test_g2_la_riga_del_registro_conta_doppi_e_importi_diversi(self):
+        self._giornale_con_r1()
+        from fase177_financial_controller import crea_financial_controller
+        crea_financial_controller(self.env["DB_FINANZA"]).movimento(
+            tipo="incasso", riferimento="R2", soggetto="host:h", importo_cents=1000,
+            valuta="EUR", causale="pagamento")
+        sessioni = [{"id": cs, "payment_status": "paid", "amount_total": cents, "currency": "eur",
+                     "metadata": {"riferimento": rif}, "payment_intent": {"id": pi,
+                                                                          "status": "succeeded"}}
+                    for cs, pi, rif, cents in (("cs_1", "pi_1", "R1", 1000),
+                                               ("cs_2", "pi_2", "R1", 1000),
+                                               ("cs_3", "pi_3", "R2", 1500))]
+        registro = os.path.join(self.d, "notte.log")
+        with mock.patch.object(cron, "LOG", registro):
+            cod, _uscite, _ = self._giro(sessioni=sessioni)
+        self.assertEqual(1, cod)
+        with open(registro, encoding="utf-8") as f:
+            riga = json.loads(f.read().splitlines()[-1])
+        self.assertEqual((1, 1), (riga.get("doppio_pagamento"), riga.get("importo_diverso")),
+                         "LA RIGA DEL REGISTRO NON CONTA QUELLO CHE LA MAIL DICE: %r" % (riga,))
 
     def test_senza_config_NON_ESEGUITO_uscita_2_e_zero_effetti(self):
         inviate = []

@@ -27,10 +27,13 @@ from fase182_riconciliazione import _MAX_PAGINE, riconcilia, stripe_sessioni_pag
 ORA = 1_800_000_000            # orologio finto e fermo: test deterministici
 
 
-def _sessione(rif, cents, valuta="eur", pagata=True, sid=None):
-    return {"id": sid or ("cs_" + rif), "payment_status": "paid" if pagata else "unpaid",
-            "amount_total": cents, "currency": valuta,
-            "metadata": {"riferimento": rif}}
+def _sessione(rif, cents, valuta="eur", pagata=True, sid=None, pi=None):
+    s = {"id": sid or ("cs_" + rif), "payment_status": "paid" if pagata else "unpaid",
+         "amount_total": cents, "currency": valuta,
+         "metadata": {"riferimento": rif}}
+    if pi:                         # g2: il pagamento, espanso come lo chiede fase182
+        s["payment_intent"] = {"id": pi, "status": "succeeded"}
+    return s
 
 
 class _StripeFinto:
@@ -253,6 +256,145 @@ class TestRiconciliazione(unittest.TestCase):
         self.assertEqual(rep.get("fantasmi"), attesi,
                          "elenco TAGLIATO e nessun totale nel report: chi legge conta le "
                          "righe rimaste e sottostima -> chiavi=%r" % (sorted(rep),))
+
+    # g2 (RIPRENDI, voce 24/11 sera tardi; «autorizzato» 25/11): due sessioni PAGATE con lo stesso
+    # riferimento. Il confronto per riferimento guardava la prima e la seconda passava in
+    # silenzio: restava solo lo scarto dei totali, senza il nome di nessuno.
+    def _doppio(self, *, reso):
+        self._incasso("R1", 25000)
+        balance = [{"id": "txn_1", "reporting_category": "charge", "currency": "eur",
+                    "amount": 50000}]
+        if reso:
+            balance.append({"id": "txn_2", "reporting_category": "refund", "currency": "eur",
+                            "amount": -25000})
+        return _StripeFinto(sessioni=[_sessione("R1", 25000, sid="cs_a", pi="pi_a"),
+                                      _sessione("R1", 25000, sid="cs_b", pi="pi_b")],
+                            balance=balance)
+
+    def _secondo_registrato(self):           # la riga che scrive il webhook di fase83 (g1)
+        self.fc.movimento(tipo="secondo_pagamento", riferimento="R1", soggetto="ospite",
+                          importo_cents=25000, valuta="EUR", causale="restituire",
+                          evento_id="secondo_pagamento:pi_b")
+
+    def test_g2_due_pagamenti_sullo_stesso_riferimento_sono_un_fantasma(self):
+        rep = self._ric(self._doppio(reso=False))
+        self.assertIs(rep["ok"], False, rep)
+        self.assertEqual([("R1", ["cs_a", "cs_b"])],
+                         [(d["riferimento"], sorted(d["sessioni"]))
+                          for d in rep.get("doppio_pagamento") or []],
+                         "DUE PAGAMENTI SULLA STESSA PRENOTAZIONE E LA RICONCILIAZIONE NON LI "
+                         "NOMINA: %r" % (rep,))
+        self.assertEqual(1, rep["fantasmi"], rep)
+
+    def test_g2_il_secondo_pagamento_registrato_e_reso_fa_quadrare_i_totali(self):
+        self._secondo_registrato()
+        rep = self._ric(self._doppio(reso=True))
+        self.assertEqual(([], 0), (rep.get("doppio_pagamento"), rep["fantasmi"]), rep)
+        self.assertEqual(({"EUR": 0}, {"EUR": 0}),
+                         (rep["confronti"]["incassi"]["delta"],
+                          rep["confronti"]["rimborsi"]["delta"]), rep)
+        self.assertEqual(["cs_b"], [s["id"] for s in rep.get("secondi_pagamenti_noti") or []], rep)
+        self.assertIs(rep["ok"], True, rep)
+
+    def test_g2_il_secondo_pagamento_registrato_ma_non_reso_resta_da_guardare(self):
+        self._secondo_registrato()
+        rep = self._ric(self._doppio(reso=False))
+        self.assertEqual([], rep.get("doppio_pagamento"), rep)
+        self.assertEqual({"EUR": -25000}, rep["confronti"]["rimborsi"]["delta"],
+                         "il secondo pagamento e' dovuto all'ospite e non e' ancora tornato: %r"
+                         % (rep,))
+        self.assertIs(rep["ok"], False, rep)
+
+    def test_g2_il_secondo_pagamento_registrato_col_primo_fuori_periodo_non_e_un_fantasma(self):
+        # silent-failure-hunter (25/11): la notte guarda 2 giorni. Se il primo pagamento e' piu'
+        # vecchio, nel periodo resta solo il secondo, gia' in lista: non e' un fantasma
+        self._secondo_registrato()
+        rep = self._ric(_StripeFinto(
+            sessioni=[_sessione("R1", 25000, sid="cs_b", pi="pi_b")],
+            balance=[{"id": "txn_1", "reporting_category": "charge", "currency": "eur",
+                      "amount": 25000}]))
+        self.assertEqual(([], 0), (rep["solo_stripe"], rep["fantasmi"]),
+                         "UN SECONDO PAGAMENTO GIA' IN LISTA GRIDATO COME FANTASMA: %r" % (rep,))
+        self.assertEqual({"EUR": 0}, rep["confronti"]["incassi"]["delta"], rep)
+
+    def test_g2_DA5_un_secondo_pagamento_in_moneta_convertita_non_fa_gridare_gli_incassi(self):
+        # code-review (25/11): la regola DA5 valeva per le somme del giornale, non per i secondi
+        self._incasso("RU", 50000, "USD")
+        self.fc.movimento(tipo="secondo_pagamento", riferimento="RU", soggetto="ospite",
+                          importo_cents=50000, valuta="USD", causale="restituire",
+                          evento_id="secondo_pagamento:pi_u2")
+        rep = self._ric(_StripeFinto(
+            sessioni=[_sessione("RU", 50000, "usd", sid="cs_u1", pi="pi_u1"),
+                      _sessione("RU", 50000, "usd", sid="cs_u2", pi="pi_u2")],
+            balance=[self._convertita("t1", 46000), self._convertita("t2", 46000)]))
+        self.assertEqual({}, rep["confronti"]["incassi"]["delta"],
+                         "DOLLARI CONVERTITI DA STRIPE CONFRONTATI COI DOLLARI DEL GIORNALE: %r"
+                         % (rep["confronti"],))
+
+    def test_g2_col_giornale_illeggibile_il_doppione_resta_un_fantasma_e_si_dice_perche(self):
+        # D19 (25/11, guasti del giudice della CI): la lettura dei secondi pagamenti e' isolata;
+        # nel dubbio nessuno e' noto, e anche il secondo GIA' registrato si grida
+        import sqlite3
+        from unittest import mock
+        self._secondo_registrato()
+        with mock.patch.object(self.fc, "movimenti",
+                               side_effect=sqlite3.OperationalError("database is locked")), \
+                self.assertLogs("core_auto.riconciliazione", level="WARNING") as reg:
+            rep = self._ric(self._doppio(reso=True))
+        self.assertEqual(["R1"], [d["riferimento"] for d in rep.get("doppio_pagamento") or []],
+                         "UN GIORNALE ILLEGGIBILE HA FATTO TACERE IL DOPPIO PAGAMENTO: %r" % (rep,))
+        letti = [x for x in reg.records if "secondi pagamenti illeggibili" in x.getMessage()]
+        self.assertEqual(1, len(letti), "%r" % ([x.getMessage() for x in reg.records],))
+        self.assertIs(sqlite3.OperationalError, (letti[0].exc_info or (None,))[0],
+                      "il registro dice che il giornale non si legge ma non dice perche'")
+
+
+class TestDoppiPagamentiSuOgniSequenza(unittest.TestCase):
+    """g2 (25/11), skill property-based-testing di Trail of Bits: prenotazioni casuali con 1-3
+    sessioni pagate, le ultime m registrate dal webhook come secondo pagamento, incasso del primo
+    presente o no. Vista ROSSA sul codice di master (KeyError 'doppio_pagamento'), verde dopo."""
+
+    def test_doppio_se_e_solo_se_piu_di_una_sessione_non_registrata_e_totali_giusti(self):
+        from hypothesis import given, settings, strategies as st
+
+        @settings(max_examples=150, deadline=None)
+        @given(st.lists(st.tuples(st.integers(1, 3), st.integers(0, 2), st.booleans(),
+                                  st.integers(100, 90000)), min_size=1, max_size=6))
+        def proprieta(prenotazioni):
+            d = tempfile.mkdtemp()
+            try:
+                fc = crea_financial_controller(f"{d}/f.db", orologio=lambda: ORA)
+                fc.inizializza_schema()
+                sessioni, charge, giornale, attesi = [], 0, 0, set()
+                for i, (k, m, con_incasso, cents) in enumerate(prenotazioni):
+                    rif, m = "R%d" % i, min(m, k - 1)
+                    if con_incasso:
+                        fc.movimento(tipo="incasso", riferimento=rif, soggetto="host:h",
+                                     importo_cents=cents, valuta="EUR", causale="p")
+                        giornale += cents
+                    for j in range(k):
+                        pi = "pi_%d_%d" % (i, j)
+                        sessioni.append(_sessione(rif, cents, sid="cs_%d_%d" % (i, j), pi=pi))
+                        charge += cents
+                        if j >= k - m:             # le ultime m: secondi pagamenti registrati
+                            fc.movimento(tipo="secondo_pagamento", riferimento=rif,
+                                         soggetto="ospite", importo_cents=cents, valuta="EUR",
+                                         causale="restituire",
+                                         evento_id="secondo_pagamento:" + pi)
+                            giornale += cents
+                    if k - m > 1:
+                        attesi.add(rif)
+                rep = riconcilia(fc, "sk_test", giorni=30, ora=lambda: ORA, fetch=_StripeFinto(
+                    sessioni=sessioni, balance=[{"id": "t", "reporting_category": "charge",
+                                                 "currency": "eur", "amount": charge}]))
+                self.assertEqual(attesi, {x["riferimento"] for x in rep["doppio_pagamento"]}, rep)
+                self.assertEqual(charge - giornale,
+                                 rep["confronti"]["incassi"]["delta"].get("EUR", 0), rep)
+                fantasmi = {s["id"] for s in rep["solo_stripe"]}
+                self.assertFalse([s for s in rep["secondi_pagamenti_noti"] if s["id"] in fantasmi])
+            finally:
+                shutil.rmtree(d, ignore_errors=True)
+        proprieta()
 
 
 class TestEndpointRiconciliazione(unittest.TestCase):
