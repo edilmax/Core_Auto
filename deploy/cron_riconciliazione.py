@@ -49,8 +49,9 @@ def main(env, send, ora=time.time, fetch=None):
               % (type(e).__name__, e))
         return 2
 
-    fantasmi = (len(rep.get("solo_stripe") or []) + len(rep.get("solo_giornale") or [])
-                + len(rep.get("importo_diverso") or []))
+    # il totale VERO del report (g2, 25/11): gli elenchi escono tagliati a 50, e dentro c'e'
+    # anche il doppio pagamento sulla stessa prenotazione
+    fantasmi = int(rep.get("fantasmi") or 0)
     parziale = bool(rep.get("parziale"))
     urgente = bool(fantasmi or parziale)
     prefisso = "URGENTE - " if urgente else ""
@@ -74,7 +75,8 @@ def main(env, send, ora=time.time, fetch=None):
             "parziale": parziale, "email_inviata": bool(inviata),
             "solo_stripe": len(rep.get("solo_stripe") or []),
             "solo_giornale": len(rep.get("solo_giornale") or []),
-            "importo_diverso": len(rep.get("importo_diverso") or [])}
+            "importo_diverso": len(rep.get("importo_diverso") or []),
+            "doppio_pagamento": len(rep.get("doppio_pagamento") or [])}
     try:
         with open(LOG, "a", encoding="utf-8") as f:
             f.write(json.dumps(riga, ensure_ascii=True) + "\n")
@@ -96,11 +98,20 @@ def _corpo(rep, fantasmi, parziale):
                         if parziale else ""))
         for campo, titolo in (("solo_stripe", "Solo Stripe (pagato, il giornale non lo sa)"),
                               ("solo_giornale", "Solo giornale (dichiara incassato, Stripe no)"),
-                              ("importo_diverso", "Stesso riferimento, importo diverso")):
+                              ("importo_diverso", "Stesso riferimento, importo diverso"),
+                              ("doppio_pagamento", "Stessa prenotazione pagata piu' volte")):
             for v in rep.get(campo) or []:
-                righe.append("<p>- %s: %s (%s) - %s</p>"
+                righe.append("<p>- %s: %s (%s) - %s %s</p>"
                              % (titolo, v.get("riferimento") or v.get("id", "?"),
-                                v.get("valuta", ""), v.get("nota", "")))
+                                v.get("valuta", ""), v.get("nota", ""),
+                                " ".join(v.get("sessioni") or [])))
+        # g2 (25/11): i totali che non quadrano si scrivono, non solo si contano
+        for nome, c in sorted((rep.get("confronti") or {}).items()):
+            for val, d in sorted((c.get("delta") or {}).items()):
+                if d:
+                    righe.append("<p>- Totali %s %s: Stripe %d, giornale %d, differenza %d "
+                                 "centesimi</p>" % (nome, val, (c.get("stripe") or {}).get(val, 0),
+                                                    (c.get("giornale") or {}).get(val, 0), d))
     righe.append("<p style='color:#888'>Giro di solo lettura. La mail manca = allarme "
                  "(il battito invecchia e il watchdog urla).</p>")
     return "\n".join(righe)

@@ -87,7 +87,9 @@ def stripe_sessioni_pagate(chiave: str, da_ts: int, *, fetch: Any = None,
         rif = ((s.get("metadata") or {}).get("riferimento") or "").strip()
         out.append({"riferimento": rif, "cents": int(s.get("amount_total") or 0),
                     "valuta": str(s.get("currency") or "").upper(),
-                    "id": s.get("id", "")})
+                    "id": s.get("id", ""),
+                    # g2 (25/11): QUALE pagamento, per riconoscere un secondo pagamento
+                    "pi": str((pi.get("id") if isinstance(pi, dict) else pi) or "")})
     return out
 
 
@@ -129,12 +131,51 @@ def riconcilia(fc: Any, chiave: str, *, giorni: int = 30, fetch: Any = None,
                                    conversioni=conversioni)
     incassi = fc.incassi_periodo(da_ts) if fc is not None else {}
     somme = fc.somme_periodo(da_ts) if fc is not None else {}
+    # ── g2 (25/11, «autorizzato»): DUE pagamenti sullo stesso riferimento ────
+    # Il confronto qui sotto guarda un incasso per riferimento: la seconda sessione pagata
+    # passava in silenzio. Quelle che il giornale conosce (riga `secondo_pagamento` col SUO
+    # pagamento, scritta dal webhook di fase83) non sono il soggiorno: escono dal confronto e
+    # tornano nei totali, entrate e da rendere all'ospite. Ogni altra sessione in piu' e' un
+    # fantasma: un pagamento che nessuna lista di lavoro conosce.
+    per_rif: Dict[str, List[Dict[str, Any]]] = {}
+    for s in sessioni:
+        if s["riferimento"]:
+            per_rif.setdefault(s["riferimento"], []).append(s)
+    doppio: List[Dict[str, Any]] = []
+    secondi_noti: List[Dict[str, Any]] = []
+    noti = set()
+    secondi_cents: Dict[str, int] = {}
+    for rif, gruppo in sorted(per_rif.items()):
+        # anche con UNA sessione nel periodo: il primo pagamento puo' esserne fuori (la notte ne
+        # guarda 2 giorni), e il secondo gia' in lista non e' un fantasma (silent-failure-hunter)
+        try:
+            registrati = {str(m.get("evento_id") or ""): m for m in fc.movimenti(rif)
+                          if m.get("tipo") == "secondo_pagamento"} if fc is not None else {}
+        except Exception:
+            # ISOLATA come `incassi_periodo`: nel dubbio nessun secondo pagamento e' noto, e il
+            # doppione resta un fantasma (si grida)
+            logger.warning("riconciliazione: secondi pagamenti illeggibili per %s", rif,
+                           exc_info=True)
+            registrati = {}
+        for s in gruppo:
+            m = registrati.get("secondo_pagamento:" + s["pi"]) if s["pi"] else None
+            if m is not None:
+                noti.add(s["id"])
+                secondi_noti.append(s)
+                val = str(m.get("valuta") or "").upper()
+                secondi_cents[val] = secondi_cents.get(val, 0) + int(m.get("importo_cents") or 0)
+        if len([s for s in gruppo if s["id"] not in noti]) > 1:
+            doppio.append({"riferimento": rif, "sessioni": [s["id"] for s in gruppo],
+                           "cents": [s["cents"] for s in gruppo], "valuta": gruppo[0]["valuta"],
+                           "nota": "piu' sessioni pagate sulla stessa prenotazione"})
     # ── match per riferimento (al centesimo) ─────────────────────────────────
     solo_stripe: List[Dict[str, Any]] = []
     importo_diverso: List[Dict[str, Any]] = []
     visti = set()
     for s in sessioni:
         rif = s["riferimento"]
+        if s["id"] in noti:
+            continue
         if not rif:
             solo_stripe.append({**s, "nota": "sessione senza riferimento nei metadata"})
             continue
@@ -151,11 +192,13 @@ def riconcilia(fc: Any, chiave: str, *, giorni: int = 30, fetch: Any = None,
     solo_giornale = [{"riferimento": r, **v} for r, v in sorted(incassi.items())
                      if r not in visti]
     # ── totali per categoria e valuta ────────────────────────────────────────
-    def _tot(cat_stripe: str, tipi_giornale: List[str]) -> Dict[str, Any]:
+    def _tot(cat_stripe: str, tipi_giornale: List[str],
+             secondi: Optional[Dict[str, int]] = None) -> Dict[str, Any]:
         s_tot = dict(balance.get(cat_stripe, {}))
         g_tot: Dict[str, int] = {}
-        for t in tipi_giornale:
-            for val, c in (somme.get(t) or {}).items():
+        # i secondi pagamenti noti (g2) seguono la STESSA regola DA5 delle somme del giornale
+        for fonte in [somme.get(t) or {} for t in tipi_giornale] + [secondi or {}]:
+            for val, c in fonte.items():
                 # DA5: moneta straniera che Stripe ha convertito: ogni prenotazione resta
                 # confrontata al centesimo qui sopra, i totali non si possono confrontare
                 if conversioni.get(cat_stripe) and val.upper() != "EUR" and val.upper() not in s_tot:
@@ -166,11 +209,13 @@ def riconcilia(fc: Any, chiave: str, *, giorni: int = 30, fetch: Any = None,
                 "delta": {v: s_tot.get(v, 0) - g_tot.get(v, 0) for v in valute}}
     # C53-B1-4: una contestazione di carta toglie dal saldo importo E commissione, e il
     # giornale non ha righe che la raccontino: nel periodo e' sempre un delta da guardare.
-    confronti = {"incassi": _tot("charge", ["incasso"]),
-                 "rimborsi": _tot("refund", ["rimborso"]),
+    # g2: un secondo pagamento noto e' entrato (charge) ed e' dovuto all'ospite (refund), come
+    # un rimborso deciso dalla cancellazione: finche' non torna, il delta dei rimborsi lo dice
+    confronti = {"incassi": _tot("charge", ["incasso"], secondi_cents),
+                 "rimborsi": _tot("refund", ["rimborso"], secondi_cents),
                  "transfer": _tot("transfer", ["payout_host"]),
                  "contestazioni": _tot("dispute", [])}
-    fantasmi = len(solo_stripe) + len(solo_giornale) + len(importo_diverso)
+    fantasmi = len(solo_stripe) + len(solo_giornale) + len(importo_diverso) + len(doppio)
     ok = (fantasmi == 0
           and all(d == 0 for c in confronti.values() for d in c["delta"].values()))
     return {"ok": ok, "giorni": g, "da_ts": da_ts,
@@ -190,4 +235,6 @@ def riconcilia(fc: Any, chiave: str, *, giorni: int = 30, fetch: Any = None,
             "solo_stripe": solo_stripe[:50],
             "solo_giornale": solo_giornale[:50],
             "importo_diverso": importo_diverso[:50],
+            "doppio_pagamento": doppio[:50],
+            "secondi_pagamenti_noti": secondi_noti[:50],
             "confronti": confronti}

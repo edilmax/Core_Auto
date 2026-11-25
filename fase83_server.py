@@ -4625,9 +4625,10 @@ class RouterHTTP:
             logger.error("riconciliazione: eccezione ISOLATA", exc_info=True)
             return 503, {"errore": "service_unavailable"}
         logger.warning("RICONCILIAZIONE_ESEGUITA | GIORNI: %d | OK: %s | FANTASMI: "
-                       "stripe=%d giornale=%d diversi=%d | IP: %s", giorni, rep["ok"],
+                       "stripe=%d giornale=%d diversi=%d doppi=%d | IP: %s", giorni, rep["ok"],
                        len(rep["solo_stripe"]), len(rep["solo_giornale"]),
-                       len(rep["importo_diverso"]), self._client_ip(headers))
+                       len(rep["importo_diverso"]), len(rep["doppio_pagamento"]),
+                       self._client_ip(headers))
         return 200, rep
 
     def puo_esportare(self, headers) -> bool:
@@ -6097,6 +6098,59 @@ class RouterHTTP:
                 "bottone": (not manca) and not gia}
         return riga, stripe_ok
 
+    def _secondo_pagamento_scheda(self, mov):
+        """g1 (25/11, «autorizzato»): LA SCHEDA DI UN SECONDO PAGAMENTO sulla stessa prenotazione,
+        dalla riga del giornale scritta dal webhook (`secondo_pagamento:<pi_>`). La lista e il
+        pulsante fanno la stessa domanda qui, come per `_rimborso_dovuto_scheda`.
+
+        Il pagamento e' QUELLO della riga, mai `stripe_pi` (il primo, quello del soggiorno); la
+        cifra e' tutto il pagato, perche' dietro non c'e' un soggiorno. Il gesto dipende dalla
+        carta: incassato si RIMBORSA, solo bloccato si ANNULLA (Stripe rifiuta il rimborso di un
+        blocco, misurato il 28/9). «Gia' fatto» lo dice Stripe adesso, mai il nostro database.
+        Chi ci perde (D16): la piattaforma, perche' la commissione di Stripe su quel pagamento non
+        torna (docs.stripe.com/refunds); l'ospite riceve tutto, l'host non e' toccato.
+        Ritorna `(riga, stripe_ok)`: `stripe_ok` False = NON LO SO, e il pulsante resta spento."""
+        import time as _t
+        sp = getattr(self._sys, "stripe", None)
+        pi_ = str(mov.get("evento_id") or "")[len("secondo_pagamento:"):]
+        dovuto = int(mov.get("importo_cents") or 0)
+        annullo = (mov.get("causale") or "") == "annullare"
+        stato = ""
+        if annullo:
+            esito = sp.stato_pagamento(pi_) if sp is not None else None
+            ok = isinstance(esito, dict) and bool(esito.get("ok"))
+            stato = str(esito.get("stato") or "") if ok else ""
+            # un blocco poi INCASSATO (da una persona, o da un giro futuro) non si annulla piu':
+            # i soldi sono entrati e si rendono (code-review 25/11)
+            annullo = stato != "succeeded"
+        if annullo:
+            gia = stato == "canceled"
+            # un blocco in uno stato strano non si annulla a occhi chiusi: decide una persona
+            manca = [] if (not ok or stato in ("requires_capture", "canceled")) else ["stato_" + stato]
+        else:
+            esito = sp.rimborsi_di(pi_) if sp is not None else None
+            ok = isinstance(esito, dict) and bool(esito.get("ok"))
+            reso = int(esito.get("rimborsato_cents") or 0) if ok else 0
+            gia = ok and reso >= dovuto
+            manca = ((["rimborso_in_corso"] if ok and int(esito.get("in_corso_cents") or 0) else [])
+                     + (["rimborso_parziale"] if 0 < reso < dovuto else []))
+            # come `_rimborso_dovuto_scheda` (S18): un pagamento contestato lo rende gia' la banca,
+            # e rimborsarlo pagherebbe due volte (code-review 25/11)
+            if ok and not gia:
+                esito_c = sp.contestazione_di(pi_)
+                if not (isinstance(esito_c, dict) and esito_c.get("ok")):
+                    manca.append("verifica_contestazione")
+                elif esito_c.get("contestato"):
+                    manca.append("contestazione_banca")
+        riga = {"riferimento": str(mov.get("riferimento") or ""), "secondo_pagamento": True,
+                "gesto": "annullo" if annullo else "rimborso", "payment_intent": pi_,
+                "dovuto_cents": dovuto, "pagato_cents": dovuto, "valuta": mov.get("valuta"),
+                "attesa_ore": max(0, (int(_t.time()) - int(mov.get("ts") or 0)) // 3600),
+                "gia_rimborsato": gia, "manca": manca,
+                "motivo_stripe": "" if ok else str((esito or {}).get("motivo") or "lettura fallita"),
+                "bottone": ok and not manca and not gia}
+        return riga, ok
+
     def _admin_rimborsi_dovuti(self, query, headers):
         """LA LISTA DI CHI ASPETTA I SUOI SOLDI. Read-only.
 
@@ -6127,7 +6181,12 @@ class RouterHTTP:
                              "quali rimborsi sono gia' partiti, e la lista sarebbe un'opinione"}
         # ── i candidati vengono dal GIORNALE, che non perde una riga ──
         try:
-            dovuti = [m for m in fc.stream_giornale() if (m.get("tipo") or "") == "rimborso"]
+            dovuti, secondi = [], []
+            for m in fc.stream_giornale():
+                if (m.get("tipo") or "") == "rimborso":
+                    dovuti.append(m)
+                elif (m.get("tipo") or "") == "secondo_pagamento":
+                    secondi.append(m)
         except Exception:
             logger.error("rimborsi dovuti: giornale illeggibile", exc_info=True)
             return 200, {"controllabile": False, "in_attesa": 0, "rimborsi": [], "allarmi": [],
@@ -6158,6 +6217,16 @@ class RouterHTTP:
             if "pagamento_non_incassato" in (riga.get("manca") or []):
                 mai_entrati.append(rif)
             righe.append(riga)
+        # g1 (25/11, «autorizzato»): i SECONDI pagamenti, una riga per pagamento (una prenotazione
+        # ne puo' avere piu' d'uno), ognuna col suo `pi_` e il suo pulsante. Stesso tetto.
+        sec_esaminati = secondi[-self.RIMBORSI_TETTO:]
+        for mov in reversed(sec_esaminati):
+            riga, stripe_ok = self._secondo_pagamento_scheda(mov)
+            if not stripe_ok:
+                controllabile = False
+                motivi.append("%s: %s" % (riga["riferimento"], riga["motivo_stripe"]))
+            if not riga["gia_rimborsato"]:
+                righe.append(riga)
         # ⛔ NEI DUE SENSI: se Stripe ha restituito dei soldi su una prenotazione che per noi
         # e' ancora viva, i conti divergono e nessuno se ne accorgerebbe mai.
         allarmi, saltati = [], 0
@@ -6234,7 +6303,8 @@ class RouterHTTP:
             "in_attesa": len(righe) - len(mai_entrati), "rimborsi": righe, "allarmi": allarmi,
             # D18 condizione 3: si dichiara cosa NON e' stato guardato.
             "tetto": self.RIMBORSI_TETTO,
-            "non_esaminati": max(0, len(dovuti) - len(esaminati)),
+            "non_esaminati": (max(0, len(dovuti) - len(esaminati))
+                              + max(0, len(secondi) - len(sec_esaminati))),
             "saltati_blocco_annullato": saltati,
             "soldi_mai_entrati": mai_entrati,
             "nota": ("i soldi NON partono da soli: ogni riga si esegue a mano col pulsante. "
@@ -6278,7 +6348,26 @@ class RouterHTTP:
         # ⛔ FRENO 4: la scheda si RICALCOLA adesso. Tutto quello che arriva dal browser --
         # importo compreso -- viene ignorato: una cifra che sceglie chi chiama la rotta e' una
         # cifra scritta a mano su soldi veri.
-        riga, stripe_ok = self._rimborso_dovuto_scheda(rif)
+        pi_scelto = dati.get("payment_intent")
+        if pi_scelto is None:
+            riga, stripe_ok = self._rimborso_dovuto_scheda(rif)
+        else:
+            # g1 (25/11, «autorizzato»): il pulsante di UN secondo pagamento. Il pagamento arriva
+            # dalla riga, ma vale solo se il giornale lo conosce come secondo pagamento di QUESTA
+            # prenotazione; cifra e gesto li ridice la scheda (freno 4).
+            from fase85_pagamenti_stripe import _e_un_numero_di_stripe
+            if not _e_un_numero_di_stripe(pi_scelto, "pi_"):
+                return 422, {"errore": "campi_non_validi"}
+            try:
+                mov = next((m for m in getattr(self._sys, "finanza", None).movimenti(rif)
+                            if m.get("evento_id") == "secondo_pagamento:" + pi_scelto), None)
+            except Exception:
+                # giornale spento o illeggibile: «non lo so», mai «niente da fare» (code-review)
+                logger.error("secondo pagamento: giornale illeggibile per %s",
+                             _rif_per_registro(rif), exc_info=True)
+                return 503, {"errore": "giornale_non_leggibile", "riferimento": rif}
+            riga, stripe_ok = (self._secondo_pagamento_scheda(mov) if mov is not None
+                               else (None, True))
         if riga is None:
             return 404, {"errore": "nessun_rimborso_dovuto", "riferimento": rif}
         if riga.get("gia_rimborsato"):
@@ -6294,14 +6383,28 @@ class RouterHTTP:
                                  "nel dubbio decide una persona"}
         sp = getattr(self._sys, "stripe", None)
         # Chiave STABILE: la stessa di `_admin_rimborso`, cosi' le due strade non possono
-        # restituire due volte gli stessi soldi nemmeno usando rotte diverse.
-        esito = sp.rimborsa(riga["payment_intent"], int(riga["dovuto_cents"]), "rimborso:" + rif)
+        # restituire due volte gli stessi soldi nemmeno usando rotte diverse. Un secondo pagamento
+        # (g1) ha la SUA chiave, legata al suo `pi_`: non si confonde col rimborso del soggiorno.
+        pi_riga = riga["payment_intent"]
+        if riga.get("gesto") == "annullo":
+            esito = sp.annulla(pi_riga, "annullo_secondo:" + pi_riga)
+        else:
+            esito = sp.rimborsa(pi_riga, int(riga["dovuto_cents"]),
+                                ("rimborso_secondo:" + pi_riga) if riga.get("secondo_pagamento")
+                                else "rimborso:" + rif)
         # ⛔ CHI, SU COSA, QUANTO (voce 35, 6/11, «autorizzato»): come «Lo pago io a mano», e PRIMA
         # di leggere l'esito, perche' anche «in corso» e «sconosciuto» possono aver fatto uscire i
         # soldi. Guardia: `test_fase83_server...test_35_il_pulsante_lascia_la_riga_chi_cosa_quanto_su_cosa`.
-        logger.warning("ADMIN_ACTION | OGGETTO: %s | AZIONE: Rimborso dovuto | IMPORTO: %s | IP: %s",
-                       _rif_per_registro(rif), self._fmt_importo(int(riga["dovuto_cents"]), riga["valuta"]),
+        logger.warning("ADMIN_ACTION | OGGETTO: %s | AZIONE: %s | IMPORTO: %s | IP: %s",
+                       _rif_per_registro(rif),
+                       ("Secondo pagamento %s %s" % (riga.get("gesto"), _rif_per_registro(pi_riga))
+                        if riga.get("secondo_pagamento") else "Rimborso dovuto"),
+                       self._fmt_importo(int(riga["dovuto_cents"]), riga["valuta"]),
                        self._client_ip(headers))
+        if riga.get("gesto") == "annullo" and not (isinstance(esito, dict) and esito.get("ok")):
+            # un annullo senza risposta puo' essere PARTITO: la riga resta e la ricalcola Stripe
+            # (annullare due volte non muove soldi) -- code-review 25/11
+            esito = dict(esito if isinstance(esito, dict) else {}, sconosciuto=True)
         # PACCO 1 (25/10, «autorizzato»), tre risposte e non due. IN CORSO: Stripe l'ha preso ma
         # non l'ha ancora restituito; SCONOSCIUTO: la risposta non e' arrivata e puo' essere
         # partito. In tutti e due i casi NON e' «nessun rimborso e' partito»: rifarlo a mano
@@ -6326,7 +6429,8 @@ class RouterHTTP:
                     _rif_per_registro(rif),
                     self._fmt_importo(int(riga["dovuto_cents"]), riga["valuta"]),
                     esito.get("id") or "")
-        return 200, {"stato": "rimborsato", "riferimento": rif,
+        return 200, {"stato": "annullato" if riga.get("gesto") == "annullo" else "rimborsato",
+                     "riferimento": rif,
                      "importo_cents": riga["dovuto_cents"], "valuta": riga["valuta"],
                      "stripe_refund_id": esito.get("id") or "",
                      "nota": "soldi restituiti all'ospite; la riga esce dalla lista solo "
@@ -11266,6 +11370,34 @@ class RouterHTTP:
                               "controllare incasso e bonifico") if _dopo_blocco else
                              "l'ospite ha pagato DUE volte: il secondo si toglie a mano da Stripe")
                 if not _dopo_blocco:
+                    # g1 (25/11, «autorizzato»): il secondo pagamento va nella lista dei rimborsi
+                    # dovuti col SUO pagamento, attraverso una riga del giornale immutabile (che la
+                    # lista legge). Senza la riga resterebbe solo l'ERROR qui sopra: 503, Stripe
+                    # ritenta. Giornale spento (un avvio senza DB_FINANZA): resta l'ERROR, come prima.
+                    # Guardia: test_fase83_server.TestUnPreventivoDaUnaSolaPaginaDiPagamento.
+                    _fc = getattr(self._sys, "finanza", None)
+                    try:
+                        # il `pi_` finisce nel pulsante del pannello: solo con la forma dei numeri
+                        # veri di Stripe (code-review 25/11)
+                        from fase85_pagamenti_stripe import _e_un_numero_di_stripe
+                        _scritta = _fc is None or _e_un_numero_di_stripe(_pi_arrivato, "pi_") and _fc.movimento(
+                            tipo="secondo_pagamento", riferimento=str(rif), soggetto="ospite",
+                            importo_cents=obj0.get("amount_total"),
+                            valuta=str(obj0.get("currency") or "").upper(),
+                            causale="annullare" if pi_bloccato else "restituire",
+                            evento_id="secondo_pagamento:" + _pi_arrivato) is not None
+                    except Exception:
+                        logger.error("webhook | secondo pagamento: il giornale e' esploso",
+                                     exc_info=True)
+                        _scritta = False
+                    if not _scritta:
+                        logger.error("webhook | codice: esito_non_applicato | sottocodice: "
+                                     "secondo_pagamento_non_registrato | secondo: %s | rif: %s | "
+                                     "messaggio: la riga del giornale non e' scritta, rispondo 503 "
+                                     "perche' Stripe ritenti", _rif_per_registro(_pi_arrivato),
+                                     _rif_per_registro(rif))
+                        return 503, {"errore": "esito_non_applicato",
+                                     "sottocodice": "secondo_pagamento_non_registrato"}
                     return 200, {"ricevuto": True, "tipo": tipo, "secondo_pagamento": True}
             # AUDIT CONSOLE: salva l'id sessione (cs_...) -> shadow-check Stripe possibile
             # per sempre su questa prenotazione. ISOLATO dalla CONFERMA, che avviene

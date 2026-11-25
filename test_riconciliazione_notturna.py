@@ -101,6 +101,34 @@ class TestIlGiroNotturno(unittest.TestCase):
         self.assertIn("URGENTE", uscite[0][1])
         self.assertIn("solo stripe", uscite[0][2].lower())
 
+    # g2 (RIPRENDI, voce 24/11 sera tardi; «autorizzato» 25/11): la prenotazione R1 e' nel
+    # giornale, e Stripe ha DUE sessioni pagate per lei
+    def _giornale_con_r1(self):
+        from fase177_financial_controller import crea_financial_controller
+        fc = crea_financial_controller(self.env["DB_FINANZA"])
+        fc.inizializza_schema()
+        fc.movimento(tipo="incasso", riferimento="R1", soggetto="host:h", importo_cents=1000,
+                     valuta="EUR", causale="pagamento")
+
+    def test_g2_un_doppio_pagamento_mette_URGENTE_e_dice_quale(self):
+        self._giornale_con_r1()
+        due = [{"id": cs, "payment_status": "paid", "amount_total": 1000, "currency": "eur",
+                "metadata": {"riferimento": "R1"}, "payment_intent": {"id": pi, "status": "succeeded"}}
+               for cs, pi in (("cs_1", "pi_1"), ("cs_2", "pi_2"))]
+        cod, uscite, _ = self._giro(sessioni=due)
+        self.assertEqual((1, 1), (cod, len(uscite)))
+        self.assertIn("URGENTE", uscite[0][1], "DOPPIO PAGAMENTO E LA MAIL NON E' URGENTE")
+        self.assertIn("cs_2", uscite[0][2], "la mail non dice QUALE pagamento e' doppio")
+
+    def test_g2_i_totali_che_non_quadrano_si_leggono_nella_mail(self):
+        self._giornale_con_r1()
+        una = [{"id": "cs_1", "payment_status": "paid", "amount_total": 1000, "currency": "eur",
+                "metadata": {"riferimento": "R1"}}]
+        cod, uscite, _ = self._giro(sessioni=una)     # nessun movimento sul saldo di Stripe
+        self.assertEqual(1, cod)
+        self.assertIn("-1000", uscite[0][2],
+                      "I TOTALI NON QUADRANO E LA MAIL NON DICE DI QUANTO: %r" % (uscite[0][2],))
+
     def test_senza_config_NON_ESEGUITO_uscita_2_e_zero_effetti(self):
         inviate = []
         cod = cron.main({}, lambda d, o, c: inviate.append(1) or True)

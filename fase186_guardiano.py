@@ -120,6 +120,8 @@ def _riconciliazione(sistema: Any, giorni: int) -> Optional[Dict[str, Any]]:
     return {"solo_stripe": rep.get("solo_stripe") or [],
             "solo_giornale": rep.get("solo_giornale") or [],
             "importo_diverso": rep.get("importo_diverso") or [],
+            # g2 (25/11): la stessa prenotazione pagata piu' volte, col nome delle sessioni
+            "doppio_pagamento": rep.get("doppio_pagamento") or [],
             "delta_totali": delta_non_zero}
 
 
