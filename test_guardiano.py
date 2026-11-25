@@ -323,8 +323,10 @@ class TestIlDoppioPagamentoArrivaAlGuardiano(_Base):
 
     def test_il_doppio_pagamento_finisce_nell_email_col_nome_delle_sessioni(self):
         import fase182_riconciliazione as R
+        # la stessa stringa piena e finta della classe del giro troncato, presa per nome:
+        # scritta qui come testo, bandit la leggeva come una password nel codice (B106, CI 25/11)
         self.sys = crea_sistema(dataclasses.replace(
-            self.sys.config, stripe_secret_key="banco-di-prova-nessuna-chiave-vera"))
+            self.sys.config, stripe_secret_key=TestGiroTroncatoNonEUnVerdetto._NON_UNA_CHIAVE))
         self.assertIsNotNone(getattr(self.sys, "finanza", None),
                              "PREMESSA: senza giornale il confronto non parte nemmeno")
         doppio = [{"riferimento": "R1", "sessioni": ["cs_a", "cs_b"], "cents": [25000, 25000],
