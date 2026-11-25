@@ -3313,10 +3313,14 @@ class TestLoSpazzinoChiudeLaPaginaCheLOspiteHaInMano(_BancoDeiSoldiDelServer):
                 del self.nate[:]
                 s2, b2 = self.g("POST", "/api/concierge/book",
                                 {"quote_token": q["quote_token"], "email": "cli@banco.it"})
-                self.assertEqual(s2, 201, b2)
-                self.assertTrue(b2.get("idempotente"), "PREMESSA: e' un doppio clic")
-                self.assertTrue(isinstance(b2.get("payment_url"), str) and b2["payment_url"],
-                                "mai un indirizzo vuoto all'ospite: %r" % (b2.get("payment_url"),))
+                # 24/11 (soldi, gruppo 1): senza la pagina salvata il doppio clic NON da' piu' la
+                # pagina appena rifatta da fase59: sarebbe la SECONDA pagabile, con la prima ancora
+                # aperta nella scheda dell'ospite. I blocchi di prima dell'11/11 non esistono piu'
+                # (un hold online dura minuti): qui si arriva solo con un corpo rotto. Restano i
+                # controlli di S19-S22: mai un indirizzo vuoto, mai una pagina dell'anticipo online.
+                self.assertEqual((503, "pagamento_non_disponibile"), (s2, b2.get("errore")), b2)
+                self.assertNotIn("payment_url", b2,
+                                 "nessun indirizzo all'ospite, vuoto o nuovo: %r" % (b2,))
                 self.assertEqual([p for p in self.nate if p.startswith("cs_anticipo")], [],
                                  "online non nasce una pagina dell'anticipo")
 
@@ -10752,9 +10756,11 @@ class TestPR312PezzoUnoLeRigheCheIlGiudiceNonVedeva(unittest.TestCase):
         self.assertEqual(b["stato"], "in_attesa_pagamento", b)
 
     def test_VA1_online_il_doppio_clic_non_chiede_l_anticipo(self):
+        # 24/11: senza pagina salvata non si ridà il link appena rifatto (sarebbe una seconda
+        # pagina pagabile): 503; e chi paga online non riceve mai una pagina dell'anticipo
         (s, b), chieste = self._replay("", RuntimeError("anticipo chiesto per un online"))
-        self.assertEqual(s, 201, b)
-        self.assertEqual(b["payment_url"], "https://totale", b)
+        self.assertEqual((503, "pagamento_non_disponibile"), (s, b.get("errore")), b)
+        self.assertNotIn("payment_url", b, b)
         self.assertEqual(chieste, [])
 
     def test_VA1_senza_link_dell_anticipo_si_risponde_riprova_mai_il_totale(self):
@@ -11916,16 +11922,17 @@ class TestPR317PezzoCinqueLeRigheCheIlGiudiceNonVedeva(unittest.TestCase):
                 self.assertIsNone(esito)
 
     # ── :6728 il doppio clic non sostituisce il link con una pagina salvata VUOTA ───────────
-    def test_6728_una_pagina_salvata_vuota_non_cancella_il_link(self):
+    def test_6728_una_pagina_salvata_vuota_non_da_una_seconda_pagina(self):
+        # 24/11 (soldi, gruppo 1): prima si dava il link appena rifatto da fase59, cioe' una
+        # SECONDA pagina pagabile; ora 503, senza link e senza il numero di una pagina che non c'e'
         r = crea_router(_sistema())
         r._sys.pagamenti_pendenti = _PendenteFinto(
             {"riferimento": "R-317", "stato": "in_attesa", "email": "o@x.it",
              "corpo_json": json.dumps({"payment_url": "", "stripe_cs": "cs_vecchia"})})
         s, b = r._replay_prenotazione({"riferimento": "R-317", "payment_url": "https://totale"})
-        self.assertEqual(s, 201, b)
-        self.assertEqual(b["payment_url"], "https://totale", b)
+        self.assertEqual((503, "pagamento_non_disponibile"), (s, b.get("errore")), b)
+        self.assertNotIn("payment_url", b, b)
         self.assertNotIn("stripe_cs", b, "il numero di una pagina che non c'e'")
-        self.assertEqual(b["stato"], "in_attesa_pagamento", b)
 
     # ── :7243 :7256 l'approvazione usa la pagina NUOVA e ne tiene il numero ────────────────
     def _approva(self, stripe):
@@ -14829,6 +14836,400 @@ class TestLaPubblicazioneHaIFreni(unittest.TestCase):
                 self._registra(email)
         self.assertIn('https://bookinvip.com/host.html', spedite.get("senza@base.it", ""))
         self.assertIn('https://prova.bookinvip.com/host.html', spedite.get("con@base.it", ""))
+
+
+class TestUnPreventivoDaUnaSolaPaginaDiPagamento(_OraVeraPerIlPreventivo, unittest.TestCase):
+    """Soldi, gruppo 1 (24/11): «un secondo pagamento sulla stessa prenotazione». MISURATO prima di
+    riparare (sonda nello scratchpad della sessione 1d401f8f, `sonda_soldi1`): due clic sullo STESSO
+    preventivo a 0,05 s, con la pagina del primo piu' lenta da creare su Stripe, davano all'ospite DUE
+    pagine pagabili. fase59 ne crea una a ogni chiamata, e in `_book` il doppio clic si riconosce dal
+    pendente, che il primo clic non ha ancora scritto: il secondo proseguiva come una prenotazione
+    nuova. Pagate tutte e due, il secondo pagamento riscriveva `stripe_pi` (il primo spariva), la
+    conferma lo prendeva per un ritentativo: nessuna riga di rimborso, nessun ERROR. Il server vero e'
+    un ThreadingHTTPServer, quindi le due richieste girano davvero insieme. Stessa causa: dopo un primo
+    clic fallito (Stripe giu', fase59 libera la stanza) il blocco rilasciato risponde ancora «gia'
+    tuo», e il secondo clic confermava una prenotazione SENZA la stanza tenuta."""
+    WH = "whsec_un_preventivo"
+    CHIAVE_STRIPE_FINTA = "sk"           # finta: Stripe qui e' `_stripe_finto`, nessuna rete
+
+    def setUp(self):
+        super().setUp()
+        import fase85_pagamenti_stripe as _stripe
+        self.create = []
+        self.chiuse = []
+        self.lento_il_primo = False
+        self.creazioni_rotte = 0
+        self._lock = threading.Lock()
+        self._seconda_partita = threading.Event()
+        p = mock.patch.object(_stripe.ProviderStripe, "_fetch_reale", staticmethod(self._stripe_finto))
+        p.start()
+        self.addCleanup(p.stop)
+        d = self.d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        self.sis = crea_sistema(ConfigCasaVIP(
+            abilitato=True, segreto_hmac=b"S" * 32, con_registrazione_host=True,
+            db_catalogo=f"{d}/c.db", db_inventario=f"{d}/i.db", db_registro_host=f"{d}/r.db",
+            db_accettazioni=f"{d}/a.db", db_pendenti=f"{d}/p.db", db_payout=f"{d}/po.db",
+            db_garanzia=f"{d}/g.db", db_tassa_comunale=f"{d}/t.db",
+            commissione_bps=1500, psp_bps=300,
+            stripe_secret_key=self.CHIAVE_STRIPE_FINTA, stripe_webhook_secret=self.WH,
+            stripe_success_url="https://x/ok", stripe_cancel_url="https://x/no"))
+        self.r = crea_router(self.sis, host_key="hk", admin_key="ak", base_url="https://b.com")
+        _s, c = self.g("POST", "/api/host/registrazione",
+                       {"email": "h@b.it", "password": "password1", "accetta_termini": True,
+                        "accetta_clausole": True, "accetta_privacy": True,
+                        "doc_sha256": doc_sha256(), "versione": CONTRATTO_HOST_VERSIONE})
+        H = {"X-Host-Token": c["token"]}
+        self.sis.registro_host.imposta_stripe_account(c["host_id"], "acct_un_preventivo")
+        oggi = datetime.date.today()
+        self.g("POST", "/api/host/pubblica",
+               {"slug": "casa1", "titolo": "C1", "citta": "Roma", "paese": "IT",
+                "cin": "IT012034B4ABC1DEFG", "prezzo_notte_cents": 20000, "capacita": 4,
+                "politica_cancellazione": "flessibile"}, H)
+        self.g("POST", "/api/host/disponibilita_range",
+               {"alloggio_id": "casa1", "da": oggi.isoformat(),
+                "a": (oggi + datetime.timedelta(days=30)).isoformat(), "unita_totali": 1,
+                "prezzo_netto_cents": 20000}, H)
+        self.ci = (oggi + datetime.timedelta(days=3)).isoformat()
+        self.co = (oggi + datetime.timedelta(days=5)).isoformat()
+        _s, q = self.g("POST", "/api/concierge/quote",
+                       {"alloggio_id": "casa1", "check_in": self.ci, "check_out": self.co,
+                        "party": 2})
+        self.qt = q["quote_token"]
+
+    def g(self, m, p, b=None, h=None):
+        return self.r.gestisci(m, p, {}, json.dumps(b) if b is not None else None, h or {})
+
+    def _stripe_finto(self, url, body, headers):
+        if not body and "/checkout/sessions/" in url:              # rilettura della sessione
+            cs = url.rsplit("/", 1)[-1]
+            return {"id": cs, "payment_status": "paid", "payment_intent": "pi_" + cs[3:]}
+        if url.endswith("/expire") and body:                       # la pagina si chiude
+            cs = url.rsplit("/", 2)[-2]
+            self.chiuse.append(cs)
+            return {"id": cs, "status": "expired"}
+        if url.rstrip("/").endswith("/checkout/sessions") and body:  # una pagina nuova
+            with self._lock:
+                if self.creazioni_rotte > 0:            # Stripe non risponde: nessuna pagina
+                    self.creazioni_rotte -= 1
+                    return {}
+                cs = "cs_pagina%d" % (len(self.create) + 1)
+                self.create.append(cs)
+                primo = len(self.create) == 1
+            if self.lento_il_primo and primo:
+                # la prima pagina arriva DOPO la seconda: l'ordine lo comanda l'evento, non l'ora
+                # (tetto lungo: su una CI lenta l'attesa non scade, e se scade la PREMESSA lo dice)
+                self.seconda_arrivata = self._seconda_partita.wait(30)
+                time.sleep(0.3)
+            elif self.lento_il_primo:
+                self._seconda_partita.set()
+            return {"url": "https://checkout.stripe.test/" + cs, "id": cs}
+        return {}
+
+    def _book(self):
+        return self.g("POST", "/api/concierge/book", {"quote_token": self.qt, "email": "o@prova.it"})
+
+    def _pendente(self, rif):
+        rec = self.sis.pagamenti_pendenti.info(rif)
+        return rec, (json.loads(rec["corpo_json"] or "{}") if rec else {})
+
+    def _paga(self, rif, cs, pi, evt, tipo="checkout.session.completed"):
+        from fase87_stripe_webhook import firma_di_test
+        pl = json.dumps({"id": evt, "type": tipo,
+                         "data": {"object": {"id": cs, "payment_intent": pi,
+                                             "metadata": {"riferimento": rif}}}})
+        return self.r.gestisci("POST", "/api/payments/webhook", {}, pl,
+                               {"Stripe-Signature": firma_di_test(pl, self.WH, int(time.time()))})
+
+    def test_due_clic_insieme_danno_all_ospite_UNA_sola_pagina(self):
+        self.lento_il_primo = True
+        barriera = threading.Barrier(2)
+        risposte = [None, None]
+
+        def clic(i):
+            barriera.wait()
+            if i == 1:
+                time.sleep(0.05)
+            risposte[i] = self._book()
+        fili = [threading.Thread(target=clic, args=(i,)) for i in range(2)]
+        for f in fili:
+            f.start()
+        for f in fili:
+            f.join(60)
+        self.assertNotIn(None, risposte, "PREMESSA: un clic non ha risposto entro 60 s")
+        self.assertTrue(getattr(self, "seconda_arrivata", False),
+                        "PREMESSA: il secondo clic non e' arrivato a Stripe mentre il primo "
+                        "aspettava: non c'e' stata la gara")
+        self.assertEqual(2, len(self.create), "PREMESSA: tutti e due i clic hanno chiesto una pagina "
+                                              "a Stripe (%r)" % (self.create,))
+        pagine = {c.get("payment_url") for _s, c in risposte if c.get("payment_url")}
+        self.assertEqual(1, len(pagine),
+                         "DUE PAGINE PAGABILI SULLA STESSA PRENOTAZIONE: l'ospite puo' pagare due "
+                         "volte (%r)" % (risposte,))
+        rif = next(c["riferimento"] for _s, c in risposte if c.get("riferimento"))
+        _rec, dj = self._pendente(rif)
+        self.assertEqual(pagine, {dj.get("payment_url")},
+                         "la pagina data all'ospite non e' quella salvata: lo spazzino chiuderebbe "
+                         "l'altra (%r, salvata %r)" % (pagine, dj.get("payment_url")))
+        altra = [(s, c) for s, c in risposte if not c.get("payment_url")]
+        self.assertEqual([409], [s for s, _c in altra], "%r" % (risposte,))
+        self.assertEqual("prenotazione_in_corso", altra[0][1].get("errore"), "%r" % (altra,))
+        self.assertTrue(altra[0][1].get("riprova"), "%r" % (altra,))
+        self.assertEqual([c for c in self.create if c not in dj.get("payment_url", "")],
+                         self.chiuse, "la pagina in piu', che nessuno ha avuto, non e' stata "
+                                      "chiusa su Stripe (chiuse %r)" % (self.chiuse,))
+        s, c = self._book()                  # l'ospite riprova: riceve la STESSA pagina
+        self.assertEqual((201, pagine), (s, {c.get("payment_url")}), "%r" % (c,))
+
+    def test_dopo_uno_stripe_caduto_il_secondo_clic_non_conferma_senza_stanza(self):
+        self.creazioni_rotte = 1
+        s, c = self._book()
+        self.assertEqual((503, "pagamento_non_disponibile"), (s, c.get("errore")),
+                         "PREMESSA: Stripe non risponde, fase59 libera la stanza: %r" % (c,))
+        s, c = self._book()                  # Stripe e' tornato, l'ospite riclicca
+        rif = c.get("riferimento") or ""
+        rec, _dj = self._pendente(rif) if rif else (None, {})
+        vivi = [p for p in self.sis.inventario.elenco_prenotazioni(alloggio_id="casa1", limit=50)
+                if not p.get("rimborsato")]
+        self.assertFalse(s == 201 and rec is not None,
+                         "PRENOTAZIONE CONFERMATA SENZA LA STANZA: il blocco era stato liberato e il "
+                         "secondo clic l'ha creata lo stesso (blocchi vivi sulla casa: %d) (%s %r)"
+                         % (len(vivi), s, c))
+        # la stanza e' gia' libera: riprovare non serve, va rifatto il preventivo (codice tradotto)
+        self.assertEqual((409, "preventivo_scaduto"), (s, c.get("errore")), "%r" % (c,))
+        self.assertFalse(c.get("riprova"), "«riprova» su un blocco liberato: non servirebbe mai")
+        self.assertEqual(self.create, self.chiuse,
+                         "la pagina rifatta per il clic respinto non e' stata chiusa su Stripe")
+        _s, q = self.g("POST", "/api/concierge/quote",
+                       {"alloggio_id": "casa1", "check_in": self.ci, "check_out": self.co,
+                        "party": 2})
+        self.qt = q["quote_token"]           # un preventivo nuovo prenota come sempre
+        s, c = self._book()
+        self.assertEqual(201, s, "%r" % (c,))
+        self.assertTrue(c.get("payment_url"), "%r" % (c,))
+
+    # identificativi lunghi come quelli veri di Stripe (pi_ + 24): il testo dell'ERROR deve stare
+    # nei 180 caratteri che il Guardiano manda per email (fase186), dopo i 47 dell'intestazione
+    # del registro (main_casavip: ora, livello, nome)
+    PI_PRIMO, PI_SECONDO = "pi_" + "P" * 24, "pi_" + "S" * 24
+
+    def _secondo_pagamento(self):
+        s, c = self._book()
+        self.assertEqual(201, s, "%r" % (c,))
+        rif, cs = c["riferimento"], c["payment_url"].rsplit("/", 1)[-1]
+        self.assertEqual(200, self._paga(rif, cs, self.PI_PRIMO, "evt_1")[0])
+        rec, dj = self._pendente(rif)
+        self.assertEqual(("pagato", self.PI_PRIMO), (rec["stato"], dj.get("stripe_pi")), "PREMESSA")
+        return rif
+
+    def test_il_doppio_clic_su_un_corpo_illeggibile_non_da_una_seconda_pagina(self):
+        # differential-review 24/11 (R1): senza la pagina salvata leggibile, il doppio clic dava la
+        # pagina appena rifatta da fase59 -- una SECONDA pagina pagabile (per chi paga in
+        # struttura, quella del totale). D19: il corpo rotto si costruisce a mano.
+        s, c = self._book()
+        self.assertEqual(201, s, "%r" % (c,))
+        prima = c["payment_url"]
+        con = sqlite3.connect(os.path.join(self.d, "p.db"))
+        with con:
+            con.execute("UPDATE pendenti SET corpo_json='{rotto' WHERE riferimento=?",
+                        (c["riferimento"],))
+        con.close()
+        s, c2 = self._book()
+        self.assertNotEqual(201, s, "DOPPIO CLIC SU UN CORPO ROTTO: data una seconda pagina %r "
+                                    "(la prima era %r)" % (c2.get("payment_url"), prima))
+        self.assertEqual((503, "pagamento_non_disponibile"), (s, c2.get("errore")), "%r" % (c2,))
+        self.assertNotIn("payment_url", c2)
+        self.assertEqual(self.create[1:], self.chiuse,
+                         "la pagina rifatta da fase59 non e' stata chiusa su Stripe")
+
+    def test_un_secondo_pagamento_diverso_non_cancella_il_primo_e_grida(self):
+        rif = self._secondo_pagamento()
+        with self.assertLogs("core_auto.server", level="INFO") as reg:
+            s, esito = self._paga(rif, "cs_altra_pagina", self.PI_SECONDO, "evt_2")
+        self.assertEqual((200, {"ricevuto": True, "tipo": "checkout.session.completed",
+                                "secondo_pagamento": True}), (s, esito))
+        _rec, dj = self._pendente(rif)
+        self.assertEqual(self.PI_PRIMO, dj.get("stripe_pi"),
+                         "IL SECONDO PAGAMENTO HA CANCELLATO IL PRIMO: i rimborsi partirebbero dal "
+                         "secondo e del primo non resta traccia")
+        errori = [x.getMessage() for x in reg.records if x.levelname == "ERROR"]
+        gridato = [e for e in errori if "secondo_pagamento" in e]
+        self.assertEqual(1, len(gridato), "SECONDO PAGAMENTO IN SILENZIO: %r" % (errori,))
+        self.assertIn("sottocodice: restituire", gridato[0])
+        fine = gridato[0].index(rif) + len(rif)
+        self.assertIn(self.PI_SECONDO, gridato[0][:fine])
+        self.assertLessEqual(47 + fine, 180,
+                             "il Guardiano taglia a 180: il secondo pagamento o la prenotazione "
+                             "uscirebbero mozzati dall'email (%d) %r" % (47 + fine, gridato[0]))
+        self.assertIn(self.PI_PRIMO, gridato[0])
+
+    def test_il_secondo_pagamento_si_vede_anche_a_conferma_del_primo_non_finita(self):
+        # code-review 24/11 (mutante B1): il primo pagamento e' salvato ma la sua conferma e'
+        # fallita (503, Stripe la ritentera'): la prenotazione e' ancora 'in_attesa'
+        s, c = self._book()
+        rif, cs = c["riferimento"], c["payment_url"].rsplit("/", 1)[-1]
+        with mock.patch.object(self.r, "_conferma_pagamento", return_value=False):
+            s, esito = self._paga(rif, cs, self.PI_PRIMO, "evt_1")
+        rec, dj = self._pendente(rif)
+        self.assertEqual((503, "in_attesa", self.PI_PRIMO), (s, rec["stato"], dj.get("stripe_pi")),
+                         "PREMESSA: primo salvato, conferma da finire (%r)" % (esito,))
+        with self.assertLogs("core_auto.server", level="INFO") as reg:
+            s, esito = self._paga(rif, "cs_altra_pagina", self.PI_SECONDO, "evt_2")
+        _rec, dj = self._pendente(rif)
+        self.assertEqual((200, self.PI_PRIMO), (s, dj.get("stripe_pi")),
+                         "A CONFERMA NON FINITA IL SECONDO PAGAMENTO CANCELLA IL PRIMO (%r)" % (esito,))
+        self.assertTrue(any("secondo_pagamento" in x.getMessage() for x in reg.records
+                            if x.levelname == "ERROR"))
+        s, _e = self._paga(rif, cs, self.PI_PRIMO, "evt_1")        # Stripe ritenta il primo
+        rec, dj = self._pendente(rif)
+        self.assertEqual((200, "pagato", self.PI_PRIMO), (s, rec["stato"], dj.get("stripe_pi")))
+
+    def test_un_secondo_pagamento_solo_bloccato_sulla_carta_si_annulla(self):
+        # mutante B7: se il secondo e' un blocco sulla carta non c'e' niente da restituire, c'e'
+        # un'autorizzazione da annullare: il sottocodice dice il rimedio giusto
+        rif = self._secondo_pagamento()
+        with mock.patch.object(self.sis.stripe, "stato_sessione", return_value="unpaid"), \
+                mock.patch.object(self.sis.stripe, "pagamento_della_sessione",
+                                  return_value={"ok": True, "stato": "requires_capture",
+                                                "pi": self.PI_SECONDO}), \
+                self.assertLogs("core_auto.server", level="INFO") as reg:
+            s, esito = self._paga(rif, "cs_altra_pagina", "", "evt_2")
+        self.assertEqual(200, s, "%r" % (esito,))
+        gridato = [x.getMessage() for x in reg.records
+                   if x.levelname == "ERROR" and "secondo_pagamento" in x.getMessage()]
+        self.assertEqual(1, len(gridato), "%r" % ([x.getMessage() for x in reg.records],))
+        self.assertIn("sottocodice: annullare", gridato[0])
+        self.assertIn(self.PI_SECONDO, gridato[0])
+        _rec, dj = self._pendente(rif)
+        self.assertEqual(self.PI_PRIMO, dj.get("stripe_pi"))
+
+    def test_se_l_archivio_non_si_legge_stripe_ritenta_e_il_primo_resta(self):
+        rif = self._secondo_pagamento()
+        vero = self.sis.pagamenti_pendenti.info
+
+        def rotto(r):
+            raise sqlite3.OperationalError("database is locked")
+        self.sis.pagamenti_pendenti.info = rotto
+        try:
+            with self.assertLogs("core_auto.server", level="ERROR") as reg:
+                s, esito = self._paga(rif, "cs_altra_pagina", self.PI_SECONDO, "evt_2")
+        finally:
+            self.sis.pagamenti_pendenti.info = vero
+        self.assertEqual((503, "lettura_pendente_fallita"), (s, esito.get("sottocodice")),
+                         "archivio muto e risposta 2xx: Stripe non ritenta e il secondo pagamento "
+                         "passa senza controllo (%r)" % (esito,))
+        gridato = [x for x in reg.records if "lettura_pendente_fallita" in x.getMessage()]
+        self.assertEqual(1, len(gridato), "%r" % ([x.getMessage() for x in reg.records],))
+        # il TIPO vero nella traccia: «non e' nullo» non basta, `exc_info=False` vale False
+        self.assertIs(sqlite3.OperationalError, (gridato[0].exc_info or (None,))[0],
+                      "il guasto dell'archivio senza la sua traccia")
+        _rec, dj = self._pendente(rif)
+        self.assertEqual(self.PI_PRIMO, dj.get("stripe_pi"))
+
+    def test_senza_archivio_dei_pendenti_il_webhook_non_inventa_un_guasto(self):
+        # giudice della mutazione (CI #349, riga del `_pp_gia ... and rif`): un sistema senza
+        # l'archivio dei pendenti non e' un archivio guasto -- niente 503 inventato
+        s, c = self._book()
+        rif, cs = c["riferimento"], c["payment_url"].rsplit("/", 1)[-1]
+        with mock.patch.object(self.sis, "pagamenti_pendenti", None):
+            s, esito = self._paga(rif, cs, self.PI_PRIMO, "evt_1")
+        self.assertNotEqual("lettura_pendente_fallita", esito.get("sottocodice"), "%r" % (esito,))
+        self.assertEqual(200, s, "%r" % (esito,))
+
+    def test_il_409_guarda_il_blocco_solo_se_e_quello_del_preventivo(self):
+        # giudice della mutazione (CI #349, righe del 409): rami che la gara non percorre. D19: lo
+        # stato si costruisce a mano -- fase59 risponde «gia' tuo» e il pendente non c'e'
+        idem = self.qt.split(".")[-1]
+        corpo = {"idempotente": True, "payment_url": "https://checkout.stripe.test/cs_x",
+                 "stripe_cs": "cs_x", "stato": "confermata"}
+        concierge = self.sis.concierge
+        # (1) un riferimento che NON e' l'inizio della chiave: il blocco non si legge
+        with mock.patch.object(concierge, "prenota", return_value=types.SimpleNamespace(
+                status=201, corpo=dict(corpo, riferimento="R-NON-DEL-PREVENTIVO"))), \
+                mock.patch.object(self.sis.inventario, "stato_blocco",
+                                  return_value="rilasciato") as letto:
+            s, c = self._book()
+        self.assertEqual((409, "prenotazione_in_corso"), (s, c.get("errore")), "%r" % (c,))
+        self.assertEqual([], letto.call_args_list, "letto il blocco di un'altra chiave")
+        # (2) un inventario che non sa leggere il blocco: «riprova», senza avvisi inventati
+        with mock.patch.object(concierge, "prenota", return_value=types.SimpleNamespace(
+                status=201, corpo=dict(corpo, riferimento=idem[:24]))), \
+                mock.patch.object(self.sis.inventario, "stato_blocco", None), \
+                self.assertLogs("core_auto.server", level="INFO") as reg:
+            s, c = self._book()
+        self.assertEqual((409, "prenotazione_in_corso"), (s, c.get("errore")), "%r" % (c,))
+        self.assertEqual([], [x.getMessage() for x in reg.records
+                              if "stato del blocco non letto" in x.getMessage()])
+        # (3) la lettura del blocco esplode: «riprova», e il guasto si dice con la sua traccia
+        with mock.patch.object(concierge, "prenota", return_value=types.SimpleNamespace(
+                status=201, corpo=dict(corpo, riferimento=idem[:24]))), \
+                mock.patch.object(self.sis.inventario, "stato_blocco",
+                                  side_effect=sqlite3.OperationalError("database is locked")), \
+                self.assertLogs("core_auto.server", level="INFO") as reg:
+            s, c = self._book()
+        self.assertEqual((409, "prenotazione_in_corso"), (s, c.get("errore")), "%r" % (c,))
+        guasto = [x for x in reg.records if "stato del blocco non letto" in x.getMessage()]
+        self.assertEqual(1, len(guasto), "%r" % ([x.getMessage() for x in reg.records],))
+        self.assertIs(sqlite3.OperationalError, (guasto[0].exc_info or (None,))[0],
+                      "il guasto della lettura senza la sua traccia")
+
+    def test_la_pagina_in_piu_si_chiude_solo_se_c_e_e_il_guasto_si_vede(self):
+        # giudice della mutazione (CI #349, `_chiudi_pagina_in_piu`)
+        chiamate = []
+        with mock.patch.object(self.sis, "stripe",
+                               types.SimpleNamespace(chiudi_sessione=chiamate.append)):
+            self.r._chiudi_pagina_in_piu("")
+            self.r._chiudi_pagina_in_piu(None)
+            self.r._chiudi_pagina_in_piu("cs_vera")
+        self.assertEqual(["cs_vera"], chiamate, "chiusa una pagina che non c'e', o non quella vera")
+        with mock.patch.object(self.sis, "stripe", types.SimpleNamespace()), \
+                self.assertLogs("core_auto.server", level="INFO") as reg:
+            logging.getLogger("core_auto.server").info("segnale della prova")
+            self.r._chiudi_pagina_in_piu("cs_vera")      # un gateway che non sa chiudere: niente
+        self.assertEqual(["segnale della prova"], [x.getMessage() for x in reg.records])
+
+        def esplode(_cs):
+            raise RuntimeError("Stripe non risponde")
+        with mock.patch.object(self.sis, "stripe", types.SimpleNamespace(chiudi_sessione=esplode)), \
+                self.assertLogs("core_auto.server", level="WARNING") as reg:
+            self.r._chiudi_pagina_in_piu("cs_vera")
+        guasto = [x for x in reg.records if "pagina in piu' non chiusa" in x.getMessage()]
+        self.assertEqual(1, len(guasto), "%r" % ([x.getMessage() for x in reg.records],))
+        self.assertIs(RuntimeError, (guasto[0].exc_info or (None,))[0],
+                      "il guasto della chiusura senza la sua traccia")
+
+    def test_dopo_un_blocco_mai_incassato_il_secondo_pagamento_e_quello_vero(self):
+        rif = self._secondo_pagamento()
+        # D19: lo stato si costruisce a mano -- il pagamento tenuto e' un blocco sulla carta finito
+        # senza incasso (autorizzazione scaduta): i soldi veri, se arrivano, sono il secondo
+        self.assertTrue(self.sis.pagamenti_pendenti.segna_blocco(
+            rif, blocco_pi=self.PI_PRIMO, blocco_annullato_ts=int(time.time())))
+        with self.assertLogs("core_auto.server", level="INFO") as reg:
+            s, esito = self._paga(rif, "cs_altra_pagina", self.PI_SECONDO, "evt_2")
+        self.assertEqual(200, s, "%r" % (esito,))
+        self.assertFalse(esito.get("secondo_pagamento"), "%r" % (esito,))
+        _rec, dj = self._pendente(rif)
+        self.assertEqual(self.PI_SECONDO, dj.get("stripe_pi"),
+                         "SOLDI VERI SCARTATI: il primo non e' mai entrato e il secondo non e' "
+                         "stato tenuto")
+        self.assertTrue(any("sottocodice: dopo_blocco" in x.getMessage() for x in reg.records
+                            if x.levelname == "ERROR"), "nessuno controlla incasso e bonifico")
+
+    def test_lo_stesso_pagamento_rimandato_da_stripe_tace(self):
+        # GEMELLO della prova del secondo pagamento (ferrea 10): da sola passerebbe anche senza la
+        # guardia, vale in coppia con quella -- che grida, mentre qui sullo STESSO pagamento si tace
+        s, c = self._book()
+        rif, cs = c["riferimento"], c["payment_url"].rsplit("/", 1)[-1]
+        self.assertEqual(200, self._paga(rif, cs, "pi_" + cs[3:], "evt_1")[0])
+        with self.assertLogs("core_auto.server", level="INFO") as reg:
+            s, esito = self._paga(rif, cs, "pi_" + cs[3:], "evt_2",
+                                  tipo="checkout.session.async_payment_succeeded")
+        self.assertEqual(200, s, "%r" % (esito,))
+        self.assertEqual([], [x.getMessage() for x in reg.records
+                              if x.levelname == "ERROR" and "secondo_pagamento" in x.getMessage()],
+                         "FALSO ALLARME: e' lo stesso pagamento")
+        _rec, dj = self._pendente(rif)
+        self.assertEqual("pi_" + cs[3:], dj.get("stripe_pi"))
 
 
 if __name__ == "__main__":

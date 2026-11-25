@@ -814,8 +814,9 @@ def _blocco_mai_incassato(rec: Any) -> bool:
     (autorizzazione scaduta, o annullata): i soldi dell'ospite non sono mai entrati. Il sospetto
     del 23/11 (`TestLAutorizzazioneScadutaNonFaDividereSoldiMaiEntrati`), giudicato in un posto
     solo per l'arbitro, la scheda dei rimborsi dovuti e la lista degli allarmi. Vale solo se il
-    pagamento salvato e' PROPRIO quello bloccato: un secondo pagamento riscrive `stripe_pi`
-    (fase162 `salva_stripe_session`) e su quello valgono i freni di sempre. `stripe_pi` vuoto =
+    pagamento salvato e' PROPRIO quello bloccato: un secondo pagamento riscrive `stripe_pi` solo
+    nell'eccezione `dopo_blocco` del webhook (24/11: negli altri casi il webhook tiene il primo e
+    grida `secondo_pagamento`), e su quello valgono i freni di sempre. `stripe_pi` vuoto =
     il blocco e' l'unico pagamento noto: il webhook segna il blocco anche quando la sessione non
     si salva, e Stripe ritenta (code-review 23/11). Un corpo che qui non si rilegge -- `_blocco`
     l'ha appena letto -- vale «mai entrati»: nel dubbio niente si divide e nessun pulsante si accende."""
@@ -6180,8 +6181,9 @@ class RouterHTTP:
             # Stripe di prova il 23/11): non e' una divergenza, l'ha gia' gridata
             # `_incassa_blocco` («autorizzazione_scaduta»). Qui era un falso allarme a ogni apertura.
             # Solo se il pagamento e' PROPRIO quello annullato (silent-failure-hunter, 23/11): un
-            # secondo pagamento riscrive `stripe_pi` (fase162 `salva_stripe_session`), e su quello
-            # il confronto resta. Quante se ne saltano lo dice la risposta (D18 punto 3), col nome
+            # secondo pagamento riscrive `stripe_pi` solo nell'eccezione `dopo_blocco` del webhook
+            # (24/11; negli altri casi lo tiene e grida `secondo_pagamento`), e su quello il
+            # confronto resta. Quante se ne saltano lo dice la risposta (D18 punto 3), col nome
             # di cio' che conta: OGNI blocco annullato su una prenotazione 'pagato' (scaduto, o
             # annullato da una cancellazione rimasta a meta'), non solo l'autorizzazione scaduta.
             if _blocco_mai_incassato(rec):
@@ -6591,7 +6593,8 @@ class RouterHTTP:
         # contestazione 'prevented': soldi fermi perche' non ce ne sono, nessuno perso. Si
         # legge qui, sotto `_BONIFICI_LOCK`: il giro orario annulla il blocco tenendo lo stesso.
         # Solo se il pagamento della prenotazione e' PROPRIO quello annullato
-        # (`_blocco_mai_incassato`: un secondo pagamento riscrive `stripe_pi`). Un pendente che
+        # (`_blocco_mai_incassato`; dal 24/11 un secondo pagamento riscrive `stripe_pi` solo
+        # nell'eccezione `dopo_blocco` del webhook). Un pendente che
         # non si rilegge qui ferma tutto PRIMA di ogni scrittura, col suo nome (code-review 23/11:
         # prima era un 500 senza codice, ferrea 9).
         _pp = getattr(self._sys, "pagamenti_pendenti", None)
@@ -7196,6 +7199,45 @@ class RouterHTTP:
                 gia = self._replay_prenotazione(corpo)
                 if gia is not None:
                     return gia
+                # UN PREVENTIVO, UNA PAGINA (24/11, soldi gruppo 1, «autorizzato»). Il blocco dice
+                # «gia' tuo» ma la prenotazione non e' scritta: o il primo clic e' ancora a meta'
+                # (sta creando la sua pagina su Stripe, e il server serve le richieste insieme), o
+                # e' fallito e ha liberato la stanza (un blocco rilasciato risponde ancora «gia'
+                # tuo», fase58). Proseguire come una prenotazione nuova dava all'ospite una SECONDA
+                # pagina pagabile, oppure una prenotazione senza la stanza. La pagina che fase59 ha
+                # appena rifatto non l'ha avuta nessuno: si chiude. Primo clic a meta' -> «riprova»
+                # (al nuovo clic c'e' la sua pagina); blocco gia' liberato -> va rifatto il preventivo.
+                # Guardia: test_fase83_server.TestUnPreventivoDaUnaSolaPaginaDiPagamento.
+                if corpo.get("payment_url"):
+                    self._chiudi_pagina_in_piu(corpo.get("stripe_cs"))
+                    # la chiave del blocco e' la firma del preventivo, come in fase59: nasce li',
+                    # prima di qualunque riblocco, quindi non porta mai il prefisso dei pagamenti
+                    # tardivi; il riferimento ne e' l'inizio
+                    idem = str(dati.get("quote_token") or "").split(".")[-1]
+                    rif_book = str(corpo.get("riferimento") or "")
+                    stato_blocco = getattr(getattr(self._sys, "inventario", None),
+                                           "stato_blocco", None)
+                    liberato = False
+                    if stato_blocco is not None and rif_book and idem.startswith(rif_book):
+                        try:
+                            liberato = stato_blocco(idem) == "rilasciato"
+                        except Exception:
+                            logger.warning("book: stato del blocco non letto (ISOLATO)",
+                                           exc_info=True)
+                    logger.warning("book | codice: prenotazione_in_corso | sottocodice: %s | "
+                                   "riferimento: %s | messaggio: stesso preventivo senza prenotazione "
+                                   "scritta, niente seconda pagina",
+                                   "blocco_liberato" if liberato else "primo_clic_a_meta",
+                                   _rif_per_registro(corpo.get("riferimento", "")))
+                    if liberato:
+                        return 409, {"stato": "rifiutata", "errore": "preventivo_scaduto",
+                                     "riferimento": corpo.get("riferimento", ""),
+                                     "messaggio": "Il tempo per pagare e' scaduto e le date sono "
+                                                  "di nuovo libere: rifai il preventivo."}
+                    return 409, {"errore": "prenotazione_in_corso", "riprova": True,
+                                 "messaggio": "La prenotazione con questo preventivo e' gia' in "
+                                              "corso: riprova tra qualche secondo. Se continua, "
+                                              "rifai la ricerca."}
             elif self._tetto_hold is not None:
                 self._tetto_hold.fallito(chiave_hold)  # una prenotazione NUOVA tiene le date
             allog = corpo.get("alloggio_id", "")
@@ -7286,11 +7328,31 @@ class RouterHTTP:
             if isinstance(pagina, str) and pagina:
                 fuori["payment_url"] = pagina
                 fuori["stripe_cs"] = salvato.get("stripe_cs", "")
-            elif (fuori.get("modo_pagamento") == "in_struttura"
-                    and not self._rifai_link_anticipo(fuori, rec)):
+            elif fuori.get("modo_pagamento") == "in_struttura":
+                if not self._rifai_link_anticipo(fuori, rec):
+                    return 503, {"errore": "pagamento_non_disponibile", "riprova": True}
+            else:
+                # 24/11 (differential-review R1): senza la pagina salvata (corpo illeggibile) quella
+                # rifatta da fase59 sarebbe la SECONDA pagabile -- per chi paga in struttura, il
+                # totale. Non si da': si chiude, e decide una persona (I9).
+                self._chiudi_pagina_in_piu(fuori.get("stripe_cs"))
+                logger.error("book | codice: pagina_salvata_assente | riferimento: %s | messaggio: "
+                             "doppio clic senza la pagina salvata, niente seconda pagina",
+                             _rif_per_registro(ref))
                 return 503, {"errore": "pagamento_non_disponibile", "riprova": True}
             fuori["stato"] = "in_attesa_pagamento"
         return 201, fuori
+
+    def _chiudi_pagina_in_piu(self, cs):
+        """La pagina che fase59 ha appena rifatto per un clic respinto non l'ha avuta nessuno: si
+        chiude su Stripe (24/11, soldi gruppo 1). Isolato: se non si chiude scade da sola."""
+        chiudi = getattr(getattr(self._sys, "stripe", None), "chiudi_sessione", None)
+        if chiudi is not None and cs:
+            try:
+                chiudi(cs)
+            except Exception:
+                logger.warning("book: pagina in piu' non chiusa su Stripe (ISOLATO)",
+                               exc_info=True)
 
     @staticmethod
     def _pagina_anticipo(stripe, dati):
@@ -11155,6 +11217,56 @@ class RouterHTTP:
                              tipo)
                 return 503, {"errore": "esito_non_applicato",
                              "sottocodice": "rilettura_stato_fallita"}
+            # UN SECONDO PAGAMENTO SULLA STESSA PRENOTAZIONE (24/11, soldi gruppo 1, «autorizzato»):
+            # c'e' gia' un ALTRO pagamento salvato, confermato o con la conferma ancora da finire
+            # (in_attesa/scaduto: Stripe la ritentera'). Riscrivere `stripe_pi` faceva sparire il
+            # primo (i rimborsi partono da li') e la conferma lo prendeva per un ritentativo, in
+            # silenzio. Si tiene il primo e si grida: una prenotazione tiene un solo pagamento e i
+            # rimborsi li fa una persona (decisione del fondatore). 200: ritentare non cambia niente.
+            # ⛔ Eccezione: il pagamento tenuto e' un blocco finito SENZA incasso
+            # (`_blocco_mai_incassato`): i soldi veri sono questi, si prosegue come prima gridando.
+            # Negli stati chiusi (rimborsato, cancellata...) resta la strada di sempre: li' il
+            # pagamento nuovo e' quello che il pulsante deve restituire. Il testo dell'ERROR sta nei
+            # 180 caratteri che il Guardiano manda per email (fase186), il secondo pagamento per primo.
+            # Guardia: test_fase83_server.TestUnPreventivoDaUnaSolaPaginaDiPagamento.
+            _pi_arrivato = pi_bloccato or str(obj0.get("payment_intent") or "")
+            try:
+                _pp_gia = getattr(self._sys, "pagamenti_pendenti", None)
+                _gia = _pp_gia.info(rif) if (_pp_gia is not None and rif) else None
+            except Exception:
+                # l'archivio non risponde: non si sa se c'e' gia' un altro pagamento, e proseguire
+                # poteva cancellarlo
+                logger.error("webhook | codice: esito_non_applicato | sottocodice: "
+                             "lettura_pendente_fallita | riferimento: %s | messaggio: rispondo 503 "
+                             "perche' Stripe ritenti", _rif_per_registro(rif), exc_info=True)
+                return 503, {"errore": "esito_non_applicato",
+                             "sottocodice": "lettura_pendente_fallita"}
+            _pi_tenuto = ""
+            if isinstance(_gia, dict) and _gia.get("stato") in ("in_attesa", "scaduto", "pagato"):
+                try:
+                    _pi_tenuto = str(_leggi_corpo(_gia, "secondo_pagamento").get("stripe_pi")
+                                     or "")
+                except Exception:
+                    # corpo rotto: lo dice col suo nome la strada di sempre (I9, `corpo_illeggibile`,
+                    # 503) e `salva_stripe_session` non riscrive un corpo rotto
+                    _pi_tenuto = ""
+            if (_pi_tenuto.startswith("pi_") and _pi_arrivato.startswith("pi_")
+                    and _pi_arrivato != _pi_tenuto):
+                _dopo_blocco = _blocco_mai_incassato(_gia)
+                logger.error("webhook | codice: secondo_pagamento | sottocodice: %s | secondo: %s | "
+                             "rif: %s | tenuto: %s | messaggio: %s",
+                             "dopo_blocco" if _dopo_blocco else (
+                                 "annullare" if pi_bloccato else "restituire"),
+                             _rif_per_registro(_pi_arrivato), _rif_per_registro(rif),
+                             _rif_per_registro(_pi_tenuto),
+                             ("il tenuto era un blocco mai incassato e anche questo e' un blocco: "
+                              "il giro orario NON lo incassa (resta la data d'annullo del primo), "
+                              "incassarlo o annullarlo a mano" if pi_bloccato else
+                              "il tenuto era un blocco mai incassato: questo diventa il pagamento, "
+                              "controllare incasso e bonifico") if _dopo_blocco else
+                             "l'ospite ha pagato DUE volte: il secondo si toglie a mano da Stripe")
+                if not _dopo_blocco:
+                    return 200, {"ricevuto": True, "tipo": tipo, "secondo_pagamento": True}
             # AUDIT CONSOLE: salva l'id sessione (cs_...) -> shadow-check Stripe possibile
             # per sempre su questa prenotazione. ISOLATO dalla CONFERMA, che avviene
             # comunque qui sotto -- ma NON piu' dalla RISPOSTA: se il salvataggio non
