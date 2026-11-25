@@ -136,9 +136,12 @@ NON_GUARDA = (
 )
 
 
-def passo(situazione, nome, ok, dettaglio=""):
+def passo(situazione, nome, ok, dettaglio="", avviso=False):
+    """`avviso`: un passo INFORMATIVO la cui condizione e' falsa (decide un altro passo, quindi `ok` resta vero) si
+    stampa «AVVISO», non «OK» (25/11/2026: «OK ... sotto i 60 minuti -> buco massimo 523 minuti»). Il verdetto non cambia."""
     PASSI.append((situazione, nome, bool(ok), dettaglio))
-    print("  %s  [%s] %s%s" % ("OK  " if ok else "ROSSO", situazione, nome, ("  -> " + dettaglio) if dettaglio else ""))
+    etichetta = ("AVVISO" if avviso else "OK  ") if ok else "ROSSO"
+    print("  %s  [%s] %s%s" % (etichetta, situazione, nome, ("  -> " + dettaglio) if dettaglio else ""))
     return bool(ok)
 
 
@@ -365,7 +368,8 @@ def misura(letture, con_guasto=False):
           % (ULTIMO_MAX_MIN, BUCO_MAX_MIN, " — informativo, decide il monitor" if monitor_sveglio else " — DECIDE, perche' il monitor esterno manca o non e' sveglio"),
           github_sveglio or monitor_sveglio,
           "ultimo giro %s (%.0f minuti fa), giri nelle 24 ore: %d, buco massimo %.0f minuti"
-          % (tempi[0].strftime("%Y-%m-%d %H:%M UTC") if tempi else "-", eta or -1, n_giri, buco_max or -1))
+          % (tempi[0].strftime("%Y-%m-%d %H:%M UTC") if tempi else "-", eta or -1, n_giri, buco_max or -1),
+          avviso=not github_sveglio)
     verdi = sum(1 for g in giri if g.get("esito") == "success")
     rossi_recenti = sum(1 for g in giri if g.get("esito") == "failure")
     rossi = letture.get("rossi_totali")
@@ -380,12 +384,13 @@ def misura(letture, con_guasto=False):
           ("contatti %s, giu' in storia %s" % (est.get("contatti_allarme"), est.get("giu_in_storia"))) if est else "nessun monitor esterno")
     passo("grida", "GitHub: nella storia c'e' almeno un giro VERDE e almeno un giro ROSSO (le due direzioni)%s"
           % (" — informativo" if monitor_grida else " — DECIDE"), github_grida or monitor_grida,
-          "verdi (ultimi %d): %d, rossi in storia: %d" % (len(giri), verdi, rossi))
+          "verdi (ultimi %d): %d, rossi in storia: %d" % (len(giri), verdi, rossi), avviso=not github_grida)
     up = letture.get("ultimo_push")
     giorni = (adesso - _quando(up)).days if up else None
     passo("non_scade", "GitHub: un push da meno di %d giorni (oltre, gli schedule si spengono)%s"
           % (INATTIVITA_MAX_GIORNI, " — informativo: il monitor esterno non scade" if monitor_sveglio else " — DECIDE"),
-          (giorni is not None and giorni < INATTIVITA_MAX_GIORNI) or monitor_sveglio, "ultimo push %s (%s giorni)" % (up, giorni))
+          (giorni is not None and giorni < INATTIVITA_MAX_GIORNI) or monitor_sveglio, "ultimo push %s (%s giorni)" % (up, giorni),
+          avviso=not (giorni is not None and giorni < INATTIVITA_MAX_GIORNI))
 
 
 ADESSO_FINTO = datetime(2026, 9, 7, 18, 0, tzinfo=timezone.utc)

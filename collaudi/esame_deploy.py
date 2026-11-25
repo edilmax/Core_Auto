@@ -5,7 +5,8 @@
     python collaudi/esame_deploy.py                    senza letture: misura SOLO la parte «documento» (ROSSO: le
                                                        situazioni del VPS restano NON misurate, S7)
     python collaudi/esame_deploy.py --da-file F --con-guasto   storce le letture (paracadute uguale alla viva; uno
-                                                       scambio senza punto di ritorno): deve gridare, NON scrive
+                                                       scambio senza punto di ritorno; un contenitore ricreato fuori
+                                                       da ogni scambio): deve gridare, NON scrive
                                                        (senza --da-file storce le letture FINTE dell'autoprova, e lo dice)
     python collaudi/esame_deploy.py --autoprova        il giudizio su letture costruite, nelle due direzioni
 
@@ -31,7 +32,12 @@ COSA MISURA, dichiarato (D18) — decisione della chat A il 2026-09-08 col manda
   A_MANO     sul VPS `git status --porcelain` su fase*/main*/deploy/ e' vuoto, nessun commit esiste solo sul server
              (`git log origin/master..HEAD` = 0), HEAD del VPS e' un commit di origin/master, docker compose e' la v2
              e la v1 e' un segnaposto bloccato (apt candidate «(none)»).
-Denominatore = passi. Senza letture, le tre situazioni del VPS sono NON MISURATE e la casella e' rossa (S7).
+  CONTENITORI (25/11/2026, trovato dalla revisione della rimisura: nginx ricreato il 24/11 da uno script fuori dal
+             protocollo e la casella verde lo stesso) ogni contenitore del progetto `bookinvip` e' stato CREATO dentro
+             uno scambio D17 riuscito: dopo un PRE_DEPLOY_*.commit e non oltre la fine del registro di quello scambio,
+             con lo scambio entro FINESTRA_MIN minuti dal suo punto di ritorno. Una data di creazione che nessuno
+             scambio copre e' un contenitore ricreato a mano o da un altro script.
+Denominatore = passi. Senza letture, le quattro situazioni del VPS sono NON MISURATE e la casella e' rossa (S7).
 
 FORMATO_LETTURE (JSON, lo scrive B con sola lettura sul VPS; tempi in UTC «AAAA-MM-GGTHH:MM:SSZ», accettato anche
 «+00:00»). Accanto a ogni campo, il comando di sola lettura che lo produce (proposta: B puo' cambiarlo, il valore no):
@@ -59,6 +65,10 @@ FORMATO_LETTURE (JSON, lo scrive B con sola lettura sul VPS; tempi in UTC «AAAA
    "compose": {"v2": "Docker Compose version v2.x", "v1_segnaposto": true, "v1_apt_candidate": "(none)"}}
         docker compose version · `head -c 200 /usr/local/bin/docker-compose` non e' un binario (e' il cartello di
         DEPLOY.md §1) · apt-cache policy docker-compose | grep Candidate  -> «(none)»
+   "contenitori": [{"nome": "casavip_app", "creato": ..., "immagine": "sha256:..."}]
+        per ogni `docker ps -aq --filter label=com.docker.compose.project=bookinvip`: docker inspect --format
+        '{{.Name}} {{.Created}} {{.Image}}'; creato = .Created TRONCATO ai secondi, in UTC con la «Z»
+        (Docker scrive i nanosecondi, che `datetime.fromisoformat` non legge)
   ⚠️ Le letture si prendono A RIPOSO, non fra un `prima` e il suo `scambio`: in quella finestra (max un'ora, il
      gettone) :prec coincide con la viva per costruzione e l'esame direbbe ROSSO a ragione ma su uno stato transitorio.
 
@@ -89,7 +99,7 @@ from piano import BLOCCHI  # noqa: E402
 BLOCCO = 8
 MARCA = "protocollo D17"
 COMANDO = "python collaudi/esame_deploy.py --da-file <letture> --scrivi"
-SITUAZIONI = ("documento", "pulsante", "tracce", "a_mano")
+SITUAZIONI = ("documento", "pulsante", "tracce", "a_mano", "contenitori")
 FINESTRA_MIN = 180
 TAPPE = ("paracadute", "scambio", "verifica", "indietro")
 PASSI = []
@@ -104,6 +114,11 @@ NON_GUARDA = (
     "il salvataggio prima del deploy (backup verificato leggibile): e' la casella 1 del blocco (esame_backup)",
     "lo stato fra un `prima` e il suo `scambio` (:prec == viva per costruzione, al massimo un'ora): le letture si "
     "prendono a riposo, e l'ora «adesso» delle letture sta accanto al verdetto",
+    "un contenitore RIAVVIATO (docker restart, riavvio del server, la sua politica di riavvio) conserva la data di "
+    "creazione: qui si vede solo chi lo RICREA. E il ritorno (`indietro`) ricrea l'app fuori da uno scambio: qui "
+    "diventa rosso finche' non lascia anche lui un PRE_DEPLOY e il registro del suo scambio",
+    "la fine di uno scambio e' l'ora di ultima modifica del suo registro: chi riscrive quel registro dopo lo scambio "
+    "allarga la finestra; e l'immagine di ogni contenitore e' raccolta ma non confrontata con quella dello scambio",
 )
 
 
@@ -185,7 +200,14 @@ def misura_documento():
           not compose_v1_nei_comandi(sh))
 
 
-# ---- PULSANTE / TRACCE / A_MANO (dalle letture del VPS) ----
+# ---- PULSANTE / TRACCE / A_MANO / CONTENITORI (dalle letture del VPS) ----
+def _per_costruzione(s, sh, dal_q):
+    """Un registro di scambio SENZA «USCITA=» riuscito per costruzione (regola del 2026-09-08, spiegata in
+    `misura_tracce`): una sola copia della regola, per le tracce e per i contenitori."""
+    return (s.get("uscita") is None and s.get("scambio_fatto") is True and "set -eu" in sh and dal_q is not None
+            and _quando(s["quando"]) < dal_q)
+
+
 def misura_pulsante(let):
     print("\n--- PULSANTE: il testo di /root/deploy_pulsante.sh (dalle letture) ---")
     sh = let.get("deploy_pulsante_sh") or ""
@@ -220,7 +242,7 @@ def misura_tracce(let, con_guasto=False):
     for s in scambi:
         q = _quando(s["quando"])
         nome = os.path.basename(str(s.get("file")))
-        if s.get("uscita") is None and s.get("scambio_fatto") is True and "set -eu" in sh and dal_q is not None and q < dal_q:
+        if _per_costruzione(s, sh, dal_q):
             storici += 1
             passo("tracce", "%s: «SCAMBIO FATTO», riuscito PER COSTRUZIONE senza codice d'uscita (registro del %s, prima che il "
                   "pulsante lo scrivesse da se', %s)" % (nome, q.strftime("%Y-%m-%d"), dal), True, "set -eu nel pulsante")
@@ -264,6 +286,44 @@ def misura_a_mano(let):
           "segnaposto=%r apt=%r" % (c.get("v1_segnaposto"), c.get("v1_apt_candidate")))
 
 
+def misura_contenitori(let, con_guasto=False):
+    print("\n--- CONTENITORI: ognuno e' stato creato dentro uno scambio D17 riuscito, nessuno ricreato a mano ---")
+    cont = let.get("contenitori")
+    passo("contenitori", "le letture elencano i contenitori del progetto", isinstance(cont, list) and bool(cont),
+          ("%d contenitori" % len(cont)) if isinstance(cont, list) else "campo «contenitori» assente")
+    if not isinstance(cont, list):
+        return
+    # i nomi ATTESI si leggono dal compose di produzione, non si ricopiano: un contenitore ricreato con `docker run`
+    # (senza l'etichetta del progetto) sparisce dall'elenco, e qui deve diventare rosso (seconda revisione, 25/11)
+    attesi = set(re.findall(r"(?m)^\s*container_name:\s*(\S+)\s*$", _leggi("docker-compose.casavip.yml")))
+    mancanti = sorted(attesi - {str(c.get("nome")) for c in cont})
+    passo("contenitori", "ci sono tutti i contenitori di docker-compose.casavip.yml", bool(attesi) and not mancanti,
+          ("mancano: %s" % ", ".join(mancanti)) if mancanti else
+          ("%s" % ", ".join(sorted(attesi)) if attesi else "il compose non dichiara nessun container_name"))
+    if con_guasto:
+        cont = cont + [{"nome": "casavip_ricreato_a_mano", "creato": "2026-01-01T00:00:00Z"}]   # IL GUASTO 3
+    sh = let.get("deploy_pulsante_sh") or ""
+    dal = let.get("pulsante_scrive_uscita_dal")
+    dal_q = _quando(dal) if dal else None
+    pre = [_quando(p["quando"]) for p in (let.get("pre_deploy") or [])]
+    finestre = []
+    for s in let.get("scambi") or []:
+        if not (s.get("scambio_fatto") is True and (s.get("uscita") == 0 or _per_costruzione(s, sh, dal_q))):
+            continue
+        fine = _quando(s["quando"])
+        inizi = [p for p in pre if 0 <= (fine - p).total_seconds() <= FINESTRA_MIN * 60]
+        if inizi:
+            # il punto di ritorno PIU' VICINO: quello del `prima` di questo scambio, non uno di ore prima
+            finestre.append((max(inizi), fine, os.path.basename(str(s.get("file")))))
+    for c in cont:
+        nome = str(c.get("nome") or "?")
+        q = _quando(c.get("creato"))
+        coperto = [f for f in finestre if f[0] <= q <= f[1]]
+        passo("contenitori", "%s creato il %s dentro uno scambio D17 riuscito" % (nome, q.strftime("%Y-%m-%d %H:%M:%S UTC")),
+              bool(coperto), coperto[0][2] if coperto else
+              "nessuno scambio riuscito lo copre: ricreato a mano o da un altro script")
+
+
 def letture_finte(**k):
     let = {"adesso": "2026-09-08T16:00:00Z",
            "deploy_pulsante_sh": "#!/bin/sh\ncase \"$1\" in\n paracadute) VIVA=$(docker inspect casavip_app --format '{{.Image}}'); "
@@ -275,7 +335,10 @@ def letture_finte(**k):
            "paracadute": [{"quando": "2026-09-07T15:09:00Z", "viva": "sha256:aaa", "prec_dopo": "sha256:aaa"}],
            "immagini": {"viva": "sha256:bbb", "prec": "sha256:aaa", "latest": "sha256:bbb"},
            "git": {"status_porcelain_produzione": [], "commit_solo_sul_vps": 0, "head": "b51d74d", "head_in_origin_master": True},
-           "compose": {"v2": "Docker Compose version v2.29.0", "v1_segnaposto": True, "v1_apt_candidate": "(none)"}}
+           "compose": {"v2": "Docker Compose version v2.29.0", "v1_segnaposto": True, "v1_apt_candidate": "(none)"},
+           "contenitori": [{"nome": "casavip_app", "creato": "2026-09-07T15:11:00Z", "immagine": "sha256:bbb"},
+                           {"nome": "casavip_nginx", "creato": "2026-09-07T15:11:01Z", "immagine": "sha256:ngx"},
+                           {"nome": "casavip_backup", "creato": "2026-09-07T15:11:02Z", "immagine": "sha256:bbb"}]}
     for chiave, valore in k.items():
         a, _, b = chiave.partition("__")
         if b:
@@ -286,7 +349,7 @@ def letture_finte(**k):
 
 
 def misura_tutto(let, con_guasto=False):
-    """Documento sempre; pulsante/tracce/a_mano solo con le letture. Una misura che esplode e' un ROSSO, non un
+    """Documento sempre; pulsante/tracce/a_mano/contenitori solo con le letture. Una misura che esplode e' un ROSSO, non un
     silenzio (S7): l'eccezione diventa un passo rosso col suo nome."""
     try:
         misura_documento()
@@ -294,8 +357,9 @@ def misura_tutto(let, con_guasto=False):
             misura_pulsante(let)
             misura_tracce(let, con_guasto)
             misura_a_mano(let)
+            misura_contenitori(let, con_guasto)
         else:
-            print("\n(nessuna lettura del VPS: --da-file assente -> pulsante, tracce e a_mano restano NON misurate)")
+            print("\n(nessuna lettura del VPS: --da-file assente -> pulsante, tracce, a_mano e contenitori restano NON misurate)")
     except Exception as e:                                        # noqa: BLE001 - una misura rotta e' un rosso
         passo("documento", "la misura e' ESPLOSA", False, "%s: %s" % (type(e).__name__, e))
 
@@ -325,6 +389,12 @@ def autoprova():
             ("un commit solo sul VPS", letture_finte(git__commit_solo_sul_vps=1), False),
             ("docker-compose v1 installato", letture_finte(compose__v1_apt_candidate="1.29.2-1"), False),
             ("pulsante senza la tappa indietro", letture_finte(deploy_pulsante_sh="paracadute scambio verifica docker tag casavip-app:prec exit 1 PRE_DEPLOY_ docker compose"), False),
+            ("un contenitore ricreato fuori da ogni scambio", letture_finte(contenitori=[{"nome": "casavip_app", "creato": "2026-09-07T15:11:00Z"},
+                                                                                     {"nome": "casavip_nginx", "creato": "2026-09-07T20:00:00Z"},
+                                                                                     {"nome": "casavip_backup", "creato": "2026-09-07T15:11:00Z"}]), False),
+            ("un contenitore del compose manca dall'elenco", letture_finte(contenitori=[{"nome": "casavip_app", "creato": "2026-09-07T15:11:00Z"},
+                                                                                       {"nome": "casavip_backup", "creato": "2026-09-07T15:11:00Z"}]), False),
+            ("letture senza l'elenco dei contenitori", letture_finte(contenitori=[]), False),
             ("nessuna lettura del VPS", None, False)]
     righe, riuscita = [], True
     for nome, let, atteso in casi:
@@ -403,7 +473,8 @@ def main(argv=None):
         _stampa_non_guarda()
         return 2
     if con_guasto:
-        print("⚠️  PASSATA COI GUASTI DENTRO: :prec uguale alla viva; uno scambio senza punto di ritorno")
+        print("⚠️  PASSATA COI GUASTI DENTRO: :prec uguale alla viva; uno scambio senza punto di ritorno; un contenitore "
+              "ricreato fuori da ogni scambio")
     da_file = argv[argv.index("--da-file") + 1] if "--da-file" in argv else None
     ambiente_prima = dict(os.environ)
     let = None

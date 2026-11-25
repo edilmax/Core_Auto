@@ -15276,6 +15276,32 @@ class TestLEsameDellaSentinellaNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
             shutil.rmtree(d, ignore_errors=True)
         self.assertEqual(dict(os.environ), vero_environ)
 
+    def test_UN_PASSO_INFORMATIVO_FUORI_SOGLIA_SI_STAMPA_AVVISO_E_NON_OK(self):
+        """Trovato il 25/11/2026 dalla revisione della rimisura: l'esame vero ha stampato «OK [sveglia] GitHub (seconda
+        linea): ... buco massimo nelle 24 ore sotto i 60 minuti -> ... buco massimo 523 minuti». Il verdetto era giusto
+        (decide il monitor esterno), la RIGA no: chi legge le righe OK crede che la riserva regga. Da qui un passo
+        informativo la cui condizione e' falsa si stampa «AVVISO», il verdetto non cambia, e a condizione vera resta «OK»
+        (le due direzioni: un AVVISO sempre acceso viene ignorato)."""
+        esame = self._esame()
+
+        def _righe(let):
+            del esame.PASSI[:]
+            flusso = io.StringIO()
+            with contextlib.redirect_stdout(flusso):
+                esame.misura(let)
+            verde = esame.giudica(esame.PASSI)[0]
+            return verde, [r for r in flusso.getvalue().splitlines() if "] GitHub" in r]
+        verde, righe = _righe(esame.letture_finte(buco=333, n=8, minuti_fa=40, rossi=0, push_giorni=70))
+        self.assertTrue(verde, "con il monitor esterno sano la casella resta verde: i passi di GitHub sono informativi")
+        self.assertEqual(len(righe), 3, righe)
+        for r in righe:
+            self.assertTrue(r.lstrip().startswith("AVVISO"), "fuori soglia deve dire AVVISO, non OK: %r" % r)
+        verde, righe = _righe(esame.letture_finte())
+        self.assertTrue(verde)
+        self.assertEqual(len(righe), 3, righe)
+        for r in righe:
+            self.assertTrue(r.lstrip().startswith("OK"), "dentro la soglia resta OK: %r" % r)
+
     def test_I_TEMPI_DI_RISPOSTA_BUCATI_NON_SONO_UN_MONITOR_ADDORMENTATO(self):
         """⛔ IL FALSO ALLARME DEL 21/11/2026. La casella era ROSSA «buco massimo 454 min» perche' l'esame contava i
         controlli dai `response_times` di getMonitors, e UptimeRobot non ne conserva uno per controllo: l'API dava
@@ -15577,7 +15603,8 @@ class TestLEsameDelDeployNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
         self.assertFalse(esame.giudica([])[0])
         self.assertFalse(esame.giudica([("altro", "x", True, "")])[0])
         self.assertEqual(esame.giudica([(s, "p", True, "") for s in esame.SITUAZIONI])[0], True)
-        self.assertEqual(esame.SITUAZIONI, ("documento", "pulsante", "tracce", "a_mano"))
+        # 25/11/2026: + «contenitori» (nginx ricreato fuori da D17 e la casella verde lo stesso)
+        self.assertEqual(esame.SITUAZIONI, ("documento", "pulsante", "tracce", "a_mano", "contenitori"))
 
     def test_IL_PARACADUTE_A_RIPOSO_E_LA_VIVA_DI_PRIMA_NON_QUELLA_DI_OGGI(self):
         esame = self._esame()
@@ -15633,6 +15660,50 @@ class TestLEsameDelDeployNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
             if not atteso:
                 self.assertTrue(any("USCITA=0" in m for m in motivi), motivi)
 
+    def test_UN_CONTENITORE_CREATO_FUORI_DA_UNO_SCAMBIO_D17_E_ROSSO(self):
+        """Trovato il 25/11/2026 dalla revisione del diff della rimisura: l'esame leggeva solo i registri degli scambi
+        dell'APP, e la casella «mai a mano» tornava spuntata mentre `casavip_nginx` era stato ricreato il 24/11 alle
+        01:36 UTC da `/root/aggiorna_nginx_20261124.sh`, fuori dal protocollo (voce 263 di RIPRENDI, punti 2 e 3). Da
+        qui ogni contenitore del progetto deve essere stato CREATO dentro uno scambio D17 riuscito: dopo un
+        PRE_DEPLOY_*.commit e non oltre la fine del registro del suo scambio. Chi lo ricrea a mano, o con un altro
+        script, lascia una data di creazione che nessuno scambio copre. Senza l'elenco nelle letture: ROSSO (S7)."""
+        esame = self._esame()
+        sane = esame.letture_finte()
+        self.assertTrue(sane.get("contenitori"), "le letture costruite devono elencare i contenitori")
+        dentro = sane["contenitori"]
+        nginx_fuori = {"nome": "casavip_nginx", "creato": "2026-09-07T20:00:00Z", "immagine": "sha256:ngx"}
+        prima_del_ritorno = {"nome": "casavip_backup", "creato": "2026-09-07T15:08:59Z", "immagine": "sha256:bbb"}
+        casi = (
+            ("tutti creati dentro lo scambio", sane, True, ""),
+            ("nginx ricreato fuori da ogni scambio", esame.letture_finte(contenitori=dentro + [nginx_fuori]), False,
+             "casavip_nginx"),
+            ("creato un secondo prima del punto di ritorno", esame.letture_finte(contenitori=dentro + [prima_del_ritorno]),
+             False, "casavip_backup"),
+            ("creato dentro uno scambio FALLITO", esame.letture_finte(scambi=[dict(sane["scambi"][0], uscita=1)]), False,
+             "casavip_app"),
+            ("nessun contenitore nelle letture", esame.letture_finte(contenitori=[]), False, "elencano i contenitori"),
+            # seconda revisione del 25/11: nginx ricreato con `docker run` (senza l'etichetta del progetto) SPARISCE
+            # dall'elenco; i nomi attesi si leggono da docker-compose.casavip.yml, non si ricopiano
+            ("nginx manca dall'elenco", esame.letture_finte(contenitori=[c for c in dentro if c["nome"] != "casavip_nginx"]),
+             False, "casavip_nginx"),
+        )
+        for nome, let, atteso, motivo in casi:
+            del esame.PASSI[:]
+            with contextlib.redirect_stdout(io.StringIO()):
+                esame.misura_contenitori(let)
+            verde, motivi, _ = esame.giudica(esame.PASSI, situazioni=("contenitori",))
+            self.assertEqual(verde, atteso, "%s: %s" % (nome, motivi))
+            self.assertIn(motivo, " | ".join(motivi), nome)
+        senza = esame.letture_finte()
+        del senza["contenitori"]
+        del esame.PASSI[:]
+        with contextlib.redirect_stdout(io.StringIO()):
+            esame.misura_tutto(senza)
+        verde, motivi, _ = esame.giudica(esame.PASSI)
+        self.assertFalse(verde, "letture senza il campo «contenitori» non possono dare la casella verde")
+        self.assertIn("contenitori", " | ".join(motivi))
+        self.assertTrue(any("contenitor" in r for r in esame.NON_GUARDA), "il riavvio che non cambia la data va dichiarato")
+
     def test_DA_FILE_GIUDICA_SENZA_RETE_SCRIVE_L_ESITO_VERO_E_COL_GUASTO_NON_SCRIVE_MAI(self):
         esame = self._esame()
         vera_registra = esame.scheda.registra
@@ -15664,7 +15735,9 @@ class TestLEsameDelDeployNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
             self.assertIn("git status --porcelain", scritture[1]["motivo"] or "")
             self.assertIn("fase83_server.py", scritture[1]["motivo"] or "")
             self.assertIn("PRE_DEPLOY", scritture[1]["motivo"] or "")
-            self.assertEqual(scritture[0]["denominatore"], 28)
+            # 28 + 5 dal 25/11/2026: «le letture elencano i contenitori», «ci sono tutti quelli del compose» e i tre
+            # contenitori delle letture costruite
+            self.assertEqual(scritture[0]["denominatore"], 33)
             self.assertEqual(dict(os.environ), ambiente_prima)
         finally:
             esame.scheda.registra = vera_registra
@@ -15851,12 +15924,82 @@ class TestLEsameDelBackupNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
                 self.assertEqual(esame.main(["--con-guasto"]), 1)
                 self.assertEqual(esame.main(["--file", sano[0], "--sha", sano[1], "--manifest", sano[2]]), 0)
                 self.assertEqual(esame.main(["--file", sano[0], "--sha", sano[1], "--manifest", sano[2], "--con-guasto", "--scrivi"]), 2)
-                self.assertEqual(esame.main(["--file", sano[0], "--sha", sano[1], "--manifest", sano[2], "--scrivi"]), 0)
-                self.assertEqual(esame.main(["--file", rotto[0], "--sha", rotto[1], "--manifest", rotto[2], "--scrivi"]), 1)
-            self.assertEqual([s["esito"] for s in scritture], [True, False])
-            self.assertEqual(scritture[0]["denominatore"], 19)
-            self.assertIn("referral_codici", scritture[1]["motivo"] or "")
+                # dal 25/11/2026 UN archivio solo misura ma NON scrive: la casella parla del salvataggio intero (--giro)
+                self.assertEqual(esame.main(["--file", sano[0], "--sha", sano[1], "--manifest", sano[2], "--scrivi"]), 2)
+                self.assertEqual(esame.main(["--file", rotto[0], "--sha", rotto[1], "--manifest", rotto[2]]), 1)
+            self.assertEqual(scritture, [])
             self.assertEqual(dict(os.environ), ambiente_prima)
+        finally:
+            esame.scheda.registra = vera_registra
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_LA_CASELLA_SI_SCRIVE_SOLO_RIPRISTINANDO_TUTTO_IL_GIRO(self):
+        """Trovato il 25/11/2026 dalla revisione della rimisura: la casella «il salvataggio e' stato RIPRISTINATO e letto»
+        era spuntata ripristinando UN archivio (finanza) dei 23 del giro; gli altri erano solo «elencati nel manifesto».
+        Un archivio delle prenotazioni rovinato ma elencato lasciava la casella verde. Da qui `--giro <cartella>
+        --manifest <MANIFEST>` ripristina e legge OGNI archivio di TABELLE_ATTESE di quel giro, e solo cosi' si scrive."""
+        esame = self._esame()
+        attese = esame.tabelle_attese()
+        vera_registra = esame.scheda.registra
+        scritture = []
+
+        def _registra_finta(*a, **k):
+            scritture.append(k)
+            return {"blocco": 8, "esito": k.get("esito"), "denominatore": k.get("denominatore"), "impronta": "finta"}
+
+        def _giro(cartella):
+            os.makedirs(cartella)
+            for db in sorted(attese):
+                archivio, _sha, manifesto = esame.backup_finto(cartella, db=db, attese=attese)
+            return manifesto
+        d = tempfile.mkdtemp()
+        try:
+            esame.scheda.registra = _registra_finta
+            m_sano = _giro(os.path.join(d, "sano"))
+            m_rotto = _giro(os.path.join(d, "rotto"))
+            altri = sorted(k for k in attese if k != "finanza.db")
+            vittima, senza_tabella, assente = altri[-1], altri[-2], altri[-3]
+            rovinato = os.path.join(d, "rotto", "%s-20260908-031500.db.gz" % vittima[:-3])
+            with esame.gzip.open(rovinato, "wb") as fo:
+                fo.write(b"questo non e' un database\n" * 40)
+            with io.open(rovinato + ".sha256", "w", encoding="utf-8") as f:
+                f.write("%s  %s\n" % (esame.sha256_di(rovinato), os.path.basename(rovinato)))
+            # seconda revisione del 25/11: anche una tabella attesa che manca e un archivio cancellato dal disco
+            tabelle = sorted(attese[senza_tabella])
+            esame.backup_finto(os.path.join(d, "rotto"), db=senza_tabella, attese=attese,
+                               tabelle=tabelle[1:] if len(tabelle) > 1 else ["tabella_non_attesa"])
+            os.remove(os.path.join(d, "rotto", "%s-20260908-031500.db.gz" % assente[:-3]))
+            finanza = os.path.join(d, "rotto", "finanza-20260908-031500.db.gz")
+            flusso = io.StringIO()
+            with contextlib.redirect_stdout(flusso):
+                self.assertEqual(esame.main(["--giro", os.path.join(d, "sano"), "--manifest", m_sano, "--scrivi"]), 0)
+                self.assertEqual(esame.main(["--giro", os.path.join(d, "rotto"), "--manifest", m_rotto, "--scrivi"]), 1)
+                self.assertEqual(esame.main(["--file", finanza, "--sha", finanza + ".sha256", "--manifest", m_rotto,
+                                             "--scrivi"]), 2, "un archivio sano solo non chiude un giro rotto")
+            self.assertEqual([s["esito"] for s in scritture], [True, False])
+            self.assertIn("--giro", scritture[0]["comando"])
+            self.assertGreater(scritture[0]["denominatore"], 19 * 2, "ogni archivio del giro porta i suoi passi")
+            self.assertEqual(len(re.findall(r"(?m)^\s+(?:OK|ROSSO)\s+\[archivio\] il gzip e' integro", flusso.getvalue())),
+                             2 * len(attese), "ogni archivio di TABELLE_ATTESE ripristinato, in tutti e due i giri")
+            giro_rotto = flusso.getvalue().split("giro 20260908-031500")[2]
+            pezzi = {p.split(" ===", 1)[0]: p for p in giro_rotto.split("=== archivio ")[1:]}
+            for db in (vittima, senza_tabella, assente):
+                pezzo = pezzi.get("%s-20260908-031500.db.gz" % db[:-3], "")
+                self.assertIn("ROSSO", pezzo, "l'archivio %s del giro rotto deve avere il suo rosso" % db)
+            self.assertNotIn("ROSSO", pezzi["finanza-20260908-031500.db.gz"], "finanza e' sano anche nel giro rotto")
+            # il TEMPO e' quello del giro INTERO, non di un archivio alla volta: orologio finto a +10 s per lettura
+            from unittest import mock
+            del scritture[:]
+            orologio = [0.0]
+
+            def _monotonic():
+                orologio[0] += 10.0
+                return orologio[0]
+            with mock.patch.object(esame.time, "monotonic", _monotonic), contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(esame.main(["--giro", os.path.join(d, "sano"), "--manifest", m_sano, "--scrivi"]), 1,
+                                 "ogni archivio sotto il tetto ma il giro intero sopra: ROSSO")
+            self.assertEqual([s["esito"] for s in scritture], [False])
+            self.assertIn("giro intero", scritture[0]["motivo"] or "")
         finally:
             esame.scheda.registra = vera_registra
             shutil.rmtree(d, ignore_errors=True)

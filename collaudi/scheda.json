@@ -24,11 +24,11 @@
  "0d485cbbe89e": {
   "blocco": 8,
   "comando": "python collaudi/esame_deploy.py --da-file <letture> --scrivi",
-  "commit": "dd62d8c",
+  "commit": "8eff26d",
   "condizione": "il deploy passa sempre dal protocollo D17, mai a mano",
-  "denominatore": 153,
-  "esito": true,
-  "impronta": "194e20138ca6",
+  "denominatore": 166,
+  "esito": false,
+  "impronta": "2a5c6c3b7ce6",
   "impronte_moduli": {
    "fase13_protocollo_finale": "2dce22f058cc",
    "fase16_outbox": "a47de5874653",
@@ -42,11 +42,11 @@
    "fase42_observability": "a557645447a7",
    "fase60_mcp_server": "56ffc4364819",
    "fase81_bootstrap_casavip": "755840ed917e",
-   "fase83_server": "5f01ce29a46c",
+   "fase83_server": "f0262ebd76c9",
    "fase86_email": "71ba17ea5775"
   },
-  "motivo": "",
-  "quando": "2026-11-21T22:25:00"
+  "motivo": "[contenitori] casavip_nginx creato il 2026-11-24 01:36:19 UTC dentro uno scambio D17 riuscito (nessuno scambio riuscito lo copre: ricreato a mano o da un altro script)",
+  "quando": "2026-11-25T11:27:24"
  },
  "0f42c4387710": {
   "blocco": 1,
@@ -344,12 +344,12 @@
  },
  "3a547df3a743": {
   "blocco": 8,
-  "comando": "python collaudi/esame_backup.py --file <db.gz> --sha <.sha256> --manifest <MANIFEST.txt> --scrivi",
-  "commit": "dd62d8c",
+  "comando": "python collaudi/esame_backup.py --giro <cartella> --manifest <MANIFEST.txt> --scrivi",
+  "commit": "8eff26d",
   "condizione": "il salvataggio e' stato RIPRISTINATO e letto, non solo prodotto",
-  "denominatore": 19,
+  "denominatore": 379,
   "esito": true,
-  "impronta": "194e20138ca6",
+  "impronta": "2a5c6c3b7ce6",
   "impronte_moduli": {
    "fase13_protocollo_finale": "2dce22f058cc",
    "fase16_outbox": "a47de5874653",
@@ -363,11 +363,11 @@
    "fase42_observability": "a557645447a7",
    "fase60_mcp_server": "56ffc4364819",
    "fase81_bootstrap_casavip": "755840ed917e",
-   "fase83_server": "5f01ce29a46c",
+   "fase83_server": "f0262ebd76c9",
    "fase86_email": "71ba17ea5775"
   },
   "motivo": "",
-  "quando": "2026-11-21T22:26:13"
+  "quando": "2026-11-25T11:27:25"
  },
  "50691c557e6e": {
   "blocco": 1,
@@ -750,11 +750,11 @@
  "a36e3373da1d": {
   "blocco": 8,
   "comando": "python collaudi/esame_sentinella.py --arrivi <registro nginx 24h> --scrivi",
-  "commit": "fbff978",
+  "commit": "8eff26d",
   "condizione": "una sentinella ESTERNA (non nostra) si accorge se il sito muore",
   "denominatore": 10,
   "esito": true,
-  "impronta": "194e20138ca6",
+  "impronta": "2a5c6c3b7ce6",
   "impronte_moduli": {
    "fase13_protocollo_finale": "2dce22f058cc",
    "fase16_outbox": "a47de5874653",
@@ -768,11 +768,11 @@
    "fase42_observability": "a557645447a7",
    "fase60_mcp_server": "56ffc4364819",
    "fase81_bootstrap_casavip": "755840ed917e",
-   "fase83_server": "5f01ce29a46c",
+   "fase83_server": "f0262ebd76c9",
    "fase86_email": "71ba17ea5775"
   },
   "motivo": "",
-  "quando": "2026-11-22T16:30:18"
+  "quando": "2026-11-25T11:14:14"
  },
  "a5c77ac6c76a": {
   "blocco": 5,

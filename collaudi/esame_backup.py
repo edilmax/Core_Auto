@@ -1,8 +1,13 @@
 """L'ESAME DELLA CASELLA 1 DEL BLOCCO 8 (INFRASTRUTTURA) — il salvataggio si ripristina e si legge, non si guarda.
 
-    python collaudi/esame_backup.py --file F.db.gz --sha F.db.gz.sha256 --manifest MANIFEST-TS.txt
-                                                      ripristina UN backup vero in una cartella temporanea e lo legge
+    python collaudi/esame_backup.py --giro CARTELLA --manifest MANIFEST-TS.txt
+                                                      ripristina e legge OGNI archivio di TABELLE_ATTESE di quel giro
+                                                      (<db>-<TS>.db.gz e il suo .sha256, tutti dentro CARTELLA)
     ... --scrivi                                      ... e SCRIVE nella scheda (anche un rosso, col motivo)
+    python collaudi/esame_backup.py --file F.db.gz --sha F.db.gz.sha256 --manifest MANIFEST-TS.txt
+                                                      ripristina UN archivio solo: misura e stampa, ma con --scrivi SI
+                                                      FERMA (25/11/2026: la casella parla del salvataggio INTERO, e un
+                                                      archivio sano non dice niente degli altri 22)
     ... --con-guasto                                  tre guasti insieme (impronta sbagliata, pagina azzerata nella copia
                                                       ripristinata, tabella attesa che non esiste): deve gridare, NON scrive.
                                                       Il file originale NON viene toccato: il guasto vive nella copia.
@@ -68,7 +73,7 @@ from piano import BLOCCHI  # noqa: E402
 
 BLOCCO = 8
 MARCA = "RIPRISTINATO"
-COMANDO = "python collaudi/esame_backup.py --file <db.gz> --sha <.sha256> --manifest <MANIFEST.txt> --scrivi"
+COMANDO = "python collaudi/esame_backup.py --giro <cartella> --manifest <MANIFEST.txt> --scrivi"
 SITUAZIONI = ("archivio", "ripristino", "contenuto", "tempo")
 TETTO_SECONDI = 120
 MAGIA = b"SQLite format 3\x00"
@@ -85,6 +90,12 @@ NON_GUARDA = (
     "il pacchetto offsite cifrato e la passphrase: questo esame legge il backup del volume /data/backup, non l'offsite",
     "se il backup e' RECENTE: l'ora nel nome del file sta nel dettaglio del passo, il giudizio sull'eta' non e' qui",
     "un ripristino DENTRO il contenitore vivo: qui si ripristina in una cartella temporanea del computer che esamina",
+    "con --file si ripristina UN archivio solo e non si scrive; la casella si scrive solo con --giro, che ripristina "
+    "OGNI archivio di TABELLE_ATTESE del giro (25/11/2026: prima bastava finanza, 1 su 23)",
+    "con --giro, gli archivi del manifesto FUORI da TABELLE_ATTESE (a schema pigro) non si leggono affatto: ne' gzip, "
+    "ne' impronta, ne' ripristino; il 25/11/2026 erano 5 su 28",
+    "i percorsi relativi passati a --giro/--file/--manifest si leggono dalla radice del repository (l'esame fa chdir): "
+    "si passano percorsi assoluti",
 )
 
 
@@ -449,25 +460,54 @@ def main(argv=None):
         _stampa_non_guarda()
         return 2
     archivio, sha_file, manifesto = _argomento(argv, "--file"), _argomento(argv, "--sha"), _argomento(argv, "--manifest")
+    giro = _argomento(argv, "--giro")
+    if "--scrivi" in argv and not giro:
+        print("⛔ FERMO: la casella parla del salvataggio INTERO. Un archivio solo (--file) si misura ma non si scrive:")
+        print("   per scrivere serve --giro <cartella> --manifest <MANIFEST.txt>, che ripristina ogni archivio del giro.")
+        _stampa_non_guarda()
+        return 2
     ambiente_prima = dict(os.environ)
     cartella_finta = None
-    if not (archivio and sha_file and manifesto):
+    if giro:
+        m_giro = re.match(r"^MANIFEST-(?P<ts>\d{8}-\d{6}(?:-\d+)*)\.txt$", os.path.basename(manifesto or ""))
+        if not (m_giro and os.path.isdir(giro)):
+            print("VERDETTO: ⛔ FERMO — --giro vuole una cartella che esiste e --manifest MANIFEST-<TS>.txt (il timbro del giro)")
+            _stampa_non_guarda()
+            return 2
+        attese = tabelle_attese()
+        print("giro %s: %d archivi di TABELLE_ATTESE da ripristinare, dalla cartella %s" % (m_giro.group("ts"), len(attese), giro))
+        if con_guasto:
+            print("⚠️  PASSATA COI GUASTI DENTRO, su ogni archivio: impronta sbagliata; una pagina azzerata nella COPIA; "
+                  "una tabella attesa inventata")
+        avvio_giro = time.monotonic()
+        for db in sorted(attese):
+            a = os.path.join(giro, "%s-%s.db.gz" % (db[:-3], m_giro.group("ts")))
+            print("\n=== archivio %s ===" % os.path.basename(a))
+            misura_tutto(a, a + ".sha256", manifesto, attese, con_guasto)
+        # il tetto vale per il ripristino del salvataggio INTERO, non per un archivio alla volta (seconda revisione 25/11)
+        durata_giro = time.monotonic() - avvio_giro
+        print("\n--- TEMPO DEL GIRO ---")
+        passo("tempo", "il giro intero (%d archivi) ripristinato e letto sta sotto %d s" % (len(attese), TETTO_SECONDI),
+              durata_giro <= TETTO_SECONDI, "%.2f s" % durata_giro)
+    elif not (archivio and sha_file and manifesto):
         if con_guasto:
             cartella_finta = tempfile.mkdtemp(prefix="esame_backup_finto_")
             archivio, sha_file, manifesto = backup_finto(cartella_finta)
             print("backup FINTO dell'autoprova (--file/--sha/--manifest assenti): il guasto si vede lo stesso, ma NON e' il VPS")
         else:
-            print("VERDETTO: ⛔ FERMO — servono --file <db.gz> --sha <.sha256> --manifest <MANIFEST.txt> (il backup vero lo scarica B)")
+            print("VERDETTO: ⛔ FERMO — servono --giro <cartella> --manifest <MANIFEST.txt> (l'unico modo che scrive), oppure "
+                  "--file <db.gz> --sha <.sha256> --manifest <MANIFEST.txt> per un archivio solo (il backup vero lo scarica B)")
             _stampa_non_guarda()
             return 2
-    if con_guasto:
-        print("⚠️  PASSATA COI GUASTI DENTRO: impronta sbagliata; una pagina azzerata nella COPIA; una tabella attesa inventata")
-    print("archivio: %s\nsha256:   %s\nmanifesto: %s" % (archivio, sha_file, manifesto))
-    try:
-        misura_tutto(archivio, sha_file, manifesto, tabelle_attese(), con_guasto)
-    finally:
-        if cartella_finta:
-            shutil.rmtree(cartella_finta, ignore_errors=True)
+    if not giro:
+        if con_guasto:
+            print("⚠️  PASSATA COI GUASTI DENTRO: impronta sbagliata; una pagina azzerata nella COPIA; una tabella attesa inventata")
+        print("archivio: %s\nsha256:   %s\nmanifesto: %s" % (archivio, sha_file, manifesto))
+        try:
+            misura_tutto(archivio, sha_file, manifesto, tabelle_attese(), con_guasto)
+        finally:
+            if cartella_finta:
+                shutil.rmtree(cartella_finta, ignore_errors=True)
     passo("tempo", "l'ambiente (os.environ) e' identico a prima della misura", dict(os.environ) == ambiente_prima)
     verde, motivi, denominatore = giudica(PASSI)
     print("")
