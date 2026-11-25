@@ -331,6 +331,23 @@ class TestRiconciliazione(unittest.TestCase):
                          "DOLLARI CONVERTITI DA STRIPE CONFRONTATI COI DOLLARI DEL GIORNALE: %r"
                          % (rep["confronti"],))
 
+    def test_g2_col_giornale_illeggibile_il_doppione_resta_un_fantasma_e_si_dice_perche(self):
+        # D19 (25/11, guasti del giudice della CI): la lettura dei secondi pagamenti e' isolata;
+        # nel dubbio nessuno e' noto, e anche il secondo GIA' registrato si grida
+        import sqlite3
+        from unittest import mock
+        self._secondo_registrato()
+        with mock.patch.object(self.fc, "movimenti",
+                               side_effect=sqlite3.OperationalError("database is locked")), \
+                self.assertLogs("core_auto.riconciliazione", level="WARNING") as reg:
+            rep = self._ric(self._doppio(reso=True))
+        self.assertEqual(["R1"], [d["riferimento"] for d in rep.get("doppio_pagamento") or []],
+                         "UN GIORNALE ILLEGGIBILE HA FATTO TACERE IL DOPPIO PAGAMENTO: %r" % (rep,))
+        letti = [x for x in reg.records if "secondi pagamenti illeggibili" in x.getMessage()]
+        self.assertEqual(1, len(letti), "%r" % ([x.getMessage() for x in reg.records],))
+        self.assertIs(sqlite3.OperationalError, (letti[0].exc_info or (None,))[0],
+                      "il registro dice che il giornale non si legge ma non dice perche'")
+
 
 class TestDoppiPagamentiSuOgniSequenza(unittest.TestCase):
     """g2 (25/11), skill property-based-testing di Trail of Bits: prenotazioni casuali con 1-3

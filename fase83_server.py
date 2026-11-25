@@ -6366,8 +6366,12 @@ class RouterHTTP:
                 logger.error("secondo pagamento: giornale illeggibile per %s",
                              _rif_per_registro(rif), exc_info=True)
                 return 503, {"errore": "giornale_non_leggibile", "riferimento": rif}
-            riga, stripe_ok = (self._secondo_pagamento_scheda(mov) if mov is not None
-                               else (None, True))
+            if mov is None:
+                # il giornale non conosce questo pagamento come secondo di QUESTA prenotazione.
+                # Uscita qui e non piu' sotto: senza la riga non c'e' nessuna risposta di Stripe da
+                # portarsi dietro (il valore che la sostituiva non lo leggeva nessuno, giudice 25/11)
+                return 404, {"errore": "nessun_rimborso_dovuto", "riferimento": rif}
+            riga, stripe_ok = self._secondo_pagamento_scheda(mov)
         if riga is None:
             return 404, {"errore": "nessun_rimborso_dovuto", "riferimento": rif}
         if riga.get("gia_rimborsato"):

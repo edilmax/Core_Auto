@@ -14863,6 +14863,7 @@ class TestUnPreventivoDaUnaSolaPaginaDiPagamento(_OraVeraPerIlPreventivo, unitte
         self.annulli = []         # (pagamento, chiave)
         self.stati_pi = {}        # pagamento -> stato su Stripe, solo quelli che la prova sceglie
         self.contestati = set()   # pagamenti contestati dalla banca
+        self.rimborsi_in_corso = set()   # pagamenti il cui rimborso Stripe tiene «pending»
         self._lock = threading.Lock()
         self._seconda_partita = threading.Event()
         p = mock.patch.object(_stripe.ProviderStripe, "_fetch_reale", staticmethod(self._stripe_finto))
@@ -14912,10 +14913,12 @@ class TestUnPreventivoDaUnaSolaPaginaDiPagamento(_OraVeraPerIlPreventivo, unitte
                 q = parse_qs(body.decode("utf-8"))
                 self.rimborsi.append((q["payment_intent"][0], int(q["amount"][0]),
                                       headers.get("Idempotency-Key")))
-                return {"id": "re_%d" % len(self.rimborsi), "status": "succeeded",
-                        "amount": int(q["amount"][0])}
+                return {"id": "re_%d" % len(self.rimborsi), "amount": int(q["amount"][0]),
+                        "status": ("pending" if q["payment_intent"][0] in self.rimborsi_in_corso
+                                   else "succeeded")}
             chiesto = url.split("payment_intent=", 1)[1].split("&", 1)[0]
-            return {"data": [{"id": "re_x", "status": "succeeded", "amount": imp}
+            return {"data": [{"id": "re_x", "amount": imp,
+                              "status": "pending" if pi in self.rimborsi_in_corso else "succeeded"}
                              for pi, imp, _k in self.rimborsi if pi == chiesto]}
         if "/v1/payment_intents/" in url:            # g1: stato, annullo, addebito contestato
             pi = url.split("/v1/payment_intents/", 1)[1].split("/", 1)[0].split("?", 1)[0]
@@ -15236,10 +15239,16 @@ class TestUnPreventivoDaUnaSolaPaginaDiPagamento(_OraVeraPerIlPreventivo, unitte
     def test_col_giornale_illeggibile_il_pulsante_dice_non_lo_so(self):
         rif = self._secondo_pagamento()
         with mock.patch.object(self.sis.finanza, "movimenti",
-                               side_effect=sqlite3.OperationalError("database is locked")):
+                               side_effect=sqlite3.OperationalError("database is locked")), \
+                self.assertLogs("core_auto.server", level="ERROR") as reg:
             s, o = self._premi({"riferimento": rif, "payment_intent": self.PI_SECONDO})
         self.assertEqual((503, "giornale_non_leggibile"), (s, o.get("errore")),
                          "«NON LO SO» DETTO COME «NIENTE DA FARE»: %r" % (o,))
+        # giudice della CI (25/11): il TIPO vero nella traccia, «non e' nullo» non basta
+        gridato = [x for x in reg.records if "giornale illeggibile" in x.getMessage()]
+        self.assertEqual(1, len(gridato), "%r" % ([x.getMessage() for x in reg.records],))
+        self.assertIs(sqlite3.OperationalError, (gridato[0].exc_info or (None,))[0],
+                      "il registro dice che il giornale non si legge ma non dice perche'")
 
     def test_un_secondo_pagamento_con_un_numero_storto_non_finisce_nel_pannello(self):
         # code-review (25/11): il `pi_` va nel pulsante del pannello; un apice spezzerebbe il codice
@@ -15278,6 +15287,97 @@ class TestUnPreventivoDaUnaSolaPaginaDiPagamento(_OraVeraPerIlPreventivo, unitte
                          "%r" % (esito,))
         self.assertEqual(200, self._paga(rif, "cs_altra_pagina", self.PI_SECONDO, "evt_2")[0])
         self.assertEqual(1, len(self._lista(rif)), "al ritentativo la riga c'e'")
+
+    # ── i rami di difesa del secondo pagamento, costruiti a mano (D19; misurati il 25/11 sui
+    # guasti che il giudice della CI genera sulle righe cambiate: nessuna prova li guardava) ──
+    def test_se_il_giornale_esplode_stripe_ritenta_e_il_registro_dice_perche(self):
+        rif = self._secondo_pagamento()
+        with mock.patch.object(self.sis.finanza, "movimento",
+                               side_effect=sqlite3.OperationalError("database is locked")), \
+                self.assertLogs("core_auto.server", level="ERROR") as reg:
+            s, esito = self._paga(rif, "cs_altra_pagina", self.PI_SECONDO, "evt_2")
+        self.assertEqual((503, "secondo_pagamento_non_registrato"), (s, esito.get("sottocodice")),
+                         "IL GIORNALE E' ESPLOSO E STRIPE NON RITENTA: il secondo pagamento "
+                         "resterebbe solo nel registro (%r)" % (esito,))
+        esploso = [x for x in reg.records if "giornale e' esploso" in x.getMessage()]
+        self.assertEqual(1, len(esploso), "%r" % ([x.getMessage() for x in reg.records],))
+        self.assertIs(sqlite3.OperationalError, (esploso[0].exc_info or (None,))[0],
+                      "il registro dice che il giornale e' esploso ma non dice perche'")
+        self.assertEqual(200, self._paga(rif, "cs_altra_pagina", self.PI_SECONDO, "evt_2")[0])
+        self.assertEqual(1, len(self._lista(rif)), "al ritentativo la riga c'e'")
+
+    def _lista_intera(self):
+        s, lista = self.g("GET", "/api/admin/rimborsi_dovuti", None, {"X-Admin-Key": "ak"})
+        self.assertEqual(200, s, "%r" % (lista,))
+        return lista
+
+    def test_se_stripe_non_dice_i_rimborsi_del_secondo_la_lista_dice_non_lo_so(self):
+        rif = self._secondo_pagamento()
+        self.assertEqual(200, self._paga(rif, "cs_altra_pagina", self.PI_SECONDO, "evt_2")[0])
+        vero = self.sis.stripe.rimborsi_di
+
+        def rimborsi_di(pi):       # solo il SECONDO pagamento: il primo si legge come sempre
+            if pi == self.PI_SECONDO:
+                return {"ok": False, "rimborsi": [], "rimborsato_cents": 0,
+                        "motivo": "HTTPError 500"}
+            return vero(pi)
+        with mock.patch.object(self.sis.stripe, "rimborsi_di", side_effect=rimborsi_di):
+            lista = self._lista_intera()
+        righe = [r for r in lista.get("rimborsi") or [] if r.get("riferimento") == rif]
+        self.assertFalse(lista.get("controllabile"),
+                         "STRIPE NON HA DETTO SE E' GIA' RESO E LA LISTA SI DICE CONTROLLATA: %r"
+                         % (lista,))
+        self.assertIn(rif + ": HTTPError 500", lista.get("motivo_non_controllabile") or "")
+        self.assertEqual([(False, [], "HTTPError 500")],
+                         [(r.get("bottone"), r.get("manca"), r.get("motivo_stripe")) for r in righe],
+                         "PULSANTE ACCESO SENZA SAPERE SE I SOLDI SONO GIA' TORNATI: %r" % (righe,))
+
+    def test_se_stripe_non_dice_lo_stato_del_blocco_la_lista_dice_non_lo_so(self):
+        rif = self._secondo_pagamento()
+        with mock.patch.object(self.sis.stripe, "stato_sessione", return_value="unpaid"), \
+                mock.patch.object(self.sis.stripe, "pagamento_della_sessione",
+                                  return_value={"ok": True, "stato": "requires_capture",
+                                                "pi": self.PI_SECONDO}):
+            self.assertEqual(200, self._paga(rif, "cs_altra_pagina", "", "evt_2")[0])
+        # il finto Stripe non conosce PI_SECONDO (`stati_pi` vuoto): lo stato non si rilegge
+        lista = self._lista_intera()
+        righe = [r for r in lista.get("rimborsi") or [] if r.get("riferimento") == rif]
+        self.assertFalse(lista.get("controllabile"), "%r" % (lista,))
+        self.assertEqual([("annullo", False, [])],
+                         [(r.get("gesto"), r.get("bottone"), r.get("manca")) for r in righe],
+                         "%r" % (righe,))
+        self.assertTrue(str(righe[0].get("motivo_stripe")).startswith("risposta_inattesa"),
+                        "%r" % (righe,))
+        s, o = self._premi({"riferimento": rif, "payment_intent": self.PI_SECONDO})
+        self.assertEqual((409, [], []), (s, self.annulli, self.rimborsi),
+                         "UN BLOCCO DI CUI STRIPE NON DICE LO STATO E' STATO TOCCATO: %r" % (o,))
+
+    def test_un_rimborso_del_secondo_ancora_in_corso_non_riparte(self):
+        rif = self._secondo_pagamento()
+        self.stati_pi[self.PI_SECONDO] = "succeeded"
+        self.rimborsi_in_corso.add(self.PI_SECONDO)       # Stripe lo prende e lo tiene «pending»
+        self.assertEqual(200, self._paga(rif, "cs_altra_pagina", self.PI_SECONDO, "evt_2")[0])
+        s, o = self._premi({"riferimento": rif, "payment_intent": self.PI_SECONDO})
+        self.assertEqual((202, "in_lavorazione"), (s, o.get("stato")), "%r" % (o,))
+        righe = self._lista(rif)
+        self.assertEqual([(False, ["rimborso_in_corso"])],
+                         [(r.get("bottone"), r.get("manca")) for r in righe],
+                         "UN RIMBORSO IN CORSO HA DI NUOVO IL PULSANTE: %r" % (righe,))
+        s, o = self._premi({"riferimento": rif, "payment_intent": self.PI_SECONDO})
+        self.assertEqual((409, 1), (s, len(self.rimborsi)),
+                         "PREMUTO MENTRE IL PRIMO RIMBORSO E' IN CORSO: %r %r" % (o, self.rimborsi))
+
+    def test_se_la_contestazione_non_si_legge_il_pulsante_resta_spento(self):
+        rif = self._secondo_pagamento()
+        # il finto Stripe non conosce PI_SECONDO: i rimborsi si leggono, la contestazione no
+        # (una risposta che non so leggere vuol dire «non lo so», mai «non contestato»)
+        self.assertEqual(200, self._paga(rif, "cs_altra_pagina", self.PI_SECONDO, "evt_2")[0])
+        righe = self._lista(rif)
+        self.assertEqual([(False, ["verifica_contestazione"], 0)],
+                         [(r.get("bottone"), r.get("manca"), r.get("attesa_ore")) for r in righe],
+                         "PULSANTE ACCESO SENZA SAPERE SE LA BANCA HA CONTESTATO: %r" % (righe,))
+        s, o = self._premi({"riferimento": rif, "payment_intent": self.PI_SECONDO})
+        self.assertEqual((409, []), (s, self.rimborsi), "%r" % (o,))
 
     def test_se_l_archivio_non_si_legge_stripe_ritenta_e_il_primo_resta(self):
         rif = self._secondo_pagamento()
