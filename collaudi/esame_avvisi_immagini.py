@@ -90,10 +90,12 @@ _RE_PACCHETTO_NGINX_ORG = re.compile(r"^nginx(-module-[a-z0-9-]+)?$")
 
 # ⛔ LE ECCEZIONI PORTANO LA LORO PROVA, RIMISURATA A OGNI GIRO, E SCADONO DA SOLE.
 #    Un avviso con la riparazione pronta resta rosso, salvo che qui sotto ci sia: (1) il
-#    motivo, (2) i SIMBOLI del codice difettoso, che l'esame cerca nei file dell'immagine e
-#    che devono MANCARE (un file non trovato non e' una prova: e' rosso), (3) una scadenza,
-#    passata la quale torna rosso anche se la prova regge. Un elenco di eccezioni senza prova
-#    e' un interruttore per spegnere l'allarme: questo non lo e'.
+#    motivo, (2) la PROVA, in una di due forme: (a) zlib, `file` + `simboli_assenti`: i nomi del
+#    codice difettoso che devono MANCARE dalla libreria (il codice non e' compilato); (b) dal
+#    26/11 `prove`: piu' file, tutti da reggere, per dire «la libreria c'e' intera ma nginx non
+#    la carica» -- qui il codice difettoso C'E'. Un file non trovato non e' una prova: e' rosso.
+#    (3) una scadenza, passata la quale torna rosso anche se la prova regge. Un elenco di
+#    eccezioni senza prova e' un interruttore per spegnere l'allarme: questo non lo e'.
 ECCEZIONI = {
     # 24/11/2026. CVE-2026-4738 e' una falla di gdal nel codice «contrib/infback9» di zlib
     # (inftree9.c); Alpine l'ha attribuita al pacchetto zlib e la «ripara» con la 1.4-r0.
@@ -112,6 +114,46 @@ ECCEZIONI = {
     },
 }
 
+# 26/11/2026. expat e libxml2: falle con la riparazione pronta in Alpine 3.24, ma nessuna immagine nginx ufficiale le
+# ha ancora (misurato quel giorno su nginx:1.31.10-alpine, mainline-alpine e stable-alpine: libexpat 2.10.0-r0,
+# libxml2 2.13.9-r3). Qui il codice difettoso C'E' (le librerie sono intere): lo schema di zlib non basta. La prova e'
+# che nginx NON LE CARICA: il programma (/usr/sbin/nginx e nginx-debug) non e' legato a nessuna di loro -- le usano
+# solo i moduli dinamici image_filter, xslt e js e i programmi fc-*, njs, xsltproc -- e il nginx.conf dell'immagine
+# non carica moduli (load_module si scrive solo li', non in conf.d). Misurato anche sul processo vivo il 26/11: 25
+# librerie in memoria, nessuna di queste. Le falle chiedono tutte che la libreria legga un XML scelto da chi attacca
+# (una riguarda il programma xmlwf, che nell'immagine non c'e'). UNA VOCE PER FALLA, apposta: una falla nuova di
+# queste librerie torna rossa, e qualcuno legge cosa dice prima di aggiungerla.
+# Le revisioni del 26/11 (code-review, caccia agli errori silenziosi, revisione differenziale) l'hanno stretta: il
+# programma col nome ESATTO e un nome che deve esserci (libssl: un file letto vuoto non prova niente), le librerie
+# che nginx chiede (libssl, libcrypto, libpcre2-8, libz: nemmeno loro nominano queste), nginx.conf senza
+# load_module, senza la cartella dei moduli e senza `include` PRIMA del blocco http (fuori da http un include
+# porterebbe file dove load_module e' ammesso). E il contesto fuori dall'immagine: `contesto_nginx` (compose e
+# avvio dell'immagine), voluto da ogni voce con "contesto_nginx".
+_NOMI_VIETATI = ("libexpat", "libxml2", "libxslt", "libexslt", "libgd", "libfontconfig")
+_NGINX_NON_LE_CARICA = (
+    {"file": "usr/sbin/nginx", "esatto": True, "presenti": ("libssl",), "simboli_assenti": _NOMI_VIETATI},
+    {"file": "usr/lib/libssl.so.", "simboli_assenti": _NOMI_VIETATI},
+    {"file": "usr/lib/libcrypto.so.", "simboli_assenti": _NOMI_VIETATI},
+    {"file": "usr/lib/libpcre2-8.so.", "simboli_assenti": _NOMI_VIETATI},
+    {"file": "usr/lib/libz.so.", "simboli_assenti": _NOMI_VIETATI},
+    {"file": "etc/nginx/nginx.conf", "esatto": True, "presenti": ("worker_processes",),
+     "simboli_assenti": ("load_module", "modules", "LD_PRELOAD")},
+    {"file": "etc/nginx/nginx.conf", "esatto": True, "fino_a": "\nhttp {", "simboli_assenti": ("include",)},
+)
+ECCEZIONI.update({
+    (origine, cve): {"motivo": motivo, "versione": versione, "prove": _NGINX_NON_LE_CARICA,
+                     "contesto_nginx": True, "dal": "2026-11-26", "scadenza": "2026-12-26"}
+    for origine, versione, motivo, falle in (
+        ("expat", "2.10.0-r0", "libexpat e' nell'immagine ma nginx non la carica (la usano solo fontconfig/libgd: "
+                               "il modulo image_filter, non caricato, e i programmi fc-*)",
+         ("ALPINE-CVE-2026-124317", "ALPINE-CVE-2026-128241", "ALPINE-CVE-2026-134703")),
+        ("libxml2", "2.13.9-r3", "libxml2 e' nell'immagine ma nginx non la carica (la usano solo i moduli xslt e js, "
+                                 "non caricati, e i programmi njs e xsltproc)",
+         ("ALPINE-CVE-2026-0989", "ALPINE-CVE-2026-0990", "ALPINE-CVE-2026-0992", "ALPINE-CVE-2026-11979",
+          "ALPINE-CVE-2026-1757", "ALPINE-CVE-2026-86137", "ALPINE-CVE-2026-86138", "ALPINE-CVE-2026-86139",
+          "ALPINE-CVE-2026-86140", "ALPINE-CVE-2026-86141", "ALPINE-CVE-2026-86142", "ALPINE-CVE-2026-86143")))
+    for cve in falle})
+
 NON_GUARDA = (
     "i pacchetti Debian e pip dell'immagine dell'app: il Dockerfile fa `apt-get upgrade` alla "
     "costruzione, quindi la base ufficiale non e' cio' che gira. Li guarda Trivy nel job "
@@ -120,8 +162,15 @@ NON_GUARDA = (
     "OSV.dev e' uno specchio: un avviso che la fonte pubblica e OSV non ha ancora importato "
     "arriva il giorno dopo (Alpine e PSF sono importati di continuo)",
     "le falle SENZA riparazione si stampano ma non fanno rosso",
-    "le ECCEZIONI (oggi una: zlib CVE-2026-4738) non fanno rosso finche' la loro prova regge "
-    "e non sono scadute: la prova cerca simboli nel file, non dimostra che il resto sia sano",
+    "le ECCEZIONI (zlib CVE-2026-4738; dal 26/11 expat e libxml2, «nginx non le carica») non fanno rosso "
+    "finche' la loro prova regge e non sono scadute: la prova cerca nomi nei file, non dimostra che il resto sia "
+    "sano. Quella di expat/libxml2 legge il nginx.conf DELL'IMMAGINE: se il compose montasse un nginx.conf nostro "
+    "con un load_module, qui non si vedrebbe (oggi il compose monta solo conf.d/default.conf, dove load_module "
+    "non e' ammesso); a questo, a `command:`, LD_PRELOAD e all'avvio dell'immagine guarda `contesto_nginx`",
+    "la prova «nginx non le carica» vede il legame DINAMICO (il nome della libreria fra quelle che nginx e le sue "
+    "librerie chiedono): un nginx compilato con expat o libxml2 DENTRO non porterebbe quei nomi (le immagini "
+    "ufficiali Alpine sono a librerie dinamiche: il programma nomina libz.so e libssl.so); e gli script di "
+    "/docker-entrypoint.d/ dell'immagine, che all'avvio possono riscrivere nginx.conf, qui non si leggono",
     "la gravita' non si pesa: qualunque falla con la riparazione pronta e' rossa",
     "le immagini si leggono dal compose e dal Dockerfile di MASTER, non da cio' che gira sul "
     "VPS: se il server restasse indietro rispetto a master, questo esame non lo vede (lo vede "
@@ -324,6 +373,10 @@ def leggi_apk(strati, cerca=()):
                 if mb.isfile() and not n.rsplit("/", 1)[-1].startswith(".wh.") and (
                         n in fissi or any(n.startswith(p) for p in cerca)):
                     disco[n] = tf.extractfile(mb).read()
+                elif not mb.isfile():
+                    # un collegamento o una cartella che prende il posto di un file: la copia di sotto non vale
+                    # piu' (26/11/2026: le prove delle eccezioni la leggerebbero al posto del file vero)
+                    disco.pop(n.rstrip("/"), None)
     db = disco.get("lib/apk/db/installed")
     db = db.decode("utf-8", "replace") if db else None
     ver = None
@@ -340,24 +393,79 @@ def leggi_apk(strati, cerca=()):
     return ver, db, file
 
 
+def _prove(ecc):
+    """Le prove di un'eccezione: UNA nello schema di zlib (`file` + `simboli_assenti`), piu' d'una in quello a
+    `prove` (expat e libxml2, 26/11/2026). I due schemi insieme sono ambigui (uno dei due verrebbe ignorato in
+    silenzio): nessuna prova."""
+    if "prove" in ecc:
+        if "file" in ecc or "simboli_assenti" in ecc:
+            return []
+        return list(ecc["prove"] or ())
+    return [{"file": ecc.get("file"), "simboli_assenti": ecc.get("simboli_assenti")}]
+
+
+def contesto_nginx(compose, cfg):
+    """(regge, perche'). Le prove «nginx non le carica» leggono i file DELL'IMMAGINE: un modulo o una libreria
+    possono entrare anche da fuori. Regge solo se il servizio nginx del compose NON ha `command:`/`entrypoint:`,
+    NON monta nginx.conf, /etc/nginx intera o la cartella dei moduli, NON nomina LD_PRELOAD; e se Cmd, Entrypoint
+    ed Env dell'immagine non nominano load_module ne' LD_PRELOAD (code-review del 26/11)."""
+    m = re.search(r"(?ms)^  nginx:\n(.*?)(?=^  [^ #\n][^:\n]*:\s*$|^[^ #\n]|\Z)", compose)
+    if not m:
+        return False, "il servizio nginx non si trova nel compose: il contesto non si guarda"
+    blocco = m.group(1)
+    for vietato, perche in ((r"(?m)^\s+command:", "il servizio nginx ha `command:`"),
+                            (r"(?m)^\s+entrypoint:", "il servizio nginx ha `entrypoint:`"),
+                            (r"LD_PRELOAD", "il servizio nginx nomina LD_PRELOAD"),
+                            (r":/etc/nginx/nginx\.conf\b", "il compose monta un nginx.conf"),
+                            (r":/etc/nginx/modules\b", "il compose monta la cartella dei moduli"),
+                            (r":/etc/nginx/?(:|\s|$)", "il compose monta /etc/nginx intera")):
+        if re.search(vietato, blocco):
+            return False, perche
+    c = cfg.get("config") or {}
+    avvio = " ".join(str(x) for chiave in ("Cmd", "Entrypoint", "Env") for x in (c.get(chiave) or []))
+    for vietato in ("load_module", "LD_PRELOAD"):
+        if vietato in avvio:
+            return False, "l'avvio dell'immagine (Cmd/Entrypoint/Env) nomina %s" % vietato
+    return True, "compose e avvio dell'immagine non portano moduli ne' librerie in piu' a nginx"
+
+
+def file_delle_prove(ecc):
+    """I prefissi dei file che le prove guardano: si leggono dagli strati dell'immagine (`leggi_apk(cerca=)`)."""
+    return [p.get("file") for p in _prove(ecc) if p.get("file")]
+
+
 def eccezione_regge(ecc, file, oggi):
-    """(regge, perche'). Regge solo se non e' scaduta, il file c'e' e NESSUN simbolo vietato
-    compare in nessuna sua versione: un file assente non prova niente."""
-    if not ecc.get("simboli_assenti") or not ecc.get("motivo"):
+    """(regge, perche'). Regge solo se non e' scaduta e, per OGNI prova, il file c'e' e NESSUN simbolo
+    vietato compare in nessuna sua versione: un file assente non prova niente, e basta una prova che cade."""
+    prove = _prove(ecc)
+    if not ecc.get("motivo") or not prove or not all(p.get("file") and p.get("simboli_assenti") for p in prove):
         return False, "eccezione senza simboli da cercare o senza motivo: non e' una prova"
     if not re.match(r"^\d{4}-\d{2}-\d{2}$", str(ecc.get("scadenza", ""))):
         return False, "eccezione senza una scadenza AAAA-MM-GG"
     if oggi > ecc["scadenza"]:
         return False, "eccezione scaduta il %s: si rimisura o si ripara" % ecc["scadenza"]
-    trovati = {n: b for n, b in file.items() if n.startswith(ecc["file"])}
-    if not trovati:
-        return False, "il file %s non c'e' nell'immagine: la prova non si fa" % ecc["file"]
-    for n, b in sorted(trovati.items()):
-        for s in ecc["simboli_assenti"]:
-            if s.encode() in b:
-                return False, "%s contiene %r: il codice difettoso C'E'" % (n, s)
-    return True, "%s senza %s (%d file guardati), scade il %s" % (
-        ecc["file"], "/".join(ecc["simboli_assenti"]), len(trovati), ecc["scadenza"])
+    fatte = []
+    for p in prove:
+        trovati = {n: b for n, b in file.items() if n.startswith(p["file"])}
+        # `esatto`: il file col nome preciso deve esserci (un nginx-debug non basta per il programma nginx)
+        if not trovati or (p.get("esatto") and p["file"] not in trovati):
+            return False, "il file %s non c'e' nell'immagine: la prova non si fa" % p["file"]
+        for n, b in sorted(trovati.items()):
+            # `presenti`: un nome che nel file vero DEVE esserci: un file vuoto o letto male non prova niente
+            for s in p.get("presenti") or ():
+                if s.encode() not in b:
+                    return False, "%s non contiene %r: letto male o non e' il file atteso, la prova non si fa" % (n, s)
+            # `fino_a`: si guarda solo il pezzo prima del segno (in nginx.conf, prima del blocco http)
+            if p.get("fino_a"):
+                if p["fino_a"].encode() not in b:
+                    return False, "%s non contiene %r: la prova non si fa" % (n, p["fino_a"])
+                b = b.split(p["fino_a"].encode(), 1)[0]
+            for s in p["simboli_assenti"]:
+                if s.encode() in b:
+                    # zlib: il codice difettoso c'e'; expat/libxml2: nginx la usa o carica un modulo
+                    return False, "%s contiene %r: la prova cade" % (n, s)
+        fatte.append("%s senza %s (%d file guardati)" % (p["file"], "/".join(p["simboli_assenti"]), len(trovati)))
+    return True, "%s, scade il %s" % ("; ".join(fatte), ecc["scadenza"])
 
 
 def pacchetti_apk(testo_db):
@@ -703,7 +811,17 @@ def autoprova():
              and not eccezione_regge(ecc, {"usr/lib/libz.so.1": b"inflateBack9"}, "2026-11-24")[0]
              and not eccezione_regge(ecc, {}, "2026-11-24")[0]
              and not eccezione_regge(ecc, {"usr/lib/libz.so.1": b"x"}, "2099-01-02")[0])
-    aperta = {"vulnerabili": [("da", (1, 31, 0))], "non_vulnerabili": [("nessuna",)]}
+    # lo schema a piu' prove (26/11/2026): tace se reggono tutte, grida se ne cade una sola
+    piu = {"motivo": "prova", "versione": "1.0-r0", "scadenza": "2099-01-01",
+           "prove": ({"file": "usr/sbin/nginx", "esatto": True, "presenti": ("libssl",), "simboli_assenti": ("libexpat",)},
+                     {"file": "etc/nginx/nginx.conf", "esatto": True, "simboli_assenti": ("load_module",)})}
+    buoni = {"usr/sbin/nginx": b"libssl.so.3", "etc/nginx/nginx.conf": b"worker_processes auto;"}
+    tace = tace and eccezione_regge(piu, buoni, "2026-11-26")[0]
+    grida = (grida
+             and not eccezione_regge(piu, dict(buoni, **{"etc/nginx/nginx.conf": b"load_module x.so;"}), "2026-11-26")[0]
+             and not eccezione_regge(piu, {"usr/sbin/nginx": b"libssl.so.3"}, "2026-11-26")[0]
+             and not eccezione_regge(piu, dict(buoni, **{"usr/sbin/nginx": b""}), "2026-11-26")[0])
+    aperta ={"vulnerabili": [("da", (1, 31, 0))], "non_vulnerabili": [("nessuna",)]}
     vecchio = {"vulnerabili": [("fascia", (1, 21, 4), (1, 31, 10))],
                "non_vulnerabili": [("da", (1, 30, 8))]}
     grida = (grida and e_vulnerabile("1.31.10", aperta) and e_vulnerabile("1.31.10", vecchio))
@@ -774,8 +892,8 @@ def misura():
                           {"Authorization": "Bearer " + tok})
                 _verifica(b, s["digest"], "strato")
                 strati.append(b)
-            ver_os, db, file = leggi_apk(strati, cerca=tuple(
-                e["file"] for e in ECCEZIONI.values()))
+            ver_os, db, file = leggi_apk(strati, cerca=tuple(sorted(
+                {f for e in ECCEZIONI.values() for f in file_delle_prove(e)})))
             eco = "Alpine:v%s" % ".".join(ver_os.split(".")[:2])
             n, v = CONTROPROVA_ALPINE
             if not osv_query({"package": {"name": n, "ecosystem": eco}, "version": v}):
@@ -791,6 +909,9 @@ def misura():
             for o, ve, i in rip:
                 ecc = ECCEZIONI.get((o, i))
                 regge, perche = eccezione_regge(ecc, file, oggi) if ecc else (False, "")
+                if regge and ecc.get("contesto_nginx"):
+                    regge, perche_c = contesto_nginx(compose, cfg)
+                    perche = perche if regge else perche_c
                 if regge and ecc.get("versione") != versioni.get(o):
                     regge, perche = False, ("vale per %s %s, nell'immagine c'e' %s"
                                             % (o, ecc.get("versione"), versioni.get(o)))

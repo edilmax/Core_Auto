@@ -17663,8 +17663,6 @@ class TestLEsameDegliAvvisiNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
         for chiave, ecc in esame.ECCEZIONI.items():
             self.assertEqual(len(chiave), 2, chiave)
             self.assertTrue(ecc.get("motivo"), chiave)
-            self.assertTrue(ecc.get("file"), chiave)
-            self.assertTrue(ecc.get("simboli_assenti"), chiave)
             self.assertRegex(ecc.get("scadenza", ""), r"^\d{4}-\d{2}-\d{2}$")
             import datetime
             durata = (datetime.date.fromisoformat(ecc["scadenza"])
@@ -17672,16 +17670,166 @@ class TestLEsameDegliAvvisiNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
             self.assertTrue(0 < durata <= 45, "%s dura %d giorni: un'eccezione lunga e' un "
                                               "allarme spento" % (chiave, durata))
             self.assertTrue(ecc.get("versione"), "%s non e' legata a una versione" % (chiave,))
-            self.assertRegex(ecc["file"], r"^[a-z0-9_/.+-]+/[a-z0-9_+-]+\.so\.?$",
-                             "il file della prova dev'essere UNA libreria, non una cartella")
+            # 26/11/2026: lo schema di zlib ha UNA prova (file + simboli_assenti), quello a `prove` (expat e libxml2,
+            # «nginx non le carica») piu' d'una. Per OGNI prova: un file preciso (una libreria, un programma, un file
+            # di configurazione: mai una cartella), dei nomi da cercare, e la prova che cade da sola.
+            prove = list(ecc["prove"]) if "prove" in ecc else [
+                {"file": ecc.get("file"), "simboli_assenti": ecc.get("simboli_assenti")}]
+            self.assertTrue(prove, "%s senza prove" % (chiave,))
+            self.assertEqual(sorted(esame.file_delle_prove(ecc)), sorted(p["file"] for p in prove), chiave)
+            if "prove" not in ecc:
+                # schema di zlib: la prova dev'essere UNA libreria
+                self.assertRegex(ecc["file"], r"^[a-z0-9_/.+-]+/[a-z0-9_+-]+\.so\.?$",
+                                 "il file della prova dev'essere UNA libreria, non una cartella")
+            else:
+                # schema a piu' prove (code-review del 26/11): la prova deve parlare della libreria della falla,
+                # i file che non sono librerie si prendono per nome ESATTO, e il contesto fuori dall'immagine conta
+                self.assertTrue(ecc.get("contesto_nginx"), "%s senza il controllo del contesto di nginx" % (chiave,))
+                libreria = {"expat": "libexpat"}.get(chiave[0], chiave[0])
+                sul_programma = [p for p in prove if p["file"] == "usr/sbin/nginx"]
+                self.assertTrue(sul_programma and libreria in sul_programma[0]["simboli_assenti"],
+                                "%s: la prova sul programma nginx non cerca %r" % (chiave, libreria))
+                for p in prove:
+                    if not re.search(r"\.so\.?$", p["file"]):
+                        self.assertTrue(p.get("esatto"), "%s: %s va preso per nome esatto" % (chiave, p["file"]))
+            # file SANI costruiti dalle prove stesse (nome esatto, nomi che devono esserci, segno di fine): devono
+            # far reggere l'eccezione, altrimenti i controlli qui sotto cadrebbero per il motivo sbagliato (S6)
+            def nome_del_file(p):
+                return p["file"] if p.get("esatto") else p["file"] + ".1"
+            sano = {}
+            for p in prove:
+                sano[nome_del_file(p)] = (sano.get(nome_del_file(p), b"x ")
+                                          + b" ".join(s.encode() for s in p.get("presenti") or ()) + b" "
+                                          + ((p["fino_a"].encode() + b" ") if p.get("fino_a") else b""))
             prima = "0000-01-01"
-            self.assertFalse(esame.eccezione_regge(ecc, {}, prima)[0],
-                             "%s regge senza il file: un file assente non prova niente" % (chiave,))
-            veleno = {ecc["file"] + ".1": ecc["simboli_assenti"][0].encode()}
-            self.assertFalse(esame.eccezione_regge(ecc, veleno, prima)[0],
-                             "%s regge col codice difettoso dentro" % (chiave,))
-            self.assertFalse(esame.eccezione_regge(ecc, {ecc["file"] + ".1": b"x"}, "9999-12-31")[0],
+            self.assertTrue(esame.eccezione_regge(ecc, sano, prima)[0],
+                            "PREMESSA %s: coi file sani deve reggere: %r" % (chiave, esame.eccezione_regge(ecc, sano, prima)))
+            for p in prove:
+                self.assertTrue(p.get("file") and p.get("simboli_assenti"), chiave)
+                self.assertRegex(p["file"], r"^[a-z0-9_/.+-]+/[a-z0-9_.+-]+$",
+                                 "il file della prova dev'essere UN file, non una cartella: %r" % (p["file"],))
+                manca = {k: v for k, v in sano.items() if k != nome_del_file(p)}
+                self.assertFalse(esame.eccezione_regge(ecc, manca, prima)[0],
+                                 "%s regge senza %s: un file assente non prova niente" % (chiave, p["file"]))
+                # il nome vietato messo IN TESTA al file: prima del segno di fine, dove la prova guarda
+                veleno = dict(sano, **{nome_del_file(p): p["simboli_assenti"][0].encode() + b" " + sano[nome_del_file(p)]})
+                self.assertFalse(esame.eccezione_regge(ecc, veleno, prima)[0],
+                                 "%s regge con %r dentro %s" % (chiave, p["simboli_assenti"][0], p["file"]))
+            self.assertFalse(esame.eccezione_regge(ecc, sano, "9999-12-31")[0],
                              "%s regge dopo la scadenza" % (chiave,))
+
+    def test_UN_ECCEZIONE_A_PIU_PROVE_REGGE_SOLO_SE_REGGONO_TUTTE(self):
+        """26/11/2026, expat e libxml2 nell'immagine di nginx: il codice difettoso C'E' (la libreria e' intera),
+        ma nginx non lo carica. La prova non e' «un simbolo manca da una libreria» (lo schema di zlib) ma due:
+        il programma nginx non e' legato alla libreria, e nginx.conf non carica moduli. Regge solo se reggono
+        TUTTE: un file assente, o un file col nome vietato dentro, la fa cadere."""
+        esame = self._esame()
+        ecc = {"motivo": "prova", "versione": "1.0-r0", "dal": "0000-01-01", "scadenza": "9999-12-30",
+               "prove": ({"file": "usr/sbin/nginx", "simboli_assenti": ("libexpat",)},
+                         {"file": "etc/nginx/nginx.conf", "simboli_assenti": ("load_module",)})}
+        sano = {"usr/sbin/nginx": b"libz.so.1 libssl.so.3", "usr/sbin/nginx-debug": b"libz.so.1",
+                "etc/nginx/nginx.conf": b"worker_processes auto;"}
+        self.assertTrue(esame.eccezione_regge(ecc, sano, "2026-11-26")[0], esame.eccezione_regge(ecc, sano, "2026-11-26"))
+        casi = (("manca nginx.conf", {k: v for k, v in sano.items() if k != "etc/nginx/nginx.conf"}),
+                ("manca il programma", {k: v for k, v in sano.items() if not k.startswith("usr/sbin/")}),
+                ("nginx-debug legato a libexpat", dict(sano, **{"usr/sbin/nginx-debug": b"libexpat.so.1"})),
+                ("nginx.conf carica un modulo", dict(sano, **{"etc/nginx/nginx.conf": b"load_module x.so;"})))
+        for nome, file in casi:
+            with self.subTest(caso=nome):
+                self.assertFalse(esame.eccezione_regge(ecc, file, "2026-11-26")[0], nome)
+        self.assertFalse(esame.eccezione_regge(ecc, sano, "9999-12-31")[0], "regge dopo la scadenza")
+        self.assertFalse(esame.eccezione_regge(dict(ecc, prove=()), sano, "2026-11-26")[0], "regge senza prove")
+        # i file delle prove si leggono dagli strati dell'immagine: devono essere TUTTI fra quelli cercati
+        self.assertEqual(sorted(esame.file_delle_prove(ecc)), ["etc/nginx/nginx.conf", "usr/sbin/nginx"])
+
+    def test_LA_PROVA_NON_REGGE_SU_UN_FILE_LETTO_MALE_SOSTITUITO_O_AMBIGUO(self):
+        """Tre revisioni del 26/11 (code-review, caccia agli errori silenziosi, revisione differenziale): un file
+        letto VUOTO non contiene nessun nome vietato e la prova reggerebbe; se il programma nginx sparisse (o
+        diventasse un collegamento) basterebbe nginx-debug a far reggere la prova sul prefisso; un `include` prima
+        del blocco http carica file dove load_module e' ammesso; un'eccezione con `prove` E `file` perderebbe in
+        silenzio la prova vecchia. Si pretende: il nome ESATTO, un nome che nel file vero DEVE esserci, il pezzo
+        di file prima di un segno, e uno schema solo."""
+        esame = self._esame()
+        ecc = {"motivo": "prova", "versione": "1.0-r0", "dal": "0000-01-01", "scadenza": "9999-12-30",
+               "prove": ({"file": "usr/sbin/nginx", "esatto": True, "presenti": ("libssl",),
+                          "simboli_assenti": ("libexpat",)},
+                         {"file": "etc/nginx/nginx.conf", "esatto": True, "fino_a": "\nhttp {",
+                          "simboli_assenti": ("include",)})}
+        sano = {"usr/sbin/nginx": b"libssl.so.3", "usr/sbin/nginx-debug": b"libssl.so.3",
+                "etc/nginx/nginx.conf": b"user nginx;\nhttp {\n    include /etc/nginx/conf.d/*.conf;\n}\n"}
+        self.assertTrue(esame.eccezione_regge(ecc, sano, "2026-11-26")[0], esame.eccezione_regge(ecc, sano, "2026-11-26"))
+        casi = (("programma letto vuoto", dict(sano, **{"usr/sbin/nginx": b""})),
+                ("nginx-debug letto vuoto", dict(sano, **{"usr/sbin/nginx-debug": b""})),
+                ("programma col nome esatto assente, nginx-debug presente",
+                 {k: v for k, v in sano.items() if k != "usr/sbin/nginx"}),
+                ("include prima del blocco http",
+                 dict(sano, **{"etc/nginx/nginx.conf": b"include /etc/nginx/modules/*.conf;\nhttp {\n}\n"})),
+                ("nginx.conf senza il blocco http", dict(sano, **{"etc/nginx/nginx.conf": b"user nginx;\n"})))
+        for nome, file in casi:
+            with self.subTest(caso=nome):
+                self.assertFalse(esame.eccezione_regge(ecc, file, "2026-11-26")[0], nome)
+        ambigua = dict(ecc, file="usr/lib/libz.so.", simboli_assenti=("inflateBack9",))
+        self.assertFalse(esame.eccezione_regge(ambigua, dict(sano, **{"usr/lib/libz.so.1": b"x"}), "2026-11-26")[0],
+                         "un'eccezione con `prove` E `file` e' ambigua: non e' una prova")
+
+    def test_IL_CONTESTO_DI_NGINX_FUORI_DALL_IMMAGINE(self):
+        """La prova «nginx non le carica» legge i file DELL'IMMAGINE. Un modulo o una libreria possono entrare
+        anche da fuori: `command:`/`entrypoint:` nel compose (`nginx -g 'load_module ...'`), un nginx.conf o la
+        cartella dei moduli montati, LD_PRELOAD, o un Cmd/Entrypoint/Env dell'immagine che li porta (code-review
+        del 26/11). Il controllo del contesto grida su ognuno e tace sul compose e sull'immagine di oggi."""
+        esame = self._esame()
+        with io.open(os.path.join(QUI, "docker-compose.casavip.yml"), encoding="utf-8") as f:
+            compose = f.read()
+        cfg = {"config": {"Cmd": ["nginx", "-g", "daemon off;"], "Entrypoint": ["/docker-entrypoint.sh"],
+                          "Env": ["PATH=/usr/local/sbin:/usr/bin", "NGINX_VERSION=1.31.10"]}}
+        ok, perche = esame.contesto_nginx(compose, cfg)
+        self.assertTrue(ok, perche)
+        self.assertIn("\n  nginx:\n", compose, "PREMESSA: il servizio nginx del compose non si trova")
+        nel_blocco = lambda riga: compose.replace("\n  nginx:\n", "\n  nginx:\n" + riga, 1)  # noqa: E731
+        casi = (("command nel compose", nel_blocco("    command: [\"nginx\", \"-g\", \"load_module x.so;\"]\n"), cfg),
+                ("entrypoint nel compose", nel_blocco("    entrypoint: /bin/sh\n"), cfg),
+                ("LD_PRELOAD nel compose", nel_blocco("    environment:\n      - LD_PRELOAD=/usr/lib/libxml2.so.2\n"), cfg),
+                ("nginx.conf montato", nel_blocco("    volumes:\n      - ./mio.conf:/etc/nginx/nginx.conf:ro\n"), cfg),
+                ("cartella dei moduli montata", nel_blocco("    volumes:\n      - ./m:/etc/nginx/modules:ro\n"), cfg),
+                ("load_module nel Cmd dell'immagine", compose,
+                 {"config": dict(cfg["config"], Cmd=["nginx", "-g", "load_module x.so; daemon off;"])}),
+                ("LD_PRELOAD nell'ambiente dell'immagine", compose,
+                 {"config": dict(cfg["config"], Env=cfg["config"]["Env"] + ["LD_PRELOAD=/usr/lib/libexpat.so.1"])}),
+                ("servizio nginx assente dal compose", compose.replace("\n  nginx:\n", "\n  nginxx:\n", 1), cfg))
+        for nome, testo, c in casi:
+            with self.subTest(caso=nome):
+                self.assertFalse(esame.contesto_nginx(testo, c)[0], nome)
+        # l'altra direzione: un `command:` dell'APP non riguarda nginx
+        self.assertTrue(esame.contesto_nginx(compose.replace("\n  app:\n", "\n  app:\n    command: python x.py\n", 1),
+                                             cfg)[0])
+
+    def test_UN_COLLEGAMENTO_IN_UNO_STRATO_SOPRA_TOGLIE_IL_FILE_DI_SOTTO(self):
+        """leggi_apk teneva solo i file normali: se uno strato piu' in alto sostituiva un file con un collegamento
+        (senza la cancellazione `.wh.`), restava la copia vecchia di sotto, e una prova l'avrebbe letta al posto
+        del file vero (code-review del 26/11, rilievo che c'era gia' prima di oggi)."""
+        esame = self._esame()
+        import tarfile as _tar
+
+        def strato(voci):
+            b = io.BytesIO()
+            with _tar.open(fileobj=b, mode="w") as t:
+                for nome, dati, collegamento in voci:
+                    ti = _tar.TarInfo(nome)
+                    if collegamento:
+                        ti.type, ti.linkname = _tar.SYMTYPE, collegamento
+                        t.addfile(ti)
+                    else:
+                        ti.size = len(dati)
+                        t.addfile(ti, io.BytesIO(dati))
+            return b.getvalue()
+        sotto = strato([("lib/apk/db/installed", b"P:x\nV:1\no:x\n\n", None),
+                        ("etc/os-release", b'VERSION_ID="3.24.4"\n', None),
+                        ("etc/nginx/nginx.conf", b"pulito", None)])
+        sopra = strato([("etc/nginx/nginx.conf", b"", "nginx-pieno.conf")])
+        _ver, _db, file = esame.leggi_apk([sotto, sopra], cerca=("etc/nginx/nginx.conf",))
+        self.assertNotIn("etc/nginx/nginx.conf", file, "resta la copia vecchia dello strato sotto")
+        _ver, _db, file = esame.leggi_apk([sotto], cerca=("etc/nginx/nginx.conf",))
+        self.assertEqual(file.get("etc/nginx/nginx.conf"), b"pulito", "PREMESSA: senza lo strato sopra il file si legge")
 
 
 if __name__ == "__main__":
