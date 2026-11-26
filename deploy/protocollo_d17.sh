@@ -15,6 +15,7 @@
 #     sh deploy/protocollo_d17.sh prima      # punto di ritorno + paracadute + backup
 #     sh deploy/protocollo_d17.sh scambio    # pull + build + rm-first + up
 #     sh deploy/protocollo_d17.sh dopo       # sonde nelle due direzioni + giudice
+#     sh deploy/protocollo_d17.sh nginx      # SOLO nginx: ritorno e paracadute suoi + prova + scambio (poi `dopo`)
 #
 # ⛔ `docker compose` (DUE PAROLE) e' la v2. `docker-compose` col trattino e' la v1 e BUTTA
 #    GIU' nginx, cioe' il sito. In questo file la v1 non compare mai.
@@ -156,7 +157,9 @@ if [ "$FASE" = "scambio" ]; then
   echo "=== [2c] SCAMBIO (sequenza rm-first di DEPLOY.md §3)"
   $C stop app backup
   $C rm -f app backup
-  $C up -d
+  # SOLO app e backup (26/11/2026): un `up -d` senza nomi ricreava anche nginx se nello stesso invio cambiava la sua
+  # definizione, senza `nginx -t` e senza il suo paracadute. nginx si cambia solo con la fase `nginx`, qui sotto.
+  $C up -d app backup
 
   echo
   echo "=== [2d] ASPETTO CHE TORNI SANO (max 90s)"
@@ -230,5 +233,195 @@ if [ "$FASE" = "dopo" ]; then
   exit 0
 fi
 
-echo "uso: sh deploy/protocollo_d17.sh [prima|scambio|dopo]"
+# ---------------------------------------------------------------- NGINX ----
+# (26/11/2026, n1 di RIPRENDI_QUI.md) Il 24/11 nginx l'ha ricreato /root/aggiorna_nginx_20261124.sh, fuori da qui:
+# nessun punto di ritorno, nessuna traccia dello scambio, e `collaudi/esame_deploy.py` l'ha visto (giustamente) come
+# ricreato a mano. Da qui in poi nginx -- la sua immagine nel compose o la sua configurazione -- si cambia SOLO con
+# questa fase, e poi `dopo`.
+# PERCHE' una fase a se' e non un pezzo di `scambio`: il compose non entra nell'immagine dell'app (.dockerignore),
+# quindi un cambio della sola impronta di nginx lascia l'app identica e `scambio` si fermerebbe a [2b] («:latest e
+# :prec COINCIDONO»). E PERCHE' senza il gettone di `prima`: `prima` riaggancia il paracadute dell'APP alla viva, e
+# dopo un cambio del solo nginx il ritorno dell'app non esisterebbe piu'. Punto di ritorno e paracadute di nginx li
+# prende questa fase, nello stesso giro dello scambio: non fanno in tempo a invecchiare.
+# E IL DISCO RESTA AL CODICE DI PRIMA FINCHE' LO SCAMBIO NON E' RIUSCITO (code-review del 26/11): la definizione nuova
+# si prova e si usa da una copia del compose di origin/master; se nginx non torna, il ritorno usa il compose del disco
+# piu' immagine e configurazione di prima, e nessuno `scambio` successivo puo' rimettere su la definizione respinta.
+# ⚠️ Torna TUTTO com'era solo se il compose del disco e' quello da cui il nginx vivo e' nato (il caso normale: un
+# cambio dell'impronta). Se il disco e' gia' piu' avanti (codice preso prima da uno `scambio`), il ritorno rimette
+# immagine e configurazione ma non le altre righe nuove di nginx nel compose (RIPRENDI_QUI.md, n7).
+if [ "$FASE" = "nginx" ]; then
+  REGISTRI="${REGISTRI_D17:-/root}"
+  TS=$(date +%Y%m%d-%H%M%S)        # un nome nuovo per ogni giro: il ritorno di un giro vecchio puo' essere montato
+  NUOVO="$REGISTRI/nginx_nuovo_$TS.yml"
+  CN="docker compose -f $NUOVO --project-directory $RADICE"
+  aspetta_200() {   # fino a 30 prove, una al secondo, ognuna al massimo 5 s: un curl appeso non ferma il ritorno
+    i=0; CODICE=000
+    while [ $i -lt 30 ]; do
+      CODICE=$(curl -s -m 5 --connect-timeout 3 -o /dev/null -w '%{http_code}' https://bookinvip.com/api/health) || CODICE=000
+      [ "$CODICE" = 200 ] && return 0
+      i=$((i+1)); sleep 1
+    done
+    return 1
+  }
+  fuori_da_nginx() {   # il compose SENZA il blocco del servizio nginx: da «  nginx:» al servizio o alla sezione dopo
+    awk '/^  [^ #][^:]*:/ { dentro = ($1 == "nginx:") } /^[^ #]/ { dentro = 0 } !dentro' "$1"
+  }
+  echo "=== [Na] IL CODICE NUOVO CAMBIA SOLO NGINX? E IL DISCO POTRA' ANDARE AVANTI DOPO LO SCAMBIO?"
+  git fetch -q origin
+  # fissato ADESSO: un altro `git fetch` durante la fase non cambia cosa si prova e cosa si porta sul disco
+  NUOVO_SHA=$(git rev-parse origin/master)
+  # (1) i file: solo il compose e file che sul server non girano (documenti, prove, collaudi, .github). Il resto --
+  #     l'immagine dell'app (main_casavip.py, fase*.py, deploy/, Dockerfile.casavip) o un file che nginx monta -- va
+  #     prima nello scambio dell'app: il compose nuovo legge i suoi montaggi dal disco, che resta vecchio fino a [Nh]
+  #     `--no-renames`: un file spostato conta col nome vecchio E col nuovo (senza, git mostra solo il nuovo). Un
+  #     nome per riga, letto intero (spazi compresi); un nome con caratteri speciali git lo scrive fra virgolette
+  #     e qui non corrisponde a niente di ammesso: si rifiuta, dalla parte sicura.
+  CAMBIATI=$(git diff --no-renames --name-only HEAD "$NUOVO_SHA")
+  FUORI=$(printf '%s\n' "$CAMBIATI" | while IFS= read -r f; do
+    case "$f" in
+      ''|collaudi/*|.github/*) ;;
+      */*) printf '%s\n' "$f" ;;         # ogni altra cartella, deploy/ compresa (anche un .md: entra nell'immagine)
+      docker-compose.casavip.yml|*.md|test_*.py) ;;
+      *) printf '%s\n' "$f" ;;
+    esac
+  done)
+  if [ -n "$FUORI" ]; then
+    echo "  ⛔ il codice nuovo cambia file che il server usa oltre al compose (l'immagine dell'app o file montati):"
+    printf '%s\n' "$FUORI" | while IFS= read -r f; do echo "     $f"; done
+    echo "  Prima 'prima' + 'scambio' + 'dopo' (prendono il codice e rifanno l'app), poi questa fase. MI FERMO"
+    exit 1
+  fi
+  # (2) il compose: fuori dal blocco di nginx (app, backup, reti, volumi) deve restare identico riga per riga. Due
+  #     letture vuote non sono «uguali», sono una misura non valida (sbaglio S1).
+  git show "$NUOVO_SHA:docker-compose.casavip.yml" > "$NUOVO"
+  RESTO_DISCO=$(fuori_da_nginx docker-compose.casavip.yml)
+  RESTO_NUOVO=$(fuori_da_nginx "$NUOVO")
+  [ -n "$RESTO_DISCO" ] && [ -n "$RESTO_NUOVO" ] || {
+    echo "  ⛔ misura non valida: il compose del disco o quello nuovo si legge vuoto. MI FERMO"; exit 1; }
+  if [ "$RESTO_DISCO" != "$RESTO_NUOVO" ]; then
+    echo "  ⛔ il compose nuovo cambia anche fuori da nginx (app, backup, reti o volumi): questa fase ricrea solo"
+    echo "     nginx e quel cambio resterebbe sul disco senza essere applicato (RIPRENDI_QUI.md, blocco 8, n3). MI FERMO"
+    exit 1
+  fi
+  $CN config -q
+  # (3) l'avanti veloce di [Nh] arriva DOPO lo scambio: le tre cose che lo farebbero fallire si guardano adesso
+  git merge-base --is-ancestor HEAD "$NUOVO_SHA" || {
+    echo "  ⛔ il commit del disco non e' un antenato di $NUOVO_SHA: niente avanti veloce possibile. MI FERMO"; exit 1; }
+  SPORCHI=$(git status --porcelain --untracked-files=no)
+  [ -z "$SPORCHI" ] || {
+    echo "  ⛔ file del progetto modificati sul server (l'avanti veloce si fermerebbe):"; printf '     %s\n' "$SPORCHI"
+    echo "  MI FERMO"; exit 1; }
+  AGGIUNTI=$(git diff --no-renames --name-only --diff-filter=A HEAD "$NUOVO_SHA")
+  GIA=$(printf '%s\n' "$AGGIUNTI" | while IFS= read -r f; do [ -z "$f" ] || [ ! -e "$f" ] || printf '%s\n' "$f"; done)
+  [ -z "$GIA" ] || {
+    echo "  ⛔ arriva col codice nuovo ma esiste gia' sul server (l'avanti veloce si fermerebbe): $GIA. MI FERMO"; exit 1; }
+  echo "  OK: cambiano solo nginx, documenti o prove; codice nuovo $NUOVO_SHA, compose nuovo in $NUOVO"
+
+  echo
+  echo "=== [Nb] PUNTO DI RITORNO — scritto E RILETTO dal disco"
+  PRIMA=$(git rev-parse --short HEAD)
+  echo "$PRIMA" > "$REGISTRI/PRE_DEPLOY_$TS.commit"
+  RILETTO=$(cat "$REGISTRI/PRE_DEPLOY_$TS.commit")
+  echo "  scritto:  $REGISTRI/PRE_DEPLOY_$TS.commit"
+  echo "  RILETTO:  $RILETTO   (deve dire $PRIMA)"
+  [ "$RILETTO" = "$PRIMA" ] || { echo "  ⛔ il punto di ritorno non si rilegge — MI FERMO"; exit 1; }
+
+  echo
+  echo "=== [Nc] PARACADUTE casavip-nginx:prec — l'immagine e la configurazione che nginx usa ADESSO"
+  [ "$(docker inspect --format='{{.State.Running}}' casavip_nginx)" = true ] || {
+    echo "  ⛔ casavip_nginx non e' in esecuzione (fermo o in riavvio): non c'e' una configurazione viva da tenere"
+    echo "     per il ritorno. Emergenza: DEPLOY.md §1. MI FERMO"; exit 1; }
+  NGINX_VIVA=$(docker inspect --format="{{.Image}}" casavip_nginx)
+  echo "  immagine viva di nginx: $NGINX_VIVA"
+  # `:prec` e' il paracadute di cui parlano DEPLOY.md e l'esame; `:prec-<ora>` e' quello di QUESTO giro, e il file
+  # del ritorno usa lui: un giro successivo riaggancia `:prec`, ma il ritorno di questo resta coerente
+  docker tag "$NGINX_VIVA" casavip-nginx:prec
+  docker tag "$NGINX_VIVA" "casavip-nginx:prec-$TS"
+  for t in casavip-nginx:prec "casavip-nginx:prec-$TS"; do
+    [ "$(docker inspect --format='{{.Id}}' "$t")" = "$NGINX_VIVA" ] || {
+      echo "  ⛔ il paracadute di nginx ($t) NON coincide con l'immagine viva — MI FERMO"; exit 1; }
+  done
+  # la configurazione si legge DENTRO il contenitore: quella del disco puo' essere gia' nuova (git sostituisce il
+  # file e Docker resta agganciato al vecchio per inode: DEPLOY.md §3). File nuovo a ogni giro: dopo un ritorno
+  # nginx tiene MONTATO il file del giro di allora, e riscriverlo lo svuoterebbe sotto il nginx vivo.
+  CONF_PREC="$REGISTRI/nginx_prec_$TS.conf"
+  RITORNO="$REGISTRI/nginx_prec_$TS.yml"
+  docker exec casavip_nginx cat /etc/nginx/conf.d/default.conf > "$CONF_PREC"
+  [ -s "$CONF_PREC" ] || { echo "  ⛔ la configurazione viva letta da nginx e' VUOTA: niente ritorno possibile — MI FERMO"; exit 1; }
+  printf 'services:\n  nginx:\n    image: casavip-nginx:prec-%s\n    volumes:\n      - %s:/etc/nginx/conf.d/default.conf:ro\n' \
+    "$TS" "$CONF_PREC" > "$RITORNO"
+  $C -f "$RITORNO" config -q
+  echo "  OK: il ritorno ($RITORNO, sul compose di adesso) e' pronto e valido, prima di toccare il sito"
+
+  echo
+  echo "=== [Nd] LA DEFINIZIONE NUOVA DI NGINX, PROVATA PRIMA DI TOCCARE IL SITO"
+  # un contenitore usa e getta con la definizione del compose NUOVO (rete, montaggi in sola lettura): il nginx vivo
+  # e il disco non si toccano. Se l'immagine nuova manca, Docker la scarica qui.
+  $CN run --rm --no-deps -T nginx nginx -t || {
+    echo "  ⛔ la definizione nuova non regge: nginx e il disco sono come prima, il sito non e' stato toccato. MI FERMO"
+    exit 1; }
+
+  echo
+  echo "=== [Ne] LONTANO DAL GUARDIANO (cron ogni 10 minuti: nginx giu' in quel secondo = un falso allarme)"
+  # si guarda ADESSO, subito prima dello scambio: le preparazioni qui sopra possono scaricare un'immagine e durare.
+  # Senza i due punti apposta: GUARDIANO_D17="" (lo usano solo le guardie di prova) vuol dire «nessun minuto vietato».
+  M=$(date -u +%M); M=${M#0}
+  for v in ${GUARDIANO_D17-9 0 1}; do
+    [ $((M % 10)) -ne "$v" ] || {
+      echo "  ⛔ minuto $M: troppo vicino al guardiano. Il sito non e' stato toccato: rilancia questa fase fra due minuti"
+      exit 1; }
+  done
+  echo "  minuto $M: lontano dal guardiano"
+
+  echo
+  echo "=== [Nf] TRACCIA DELLO SCAMBIO (la legge collaudi/esame_deploy.py, come quella dell'app)"
+  REGISTRO="$REGISTRI/deploy_scambio_$(date -u +%Y%m%d_%H%M%S).log"
+  trap 'u=$?; { [ "$u" -eq 0 ] && echo "SCAMBIO FATTO alle $(date -u +%H:%M:%SZ) commit $(git rev-parse --short HEAD 2>/dev/null) (nginx)"; echo "USCITA=$u"; } >> "$REGISTRO"' EXIT
+  echo "  traccia dello scambio: $REGISTRO"
+
+  echo
+  echo "=== [Ng] SCAMBIO: ricreo SOLO nginx col compose nuovo (app e backup non si toccano), poi /api/health"
+  # se la ricreazione fallisce non si guarda /api/health: il nginx vecchio potrebbe ancora rispondere 200, e si
+  # scriverebbe «SCAMBIO FATTO» per uno scambio mai avvenuto. Si va diritti al ritorno.
+  SANO=no
+  if $CN up -d --no-deps --force-recreate nginx; then
+    if aspetta_200; then
+      SANO=si; echo "  /api/health -> 200 al tentativo $((i+1)) di 30"
+    else
+      echo "  /api/health -> $CODICE: nessun 200 in 30 tentativi"
+    fi
+  else
+    echo "  ⛔ la ricreazione di nginx e' fallita"
+  fi
+  if [ "$SANO" != si ]; then
+    echo "  ⛔ nginx non e' tornato: TORNO INDIETRO DA SOLO (compose del disco, immagine e configurazione di prima)"
+    if $C -f "$RITORNO" up -d --no-deps --force-recreate nginx && aspetta_200; then
+      echo "  ritorno riuscito: /api/health -> 200 al tentativo $((i+1)). Il disco e' rimasto al codice di prima ($PRIMA)."
+      # la traccia distingue «tornato indietro e il sito risponde» da «fallito e basta» (USCITA resta diversa da 0)
+      echo "RITORNO RIUSCITO alle $(date -u +%H:%M:%SZ) commit $PRIMA (nginx)" >> "$REGISTRO"
+    else
+      echo "  ⛔⛔ ANCHE IL RITORNO NON RISPONDE (/api/health -> $CODICE): il sito puo' essere GIU'."
+      echo "     Subito: docker ps -a; docker logs casavip_nginx; DEPLOY.md, «Solo nginx»."
+    fi
+    exit 1
+  fi
+
+  echo
+  echo "=== [Nh] IL CODICE NUOVO SUL DISCO (solo avanti veloce), ora che nginx lo usa e risponde"
+  git merge --ff-only "$NUOVO_SHA" || {
+    echo "  ⛔ nginx gira gia' col compose nuovo ma il disco NON e' andato avanti: allinearlo prima di qualunque altro"
+    echo "     deploy (git merge --ff-only $NUOVO_SHA), oppure tornare indietro: $C -f $RITORNO up -d --no-deps --force-recreate nginx"
+    exit 1; }
+  echo "  commit dei file ora: $(git rev-parse --short HEAD)"
+
+  echo
+  echo "=== [Ni] COSA GIRA ADESSO"
+  echo "  nginx gira:       $(docker inspect --format='{{.Image}}' casavip_nginx)"
+  echo "  paracadute nginx: $(docker inspect --format='{{.Id}}' casavip-nginx:prec)"
+  echo "  il ritorno, se servisse (prima di un altro deploy): $C -f $RITORNO up -d --no-deps --force-recreate nginx"
+  echo "  Adesso: sh deploy/protocollo_d17.sh dopo   (e poi la ZAP dal computer)"
+  exit 0
+fi
+
+echo "uso: sh deploy/protocollo_d17.sh [prima|scambio|dopo|nginx]"
 exit 2

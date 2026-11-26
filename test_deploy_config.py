@@ -168,9 +168,12 @@ class TestEnvEDeploy(unittest.TestCase):
                         "docker compose up", "docker compose build", "/api/v1/health",
                         "down -v"):
             self.assertNotIn(vietato, md, "DEPLOY.md contiene ancora: %s" % vietato)
-        # e deve contenere l'AVVERTENZA sui bind-mount (l'incidente certbot del 2026-07-20)
+        # e deve contenere l'AVVERTENZA sui bind-mount (l'incidente certbot del 2026-07-20).
+        # 26/11/2026: il rimedio «ricreare nginx» si fa con la fase nginx del protocollo D17, non piu'
+        # a mano: la ricreazione a mano del 24/11 ha fatto diventare rossa la casella del Blocco 8
+        # (collaudi/esame_deploy.py, che ora vieta il comando a mano in DEPLOY.md).
         for atteso in ("git clean", "bind-mount", "certbot renew --dry-run",
-                       "docker rm -f casavip_nginx"):
+                       "sh deploy/protocollo_d17.sh nginx"):
             self.assertIn(atteso, md, "DEPLOY.md non avverte su: %s" % atteso)
 
 

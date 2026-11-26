@@ -6854,6 +6854,402 @@ class TestIlDeployNonPuoSALTAREIlPassoDiSicurezza(unittest.TestCase):
         self.assertRegex(testi[0], r"USCITA=[1-9]")
 
 
+class TestNginxSiCambiaSoloDalProtocolloD17(unittest.TestCase):
+    """⛔ IL 24/11/2026 NGINX E' STATO RICREATO FUORI DAL PROTOCOLLO, e la casella del Blocco 8 «il deploy passa
+    sempre dal protocollo D17» e' diventata ROSSA (n1 di RIPRENDI_QUI.md): l'aggiornamento a 1.31.10 l'ha fatto
+    /root/aggiorna_nginx_20261124.sh, che non scrive ne' il punto di ritorno PRE_DEPLOY_*.commit ne' la traccia
+    /root/deploy_scambio_*.log, quindi `collaudi/esame_deploy.py` lo vede (giustamente) come ricreato a mano.
+    Da qui nginx si cambia SOLO con `sh deploy/protocollo_d17.sh nginx`.
+
+    Queste guardie ESEGUONO la fase con `git`, `docker`, `curl` e `sleep` finti davanti nel PATH (come quelle
+    dello scambio qui sopra) e leggono cosa ha chiamato, in che ordine, e cosa ha lasciato su disco. Ogni prova
+    che si aspetta un rifiuto pretende anche il MOTIVO stampato: un rifiuto muto passerebbe anche se la fase non
+    esistesse (sbaglio S7).
+    ⛔ COSA NON PROVANO (D18 punto 3): che Docker, nginx e Docker Hub si comportino come i finti. Quello lo prova
+    il giro vero sul VPS, scritto in RIPRENDI_QUI.md.
+    """
+    RADICE = os.path.dirname(os.path.abspath(__file__))
+
+    def setUp(self):
+        self.sh = TestIlDeployNonPuoSALTAREIlPassoDiSicurezza._trova_sh()
+        self.dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def _almeno_la_struttura(self):
+        """Ramo povero senza `sh` (il perche' e' scritto in TestIlDeployNonPuoSALTAREIlPassoDiSicurezza): la fase
+        esiste, prova la configurazione PRIMA di ricreare nginx, e aggancia il paracadute suo. Piu' debole (S6)."""
+        with io.open(os.path.join(self.RADICE, "deploy", "protocollo_d17.sh"), encoding="utf-8") as f:
+            testo = f.read()
+        pezzi = testo.split('if [ "$FASE" = "nginx" ]', 1)
+        self.assertEqual(len(pezzi), 2, "manca la fase 'nginx' nello script")
+        coda = pezzi[1]
+        self.assertIn("casavip-nginx:prec", coda)
+        self.assertIn("PRE_DEPLOY_", coda)
+        self.assertLess(coda.find("nginx -t"), coda.find("--force-recreate nginx"))
+
+    # curl finto che non risponde le prime 30 volte (lo scambio) e poi si' (il ritorno)
+    CURL_SOLO_IL_RITORNO = ('n=$(cat curl_n 2>/dev/null || echo 0); n=$((n+1)); echo $n > curl_n\n'
+                            'if [ $n -gt 30 ]; then echo 200; else echo 000; exit 7; fi')
+
+    # il compose del disco e quello nuovo (di origin/master) usati dalle prove: nginx in mezzo, fra app e backup,
+    # perche' il confronto «fuori da nginx» deve riprendere a contare al servizio dopo
+    COMPOSE_DISCO = ("# compose di prova\nservices:\n  app:\n    image: casavip-app:latest\n"
+                     "  nginx:\n    # dentro nginx\n    image: nginx:1.31.10-alpine@sha256:vecchia\n"
+                     "    volumes:\n      - ./deploy/nginx.casavip.ssl.conf:/etc/nginx/conf.d/default.conf:ro\n"
+                     "  backup:\n    image: casavip-app:latest\nnetworks:\n  interna:\n    driver: bridge\n")
+    COMPOSE_NUOVO = COMPOSE_DISCO.replace("@sha256:vecchia", "@sha256:nuova")
+    NUOVO_SHA = "fff9999aaaabbbbccccdddd"
+
+    def _finti(self, diff="docker-compose.casavip.yml\nRIPRENDI_QUI.md", nginx_t=0, prec="sha256:ngx_vecchia",
+               curl="echo 200", su=0, conf="server {}", compose_nuovo=None, sporchi="", aggiunti="", antenato=0,
+               in_esecuzione="true", diff_con_rinomine=None):
+        """Ogni finto scrive la sua chiamata in `chiamate.txt` della cartella di lavoro (lo script fa `cd` li'
+        per prima cosa). Il docker finto ESCE 9 su una chiamata che non conosce: una chiamata in piu' si vede.
+        Il git finto risponde un commit DIVERSO dopo il `merge`: cosi' si vede se il punto di ritorno e' quello
+        di PRIMA dell'avanti veloce; e `origin/master` e' un commit preciso, che lo script deve fissare all'inizio
+        e usare fino in fondo (code-review del 26/11, due giri)."""
+        d = os.path.join(self.dir, "finti")
+        os.makedirs(d)
+        with io.open(os.path.join(self.dir, "docker-compose.casavip.yml"), "w", encoding="utf-8", newline="\n") as f:
+            f.write(self.COMPOSE_DISCO)
+        with io.open(os.path.join(self.dir, "compose_nuovo.yml"), "w", encoding="utf-8", newline="\n") as f:
+            f.write(self.COMPOSE_NUOVO if compose_nuovo is None else compose_nuovo)
+        attrezzi = {
+            "git": '#!/bin/sh\necho "git $*" >> chiamate.txt\ncase "$*" in\n'
+                   ' "rev-parse origin/master") echo %s ;;\n'
+                   ' rev-parse*) if [ -f fatto_merge ]; then echo def5678; else echo abc1234; fi ;;\n'
+                   ' *"--diff-filter=A"*) printf "%%s" "%s" ;;\n'
+                   ' *"--no-renames"*) printf "%%s" "%s" ;;\n'
+                   # senza --no-renames git mostra solo il nome NUOVO di un file spostato (code-review del 26/11)
+                   ' diff*) printf "%%s" "%s" ;;\n'
+                   ' status*) printf "%%s" "%s" ;;\n'
+                   ' merge-base*) exit %d ;;\n'
+                   ' show*) cat compose_nuovo.yml ;;\n'
+                   ' merge*) : > fatto_merge ;;\nesac\nexit 0\n'
+                   % (self.NUOVO_SHA, aggiunti, diff, diff if diff_con_rinomine is None else diff_con_rinomine,
+                      sporchi, antenato),
+            "docker": '#!/bin/sh\necho "docker $*" >> chiamate.txt\ncase "$*" in\n'
+                      ' tag*) exit 0 ;;\n'
+                      ' *"nginx -t"*) exit %d ;;\n'
+                      ' *"config -q"*) exit 0 ;;\n'
+                      ' *nginx_prec_*"up -d"*) exit 0 ;;\n'
+                      ' *"up -d"*) exit %d ;;\n'
+                      ' exec*) printf "%%s" "%s" ;;\n'
+                      ' *State.Running*) echo %s ;;\n'
+                      ' *casavip-nginx:prec*) echo %s ;;\n'
+                      ' *casavip_nginx*) echo sha256:ngx_vecchia ;;\n'
+                      ' *) echo "docker finto: chiamata inattesa: $*" >&2; exit 9 ;;\n'
+                      'esac\nexit 0\n' % (nginx_t, su, conf, in_esecuzione, prec),
+            "curl": '#!/bin/sh\necho "curl $*" >> chiamate.txt\n%s\n' % curl,
+            "sleep": '#!/bin/sh\nexit 0\n'}
+        for nome, testo in attrezzi.items():
+            p = os.path.join(d, nome)
+            with io.open(p, "w", encoding="utf-8", newline="\n") as f:
+                f.write(testo)
+            os.chmod(p, stat.S_IRWXU)
+        return d
+
+    def _finti_scambio(self):
+        """Gli attrezzi finti dello scambio dell'APP (come `_finti_attrezzi` della classe qui sopra), ma che
+        scrivono le loro chiamate: serve sapere QUALI servizi lo scambio fa ripartire."""
+        d = os.path.join(self.dir, "finti")
+        os.makedirs(d)
+        attrezzi = {
+            "git": '#!/bin/sh\necho "git $*" >> chiamate.txt\ncase "$1" in rev-parse) echo abc1234 ;; esac\nexit 0\n',
+            "docker": '#!/bin/sh\necho "docker $*" >> chiamate.txt\ncase "$*" in\n'
+                      ' *casavip-app:latest*) echo sha256:nuova ;;\n'
+                      ' *casavip-app:prec*) echo sha256:vecchia ;;\n'
+                      ' *Health.Status*) echo healthy ;;\n'
+                      ' *"{{.Image}}"*) echo sha256:nuova ;;\n'
+                      ' logs*) echo "\'money_path_pronto\': True" ;;\n'
+                      'esac\nexit 0\n'}
+        for nome, testo in attrezzi.items():
+            p = os.path.join(d, nome)
+            with io.open(p, "w", encoding="utf-8", newline="\n") as f:
+                f.write(testo)
+            os.chmod(p, stat.S_IRWXU)
+        with open(os.path.join(self.dir, "gettone"), "w", encoding="utf-8") as f:
+            f.write("epoca=%d\nimmagine=sha256:vecchia\ncommit=abc1234\n" % int(time.time()))
+        return d
+
+    def _lancia(self, finti, guardiano="", fase="nginx"):
+        amb = dict(os.environ)
+        amb["RADICE_D17"] = self.dir
+        amb["REGISTRI_D17"] = self.dir
+        amb["GETTONE_D17"] = os.path.join(self.dir, "gettone")   # la fase nginx NON lo pretende: lo scrive solo _finti_scambio
+        amb["GUARDIANO_D17"] = guardiano
+        posix = finti.replace("\\", "/")
+        if os.name == "nt" and len(posix) > 1 and posix[1] == ":":
+            posix = "/" + posix[0].lower() + posix[2:]
+        script = os.path.join(self.RADICE, "deploy", "protocollo_d17.sh").replace("\\", "/")
+        e = subprocess.run([self.sh, "-c", 'PATH="$1:$PATH"; export PATH; exec sh "$2" "$3"', "d17", posix, script, fase],  # nosec B603 - il nostro protocollo_d17.sh con attrezzi finti in una cartella di prova  # noqa: S603
+                           cwd=self.dir, env=amb, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+        def leggi(prefisso, fine):
+            testi = []
+            for nome in sorted(f for f in os.listdir(self.dir) if f.startswith(prefisso) and f.endswith(fine)):
+                with io.open(os.path.join(self.dir, nome), encoding="utf-8") as g:
+                    testi.append(g.read().strip())
+            return testi
+        chiamate = leggi("chiamate", ".txt")
+        return (e.returncode, e.stdout.decode("utf-8", "replace"), chiamate[0].splitlines() if chiamate else [],
+                leggi("deploy_scambio_", ".log"), leggi("PRE_DEPLOY_", ".commit"))
+
+    def _indice(self, chiamate, pezzo):
+        trovate = [i for i, c in enumerate(chiamate) if pezzo in c]
+        self.assertTrue(trovate, "nessuna chiamata con %r: %r" % (pezzo, chiamate))
+        return trovate[0]
+
+    def test_NGINX_RIUSCITO_lascia_punto_di_ritorno_paracadute_e_SCAMBIO_FATTO(self):
+        if not self.sh:
+            return self._almeno_la_struttura()
+        # il ritorno di un giro VECCHIO, che dopo un ritorno nginx tiene montato: il giro nuovo non deve toccarlo
+        # (code-review del 26/11: con un nome fisso la redirezione l'avrebbe svuotato sotto il nginx vivo)
+        montato = os.path.join(self.dir, "nginx_prec_20000101-000000.conf")
+        with io.open(montato, "w", encoding="utf-8") as f:
+            f.write("montato")
+        uscita, testo, chiamate, registri, pre = self._lancia(self._finti())
+        self.assertEqual(uscita, 0, testo[-800:])
+        self.assertEqual(pre, ["abc1234"], "il punto di ritorno deve dire il commit di PRIMA dell'avanti veloce")
+        self.assertEqual(len(registri), 1, "lo scambio di nginx non ha lasciato la sua traccia: %r" % (testo[-400:],))
+        self.assertIn("SCAMBIO FATTO", registri[0])
+        self.assertIn("USCITA=0", registri[0])
+        self.assertIn("def5678", registri[0], "dopo lo scambio riuscito il disco deve essere al commit nuovo")
+        tag = self._indice(chiamate, "docker tag sha256:ngx_vecchia casavip-nginx:prec")
+        prova = self._indice(chiamate, "nginx -t")
+        su = self._indice(chiamate, "up -d --no-deps --force-recreate nginx")
+        merge = self._indice(chiamate, "git merge --ff-only " + self.NUOVO_SHA)
+        self._indice(chiamate, "git show %s:docker-compose.casavip.yml" % self.NUOVO_SHA)
+        self._indice(chiamate, "git merge-base --is-ancestor HEAD " + self.NUOVO_SHA)
+        self.assertEqual([c for c in chiamate if "origin/master" in c and not c.startswith("git rev-parse")], [],
+                         "dopo averlo fissato, origin/master non si rilegge: un fetch a meta' cambierebbe il commit")
+        self.assertEqual([c for c in chiamate if c.startswith("git diff") and "--no-renames" not in c], [],
+                         "un file spostato deve contare col nome vecchio E col nuovo")
+        self.assertLess(tag, su, "il paracadute va agganciato PRIMA di ricreare nginx")
+        self.assertLess(prova, su, "la definizione nuova si prova PRIMA di toccare il sito")
+        self.assertLess(su, merge, "il disco passa al codice nuovo solo DOPO lo scambio riuscito")
+        self.assertIn("nginx_nuovo_", chiamate[prova], "nginx -t deve provare il compose NUOVO")
+        self.assertIn("nginx_nuovo_", chiamate[su], "lo scambio deve usare il compose NUOVO")
+        self.assertIn("--project-directory", chiamate[su], "i percorsi del compose nuovo vanno letti dalla radice")
+        self.assertEqual(sum("up -d" in c for c in chiamate), 1, "nginx ricreato piu' di una volta: %r" % (chiamate,))
+        self.assertEqual([c for c in chiamate if "casavip-app" in c or "casavip_app" in c or "build" in c
+                          or " stop " in c or "rm -f" in c], [],
+                         "la fase nginx ha toccato l'app: il paracadute dell'app deve restare la viva di PRIMA")
+        ritorni = [f for f in os.listdir(self.dir) if f.startswith("nginx_prec_") and f.endswith(".yml")]
+        self.assertEqual(len(ritorni), 1, ritorni)
+        with io.open(os.path.join(self.dir, ritorni[0]), encoding="utf-8") as f:
+            ritorno = f.read()
+        # l'etichetta del giro, non quella che ogni giro riaggancia: il ritorno di un giro vecchio resta coerente
+        self.assertIn("image: casavip-nginx:prec-" + ritorni[0][len("nginx_prec_"):-len(".yml")], ritorno)
+        conf = ritorni[0][:-len(".yml")] + ".conf"
+        self.assertIn(conf + ":/etc/nginx/conf.d/default.conf:ro", ritorno)
+        with io.open(os.path.join(self.dir, conf), encoding="utf-8") as f:
+            self.assertEqual(f.read().strip(), "server {}", "il ritorno deve tenere la configurazione che nginx USAVA")
+        with io.open(montato, encoding="utf-8") as f:
+            self.assertEqual(f.read(), "montato", "il giro nuovo ha riscritto il ritorno di un giro vecchio")
+
+    def test_NGINX_con_la_configurazione_ROTTA_non_tocca_il_sito(self):
+        if not self.sh:
+            return self._almeno_la_struttura()
+        uscita, testo, chiamate, registri, _pre = self._lancia(self._finti(nginx_t=1))
+        self.assertNotEqual(uscita, 0, testo[-600:])
+        self._indice(chiamate, "nginx -t")
+        self.assertEqual([c for c in chiamate if "up -d" in c or "git merge --ff-only" in c], [],
+                         "con una definizione rotta ne' il sito ne' il disco devono cambiare")
+        self.assertEqual(registri, [], "nessuno scambio e' avvenuto: una traccia qui resterebbe rossa nell'esame")
+
+    def test_NGINX_che_non_torna_a_rispondere_TORNA_INDIETRO_DA_SOLO(self):
+        """E il ritorno si fa col compose VECCHIO del disco (che resta quello di prima finche' lo scambio non
+        riesce), piu' immagine e configurazione tenute da parte: torna davvero tutto com'era (code-review del 26/11).
+        Qui non risponde neanche il ritorno: deve dirlo forte."""
+        if not self.sh:
+            return self._almeno_la_struttura()
+        uscita, testo, chiamate, registri, _pre = self._lancia(self._finti(curl="echo 000; exit 7"))
+        self.assertNotEqual(uscita, 0, testo[-600:])
+        su = [c for c in chiamate if "up -d" in c]
+        self.assertEqual(len(su), 2, "atteso: lo scambio e poi il ritorno: %r" % (chiamate,))
+        self.assertIn("nginx_nuovo_", su[0])
+        self.assertIn("nginx_prec_", su[1], "il ritorno deve usare l'immagine e la configurazione di prima")
+        self.assertNotIn("nginx_nuovo_", su[1], "il ritorno deve usare il compose VECCHIO del disco")
+        self.assertEqual([c for c in chiamate if "git merge --ff-only" in c], [], "dopo un ritorno il disco resta al codice di prima")
+        self.assertIn("ANCHE IL RITORNO", testo)
+        self.assertNotIn("tentativo 31", testo, "su 30 tentativi falliti non si scrive «tentativo 31 di 30»")
+        self.assertTrue(all("-m 5" in c for c in chiamate if c.startswith("curl")),
+                        "un curl senza tempo massimo puo' restare appeso e il ritorno non partirebbe")
+        self.assertEqual(len(registri), 1)
+        self.assertNotIn("SCAMBIO FATTO", registri[0])
+        self.assertRegex(registri[0], r"USCITA=[1-9]")
+
+    def test_NGINX_che_non_torna_a_rispondere_e_il_RITORNO_RIESCE(self):
+        if not self.sh:
+            return self._almeno_la_struttura()
+        uscita, testo, chiamate, registri, _pre = self._lancia(self._finti(curl=self.CURL_SOLO_IL_RITORNO))
+        self.assertNotEqual(uscita, 0, testo[-600:])
+        self.assertEqual(len([c for c in chiamate if "up -d" in c]), 2)
+        self.assertIn("ritorno riuscito", testo)
+        self.assertEqual([c for c in chiamate if "git merge --ff-only" in c], [])
+        self.assertRegex(registri[0], r"USCITA=[1-9]")
+        # la traccia distingue «tornato indietro e il sito risponde» da «fallito e basta» (code-review del 26/11)
+        self.assertIn("RITORNO RIUSCITO", registri[0])
+
+    def test_NGINX_se_la_ricreazione_FALLISCE_torna_indietro_e_non_dice_SCAMBIO_FATTO(self):
+        """`up --force-recreate` puo' fallire DOPO aver tolto il nginx vecchio: il sito resterebbe giu' finche'
+        qualcuno non se ne accorge. E se fallisce PRIMA, nginx vecchio risponde 200 e una fase che guardasse solo
+        /api/health scriverebbe «SCAMBIO FATTO» per uno scambio mai avvenuto."""
+        if not self.sh:
+            return self._almeno_la_struttura()
+        uscita, testo, chiamate, registri, _pre = self._lancia(self._finti(su=1))
+        self.assertNotEqual(uscita, 0, testo[-600:])
+        su = [c for c in chiamate if "up -d" in c]
+        self.assertEqual(len(su), 2, "atteso: lo scambio fallito e poi il ritorno: %r" % (chiamate,))
+        self.assertIn("nginx_prec_", su[1])
+        self.assertIn("ritorno riuscito", testo)
+        self.assertEqual([c for c in chiamate if "git merge --ff-only" in c], [])
+        self.assertEqual(len(registri), 1)
+        self.assertNotIn("SCAMBIO FATTO", registri[0])
+        self.assertRegex(registri[0], r"USCITA=[1-9]")
+
+    def test_NGINX_col_paracadute_che_non_coincide_SI_FERMA(self):
+        if not self.sh:
+            return self._almeno_la_struttura()
+        uscita, testo, chiamate, registri, _pre = self._lancia(self._finti(prec="sha256:altra"))
+        self.assertNotEqual(uscita, 0, testo[-600:])
+        self.assertIn("NON coincide", testo)
+        self.assertEqual([c for c in chiamate if "up -d" in c or "git merge --ff-only" in c], [])
+        self.assertEqual(registri, [])
+
+    def test_NGINX_con_la_configurazione_viva_VUOTA_si_ferma(self):
+        """Un ritorno con una configurazione vuota rimetterebbe su un nginx senza i blocchi del sito."""
+        if not self.sh:
+            return self._almeno_la_struttura()
+        uscita, testo, chiamate, registri, _pre = self._lancia(self._finti(conf=""))
+        self.assertNotEqual(uscita, 0, testo[-600:])
+        self.assertIn("VUOTA", testo)
+        self._indice(chiamate, "docker exec casavip_nginx")
+        self.assertEqual([c for c in chiamate if "up -d" in c or "git merge --ff-only" in c], [])
+        self.assertEqual(registri, [])
+
+    def test_NGINX_si_ferma_se_nginx_NON_E_IN_ESECUZIONE(self):
+        """Fermo o in riavvio continuo: non c'e' una configurazione viva da tenere per il ritorno. Si ferma col motivo
+        invece di morire sull'errore grezzo di `docker exec` (code-review del 26/11)."""
+        if not self.sh:
+            return self._almeno_la_struttura()
+        uscita, testo, chiamate, registri, _pre = self._lancia(self._finti(in_esecuzione="false"))
+        self.assertNotEqual(uscita, 0, testo[-600:])
+        self.assertIn("non e' in esecuzione", testo)
+        self.assertEqual([c for c in chiamate if c.startswith("docker exec") or "up -d" in c or "git merge --ff-only" in c], [])
+        self.assertEqual(registri, [])
+
+    def _rifiuta_prima_di_tutto(self, motivo, **finti):
+        """Un rifiuto in [Na]: motivo stampato, e niente paracadute, niente punto di ritorno, sito e disco intatti."""
+        uscita, testo, chiamate, registri, pre = self._lancia(self._finti(**finti))
+        self.assertNotEqual(uscita, 0, testo[-600:])
+        self.assertIn(motivo, testo)
+        self._indice(chiamate, "git diff")
+        self.assertEqual([c for c in chiamate if c.startswith("docker tag") or c.startswith("docker exec")
+                          or "up -d" in c or "git merge " in c], [])
+        self.assertEqual((registri, pre), ([], []))
+
+    def test_NGINX_NON_PARTE_se_il_codice_nuovo_cambia_l_immagine_dell_app(self):
+        """Il compose non entra nell'immagine dell'app, i fase*.py si': se arrivano anche quelli, la fase nginx
+        prenderebbe sul disco codice che il contenitore dell'app non ha. Prima `prima` + `scambio`."""
+        if not self.sh:
+            return self._almeno_la_struttura()
+        self._rifiuta_prima_di_tutto("immagine dell'app", diff="docker-compose.casavip.yml\nfase85_pagamenti_stripe.py")
+
+    def test_NGINX_NON_PARTE_se_cambia_un_file_che_nginx_MONTA_fuori_da_deploy(self):
+        """Il compose nuovo legge i suoi montaggi dal disco, che resta vecchio fino a [Nh]: un file nuovo o cambiato
+        fuori da deploy/ non ci sarebbe ancora, e Docker al suo posto creerebbe una cartella vuota (code-review del
+        26/11). Passano solo il compose e i file che sul server non girano (documenti, prove, collaudi, .github)."""
+        if not self.sh:
+            return self._almeno_la_struttura()
+        casi = (("un file montato fuori da deploy/", dict(diff="docker-compose.casavip.yml\nnginx/snippet.conf")),
+                # *.md solo nella radice: deploy/*.md entra nell'immagine dell'app (COPY deploy, code-review del 26/11)
+                ("un .md dentro deploy/", dict(diff="docker-compose.casavip.yml\ndeploy/guida.md")),
+                # un file spostato da una cartella del server a una ammessa: senza --no-renames si vedrebbe solo
+                # collaudi/spot.mp4, e video_pubblici/spot.mp4 (montato da nginx) sparirebbe col merge
+                ("un file spostato", dict(diff="docker-compose.casavip.yml\ncollaudi/spot.mp4\nvideo_pubblici/spot.mp4",
+                                          diff_con_rinomine="docker-compose.casavip.yml\ncollaudi/spot.mp4")))
+        for nome, finti in casi:
+            with self.subTest(caso=nome):
+                shutil.rmtree(self.dir, ignore_errors=True)
+                os.makedirs(self.dir)
+                self._rifiuta_prima_di_tutto("file montati", **finti)
+
+    def test_NGINX_NON_PARTE_se_il_compose_nuovo_cambia_FUORI_DA_NGINX(self):
+        """Ricreando solo nginx, un cambio di app, backup, reti o volumi nel compose arriverebbe sul disco senza
+        essere applicato, o farebbe ricreare a compose una rete sotto l'app (code-review del 26/11, due giri)."""
+        if not self.sh:
+            return self._almeno_la_struttura()
+        for nuovo in (self.COMPOSE_NUOVO.replace("driver: bridge", "driver: overlay"),
+                      self.COMPOSE_NUOVO.replace("  backup:\n    image: casavip-app:latest",
+                                                 "  backup:\n    image: casavip-app:altra")):
+            with self.subTest(nuovo=nuovo[-60:]):
+                shutil.rmtree(self.dir, ignore_errors=True)
+                os.makedirs(self.dir)
+                self._rifiuta_prima_di_tutto("fuori da nginx", compose_nuovo=nuovo)
+
+    def test_NGINX_NON_PARTE_se_il_compose_nuovo_si_legge_VUOTO(self):
+        """Sbaglio S1: due misure vuote non sono «uguali», sono una misura non valida."""
+        if not self.sh:
+            return self._almeno_la_struttura()
+        self._rifiuta_prima_di_tutto("misura non valida", compose_nuovo="")
+
+    def test_NGINX_NON_PARTE_se_il_disco_NON_POTREBBE_ANDARE_AVANTI(self):
+        """L'avanti veloce di [Nh] arriva DOPO lo scambio: se allora fallisse, nginx girerebbe col compose nuovo e
+        il disco col vecchio. Le tre cause che lo farebbero fallire si guardano PRIMA di toccare il sito."""
+        if not self.sh:
+            return self._almeno_la_struttura()
+        with io.open(os.path.join(self.dir, "nuovo.md"), "w", encoding="utf-8") as f:
+            f.write("non tracciato")
+        os.makedirs(os.path.join(self.dir, "collaudi"))
+        with io.open(os.path.join(self.dir, "collaudi", "note prova.md"), "w", encoding="utf-8") as f:
+            f.write("non tracciato, col nome che ha uno spazio")
+        casi = (("non e' un antenato", dict(antenato=1)),
+                ("modificati sul server", dict(sporchi=" M fase83_server.py")),
+                ("esiste gia' sul server", dict(aggiunti="nuovo.md")),
+                # il nome si legge intero: spezzato sullo spazio, nessun pezzo esisterebbe (code-review del 26/11)
+                ("esiste gia' sul server", dict(aggiunti="collaudi/note prova.md")))
+        for motivo, finti in casi:
+            with self.subTest(motivo=motivo):
+                shutil.rmtree(os.path.join(self.dir, "finti"), ignore_errors=True)
+                for f in os.listdir(self.dir):
+                    if f.endswith(".txt") or f.startswith(("PRE_DEPLOY_", "deploy_scambio_")):
+                        os.remove(os.path.join(self.dir, f))
+                self._rifiuta_prima_di_tutto(motivo, **finti)
+
+    def test_NGINX_VICINO_AL_GUARDIANO_si_rifiuta_senza_toccare_il_sito(self):
+        """Il guardiano gira ai minuti 0, 10, 20... (cron sul VPS): nginx giu' in quel secondo e' un falso allarme
+        su Telegram (regola ferrea 10). Lo script del 24/11 lo evitava gia': la protezione non si perde nel trasloco.
+        Si guarda il minuto nel momento che conta, subito PRIMA dello scambio: le preparazioni (che possono
+        scaricare un'immagine nuova) lo sposterebbero."""
+        if not self.sh:
+            return self._almeno_la_struttura()
+        uscita, testo, chiamate, registri, _pre = self._lancia(self._finti(), guardiano="0 1 2 3 4 5 6 7 8 9")
+        self.assertNotEqual(uscita, 0, testo[-600:])
+        self.assertIn("guardiano", testo)
+        self._indice(chiamate, "nginx -t")
+        self.assertEqual([c for c in chiamate if "up -d" in c or "git merge --ff-only" in c], [],
+                         "nginx ricreato, o disco cambiato, vicino al guardiano")
+        self.assertEqual(registri, [])
+
+    def test_LO_SCAMBIO_DELL_APP_NON_RICREA_NGINX(self):
+        """`$C up -d` senza nomi, nello scambio dell'app, ricreava anche nginx se nello stesso invio cambiava la sua
+        definizione nel compose: niente `nginx -t`, niente paracadute di nginx (code-review del 26/11). Da qui lo
+        scambio fa ripartire solo app e backup, e nginx si cambia solo nella sua fase."""
+        if not self.sh:
+            with io.open(os.path.join(self.RADICE, "deploy", "protocollo_d17.sh"), encoding="utf-8") as f:
+                testo = f.read()
+            scambio = testo.split('if [ "$FASE" = "scambio" ]', 1)[1].split("\nfi\n", 1)[0]
+            return self.assertIn("$C up -d app backup", scambio)
+        uscita, testo, chiamate, _registri, _pre = self._lancia(self._finti_scambio(), fase="scambio")
+        self.assertEqual(uscita, 0, testo[-800:])
+        self.assertEqual([c for c in chiamate if " up -d" in c],
+                         ["docker compose -f docker-compose.casavip.yml up -d app backup"])
+
+
 class _GuardieSugliAttrezziDelLavoro(unittest.TestCase):
     """Appoggi comuni alle guardie sul PRE-VOLO e sul PRE-FATTO.
 
@@ -15736,8 +16132,9 @@ class TestLEsameDelDeployNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
             self.assertIn("fase83_server.py", scritture[1]["motivo"] or "")
             self.assertIn("PRE_DEPLOY", scritture[1]["motivo"] or "")
             # 28 + 5 dal 25/11/2026: «le letture elencano i contenitori», «ci sono tutti quelli del compose» e i tre
-            # contenitori delle letture costruite
-            self.assertEqual(scritture[0]["denominatore"], 33)
+            # contenitori delle letture costruite; + 2 dal 26/11/2026: la fase nginx nel protocollo e DEPLOY.md che non
+            # insegna piu' a ricrearlo a mano (n1)
+            self.assertEqual(scritture[0]["denominatore"], 35)
             self.assertEqual(dict(os.environ), ambiente_prima)
         finally:
             esame.scheda.registra = vera_registra
@@ -15763,7 +16160,7 @@ class TestLEsameDelDeployNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
             esame.misura_documento()
         verde, motivi, den = esame.giudica(esame.PASSI, situazioni=("documento",))
         self.assertTrue(verde, motivi)
-        self.assertEqual(den, 8)
+        self.assertEqual(den, 10)   # 8 + 2 dal 26/11/2026 (n1): la fase nginx e DEPLOY.md senza ricreazioni a mano
         self.assertEqual(esame.compose_v1_nei_comandi("docker compose -f docker-compose.casavip.yml up -d\n"), [])
         self.assertEqual(esame.compose_v1_nei_comandi("  sudo docker-compose up -d\n"), ["sudo docker-compose up -d"])
 
