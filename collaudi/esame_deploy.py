@@ -18,7 +18,9 @@ COSA MISURA, dichiarato (D18) — decisione della chat A il 2026-09-08 col manda
              (`docker tag <viva> casavip-app:prec`, la prova che coincide, il file PRE_DEPLOY_*.commit), lo scambio
              rm-first (`git pull --ff-only`, build, stop, rm -f, up -d), la verifica (healthy, /api/health, i tre
              posti allineati) e il ritorno (`docker tag casavip-app:prec casavip-app:latest`); e in nessun blocco di
-             comandi compare `docker-compose` col trattino (la v1 butta giu' nginx: DEPLOY.md §1).
+             comandi compare `docker-compose` col trattino (la v1 butta giu' nginx: DEPLOY.md §1). E (26/11/2026) il
+             protocollo ha la fase `nginx` (punto di ritorno, paracadute casavip-nginx:prec, `nginx -t` prima di
+             ricreare, traccia dello scambio) e DEPLOY.md non insegna piu' `docker rm -f casavip_nginx` a mano.
   PULSANTE   il testo di /root/deploy_pulsante.sh (nelle letture) ha le stesse tappe (paracadute/scambio/verifica/
              indietro), riaggancia :prec e si ferma se non coincide, scrive PRE_DEPLOY, usa `docker compose` v2.
   TRACCE     ogni scambio registrato (/root/deploy_scambio_*.log) ha «SCAMBIO FATTO» con USCITA=0 e un PRE_DEPLOY_*.commit
@@ -198,6 +200,23 @@ def misura_documento():
           "COINCIDONO" in sh and "[2z]" in sh)
     passo("documento", "deploy/protocollo_d17.sh: nessuna riga invoca `docker-compose` col trattino",
           not compose_v1_nei_comandi(sh))
+    # 26/11/2026 (n1 di RIPRENDI_QUI.md): il 24/11 nginx l'ha ricreato uno script fuori dal protocollo. Da allora nginx
+    # ha la sua fase nel protocollo, e DEPLOY.md non insegna piu' a ricrearlo a mano.
+    fase_nginx = sh.split('if [ "$FASE" = "nginx" ]', 1)
+    fase_nginx = fase_nginx[1].split("\nfi\n", 1)[0] if len(fase_nginx) == 2 else ""
+    # solo le righe che si ESEGUONO (S6): senza commenti e senza gli `echo` che stampano soltanto (un `echo ... > file`
+    # scrive, e resta). Cosi' togliere il `docker tag` vero lascia il passo rosso anche se l'intestazione lo nomina.
+    eseguite = "\n".join(r for r in (x.strip() for x in fase_nginx.splitlines())
+                         if r and not r.startswith("#") and not (r.startswith("echo") and " > " not in r))
+    prova, scambio = eseguite.find("nginx -t"), eseguite.find("up -d --no-deps --force-recreate nginx")
+    passo("documento", "deploy/protocollo_d17.sh ha la fase nginx: punto di ritorno, paracadute casavip-nginx:prec, "
+          "configurazione provata prima di ricreare, traccia dello scambio",
+          # le righe che SCRIVONO punto di ritorno e traccia, non quelle che le leggono o le nominano (code-review 26/11)
+          all(x in eseguite for x in ('docker tag "$NGINX_VIVA" casavip-nginx:prec', '> "$REGISTRI/PRE_DEPLOY_',
+                                      "deploy_scambio_", '>> "$REGISTRO"\' EXIT'))
+          and -1 < prova < scambio)
+    passo("documento", "DEPLOY.md: nginx si ricrea con `protocollo_d17.sh nginx`, mai a mano (`docker rm -f casavip_nginx`)",
+          "protocollo_d17.sh nginx" in md and "docker rm -f casavip_nginx" not in md)
 
 
 # ---- PULSANTE / TRACCE / A_MANO / CONTENITORI (dalle letture del VPS) ----

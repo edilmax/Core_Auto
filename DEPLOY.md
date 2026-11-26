@@ -51,8 +51,12 @@
 > Nota storica: la v1 era l'unica presente ai primi deploy, da cui la vecchia istruzione. Il
 > `rm-first` qui sotto era il rimedio a un *altro* sintomo della stessa v1; con la v2 non serve più,
 > ma **resta innocuo** e lo si tiene perché non tocca il volume dei dati.
-> Il ripristino d'emergenza di nginx, se mai servisse:
-> `docker rm -f casavip_nginx && docker compose -f docker-compose.casavip.yml up -d`
+> Ricreare nginx (immagine nuova, configurazione nuova, un montaggio toccato) si fa **solo** con
+> `sh deploy/protocollo_d17.sh nginx` (§3, «Solo nginx»): punto di ritorno, paracadute e traccia dello
+> scambio, come per l'app. Se il contenitore `casavip_nginx` non esiste più, o è fermo o in riavvio
+> continuo, la fase si ferma (non c'è una configurazione viva da tenere per il ritorno) e l'emergenza è `docker compose -f docker-compose.casavip.yml up -d --no-deps nginx`
+> (`--no-deps` perché nginx dipende dall'app: senza, compose potrebbe ricreare anche lei):
+> la casella «il deploy passa sempre dal protocollo» resta rossa finché la fase nginx non lo ricrea, ed è giusto.
 
 ## 2. Prima di ogni deploy: la suite INTERA deve essere verde
 
@@ -131,8 +135,12 @@ git pull --ff-only && \
 docker compose -f docker-compose.casavip.yml build app && \
 docker compose -f docker-compose.casavip.yml stop app backup && \
 docker compose -f docker-compose.casavip.yml rm -f app backup && \
-docker compose -f docker-compose.casavip.yml up -d
+docker compose -f docker-compose.casavip.yml up -d app backup
 ```
+
+⛔ **`up -d app backup`, non `up -d` da solo** (26/11/2026): senza nomi, compose ricrea anche nginx se
+nello stesso invio è cambiata la sua definizione, senza `nginx -t` e senza il suo paracadute. nginx si
+cambia solo con la fase «Solo nginx» qui sotto.
 
 **Perché "rm-first":** con Compose v1 un `up -d` su container esistenti dopo un `build`
 falliva con `KeyError: ContainerConfig`, e fermare+rimuovere prima di ricreare era l'unica
@@ -170,10 +178,84 @@ niente». Un rimedio che spegne una difesa non è un rimedio. Lo sorveglia
 >
 > ⚠️ **Modifiche alla configurazione nginx**: `git pull` + `nginx -s reload` **non basta** e
 > fallisce in silenzio (Docker monta quel file per inode, git lo sostituisce creandone uno
-> nuovo e il container resta sul vecchio). Serve:
-> `docker rm -f casavip_nginx && docker compose -f docker-compose.casavip.yml up -d`
+> nuovo e il container resta sul vecchio). Serve ricreare nginx, con la fase «Solo nginx» qui sotto.
 >
 > ⚠️ **Mai `git reset --hard` sul VPS**: cancellerebbe eventuali file locali non tracciati.
+
+### Solo nginx: `sh deploy/protocollo_d17.sh nginx`
+
+Il 24/11/2026 nginx è stato aggiornato (1.31.8 → 1.31.10) da uno script a parte,
+`/root/aggiorna_nginx_20261124.sh`, che non lasciava né il punto di ritorno né la traccia dello
+scambio: per `collaudi/esame_deploy.py` era un contenitore ricreato a mano, e la casella del Blocco 8
+è diventata rossa. Dal 26/11 nginx si cambia **solo** con la sua fase del protocollo, poi `dopo`:
+
+```bash
+cd /var/www/bookinvip
+sh deploy/protocollo_d17.sh nginx     # [Na]-[Ni]: si ferma da sola al primo controllo che non regge
+sh deploy/protocollo_d17.sh dopo      # le sonde e il giudice, come dopo l'app; poi la ZAP dal computer
+```
+
+Cosa fa, in quest'ordine. **[Na]** Fissa il commit di origin/master (un `git fetch` a metà non lo
+cambia) e si rifiuta se: il codice nuovo cambia file diversi dal compose e da quelli che sul server non
+girano (i `.md` e le `test_*.py` della radice, `collaudi/`, `.github/`; un file spostato conta col nome
+vecchio e col nuovo) — l'immagine dell'app (`main_casavip.py`, `fase*.py`,
+`deploy/`, `Dockerfile.casavip`) o un file che nginx monta vanno prima con `prima` + `scambio` + `dopo`,
+poi questa fase (per questo anche un cambio di `deploy/nginx.casavip.ssl.conf` passa prima dallo
+scambio dell'app); il compose nuovo cambia qualcosa **fuori dal blocco di nginx** (app, backup, reti,
+volumi: confronto riga per riga, e due letture vuote sono «misura non valida», non «uguali»); oppure il
+disco non potrebbe andare avanti veloce dopo lo scambio (commit del disco non antenato, file del progetto
+modificati sul server, un file nuovo che esiste già). **[Nb]** Scrive e rilegge `/root/PRE_DEPLOY_*.commit`.
+**[Nc]** Si ferma se nginx non è in esecuzione (fermo o in riavvio: emergenza in §1); aggancia
+`casavip-nginx:prec` e `casavip-nginx:prec-<ora>` all'immagine che nginx usa adesso, copia la
+configurazione che nginx sta usando **dentro** il contenitore e prepara il ritorno
+(`/root/nginx_prec_<ora>.yml` e `.conf`, un nome nuovo a ogni giro, con l'etichetta `:prec-<ora>` del
+giro: un giro dopo non lo cambia; provato con `config -q`).
+**[Nd]** Prova la definizione nuova con `nginx -t` in un contenitore usa e getta, leggendola da una copia
+del compose di origin/master (`/root/nginx_nuovo_<ora>.yml`). **[Ne]** Si rifiuta ai minuti 9, 0 e 1 di
+ogni decina, guardati subito prima dello scambio (il guardiano gira ogni 10 minuti e nginx giù in quel
+secondo è un falso allarme). **[Nf]** Solo allora apre la traccia `/root/deploy_scambio_*.log`.
+**[Ng]** Ricrea **solo** nginx col compose nuovo (`up -d --no-deps --force-recreate nginx`: app e backup
+non si toccano) e aspetta `/api/health` 200 su HTTPS per fino a 30 tentativi, uno al secondo e ognuno al
+massimo 5 secondi (al peggio circa tre minuti: **non interromperla**). Se la ricreazione fallisce o la
+risposta non arriva, **torna indietro da sola**: la traccia dice `USCITA` diversa da 0, senza «SCAMBIO
+FATTO», e con «RITORNO RIUSCITO» se dopo il ritorno il sito risponde. **[Nh]** Solo dopo uno scambio
+riuscito porta il disco al commit fissato in [Na] (`git merge --ff-only`); se proprio lì fallisse, lo dice
+e stampa come allineare il disco o tornare indietro.
+
+⛔ **Si lancia staccata dalla sessione ssh**, e poi si legge il file: se ssh cade a metà, la shell muore
+senza scrivere `USCITA` e senza ritorno. Per esempio:
+
+```bash
+cd /var/www/bookinvip
+setsid nohup sh deploy/protocollo_d17.sh nginx > /root/fase_nginx_$(date -u +%Y%m%d_%H%M%S).txt 2>&1 < /dev/null &
+```
+
+⛔ **Il disco resta al codice di prima finché lo scambio non è riuscito**, apposta: il ritorno usa il
+compose del disco più l'immagine e la configurazione tenute in [Nc], e nessuno scambio successivo può
+rimettere su la definizione appena respinta. Torna **tutto** com'era quando il compose del disco è quello
+da cui il nginx vivo è nato (il caso normale: cambia l'impronta di nginx); se il disco è già più avanti
+(codice preso prima da uno `scambio`), il ritorno rimette immagine e configurazione ma non le altre righe
+nuove di nginx nel compose.
+
+⚠️ **Dopo un ritorno la casella del deploy resta rossa** anche dopo un giro riuscito: la traccia di quel
+giro ha `USCITA` diversa da 0, e l'esame non sa ancora leggere «RITORNO RIUSCITO» (RIPRENDI_QUI.md, n8).
+
+⛔ **Non usa il gettone di `prima`, apposta**: `prima` riaggancia il paracadute dell'**app** alla viva,
+e dopo un cambio del solo nginx il ritorno dell'app non esisterebbe più. Paracadute e punto di ritorno
+di nginx li prende la fase stessa, nello stesso giro dello scambio.
+
+**Come si torna indietro a mano** dopo uno scambio riuscito (immagine e configurazione di prima, quelle
+tenute in `[Nc]`; il nome esatto lo stampa la fase in `[Ni]`). Il compose del disco a quel punto è già
+quello nuovo: si torna all'immagine e alla configurazione, non alle altre righe di nginx nel compose.
+```bash
+cd /var/www/bookinvip
+docker compose -f docker-compose.casavip.yml -f /root/nginx_prec_<ora>.yml up -d --no-deps --force-recreate nginx
+```
+
+Ritirati il 26/11/2026 alle 12:07 UTC: `/root/aggiorna_nginx.sh` (5/11), `/root/aggiorna_nginx_20261124.sh`
+(24/11) e il compose che quest'ultimo teneva per il suo ritorno (`/root/compose_prima_di_nginx_13110.yml`),
+spostati in `/root/ritirati_20261126/` con le impronte sha256 identiche (`f9de3cc2…`, `ff705088…`, `75ca72e9…`).
+Prima dello spostamento: nessun cron, timer di systemd o script li chiamava (li nominavano solo documenti e prove).
 
 ## 4. Verifica dopo il deploy
 
@@ -319,8 +401,8 @@ grep -E '^\s+- \./' docker-compose.casavip.yml | sed 's/^\s*- //' | cut -d: -f1 
 cp -r <file-da-rimuovere> /root/backup-orfani-$(date +%Y%m%d)/
 git clean -fd -e certbot          # -e ESCLUDE i mount vivi
 
-# 3. se per errore un mount è stato toccato: ricreare il container che lo usa
-docker rm -f casavip_nginx && docker compose -f docker-compose.casavip.yml up -d
+# 3. se per errore un mount è stato toccato: ricreare il container che lo usa (nginx: la sua fase D17, §3)
+sh deploy/protocollo_d17.sh nginx
 
 # 4. e VERIFICARE che il rinnovo funzioni davvero
 certbot renew --dry-run           # atteso: "all simulated renewals succeeded"
