@@ -126,7 +126,9 @@ def _e_una_pagina(numero: Any) -> bool:
     return isinstance(numero, str) and _NUMERO_DELLA_PAGINA.fullmatch(numero) is not None
 
 
-_NUMERO_DI_STRIPE = re.compile(r"[a-z]+_[A-Za-z0-9_]+")
+# `\A`: con `fullmatch` non cambia niente, ma CodeQL per Python non sa che `fullmatch` parte
+# dall'inizio e senza `\A` la segnala come polynomial-redos (allarme #243, 25/11).
+_NUMERO_DI_STRIPE = re.compile(r"\A[a-z]+_[A-Za-z0-9_]+")
 
 
 def _e_un_numero_di_stripe(numero: Any, prefisso: str = "") -> bool:

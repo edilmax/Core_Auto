@@ -1243,6 +1243,22 @@ class TestUnNumeroStortoNonEntraNellIndirizzoDiStripe(unittest.TestCase):
                     self.assertEqual(spia.indirizzi, [base + "cs_test_1"],
                                      "numero storto della risposta mandato a Stripe")
 
+    def test_la_forma_del_numero_parte_dall_inizio_anche_per_CodeQL(self):
+        """Allarme CodeQL #243 (py/polynomial-redos, aperto su master con l'unione #351 il
+        25/11): il `payment_intent` del pulsante dei rimborsi dovuti arriva dal corpo della
+        richiesta fino a questa forma. Python la usa con `fullmatch`, che parte comunque
+        dall'inizio (misurato il 26/11: tempo lineare, nessun rallentamento); ma la libreria di
+        CodeQL per Python non sa che `fullmatch` ancora l'inizio (`matchesAnyPrefix` e' sempre
+        vero, «not yet implemented for Python») e crede che la forma possa ripartire da ogni
+        lettera. Un `\\A` scritto dentro la forma lo dice anche a lui, senza cambiare cosa passa:
+        provato col CodeQL del PC su un programmino con cinque varianti (segnalate quella vecchia
+        e quella col lookbehind; non segnalate `^` e `\\A`). Un tetto alla lunghezza invece NON
+        basta: per Python l'unica barriera di questa regola e' il confronto con una costante."""
+        from fase85_pagamenti_stripe import _NUMERO_DI_STRIPE
+        self.assertTrue(_NUMERO_DI_STRIPE.pattern.startswith("\\A"),
+                        "forma senza \\A in testa: CodeQL la segnala di nuovo come "
+                        "polynomial-redos: " + _NUMERO_DI_STRIPE.pattern)
+
 
 if __name__ == "__main__":
     unittest.main()
