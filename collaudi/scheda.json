@@ -24,11 +24,11 @@
  "0d485cbbe89e": {
   "blocco": 8,
   "comando": "python collaudi/esame_deploy.py --da-file <letture> --scrivi",
-  "commit": "8eff26d",
+  "commit": "270a3b5",
   "condizione": "il deploy passa sempre dal protocollo D17, mai a mano",
-  "denominatore": 166,
+  "denominatore": 170,
   "esito": false,
-  "impronta": "2a5c6c3b7ce6",
+  "impronta": "18b448448f6b",
   "impronte_moduli": {
    "fase13_protocollo_finale": "2dce22f058cc",
    "fase16_outbox": "a47de5874653",
@@ -42,11 +42,11 @@
    "fase42_observability": "a557645447a7",
    "fase60_mcp_server": "56ffc4364819",
    "fase81_bootstrap_casavip": "755840ed917e",
-   "fase83_server": "f0262ebd76c9",
+   "fase83_server": "048c846d2ac0",
    "fase86_email": "71ba17ea5775"
   },
   "motivo": "[contenitori] casavip_nginx creato il 2026-11-24 01:36:19 UTC dentro uno scambio D17 riuscito (nessuno scambio riuscito lo copre: ricreato a mano o da un altro script)",
-  "quando": "2026-11-25T11:27:24"
+  "quando": "2026-11-26T02:44:28"
  },
  "0f42c4387710": {
   "blocco": 1,
@@ -90,11 +90,11 @@
  "159ad2c8ab8f": {
   "blocco": 1,
   "comando": "python collaudi/esame_produzione.py --casella ogni-ora --scrivi",
-  "commit": "8746be5",
+  "commit": "270a3b5",
   "condizione": "gli invarianti sui dati veri girano in produzione almeno OGNI ORA, non una volta al giorno, e l'ultimo giro si legge dal registro del server con la sua ora",
   "denominatore": 13,
   "esito": true,
-  "impronta": "618041e0e480",
+  "impronta": "1116c6268fbf",
   "impronte_moduli": {
    "fase101_stripe_connect": "2ba27894abf3",
    "fase102_motore_autonomo": "5f821fcc906f",
@@ -106,12 +106,12 @@
    "fase160_escrow_garanzia": "55a14f205142",
    "fase162_pagamenti_pendenti": "2ba7b5d31a60",
    "fase167_credito_single_use": "45602131ada4",
-   "fase177_financial_controller": "664a808eca59",
+   "fase177_financial_controller": "71cb44f563ba",
    "fase17_money": "4f56d5c69a04",
    "fase181_audit_console": "975c9e56aa53",
-   "fase182_riconciliazione": "7723105c1989",
+   "fase182_riconciliazione": "4cbb7b9f9bbd",
    "fase183_carta_offsession": "f92efa8944a6",
-   "fase186_guardiano": "896a0daacdcb",
+   "fase186_guardiano": "f2929637f250",
    "fase188_paga_struttura": "b06f26f76cda",
    "fase191_blocco_globale": "0e25d2e0ab6f",
    "fase199_invarianti": "ebe94f451a83",
@@ -119,21 +119,21 @@
    "fase204_eventi_stripe": "9caaa231320d",
    "fase35_pagamenti": "abd2cab5c989",
    "fase65_split_payment": "382d073ed205",
-   "fase85_pagamenti_stripe": "febeff9538c2",
+   "fase85_pagamenti_stripe": "992269053bb0",
    "fase87_stripe_webhook": "c77544db5a33",
    "fase99_multicurrency": "3bb03f7179ab"
   },
   "motivo": "",
-  "quando": "2026-11-23T12:49:51"
+  "quando": "2026-11-26T03:25:57"
  },
  "16d2c823889f": {
   "blocco": 1,
   "comando": "python collaudi/mutazione_prodotto.py --modulo fase65_split_payment.py fase85_pagamenti_stripe.py fase87_stripe_webhook.py fase101_stripe_connect.py fase131_payout_dashboard.py --tetto 200 --minuti 90 --killer test_fase65_split_payment test_fase85_pagamenti_stripe test_fase87_stripe_webhook test_fase101_stripe_connect test_fase131_payout_dashboard",
-  "commit": "8746be5",
+  "commit": "270a3b5",
   "condizione": "zero punti di mutazione scoperti sul PERCORSO DEL DENARO -- i cinque moduli che un euro attraversa davvero: entra, viene confermato, va sul conto dell'host, si divide fra ospiti, esce col bonifico -- sul codice che la produzione ESEGUE",
   "denominatore": 377,
   "esito": true,
-  "impronta": "618041e0e480",
+  "impronta": "1116c6268fbf",
   "impronte_moduli": {
    "fase101_stripe_connect": "2ba27894abf3",
    "fase102_motore_autonomo": "5f821fcc906f",
@@ -145,12 +145,12 @@
    "fase160_escrow_garanzia": "55a14f205142",
    "fase162_pagamenti_pendenti": "2ba7b5d31a60",
    "fase167_credito_single_use": "45602131ada4",
-   "fase177_financial_controller": "664a808eca59",
+   "fase177_financial_controller": "71cb44f563ba",
    "fase17_money": "4f56d5c69a04",
    "fase181_audit_console": "975c9e56aa53",
-   "fase182_riconciliazione": "7723105c1989",
+   "fase182_riconciliazione": "4cbb7b9f9bbd",
    "fase183_carta_offsession": "f92efa8944a6",
-   "fase186_guardiano": "896a0daacdcb",
+   "fase186_guardiano": "f2929637f250",
    "fase188_paga_struttura": "b06f26f76cda",
    "fase191_blocco_globale": "0e25d2e0ab6f",
    "fase199_invarianti": "ebe94f451a83",
@@ -158,21 +158,21 @@
    "fase204_eventi_stripe": "9caaa231320d",
    "fase35_pagamenti": "abd2cab5c989",
    "fase65_split_payment": "382d073ed205",
-   "fase85_pagamenti_stripe": "febeff9538c2",
+   "fase85_pagamenti_stripe": "992269053bb0",
    "fase87_stripe_webhook": "c77544db5a33",
    "fase99_multicurrency": "3bb03f7179ab"
   },
   "motivo": "",
-  "quando": "2026-11-23T13:38:03"
+  "quando": "2026-11-26T02:31:03"
  },
  "224ae0884a0b": {
   "blocco": 1,
   "comando": "python collaudi/esame_orologi.py --scrivi",
-  "commit": "8746be5",
+  "commit": "270a3b5",
   "condizione": "hold, payout e penale scadono davvero in un giro contro Stripe di PROVA con l'orologio NOSTRO spostato, e i tre esiti si rileggono da Stripe (rimborso dell'hold, bonifico all'host, penale addebitata)",
   "denominatore": 34,
   "esito": true,
-  "impronta": "618041e0e480",
+  "impronta": "1116c6268fbf",
   "impronte_moduli": {
    "fase101_stripe_connect": "2ba27894abf3",
    "fase102_motore_autonomo": "5f821fcc906f",
@@ -184,12 +184,12 @@
    "fase160_escrow_garanzia": "55a14f205142",
    "fase162_pagamenti_pendenti": "2ba7b5d31a60",
    "fase167_credito_single_use": "45602131ada4",
-   "fase177_financial_controller": "664a808eca59",
+   "fase177_financial_controller": "71cb44f563ba",
    "fase17_money": "4f56d5c69a04",
    "fase181_audit_console": "975c9e56aa53",
-   "fase182_riconciliazione": "7723105c1989",
+   "fase182_riconciliazione": "4cbb7b9f9bbd",
    "fase183_carta_offsession": "f92efa8944a6",
-   "fase186_guardiano": "896a0daacdcb",
+   "fase186_guardiano": "f2929637f250",
    "fase188_paga_struttura": "b06f26f76cda",
    "fase191_blocco_globale": "0e25d2e0ab6f",
    "fase199_invarianti": "ebe94f451a83",
@@ -197,12 +197,12 @@
    "fase204_eventi_stripe": "9caaa231320d",
    "fase35_pagamenti": "abd2cab5c989",
    "fase65_split_payment": "382d073ed205",
-   "fase85_pagamenti_stripe": "febeff9538c2",
+   "fase85_pagamenti_stripe": "992269053bb0",
    "fase87_stripe_webhook": "c77544db5a33",
    "fase99_multicurrency": "3bb03f7179ab"
   },
   "motivo": "",
-  "quando": "2026-11-23T13:12:53"
+  "quando": "2026-11-26T02:44:25"
  },
  "227c35ec4353": {
   "blocco": 1,
@@ -345,11 +345,11 @@
  "3a547df3a743": {
   "blocco": 8,
   "comando": "python collaudi/esame_backup.py --giro <cartella> --manifest <MANIFEST.txt> --scrivi",
-  "commit": "8eff26d",
+  "commit": "270a3b5",
   "condizione": "il salvataggio e' stato RIPRISTINATO e letto, non solo prodotto",
   "denominatore": 379,
   "esito": true,
-  "impronta": "2a5c6c3b7ce6",
+  "impronta": "18b448448f6b",
   "impronte_moduli": {
    "fase13_protocollo_finale": "2dce22f058cc",
    "fase16_outbox": "a47de5874653",
@@ -363,11 +363,11 @@
    "fase42_observability": "a557645447a7",
    "fase60_mcp_server": "56ffc4364819",
    "fase81_bootstrap_casavip": "755840ed917e",
-   "fase83_server": "f0262ebd76c9",
+   "fase83_server": "048c846d2ac0",
    "fase86_email": "71ba17ea5775"
   },
   "motivo": "",
-  "quando": "2026-11-25T11:27:25"
+  "quando": "2026-11-26T02:44:28"
  },
  "50691c557e6e": {
   "blocco": 1,
@@ -622,11 +622,11 @@
  "813b9082642c": {
   "blocco": 1,
   "comando": "python collaudi/esame_produzione.py --scrivi",
-  "commit": "8746be5",
+  "commit": "270a3b5",
   "condizione": "gli invarianti sono verificati in PRODUZIONE, non solo nei test",
   "denominatore": 14,
   "esito": true,
-  "impronta": "618041e0e480",
+  "impronta": "1116c6268fbf",
   "impronte_moduli": {
    "fase101_stripe_connect": "2ba27894abf3",
    "fase102_motore_autonomo": "5f821fcc906f",
@@ -638,12 +638,12 @@
    "fase160_escrow_garanzia": "55a14f205142",
    "fase162_pagamenti_pendenti": "2ba7b5d31a60",
    "fase167_credito_single_use": "45602131ada4",
-   "fase177_financial_controller": "664a808eca59",
+   "fase177_financial_controller": "71cb44f563ba",
    "fase17_money": "4f56d5c69a04",
    "fase181_audit_console": "975c9e56aa53",
-   "fase182_riconciliazione": "7723105c1989",
+   "fase182_riconciliazione": "4cbb7b9f9bbd",
    "fase183_carta_offsession": "f92efa8944a6",
-   "fase186_guardiano": "896a0daacdcb",
+   "fase186_guardiano": "f2929637f250",
    "fase188_paga_struttura": "b06f26f76cda",
    "fase191_blocco_globale": "0e25d2e0ab6f",
    "fase199_invarianti": "ebe94f451a83",
@@ -651,12 +651,12 @@
    "fase204_eventi_stripe": "9caaa231320d",
    "fase35_pagamenti": "abd2cab5c989",
    "fase65_split_payment": "382d073ed205",
-   "fase85_pagamenti_stripe": "febeff9538c2",
+   "fase85_pagamenti_stripe": "992269053bb0",
    "fase87_stripe_webhook": "c77544db5a33",
    "fase99_multicurrency": "3bb03f7179ab"
   },
   "motivo": "",
-  "quando": "2026-11-23T12:49:42"
+  "quando": "2026-11-26T02:44:26"
  },
  "8267c64a367a": {
   "blocco": 4,
@@ -711,11 +711,11 @@
  "98ef97fd624f": {
   "blocco": 1,
   "comando": "python collaudi/esame_riconciliazione.py --da-file <letture> --scrivi",
-  "commit": "8746be5",
+  "commit": "270a3b5",
   "condizione": "la riconciliazione col registro di Stripe gira OGNI notte e manda una mail anche quando e' tutto a posto (la mail che non arriva e' un allarme), con URGENTE nell'oggetto se c'e' un accredito mancante o un'operazione sconosciuta",
   "denominatore": 6,
   "esito": true,
-  "impronta": "618041e0e480",
+  "impronta": "1116c6268fbf",
   "impronte_moduli": {
    "fase101_stripe_connect": "2ba27894abf3",
    "fase102_motore_autonomo": "5f821fcc906f",
@@ -727,12 +727,12 @@
    "fase160_escrow_garanzia": "55a14f205142",
    "fase162_pagamenti_pendenti": "2ba7b5d31a60",
    "fase167_credito_single_use": "45602131ada4",
-   "fase177_financial_controller": "664a808eca59",
+   "fase177_financial_controller": "71cb44f563ba",
    "fase17_money": "4f56d5c69a04",
    "fase181_audit_console": "975c9e56aa53",
-   "fase182_riconciliazione": "7723105c1989",
+   "fase182_riconciliazione": "4cbb7b9f9bbd",
    "fase183_carta_offsession": "f92efa8944a6",
-   "fase186_guardiano": "896a0daacdcb",
+   "fase186_guardiano": "f2929637f250",
    "fase188_paga_struttura": "b06f26f76cda",
    "fase191_blocco_globale": "0e25d2e0ab6f",
    "fase199_invarianti": "ebe94f451a83",
@@ -740,21 +740,21 @@
    "fase204_eventi_stripe": "9caaa231320d",
    "fase35_pagamenti": "abd2cab5c989",
    "fase65_split_payment": "382d073ed205",
-   "fase85_pagamenti_stripe": "febeff9538c2",
+   "fase85_pagamenti_stripe": "992269053bb0",
    "fase87_stripe_webhook": "c77544db5a33",
    "fase99_multicurrency": "3bb03f7179ab"
   },
   "motivo": "",
-  "quando": "2026-11-23T12:50:49"
+  "quando": "2026-11-26T02:44:27"
  },
  "a36e3373da1d": {
   "blocco": 8,
   "comando": "python collaudi/esame_sentinella.py --arrivi <registro nginx 24h> --scrivi",
-  "commit": "8eff26d",
+  "commit": "270a3b5",
   "condizione": "una sentinella ESTERNA (non nostra) si accorge se il sito muore",
   "denominatore": 10,
   "esito": true,
-  "impronta": "2a5c6c3b7ce6",
+  "impronta": "18b448448f6b",
   "impronte_moduli": {
    "fase13_protocollo_finale": "2dce22f058cc",
    "fase16_outbox": "a47de5874653",
@@ -768,11 +768,11 @@
    "fase42_observability": "a557645447a7",
    "fase60_mcp_server": "56ffc4364819",
    "fase81_bootstrap_casavip": "755840ed917e",
-   "fase83_server": "f0262ebd76c9",
+   "fase83_server": "048c846d2ac0",
    "fase86_email": "71ba17ea5775"
   },
   "motivo": "",
-  "quando": "2026-11-25T11:14:14"
+  "quando": "2026-11-26T02:46:15"
  },
  "a5c77ac6c76a": {
   "blocco": 5,
@@ -1087,11 +1087,11 @@
  "d70ecb7a31cc": {
   "blocco": 1,
   "comando": "python collaudi/esame_rimborsi.py --scrivi",
-  "commit": "8746be5",
+  "commit": "270a3b5",
   "condizione": "i soldi tornano DAVVERO all'ospite da OGNI strada che porta a un rimborso, non solo da quella che qualcuno si e' ricordato di provare (il 2026-08-16 le strade erano due e ne funzionava una). ⛔ L'AUTOMATICO NON e' la riga d'arrivo di questo blocco: e' una decisione del fondatore, e si accende dopo -- prima si guadagna la fiducia, poi si toglie il dito",
   "denominatore": 41,
   "esito": true,
-  "impronta": "618041e0e480",
+  "impronta": "1116c6268fbf",
   "impronte_moduli": {
    "fase101_stripe_connect": "2ba27894abf3",
    "fase102_motore_autonomo": "5f821fcc906f",
@@ -1103,12 +1103,12 @@
    "fase160_escrow_garanzia": "55a14f205142",
    "fase162_pagamenti_pendenti": "2ba7b5d31a60",
    "fase167_credito_single_use": "45602131ada4",
-   "fase177_financial_controller": "664a808eca59",
+   "fase177_financial_controller": "71cb44f563ba",
    "fase17_money": "4f56d5c69a04",
    "fase181_audit_console": "975c9e56aa53",
-   "fase182_riconciliazione": "7723105c1989",
+   "fase182_riconciliazione": "4cbb7b9f9bbd",
    "fase183_carta_offsession": "f92efa8944a6",
-   "fase186_guardiano": "896a0daacdcb",
+   "fase186_guardiano": "f2929637f250",
    "fase188_paga_struttura": "b06f26f76cda",
    "fase191_blocco_globale": "0e25d2e0ab6f",
    "fase199_invarianti": "ebe94f451a83",
@@ -1116,12 +1116,12 @@
    "fase204_eventi_stripe": "9caaa231320d",
    "fase35_pagamenti": "abd2cab5c989",
    "fase65_split_payment": "382d073ed205",
-   "fase85_pagamenti_stripe": "febeff9538c2",
+   "fase85_pagamenti_stripe": "992269053bb0",
    "fase87_stripe_webhook": "c77544db5a33",
    "fase99_multicurrency": "3bb03f7179ab"
   },
   "motivo": "",
-  "quando": "2026-11-23T13:11:58"
+  "quando": "2026-11-26T02:43:59"
  },
  "ded6dcdcf4c7": {
   "blocco": 1,
