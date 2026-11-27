@@ -255,8 +255,12 @@ da cui il nginx vivo è nato (il caso normale: cambia l'impronta di nginx); se i
 (codice preso prima da uno `scambio`), il ritorno rimette immagine e configurazione ma non le altre righe
 nuove di nginx nel compose.
 
-⚠️ **Dopo un ritorno la casella del deploy resta rossa** anche dopo un giro riuscito: la traccia di quel
-giro ha `USCITA` diversa da 0, e l'esame non sa ancora leggere «RITORNO RIUSCITO» (RIPRENDI_QUI.md, n8).
+✅ **Un ritorno riuscito non fa più diventare rossa la casella del deploy** (27/11/2026, n8): la traccia
+di quel giro ha `USCITA` diversa da 0 ma anche «RITORNO RIUSCITO», e `collaudi/esame_deploy.py` la conta
+come passata dal protocollo, e il nginx ricreato dal ritorno come nato dentro la sua finestra. Le letture
+del server devono avere il campo `ritorno_riuscito` di ogni traccia (FORMATO_LETTURE in cima a
+`collaudi/esame_deploy.py`). Uno scambio fallito
+**senza** «RITORNO RIUSCITO» resta rosso, e si guarda.
 
 ⛔ **Non usa il gettone di `prima`, apposta**: `prima` riaggancia il paracadute dell'**app** alla viva,
 e dopo un cambio del solo nginx il ritorno dell'app non esisterebbe più. Paracadute e punto di ritorno

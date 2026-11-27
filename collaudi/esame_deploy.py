@@ -23,7 +23,9 @@ COSA MISURA, dichiarato (D18) — decisione della chat A il 2026-09-08 col manda
              ricreare, traccia dello scambio) e DEPLOY.md non insegna piu' `docker rm -f casavip_nginx` a mano.
   PULSANTE   il testo di /root/deploy_pulsante.sh (nelle letture) ha le stesse tappe (paracadute/scambio/verifica/
              indietro), riaggancia :prec e si ferma se non coincide, scrive PRE_DEPLOY, usa `docker compose` v2.
-  TRACCE     ogni scambio registrato (/root/deploy_scambio_*.log) ha «SCAMBIO FATTO» con USCITA=0 e un PRE_DEPLOY_*.commit
+  TRACCE     ogni scambio registrato (/root/deploy_scambio_*.log) ha «SCAMBIO FATTO» con USCITA=0 -- oppure (27/11/2026,
+             n8) e' FALLITO e TORNATO INDIETRO DA SOLO: «RITORNO RIUSCITO», USCITA scritta e diversa da 0, nessun
+             «SCAMBIO FATTO» (la fase nginx lo scrive solo dopo /api/health 200 sul ritorno) -- e un PRE_DEPLOY_*.commit
              scritto PRIMA, nella stessa finestra (entro FINESTRA_MIN minuti); il paracadute di oggi (:prec) e'
              l'immagine che girava PRIMA dell'ultimo scambio (= la «viva» registrata dall'ultimo `prima`), ed e' DIVERSA
              dalla viva di oggi: il ritorno esiste ed e' l'ultimo stato buono precedente.
@@ -36,7 +38,8 @@ COSA MISURA, dichiarato (D18) — decisione della chat A il 2026-09-08 col manda
              e la v1 e' un segnaposto bloccato (apt candidate «(none)»).
   CONTENITORI (25/11/2026, trovato dalla revisione della rimisura: nginx ricreato il 24/11 da uno script fuori dal
              protocollo e la casella verde lo stesso) ogni contenitore del progetto `bookinvip` e' stato CREATO dentro
-             uno scambio D17 riuscito: dopo un PRE_DEPLOY_*.commit e non oltre la fine del registro di quello scambio,
+             uno scambio D17 riuscito (o tornato indietro da solo, come sopra: il ritorno ricrea nginx dentro la sua
+             finestra): dopo un PRE_DEPLOY_*.commit e non oltre la fine del registro di quello scambio,
              con lo scambio entro FINESTRA_MIN minuti dal suo punto di ritorno. Una data di creazione che nessuno
              scambio copre e' un contenitore ricreato a mano o da un altro script.
 Denominatore = passi. Senza letture, le quattro situazioni del VPS sono NON MISURATE e la casella e' rossa (S7).
@@ -47,7 +50,8 @@ FORMATO_LETTURE (JSON, lo scrive B con sola lettura sul VPS; tempi in UTC «AAAA
    "deploy_pulsante_sh": "<testo dello script>",        cat /root/deploy_pulsante.sh   (sha256sum accanto, in consegna)
    "scambi": [{"file": "/root/deploy_scambio_....log", "quando": ..., "scambio_fatto": true, "uscita": 0}],
         per ogni /root/deploy_scambio_*.log: quando = `date -u -r F +%Y-%m-%dT%H:%M:%SZ`; scambio_fatto = la riga
-        «SCAMBIO FATTO» c'e'; uscita = il numero dopo «USCITA=» (assente -> null)
+        «SCAMBIO FATTO» c'e'; uscita = il numero dopo «USCITA=» (assente -> null); ritorno_riuscito = la riga
+        «RITORNO RIUSCITO» c'e' (27/11/2026, n8; assente nelle letture -> false)
    "pulsante_scrive_uscita_dal": "2026-09-08T15:5x:xxZ",   (FACOLTATIVO) da quando il pulsante scrive «USCITA=» da se'
         (`trap 'echo "USCITA=$?"' EXIT`): mtime UTC del pulsante v2, o del v1 conservato. Un registro senza «USCITA=»
         PRECEDENTE a questa data, con «SCAMBIO FATTO» e `set -eu` nel pulsante, e' «riuscito per costruzione» (D12 A+B,
@@ -103,6 +107,7 @@ MARCA = "protocollo D17"
 COMANDO = "python collaudi/esame_deploy.py --da-file <letture> --scrivi"
 SITUAZIONI = ("documento", "pulsante", "tracce", "a_mano", "contenitori")
 FINESTRA_MIN = 180
+NGINX = "casavip_nginx"     # l'unico contenitore che un ritorno automatico della fase `nginx` ricrea (n8, 27/11/2026)
 TAPPE = ("paracadute", "scambio", "verifica", "indietro")
 PASSI = []
 
@@ -121,6 +126,9 @@ NON_GUARDA = (
     "diventa rosso finche' non lascia anche lui un PRE_DEPLOY e il registro del suo scambio",
     "la fine di uno scambio e' l'ora di ultima modifica del suo registro: chi riscrive quel registro dopo lo scambio "
     "allarga la finestra; e l'immagine di ogni contenitore e' raccolta ma non confrontata con quella dello scambio",
+    "un ritorno automatico riuscito si crede alla riga «RITORNO RIUSCITO» della sua traccia (il protocollo la scrive "
+    "solo dopo /api/health 200 sul ritorno): qui la sonda di allora non si rifa', e uno scambio fallito SENZA quella "
+    "riga resta rosso anche se nessun contenitore e' stato toccato",
 )
 
 
@@ -227,6 +235,30 @@ def _per_costruzione(s, sh, dal_q):
             and _quando(s["quando"]) < dal_q)
 
 
+def _tornato_indietro(s):
+    """Uno scambio FALLITO e TORNATO INDIETRO DA SOLO (27/11/2026, n8): la fase `nginx` del protocollo, se nginx non
+    torna, rimette su da sola immagine e configurazione di prima e scrive «RITORNO RIUSCITO» solo dopo /api/health 200;
+    USCITA resta diversa da 0. E' un deploy passato dal protocollo, non a mano. Conta SOLO cosi': riga presente, USCITA
+    scritta e diversa da 0, «SCAMBIO FATTO» assente con un `false` vero (le due righe insieme sono una contraddizione, e
+    un valore scritto come testo non e' una lettura). Una copia sola della regola, per le tracce e per i contenitori; e un
+    ritorno ricrea SOLO nginx, quindi la sua finestra copre solo nginx (`misura_contenitori`)."""
+    u = s.get("uscita")
+    return (s.get("ritorno_riuscito") is True and s.get("scambio_fatto") is False
+            and type(u) is int and u != 0)
+
+
+def _esito(s, sh, dal_q):
+    """L'esito di UNA traccia, una regola sola per le tracce e per i contenitori (simplify del 27/11: erano due copie, e
+    non dicevano la stessa cosa sul registro storico con la riga del ritorno). Uno di: «tornato» (fallito e tornato
+    indietro da solo), «contraddittoria» («RITORNO RIUSCITO» in una traccia che non torna: scambio fatto, o USCITA
+    assente o 0), «storico» (riuscito per costruzione), «riuscito» («SCAMBIO FATTO» con USCITA=0), «fallito»."""
+    if s.get("ritorno_riuscito") is True:
+        return "tornato" if _tornato_indietro(s) else "contraddittoria"
+    if _per_costruzione(s, sh, dal_q):
+        return "storico"
+    return "riuscito" if s.get("scambio_fatto") is True and s.get("uscita") == 0 else "fallito"
+
+
 def misura_pulsante(let):
     print("\n--- PULSANTE: il testo di /root/deploy_pulsante.sh (dalle letture) ---")
     sh = let.get("deploy_pulsante_sh") or ""
@@ -257,24 +289,37 @@ def misura_tracce(let, con_guasto=False):
     sh = let.get("deploy_pulsante_sh") or ""
     dal = let.get("pulsante_scrive_uscita_dal")
     dal_q = _quando(dal) if dal else None
-    storici = 0
+    storici = tornati = 0
     for s in scambi:
         q = _quando(s["quando"])
         nome = os.path.basename(str(s.get("file")))
-        if _per_costruzione(s, sh, dal_q):
+        esito = _esito(s, sh, dal_q)
+        if esito == "storico":
             storici += 1
             passo("tracce", "%s: «SCAMBIO FATTO», riuscito PER COSTRUZIONE senza codice d'uscita (registro del %s, prima che il "
                   "pulsante lo scrivesse da se', %s)" % (nome, q.strftime("%Y-%m-%d"), dal), True, "set -eu nel pulsante")
+        elif esito == "tornato":
+            tornati += 1
+            passo("tracce", "%s: scambio FALLITO e TORNATO INDIETRO DA SOLO («RITORNO RIUSCITO», USCITA=%d): passato dal "
+                  "protocollo" % (nome, s["uscita"]), True, "il protocollo lo scrive solo dopo /api/health 200 sul ritorno")
+        elif esito == "contraddittoria":
+            passo("tracce", "%s: «RITORNO RIUSCITO» in una traccia che non torna" % nome, False,
+                  "scambio_fatto=%r uscita=%r: il protocollo la scrive solo con USCITA diversa da 0 e senza «SCAMBIO FATTO»"
+                  " -- traccia contraddittoria o scritta a mano" % (s.get("scambio_fatto"), s.get("uscita")))
         else:
+            vecchie = (" (letture SENZA il campo ritorno_riuscito: preso col raccoglitore vecchio? un ritorno riuscito "
+                       "sembrerebbe un fallimento)") if "ritorno_riuscito" not in s and s.get("uscita") not in (None, 0) else ""
             passo("tracce", "%s: «SCAMBIO FATTO» con USCITA=0" % nome,
                   s.get("scambio_fatto") is True and s.get("uscita") == 0,
-                  "uscita=%r%s" % (s.get("uscita"), "" if s.get("uscita") is not None or dal else
-                                   " (nessuna riga USCITA e nessun `pulsante_scrive_uscita_dal` nelle letture)"))
+                  "uscita=%r%s%s" % (s.get("uscita"), "" if s.get("uscita") is not None or dal else
+                                     " (nessuna riga USCITA e nessun `pulsante_scrive_uscita_dal` nelle letture)", vecchie))
         finestra = [p for p in pre if 0 <= (q - _quando(p["quando"])).total_seconds() <= FINESTRA_MIN * 60]
         passo("tracce", "%s: un PRE_DEPLOY_*.commit scritto PRIMA, entro %d minuti" % (nome, FINESTRA_MIN),
               bool(finestra), ", ".join(os.path.basename(str(p["file"])) for p in finestra) or "nessuno")
     if storici:
         passo("tracce", "registri storici riusciti per costruzione, senza codice d'uscita: %d su %d (dichiarato)" % (storici, len(scambi)), True)
+    if tornati:
+        passo("tracce", "scambi falliti e tornati indietro da soli: %d su %d (dichiarato)" % (tornati, len(scambi)), True)
     imm = let.get("immagini") or {}
     para = sorted(let.get("paracadute") or [], key=lambda p: p.get("quando") or "")
     ultimo = para[-1] if para else {}
@@ -325,22 +370,28 @@ def misura_contenitori(let, con_guasto=False):
     dal = let.get("pulsante_scrive_uscita_dal")
     dal_q = _quando(dal) if dal else None
     pre = [_quando(p["quando"]) for p in (let.get("pre_deploy") or [])]
-    finestre = []
+    finestre = []    # (inizio, fine, etichetta, solo nginx)
     for s in let.get("scambi") or []:
-        if not (s.get("scambio_fatto") is True and (s.get("uscita") == 0 or _per_costruzione(s, sh, dal_q))):
+        esito = _esito(s, sh, dal_q)
+        if esito not in ("riuscito", "storico", "tornato"):
             continue
         fine = _quando(s["quando"])
         inizi = [p for p in pre if 0 <= (fine - p).total_seconds() <= FINESTRA_MIN * 60]
         if inizi:
-            # il punto di ritorno PIU' VICINO: quello del `prima` di questo scambio, non uno di ore prima
-            finestre.append((max(inizi), fine, os.path.basename(str(s.get("file")))))
+            # il punto di ritorno PIU' VICINO: quello del `prima` di questo scambio, non uno di ore prima; e un ritorno
+            # automatico ricrea SOLO nginx (la fase `nginx` del protocollo): la sua finestra copre solo quel contenitore
+            tornato = esito == "tornato"
+            finestre.append((max(inizi), fine, "%s (%s)" % (os.path.basename(str(s.get("file"))),
+                                                           "fallito e TORNATO INDIETRO DA SOLO" if tornato else "riuscito"),
+                             tornato))
     for c in cont:
         nome = str(c.get("nome") or "?")
         q = _quando(c.get("creato"))
-        coperto = [f for f in finestre if f[0] <= q <= f[1]]
-        passo("contenitori", "%s creato il %s dentro uno scambio D17 riuscito" % (nome, q.strftime("%Y-%m-%d %H:%M:%S UTC")),
+        coperto = [f for f in finestre if f[0] <= q <= f[1] and (not f[3] or nome == NGINX)]
+        passo("contenitori", "%s creato il %s dentro uno scambio D17" % (nome, q.strftime("%Y-%m-%d %H:%M:%S UTC")),
               bool(coperto), coperto[0][2] if coperto else
-              "nessuno scambio riuscito lo copre: ricreato a mano o da un altro script")
+              "nessuno scambio riuscito (ne' un ritorno automatico, che ricrea solo nginx) lo copre: ricreato a mano o "
+              "da un altro script")
 
 
 def letture_finte(**k):
@@ -367,6 +418,24 @@ def letture_finte(**k):
     return let
 
 
+TRACCIA_RITORNO = {"file": "/root/deploy_scambio_20260907_200500.log", "quando": "2026-09-07T20:05:00Z",
+                   "scambio_fatto": False, "uscita": 1, "ritorno_riuscito": True}
+
+
+def letture_ritorno(traccia=None, ricreato="casavip_nginx", pre_deploy=None):
+    """La scena di n8 (27/11/2026), una copia sola per l'autoprova e per le prove: lo scambio riuscito delle 15:12 di
+    `letture_finte` ha creato app, nginx e backup; alle 20:05 una fase nginx fallisce e torna indietro da sola (`traccia`,
+    di base TRACCIA_RITORNO), e il ritorno ricrea il contenitore `ricreato` alle 20:03, dopo il suo PRE_DEPLOY delle 20:00
+    (`pre_deploy`=None aggiunge quel PRE_DEPLOY; una lista lo sostituisce)."""
+    base = letture_finte()
+    if pre_deploy is None:
+        pre_deploy = base["pre_deploy"] + [{"file": "/root/PRE_DEPLOY_20260907-200000.commit",
+                                            "quando": "2026-09-07T20:00:00Z", "commit": "ae69c1f"}]
+    return letture_finte(scambi=base["scambi"] + [TRACCIA_RITORNO if traccia is None else traccia], pre_deploy=pre_deploy,
+                         contenitori=[dict(c, creato="2026-09-07T20:03:00Z") if c["nome"] == ricreato else c
+                                      for c in base["contenitori"]])
+
+
 def misura_tutto(let, con_guasto=False):
     """Documento sempre; pulsante/tracce/a_mano/contenitori solo con le letture. Una misura che esplode e' un ROSSO, non un
     silenzio (S7): l'eccezione diventa un passo rosso col suo nome."""
@@ -389,6 +458,8 @@ def autoprova():
             ("scambio senza punto di ritorno nella finestra", letture_finte(pre_deploy=[]), False),
             ("scambio con un tempo illeggibile", letture_finte(scambi=[{"file": "x.log", "quando": "ieri", "scambio_fatto": True, "uscita": 0}]), False),
             ("scambio con USCITA=1", letture_finte(scambi=[{"file": "x.log", "quando": "2026-09-07T15:12:00Z", "scambio_fatto": False, "uscita": 1}]), False),
+            ("nginx fallito e TORNATO INDIETRO da solo (n8)", letture_ritorno(), True),
+            ("ritorno riuscito ma nessuna USCITA", letture_ritorno(dict(TRACCIA_RITORNO, uscita=None)), False),
             ("registro STORICO senza USCITA, prima della data in cui il pulsante la scrive (set -eu): per costruzione",
              letture_finte(scambi=[{"file": "/root/deploy_scambio_vecchio.log", "quando": "2026-09-07T15:12:00Z", "scambio_fatto": True, "uscita": None}],
                            pulsante_scrive_uscita_dal="2026-09-08T15:50:00Z",
