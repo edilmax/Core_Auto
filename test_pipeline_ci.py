@@ -16442,6 +16442,64 @@ class TestLEsameDelDeployNonPuoBARARE(_GuardieSugliAttrezziDelLavoro):
         self.assertIn("contenitori", " | ".join(motivi))
         self.assertTrue(any("contenitor" in r for r in esame.NON_GUARDA), "il riavvio che non cambia la data va dichiarato")
 
+    def test_UN_RITORNO_AUTOMATICO_RIUSCITO_NON_E_UN_DEPLOY_A_MANO(self):
+        """n8 di RIPRENDI_QUI.md (27/11/2026). La fase `nginx` del protocollo, se nginx non torna, torna indietro DA SOLA e
+        scrive «RITORNO RIUSCITO» nella traccia (USCITA resta diversa da 0). L'esame leggeva solo «SCAMBIO FATTO» con
+        USCITA=0: dopo un ritorno riuscito la casella sarebbe rimasta rossa per sempre (la traccia fallita, e nginx
+        ricreato dal ritorno fuori da ogni finestra), cioe' un falso allarme su un deploy passato dal protocollo (regola
+        ferrea 10). Il ritorno conta SOLO se riuscito, con USCITA scritta e diversa da 0, senza «SCAMBIO FATTO», e col suo
+        punto di ritorno nella finestra; in ogni altro caso la traccia resta rossa come prima."""
+        esame = self._esame()
+        tornato = esame.TRACCIA_RITORNO          # la scena condivisa con l'autoprova: `esame.letture_ritorno`
+        con = esame.letture_ritorno
+
+        def passi(misura, let):
+            del esame.PASSI[:]
+            with contextlib.redirect_stdout(io.StringIO()):
+                misura(let)
+            return list(esame.PASSI)
+        storico = con(dict(tornato, scambio_fatto=True, uscita=None))     # un registro «per costruzione» CON la riga
+        storico["pulsante_scrive_uscita_dal"] = "2026-09-08T15:50:00Z"
+        storico["deploy_pulsante_sh"] = "set -eu\n" + storico["deploy_pulsante_sh"]
+        casi = (  # nome, letture, verde nelle tracce, verde nei contenitori
+            ("scambio riuscito, come sempre", esame.letture_finte(), True, True),
+            ("nginx fallito e tornato indietro da solo", con(), True, True),
+            ("fallito SENZA ritorno riuscito", con(dict(tornato, ritorno_riuscito=False)), False, False),
+            ("ritorno riuscito ma nessuna USCITA scritta", con(dict(tornato, uscita=None)), False, False),
+            ("ritorno riuscito con USCITA=0 e senza SCAMBIO FATTO", con(dict(tornato, uscita=0)), False, False),
+            ("ritorno riuscito E scambio fatto, USCITA=1", con(dict(tornato, scambio_fatto=True)), False, False),
+            ("ritorno riuscito E scambio fatto, USCITA=0 (contraddizione)",
+             con(dict(tornato, scambio_fatto=True, uscita=0)), False, False),
+            ("registro storico per costruzione CON la riga del ritorno", storico, False, False),
+            ("scambio fatto scritto come testo", con(dict(tornato, scambio_fatto="true")), False, False),
+            ("ritorno riuscito senza il suo punto di ritorno", con(pre_deploy=esame.letture_finte()["pre_deploy"]),
+             False, False),
+            # il ritorno ricrea solo nginx: un'APP ricreata nella sua finestra e' stata ricreata da qualcos'altro
+            ("app ricreata nella finestra di un ritorno", con(ricreato="casavip_app"), True, False),
+        )
+        for nome, let, *attesi in casi:
+            for (situazione, misura), atteso in zip((("tracce", esame.misura_tracce),
+                                                     ("contenitori", esame.misura_contenitori)), attesi):
+                with self.subTest(caso=nome, situazione=situazione):
+                    verde, motivi, _ = esame.giudica(passi(misura, let), situazioni=(situazione,))
+                    self.assertEqual(verde, atteso, "%s, %s: %s" % (nome, situazione, motivi))
+        # le letture del raccoglitore vecchio (v2, senza il campo): rosso, e il rosso lo dice
+        verde, motivi, _ = esame.giudica(passi(esame.misura_tracce, con({k: v for k, v in tornato.items()
+                                                                          if k != "ritorno_riuscito"})),
+                                         situazioni=("tracce",))
+        self.assertFalse(verde)
+        self.assertIn("ritorno_riuscito", " | ".join(motivi), "il rosso deve dire che manca il campo")
+        # il ritorno si dice, non si spaccia per riuscito; e il conteggio e' dichiarato (solo quando c'e')
+        for misura in (esame.misura_tracce, esame.misura_contenitori):
+            self.assertTrue(any("TORNATO INDIETRO DA SOLO" in p[1] + " " + p[3] for p in passi(misura, con())),
+                            "il passo deve dire che lo scambio e' tornato indietro da solo, non spacciarlo per riuscito")
+        self.assertEqual([p[1] for p in passi(esame.misura_tracce, con()) if "tornati indietro da soli" in p[1]],
+                         ["scambi falliti e tornati indietro da soli: 1 su 2 (dichiarato)"], "il conteggio va dichiarato")
+        self.assertFalse([p for p in passi(esame.misura_tracce, esame.letture_finte()) if "tornati indietro" in p[1]],
+                         "senza ritorni nessun conteggio")
+        self.assertIn("ritorno_riuscito", esame.__doc__, "il campo nuovo va scritto nel formato delle letture")
+        self.assertTrue(any("RITORNO RIUSCITO" in r for r in esame.NON_GUARDA), "cosa l'esame crede va dichiarato")
+
     def test_DA_FILE_GIUDICA_SENZA_RETE_SCRIVE_L_ESITO_VERO_E_COL_GUASTO_NON_SCRIVE_MAI(self):
         esame = self._esame()
         vera_registra = esame.scheda.registra
