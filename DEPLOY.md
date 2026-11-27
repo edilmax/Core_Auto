@@ -127,7 +127,9 @@ sta installando — cioè a niente.
 
 ### Poi lo scambio
 
-Da eseguire sul VPS, **in questo ordine**:
+Li esegue `sh deploy/protocollo_d17.sh scambio` (dopo `prima`), **in questo ordine**. ⛔ Non si
+digitano a mano da un terminale ssh: se la connessione cade fra `stop` e `up -d` il sito resta giù
+(vedi «Se la connessione cade a metà» qui sotto); il protocollo si stacca da solo dalla sessione.
 
 ```bash
 cd /var/www/bookinvip && \
@@ -141,6 +143,26 @@ docker compose -f docker-compose.casavip.yml up -d app backup
 ⛔ **`up -d app backup`, non `up -d` da solo** (26/11/2026): senza nomi, compose ricrea anche nginx se
 nello stesso invio è cambiata la sua definizione, senza `nginx -t` e senza il suo paracadute. nginx si
 cambia solo con la fase «Solo nginx» qui sotto.
+
+#### Se la connessione cade a metà (27/11/2026)
+
+Questi passi li fa `sh deploy/protocollo_d17.sh scambio`. Prima del 27/11, se la connessione ssh cadeva
+mentre lo scambio girava, il terminale chiudendosi fermava lo script dove capitava (fra `stop` e `up -d`
+il sito è giù), senza ritorno e senza nemmeno `USCITA=` nella traccia: misurato con `dash`, la shell del
+server. Ora `scambio` e `nginx` **si rilanciano da sole fuori dalla sessione** (`setsid`): chi le lancia
+aspetta, mostra l'uscita e restituisce lo stesso codice; se cade la connessione, la fase arriva in fondo da
+sola. L'uscita completa sta in `/root/d17_scambio_<ora UTC>_<numero>.txt` (o `d17_nginx_…`), e la si può seguire
+da un'altra finestra con `tail -f`. ⚠️ Ctrl-C ferma solo chi aspetta, non la fase (lo stampa anche a
+video, col numero del processo). Per fermarla davvero: `kill <quel numero>`. La fase si ferma alla fine del
+comando in corso e la traccia dice `USCITA=143`, senza «SCAMBIO FATTO»: fra `stop` e `up -d` il sito può
+restare giù, quindi si usa solo se la fase è bloccata. `prima`, `dopo` e `gettone` non si staccano.
+
+⛔ **Una fase che tocca il sito alla volta.** Dopo una connessione caduta la fase **gira ancora**: non
+rilanciarla, leggi il suo file. Se la si rilancia lo stesso, `prima`, `scambio` e `nginx` trovano il
+lucchetto (`/root/.d17_sito.lock`, preso con `flock` e lasciato da solo anche se la fase muore) ed escono
+con **75**, senza toccare niente, dicendo quale fase lo tiene, il suo numero di processo e dove sta la sua
+uscita. Senza, un secondo `scambio` avrebbe passato il gettone (vale fino alla fine del primo) e fatto
+`stop`/`rm`/`up` sugli stessi contenitori.
 
 **Perché "rm-first":** con Compose v1 un `up -d` su container esistenti dopo un `build`
 falliva con `KeyError: ContainerConfig`, e fermare+rimuovere prima di ricreare era l'unica
@@ -222,13 +244,9 @@ FATTO», e con «RITORNO RIUSCITO» se dopo il ritorno il sito risponde. **[Nh]*
 riuscito porta il disco al commit fissato in [Na] (`git merge --ff-only`); se proprio lì fallisse, lo dice
 e stampa come allineare il disco o tornare indietro.
 
-⛔ **Si lancia staccata dalla sessione ssh**, e poi si legge il file: se ssh cade a metà, la shell muore
-senza scrivere `USCITA` e senza ritorno. Per esempio:
-
-```bash
-cd /var/www/bookinvip
-setsid nohup sh deploy/protocollo_d17.sh nginx > /root/fase_nginx_$(date -u +%Y%m%d_%H%M%S).txt 2>&1 < /dev/null &
-```
+⛔ **Si stacca da sola dalla sessione ssh** (dal 27/11/2026, come `scambio`: vedi «Se la connessione
+cade» qui sopra): si lancia col comando normale, e se ssh cade a metà la fase arriva in fondo lo stesso.
+La sua uscita completa sta in `/root/d17_nginx_<ora UTC>_<numero>.txt`, e la traccia in `deploy_scambio_*.log`.
 
 ⛔ **Il disco resta al codice di prima finché lo scambio non è riuscito**, apposta: il ritorno usa il
 compose del disco più l'immagine e la configurazione tenute in [Nc], e nessuno scambio successivo può
