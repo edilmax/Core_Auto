@@ -69,6 +69,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import stat
 import subprocess
 import sys
@@ -6793,6 +6794,12 @@ class TestIlDeployNonPuoSALTAREIlPassoDiSicurezza(unittest.TestCase):
     # protocollo D17 no. Dal 28/9 ogni deploy finiva solo in un file scelto a mano da chi lo lanciava,
     # e il codice d'uscita c'era solo se se ne ricordava (4 su 14). Una traccia affidata alla memoria
     # di chi lancia non misura «sempre».
+    # `scambio` e `nginx` si rilanciano sotto `setsid -w` e `prima`/`scambio`/`nginx` prendono il lucchetto con
+    # `flock -n 9` (n6, 27/11). Git per Windows non ha ne' l'uno ne' l'altro: finti che fanno cio' che fa il vero
+    # (setsid toglie `-w` ed esegue il resto, come quando chi lo chiama non capeggia un gruppo; flock da' sempre il
+    # lucchetto) e NON scrivono in chiamate.txt, che resta l'elenco di cio' che la fase fa
+    FINTI_DEL_RILANCIO = {"setsid": '#!/bin/sh\nshift\nexec "$@"\n', "flock": '#!/bin/sh\nexit 0\n'}
+
     def _finti_attrezzi(self, pull_ok=True):
         """`git` e `docker` finti nel PATH: lo scambio arriva in fondo senza toccare niente di vero."""
         d = os.path.join(self.dir, "finti")
@@ -6806,7 +6813,8 @@ class TestIlDeployNonPuoSALTAREIlPassoDiSicurezza(unittest.TestCase):
                       ' *Health.Status*) echo healthy ;;\n'
                       ' *"{{.Image}}"*) echo sha256:nuova ;;\n'
                       ' logs*) echo "\'money_path_pronto\': True" ;;\n'
-                      'esac\nexit 0\n'}
+                      'esac\nexit 0\n',
+            **self.FINTI_DEL_RILANCIO}
         for nome, testo in attrezzi.items():
             p = os.path.join(d, nome)
             with io.open(p, "w", encoding="utf-8", newline="\n") as f:
@@ -6852,6 +6860,338 @@ class TestIlDeployNonPuoSALTAREIlPassoDiSicurezza(unittest.TestCase):
         self.assertEqual(len(testi), 1, "lo scambio fallito non ha lasciato la sua traccia: %r" % (testo[-300:],))
         self.assertNotIn("SCAMBIO FATTO", testi[0])
         self.assertRegex(testi[0], r"USCITA=[1-9]")
+
+
+class TestLeFasiCheToccanoIlSitoNonSiFermanoSeCadeLaConnessione(unittest.TestCase):
+    """⛔ n6 di RIPRENDI_QUI.md (27/11/2026). `scambio` e `nginx` si lanciano da una sessione ssh: se la connessione
+    cade, il terminale manda SIGHUP a tutto il gruppo in primo piano, e `sh` (dash, sul VPS e in CI) muore SENZA
+    eseguire il trap EXIT. Lo scambio si ferma dove capita -- dopo `stop app backup` e prima di `up -d` il sito e'
+    giu' -- e la traccia non ha nemmeno `USCITA=`: nessun ritorno, nessun segno.
+    Da qui le due fasi che toccano il sito girano FUORI dalla sessione di chi le lancia (`setsid`, uscita su file,
+    niente terminale in ingresso): chi lancia aspetta e ne riporta l'uscita, ma se muore lui la fase arriva in fondo.
+    E, perche' ora una fase sopravvive: un lucchetto (`flock`) per `prima`, `scambio` e `nginx`, e `kill` lascia
+    USCITA=143 nella traccia invece di niente.
+    ⛔ COSA NON PROVANO (D18 punto 3): un sshd vero e un terminale vero. La caduta si imita mandando SIGHUP al gruppo
+    di chi lancia, cioe' quello che il kernel fa quando il terminale si chiude.
+    """
+    RADICE = os.path.dirname(os.path.abspath(__file__))
+    SCRIPT = os.path.join(RADICE, "deploy", "protocollo_d17.sh").replace("\\", "/")
+    LANCIO = 'PATH="$1:$PATH"; export PATH; exec sh "$2" "$3"'      # i finti davanti nel PATH visto da `sh`
+
+    def setUp(self):
+        self.sh = TestIlDeployNonPuoSALTAREIlPassoDiSicurezza._trova_sh()
+        self.dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def _righe_eseguite(self):
+        """Le righe dello script che si ESEGUONO: senza vuote e senza commenti (S6)."""
+        with io.open(self.SCRIPT, encoding="utf-8") as f:
+            return [r.strip() for r in f.read().splitlines() if r.strip() and not r.strip().startswith("#")]
+
+    def _almeno_la_struttura(self, *pezzi):
+        """Ramo povero dove non si puo' eseguire (senza `sh`; o su Windows, senza setsid, flock e os.killpg): fra le
+        righe ESEGUITE, prima di qualunque fase, c'e' ognuno dei `pezzi` (di base: il rilancio sotto `setsid`). Piu'
+        debole (S6): non prova che la fase sopravviva, solo che la riga c'e'."""
+        eseguite = self._righe_eseguite()
+        prima_fase = [i for i, r in enumerate(eseguite) if r.startswith('if [ "$FASE" = ')]
+        self.assertTrue(prima_fase, "PREMESSA MANCANTE: nessuna fase nello script")
+        for pezzo in pezzi or ('setsid -w sh "$0" "$FASE" staccata',):
+            trovate = [i for i, r in enumerate(eseguite) if pezzo in r]
+            self.assertTrue(trovate and trovate[0] < prima_fase[0],
+                            "manca, fra le righe eseguite e prima di ogni fase, %r" % pezzo)
+
+    def _scrivi(self, d, nome, testo):
+        p = os.path.join(d, nome)
+        with io.open(p, "w", encoding="utf-8", newline="\n") as f:
+            f.write(testo)
+        os.chmod(p, stat.S_IRWXU)
+
+    def _vere_o_ramo_povero(self):
+        """True se la prova vera si puo' fare. Su Windows (niente setsid, flock, killpg) il ramo povero; su Linux NO:
+        li' un attrezzo che manca e' un ROSSO, non un verde col ramo povero (silent-failure-hunter, 27/11)."""
+        if not self.sh or os.name == "nt":
+            return False
+        self.assertTrue(hasattr(os, "killpg") and shutil.which("setsid") and shutil.which("flock"),
+                        "PREMESSA MANCANTE su Linux: servono os.killpg, setsid e flock per la prova vera")
+        return True
+
+    def _finti(self, pull_ok=True, build_aspetta=False, setsid=None):
+        """`git` e `docker` finti come quelli dello scambio qui sopra; il docker scrive le sue chiamate. Con
+        `build_aspetta` la build segna `in_build` e aspetta il file `via` (al massimo 20 s): la prova sceglie lei QUANDO
+        la connessione cade, senza indovinare un tempo; una SECONDA build (solo se il lucchetto manca) esce subito, cosi'
+        il caso rosso non aspetta 20 s. `setsid` e' il testo di un `setsid` finto, e con lui c'e' anche il `flock` finto
+        (Git per Windows non ha nessuno dei due); None = tutti e due veri."""
+        d = os.path.join(self.dir, "finti")
+        os.makedirs(d)
+        build = (' *" build app"*) if [ -f in_build ]; then echo "seconda build" >> chiamate.txt; exit 1; fi; : > in_build; '
+                 'i=0; while [ ! -f via ] && [ $i -lt 200 ]; do sleep 0.1; i=$((i+1)); done; [ -f via ] ;;\n'
+                 ) if build_aspetta else ''
+        self._scrivi(d, "git", '#!/bin/sh\ncase "$1" in pull) %s ;; rev-parse) echo abc1234 ;; esac\n'
+                     % ("exit 0" if pull_ok else "echo pull rifiutato; exit 1"))
+        if setsid is not None:
+            self._scrivi(d, "flock", TestIlDeployNonPuoSALTAREIlPassoDiSicurezza.FINTI_DEL_RILANCIO["flock"])
+        # nessuna di queste prove deve parlare col sito vero, nemmeno per sbaglio (una fase nginx che non si ferma)
+        self._scrivi(d, "curl", '#!/bin/sh\necho "curl $*" >> chiamate.txt\necho 000\nexit 7\n')
+        self._scrivi(d, "docker", '#!/bin/sh\necho "docker $*" >> chiamate.txt\ncase "$*" in\n' + build +
+                     ' *casavip-app:latest*) echo sha256:nuova ;;\n'
+                     ' *casavip-app:prec*) echo sha256:vecchia ;;\n'
+                     ' *Health.Status*) echo healthy ;;\n'
+                     ' *"{{.Image}}"*) echo sha256:nuova ;;\n'
+                     ' logs*) echo "\'money_path_pronto\': True" ;;\n'
+                     'esac\nexit 0\n')
+        if setsid is not None:
+            self._scrivi(d, "setsid", setsid)
+        with open(os.path.join(self.dir, "gettone"), "w", encoding="utf-8") as f:
+            f.write("epoca=%d\nimmagine=sha256:vecchia\ncommit=abc1234\n" % int(time.time()))
+        return d
+
+    def _comando(self, finti, fase, lancio=None):
+        """Il comando e l'ambiente per lanciare `fase` coi finti davanti nel PATH, in una cartella di prova."""
+        posix = finti.replace("\\", "/")
+        if os.name == "nt" and len(posix) > 1 and posix[1] == ":":
+            posix = "/" + posix[0].lower() + posix[2:]
+        amb = dict(os.environ, RADICE_D17=self.dir, REGISTRI_D17=self.dir, GETTONE_D17=os.path.join(self.dir, "gettone"),
+                   GUARDIANO_D17="")
+        amb.pop("D17_STACCATA", None)
+        return [self.sh, "-c", lancio or self.LANCIO, "d17", posix, self.SCRIPT, fase], amb
+
+    def _esegui(self, comando, amb, **piu):
+        """(uscita, testo) di un lancio che si aspetta fino in fondo; senza `input`, niente ingresso."""
+        if "input" not in piu:
+            piu.setdefault("stdin", subprocess.DEVNULL)
+        e = subprocess.run(comando, cwd=self.dir, env=amb, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,  # nosec B603 - il nostro protocollo_d17.sh con attrezzi finti in una cartella di prova  # noqa: S603
+                           timeout=60, **piu)
+        return e.returncode, e.stdout.decode("utf-8", "replace")
+
+    def _leggi(self, prefisso, fine):
+        testi = []
+        for nome in sorted(f for f in os.listdir(self.dir) if f.startswith(prefisso) and f.endswith(fine)):
+            with io.open(os.path.join(self.dir, nome), encoding="utf-8") as g:
+                testi.append(g.read())
+        return testi
+
+    @staticmethod
+    def _viva(pid):
+        """La fase c'e' ancora? (Linux: un processo morto e non ancora raccolto, Z, non conta)."""
+        try:
+            with open("/proc/%d/stat" % pid, encoding="utf-8") as f:
+                return f.read().rsplit(")", 1)[1].split()[0] != "Z"
+        except (OSError, IndexError):
+            return False
+
+    def _aspetta_la_traccia(self, fase):
+        """Le tracce dello scambio, aspettando (al massimo 30 s) che una dica USCITA=; ma si smette subito se la fase
+        non c'e' piu' (efficienza, 27/11: nel caso rosso la fase e' gia' morta, e aspettare non misura niente)."""
+        fine = time.time() + 30
+        while time.time() < fine and not any("USCITA=" in t for t in self._leggi("deploy_scambio_", ".log")):
+            if fase is None or not self._viva(fase):
+                break
+            time.sleep(0.05)
+        return self._leggi("deploy_scambio_", ".log")
+
+    @contextlib.contextmanager
+    def _scambio_fermo_alla_build(self):
+        """Lancia `scambio` (setsid e flock veri) in una sessione sua, come da un terminale; aspetta che la build
+        cominci e la tiene ferma li' per tutto il blocco `with`; poi la libera (file `via`) e aspetta chi ha lanciato.
+        Da' (chi lancia, numero di processo della fase o None, il file d'uscita che chi lancia ha annunciato o None)."""
+        comando, amb = self._comando(self._finti(build_aspetta=True), "scambio")
+        terminale = os.path.join(self.dir, "terminale.txt")
+        with open(terminale, "wb") as uscita:
+            p = subprocess.Popen(comando, cwd=self.dir, env=amb, stdin=subprocess.DEVNULL, stdout=uscita,  # nosec B603 - il nostro protocollo_d17.sh con attrezzi finti in una cartella di prova  # noqa: S603
+                                 stderr=subprocess.STDOUT, start_new_session=True)
+            try:
+                fine = time.time() + 30
+                while not os.path.exists(os.path.join(self.dir, "in_build")) and p.poll() is None and time.time() < fine:
+                    time.sleep(0.05)
+                self.assertTrue(os.path.exists(os.path.join(self.dir, "in_build")),
+                                "PREMESSA MANCANTE: lo scambio non e' arrivato alla build")
+                with io.open(terminale, encoding="utf-8", errors="replace") as f:
+                    detto = f.read()
+                fase = re.search(r"la fase e' il processo (\d+)", detto)
+                file_fase = re.search(r"la sua uscita: (\S+)", detto)
+                yield p, int(fase.group(1)) if fase else None, file_fase.group(1) if file_fase else None
+            finally:
+                with open(os.path.join(self.dir, "via"), "w", encoding="utf-8"):
+                    pass
+                try:
+                    p.wait(timeout=30)
+                except subprocess.TimeoutExpired:
+                    p.kill()
+                    p.wait()
+
+    # il `setsid` finto: scrive come e' stato chiamato e cosa trova in ingresso, poi esegue il resto (come quello vero
+    # quando chi lo chiama non capeggia un gruppo). Chi lancia gli passa un ingresso: la fase non deve vederlo.
+    SETSID_CHE_ESEGUE = '#!/bin/sh\necho "setsid $*" >> chiamate.txt\ncat > ingresso_della_fase.txt\nshift\nexec "$@"\n'
+
+    def test_LO_SCAMBIO_GIRA_FUORI_DALLA_SESSIONE_E_CHI_LANCIA_NE_RIPORTA_L_USCITA(self):
+        if not self.sh:
+            return self._almeno_la_struttura()
+        for pull_ok, attesa in ((True, 0), (False, 1)):
+            with self.subTest(pull_ok=pull_ok):
+                shutil.rmtree(self.dir, ignore_errors=True)
+                os.makedirs(self.dir)
+                comando, amb = self._comando(self._finti(pull_ok=pull_ok, setsid=self.SETSID_CHE_ESEGUE), "scambio")
+                uscita, testo = self._esegui(comando, amb, input=b"riga del terminale\n")
+                self.assertEqual(uscita, attesa, "chi lancia deve riportare l'uscita della fase: %r" % testo[-600:])
+                nomi = [f for f in os.listdir(self.dir) if f.startswith("d17_scambio_") and f.endswith(".txt")]
+                self.assertEqual(len(nomi), 1, "l'uscita della fase deve stare in un file suo: %r" % testo[-600:])
+                chiamate = self._leggi("chiamate", ".txt")
+                self.assertEqual([c for c in (chiamate[0].splitlines() if chiamate else []) if c.startswith("setsid")],
+                                 ["setsid -w sh %s scambio staccata %s/%s" % (self.SCRIPT, self.dir, nomi[0])],
+                                 "la fase si rilancia UNA volta, sotto setsid, col segno e il suo file, e non si rilancia")
+                self.assertEqual(self._leggi("ingresso_della_fase", ".txt"), [""],
+                                 "la fase non deve leggere dal terminale di chi lancia")
+                uscite = self._leggi("d17_scambio_", ".txt")
+                self.assertIn("[2a] PRENDO IL CODICE NUOVO", uscite[0], "la fase scrive nel file, non sul terminale")
+                self.assertIn(uscite[0].strip(), testo, "chi lancia mostra l'uscita della fase quando finisce")
+
+    def test_ANCHE_NGINX_GIRA_FUORI_DALLA_SESSIONE_E_GETTONE_E_DOPO_NO(self):
+        if not self.sh:
+            return self._almeno_la_struttura()
+        # un `setsid` finto che NON esegue la fase ed esce 3: si vede chi passa dal rilancio e che l'uscita torna intera.
+        # `dopo` gira davvero (curl finto: niente sito vero) e qui conta solo che NON si rilanci; `prima` lo guarda la
+        # prova del lucchetto (code-review del 27/11: il nome prometteva anche prima e dopo, e ne guardava una sola)
+        finti = self._finti(setsid='#!/bin/sh\necho "setsid $*" >> chiamate.txt\nexit 3\n')
+        for fase, attesa in (("nginx", 3), ("gettone", 0), ("dopo", None)):
+            with self.subTest(fase=fase):
+                uscita, testo = self._esegui(*self._comando(finti, fase))
+                if attesa is not None:
+                    self.assertEqual(uscita, attesa, testo[-600:])
+        chiamate = self._leggi("chiamate", ".txt")
+        rilanci = [c for c in (chiamate[0].splitlines() if chiamate else []) if c.startswith("setsid")]
+        self.assertEqual(len(rilanci), 1, "nginx si rilancia sotto setsid; `gettone` e `dopo` (non toccano il sito) no")
+        self.assertTrue(rilanci[0].startswith("setsid -w sh %s nginx staccata %s/d17_nginx_" % (self.SCRIPT, self.dir)),
+                        rilanci)
+
+    def test_SE_LA_FASE_NON_PUO_PARTIRE_CHI_LANCIA_LO_DICE_E_NON_LA_RILANCIA(self):
+        """code-review del 27/11, due rilievi: (1) una cartella dei registri che non si puo' scrivere faceva fallire il
+        `cat` finale con `set -e`, senza dire che la fase non era mai partita; (2) lo script passato da stdin (`sh -s`)
+        ha `$0` = `sh`, e il rilancio eseguiva `sh sh scambio`. Tutti e due: uscita 1, il motivo, nessun setsid."""
+        if not self.sh:
+            return self._almeno_la_struttura()
+        finti = self._finti(setsid=self.SETSID_CHE_ESEGUE)
+        comando, amb = self._comando(finti, "scambio")
+        amb["REGISTRI_D17"] = os.path.join(self.dir, "cartella_che_non_c_e")
+        uscita, testo = self._esegui(comando, amb)
+        self.assertEqual(uscita, 1, testo[-600:])
+        self.assertIn("la fase non e' partita", testo)
+        # lo script da stdin: `sh -s scambio` (lo script lo legge da cio' che riceve in ingresso, `$0` vale `sh`)
+        with open(self.SCRIPT, "rb") as f:
+            sorgente = f.read()
+        uscita, testo = self._esegui(*self._comando(finti, "scambio", 'PATH="$1:$PATH"; export PATH; exec sh -s "$3"'),
+                                     input=sorgente)
+        self.assertEqual(uscita, 1, testo[-600:])
+        self.assertIn("la fase non e' partita", testo)
+        self.assertEqual(self._leggi("chiamate", ".txt"), [], "nessuna delle due doveva arrivare a setsid")
+
+    def test_IL_FILE_DELL_USCITA_HA_L_ORA_UTC_E_LA_FORMA_DELLA_TRACCIA(self):
+        """code-review del 27/11: la traccia `deploy_scambio_<AAAAMMGG>_<HHMMSS>` ha l'ora UTC; il file dell'uscita dello
+        stesso giro aveva l'ora locale (e, simplify, un `-` al posto del `_`): i due nomi non si accoppiavano. Si prova
+        con un fuso a +1 ora."""
+        if not self.sh:
+            return self._almeno_la_struttura()
+        comando, amb = self._comando(self._finti(setsid=self.SETSID_CHE_ESEGUE), "scambio")
+        amb["TZ"] = "CET-1"
+        uscita, testo = self._esegui(comando, amb)
+        self.assertEqual(uscita, 0, testo[-600:])
+        nomi = [f for f in os.listdir(self.dir) if f.startswith("d17_scambio_")]
+        self.assertEqual(len(nomi), 1, nomi)
+        quando = re.match(r"d17_scambio_(\d{8}_\d{6})_\d+\.txt$", nomi[0])
+        self.assertTrue(quando, "nome del file d'uscita inatteso (forma della traccia: AAAAMMGG_HHMMSS): %r" % nomi[0])
+        nel_nome = datetime.datetime.strptime(quando.group(1), "%Y%m%d_%H%M%S").replace(tzinfo=datetime.timezone.utc)
+        scarto = abs(time.time() - nel_nome.timestamp())
+        self.assertLess(scarto, 600, "l'ora nel nome non e' quella UTC (scarto %d s): %r" % (scarto, nomi[0]))
+
+    def test_UNA_D17_STACCATA_RIMASTA_NELL_AMBIENTE_NON_SPEGNE_IL_RILANCIO(self):
+        """code-review e simplify del 27/11: il segno «sono la copia rilanciata» stava in una variabile d'ambiente, e un
+        `export D17_STACCATA=1` rimasto da una prova a mano spegneva la riparazione senza dirlo. Ora il segno e' un
+        ARGOMENTO che passa solo il rilancio: la variabile nell'ambiente non conta piu' niente."""
+        if not self.sh:
+            return self._almeno_la_struttura()
+        comando, amb = self._comando(self._finti(setsid=self.SETSID_CHE_ESEGUE), "scambio")
+        amb["D17_STACCATA"] = "1"
+        uscita, testo = self._esegui(comando, amb)
+        self.assertEqual(uscita, 0, testo[-600:])
+        chiamate = self._leggi("chiamate", ".txt")
+        self.assertEqual(len([c for c in (chiamate[0].splitlines() if chiamate else []) if c.startswith("setsid")]), 1,
+                         "con D17_STACCATA=1 nell'ambiente la fase doveva rilanciarsi lo stesso: %r" % testo[-400:])
+
+    def test_UNA_CONNESSIONE_CHE_CADE_A_META_SCAMBIO_NON_LO_FERMA(self):
+        """Il guasto vero: SIGHUP al gruppo di chi lancia mentre la build gira. Lo scambio deve arrivare in fondo da
+        solo -- traccia con SCAMBIO FATTO e USCITA=0, gettone consumato."""
+        if not self._vere_o_ramo_povero():
+            return self._almeno_la_struttura()
+        with self._scambio_fermo_alla_build() as (p, fase, _):
+            os.killpg(p.pid, signal.SIGHUP)       # la connessione cade: il terminale saluta tutto il suo gruppo
+            p.wait(timeout=30)
+        tracce = self._aspetta_la_traccia(fase)
+        self.assertEqual(len(tracce), 1, "dopo la caduta della connessione lo scambio non ha lasciato la sua traccia "
+                         "(si e' fermato a meta', senza USCITA): %r" % tracce)
+        self.assertIn("SCAMBIO FATTO", tracce[0], "lo scambio doveva arrivare in fondo da solo: %r" % tracce[0])
+        self.assertIn("USCITA=0", tracce[0])
+        self.assertFalse(os.path.exists(os.path.join(self.dir, "gettone")), "il gettone non e' stato consumato: [2g] mai raggiunto")
+
+    def test_UNA_SECONDA_FASE_MENTRE_LA_PRIMA_GIRA_SI_RIFIUTA_SENZA_TOCCARE_NIENTE(self):
+        """Il rischio che la riparazione di n6 crea (differential-review e silent-failure-hunter, 27/11): la fase ora
+        sopravvive alla connessione caduta, e chi si ricollega puo' rilanciarla mentre gira ancora. Il gettone vale
+        fino a [2g], quindi un secondo `scambio` passerebbe [2z] e farebbe stop/rm/up sugli stessi contenitori; e un
+        secondo `nginx` aggancerebbe il paracadute all'immagine appena messa. Una fase che tocca il sito alla volta:
+        la seconda esce 75 col motivo e dice CHI tiene il lucchetto e dove sta la SUA uscita (non «l'ultimo file», che
+        sarebbe quello del rifiuto: simplify, 27/11), senza una chiamata a docker; finita la prima, il lucchetto e'
+        libero."""
+        if not self._vere_o_ramo_povero():
+            return self._almeno_la_struttura("flock -n 9 ||")
+        finti = os.path.join(self.dir, "finti")
+        with self._scambio_fermo_alla_build() as (p, fase, file_fase):
+            self.assertTrue(fase and file_fase, "PREMESSA MANCANTE: chi lancia non ha detto processo e file della fase")
+            # anche `prima`, che riaggancia il paracadute dell'app: a meta' scambio lo legherebbe all'immagine
+            # appena messa (code-review del 27/11). `prima` non si rilancia: si ferma da se', senza setsid
+            for seconda in ("scambio", "nginx", "prima"):
+                with self.subTest(seconda=seconda):
+                    uscita, testo = self._esegui(*self._comando(finti, seconda))
+                    self.assertEqual(uscita, 75, "la seconda fase doveva rifiutarsi: %r" % testo[-600:])
+                    self.assertIn("un'altra fase che tocca il sito sta gia' girando", testo)
+                    self.assertIn("fase scambio, processo %d" % fase, testo, "il rifiuto deve dire chi tiene il lucchetto")
+                    self.assertIn(file_fase, testo, "il rifiuto deve dire dove sta l'uscita della fase che gira")
+                    if seconda == "prima":
+                        self.assertNotIn("gira FUORI da questa sessione", testo, "`prima` non si rilancia")
+        self.assertEqual(p.returncode, 0, "la prima fase doveva arrivare in fondo")
+        chiamate = self._leggi("chiamate", ".txt")
+        self.assertEqual(len([c for c in chiamate[0].splitlines() if " build app" in c]), 1,
+                         "solo la prima fase ha costruito: %r" % chiamate)
+        tracce = self._leggi("deploy_scambio_", ".log")
+        self.assertEqual(len(tracce), 1, "la seconda fase non doveva aprire una traccia: %r" % tracce)
+        self.assertIn("SCAMBIO FATTO", tracce[0])
+        # finita la prima, il lucchetto e' libero: un altro `scambio` arriva al suo controllo (gettone consumato)
+        uscita, testo = self._esegui(*self._comando(finti, "scambio"))
+        self.assertIn("GETTONE_MANCANTE", testo, "il lucchetto e' rimasto preso")
+
+    def test_KILL_SULLA_FASE_LASCIA_USCITA_143_NELLA_TRACCIA(self):
+        """altitude di simplify, 27/11: DEPLOY.md dice che una fase staccata si ferma con `kill`. Ma SIGTERM uccide
+        dash come la connessione caduta, SENZA il trap EXIT: la traccia restava senza USCITA=, l'altra meta' di n6. Ora
+        il segnale si fa valere alla fine del comando in corso e il trap EXIT scrive USCITA=143."""
+        if not self._vere_o_ramo_povero():
+            return self._almeno_la_struttura("trap 'exit 143' TERM")
+        with self._scambio_fermo_alla_build() as (p, fase, _):
+            self.assertTrue(fase, "PREMESSA MANCANTE: chi lancia non ha detto il processo della fase")
+            os.kill(fase, signal.SIGTERM)
+        tracce = self._aspetta_la_traccia(fase)
+        self.assertEqual(len(tracce), 1, "dopo un kill la fase non ha lasciato la sua traccia: %r" % tracce)
+        self.assertIn("USCITA=143", tracce[0])
+        self.assertNotIn("SCAMBIO FATTO", tracce[0], "una fase fermata non e' uno scambio fatto")
+
+    def test_PRIMA_SCRIVE_IL_PUNTO_DI_RITORNO_NELLA_CARTELLA_DEI_REGISTRI(self):
+        """efficienza di simplify, 27/11: `prima` scriveva il punto di ritorno in /root a percorso fisso, l'unica fase
+        a farlo (nginx usa gia' la cartella dei registri). Una prova di `prima` lanciata da root lasciava un
+        PRE_DEPLOY finto in /root (successo in WSL il 27/11), che l'esame del deploy avrebbe preso per vero. Sul server
+        la cartella resta /root."""
+        if not self.sh:
+            return self._almeno_la_struttura()
+        self._esegui(*self._comando(self._finti(setsid=self.SETSID_CHE_ESEGUE), "prima"))
+        self.assertEqual([t.strip() for t in self._leggi("PRE_DEPLOY_", ".commit")], ["abc1234"],
+                         "il punto di ritorno di `prima` doveva stare nella cartella dei registri")
 
 
 class TestNginxSiCambiaSoloDalProtocolloD17(unittest.TestCase):
@@ -6943,7 +7283,8 @@ class TestNginxSiCambiaSoloDalProtocolloD17(unittest.TestCase):
                       ' *) echo "docker finto: chiamata inattesa: $*" >&2; exit 9 ;;\n'
                       'esac\nexit 0\n' % (nginx_t, su, conf, in_esecuzione, prec),
             "curl": '#!/bin/sh\necho "curl $*" >> chiamate.txt\n%s\n' % curl,
-            "sleep": '#!/bin/sh\nexit 0\n'}
+            "sleep": '#!/bin/sh\nexit 0\n',
+            **TestIlDeployNonPuoSALTAREIlPassoDiSicurezza.FINTI_DEL_RILANCIO}
         for nome, testo in attrezzi.items():
             p = os.path.join(d, nome)
             with io.open(p, "w", encoding="utf-8", newline="\n") as f:
@@ -6964,7 +7305,8 @@ class TestNginxSiCambiaSoloDalProtocolloD17(unittest.TestCase):
                       ' *Health.Status*) echo healthy ;;\n'
                       ' *"{{.Image}}"*) echo sha256:nuova ;;\n'
                       ' logs*) echo "\'money_path_pronto\': True" ;;\n'
-                      'esac\nexit 0\n'}
+                      'esac\nexit 0\n',
+            **TestIlDeployNonPuoSALTAREIlPassoDiSicurezza.FINTI_DEL_RILANCIO}
         for nome, testo in attrezzi.items():
             p = os.path.join(d, nome)
             with io.open(p, "w", encoding="utf-8", newline="\n") as f:

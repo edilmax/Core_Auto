@@ -22,13 +22,75 @@
 set -e
 FASE="${1:-}"
 C="docker compose -f docker-compose.casavip.yml"
-# I due valori qui sotto si possono sovrascrivere SOLO per poter provare questo script: in
+# I valori qui sotto si possono sovrascrivere SOLO per poter provare questo script: in
 # produzione valgono i predefiniti. Senza, le guardie del passo di sicurezza non potrebbero
 # eseguirlo affatto -- e una difesa che non si puo' mettere alla prova e' indistinguibile da
 # codice morto (D19).
 RADICE="${RADICE_D17:-/var/www/bookinvip}"
 GETTONE="${GETTONE_D17:-/root/.d17_gettone}"
+REGISTRI="${REGISTRI_D17:-/root}"   # punti di ritorno, tracce, uscite delle fasi, lucchetto
 FRESCHEZZA=3600     # un `prima` vale un'ora: dopo, l'immagine viva puo' essere gia' cambiata
+# `kill` (SIGTERM) su una fase: dash morirebbe SENZA il trap EXIT, e la traccia resterebbe senza USCITA= come dopo una
+# connessione caduta. Cosi' il segnale si fa valere alla fine del comando in corso, e il trap EXIT delle fasi scrive
+# USCITA=143 (n6, 27/11/2026).
+trap 'exit 143' TERM
+
+# ------------------------------------------------- FUORI DALLA SESSIONE ----
+# (27/11/2026, n6 di RIPRENDI_QUI.md) `scambio` e `nginx` toccano il sito. Lanciate da una sessione ssh, se la
+# connessione cade il terminale manda SIGHUP a tutto il suo gruppo e `sh` (dash) muore SENZA il trap EXIT: la fase si
+# ferma dove capita (fra `stop` e `up -d` il sito e' giu') e la traccia non ha nemmeno USCITA=. Misurato su dash il
+# 27/11 (test_pipeline_ci.py, TestLeFasiCheToccanoIlSitoNonSiFermanoSeCadeLaConnessione). Quindi queste due fasi si
+# rilanciano da sole in una sessione nuova (`setsid`: niente terminale, quindi niente SIGHUP), con l'uscita su un file;
+# l'ingresso e' gia' /dev/null, perche' in uno script un comando con `&` lo riceve da solo (POSIX, liste asincrone;
+# misurato su dash il 27/11). Questa copia aspetta, mostra il file e restituisce la stessa uscita: se cade lei, la fase
+# va avanti. `-w`: se `setsid` dovesse sdoppiarsi aspetta lo stesso la fase (senza, si leggerebbe 0 mentre gira ancora).
+# Il segno «sono la copia rilanciata» e' un ARGOMENTO (`staccata`, poi il file d'uscita) che passa solo questo rilancio:
+# una variabile d'ambiente rimasta esportata da una prova a mano lo spegnerebbe in silenzio (code-review e simplify).
+USCITA_FASE=""
+case "$FASE" in
+  scambio|nginx)
+    if [ "${2:-}" != staccata ]; then
+      # il rilancio esegue il FILE: con lo script letto da stdin (`sh -s`) $0 e' `sh`, e partirebbe `sh sh scambio`
+      [ -f "$0" ] && [ "${0##*/}" = protocollo_d17.sh ] || {
+        echo "⛔ la fase non e' partita: $0 non e' il file dello script. Lancia: sh deploy/protocollo_d17.sh $FASE"; exit 1; }
+      # ora UTC e stessa forma della traccia deploy_scambio_*; e il file si prova a creare PRIMA (`true`, non `:`: un
+      # errore di redirezione su `:` farebbe uscire la shell senza il messaggio), o un `cat` fallito direbbe il falso
+      USCITA_FASE="$REGISTRI/d17_${FASE}_$(date -u +%Y%m%d_%H%M%S)_$$.txt"
+      true > "$USCITA_FASE" || { echo "⛔ la fase non e' partita: non posso scrivere $USCITA_FASE"; exit 1; }
+      echo "=== la fase '$FASE' gira FUORI da questa sessione: se la connessione cade, arriva in fondo da sola"
+      echo "  la sua uscita: $USCITA_FASE   (da un'altra finestra: tail -f $USCITA_FASE)"
+      setsid -w sh "$0" "$FASE" staccata "$USCITA_FASE" > "$USCITA_FASE" 2>&1 &
+      FIGLIA=$!
+      echo "  la fase e' il processo $FIGLIA: Ctrl-C (o la connessione che cade) ferma solo questa attesa, NON la fase"
+      U=0
+      wait "$FIGLIA" || U=$?
+      cat "$USCITA_FASE"
+      echo "=== fine della fase '$FASE': USCITA=$U"
+      exit "$U"
+    fi
+    USCITA_FASE="${3:-}"
+    ;;
+esac
+
+# ------------------------------------------------------------ LUCCHETTO ----
+# (27/11/2026) Ora che una fase sopravvive alla connessione caduta, chi si ricollega puo' rilanciarla mentre gira
+# ancora: il gettone vale fino a [2g], quindi un secondo `scambio` farebbe stop/rm/up sugli stessi contenitori, e un
+# secondo `nginx` (o un `prima`) aggancerebbe il paracadute all'immagine appena messa. Una fase che cambia il sito o il
+# suo paracadute alla volta: `flock` lo tiene finche' il processo vive e lo lascia da solo anche se muore. Chi lo
+# tiene ci scrive dentro chi e' e dove sta la sua uscita, e il rifiuto mostra quello (non «l'ultimo file», che sarebbe
+# quello del lancio rifiutato).
+case "$FASE" in
+  prima|scambio|nginx)
+    LUCCHETTO="$REGISTRI/.d17_sito.lock"
+    exec 9>> "$LUCCHETTO"
+    flock -n 9 || {
+      echo "⛔ un'altra fase che tocca il sito sta gia' girando: non tocco niente. Chi tiene il lucchetto ($LUCCHETTO):"
+      echo "   $(cat "$LUCCHETTO")"
+      exit 75; }
+    # niente apostrofi dentro ${...:-...}: dash li legge come lettere, bash 5.3 come l'inizio di una citazione
+    echo "fase $FASE, processo $$, dalle $(date -u +%H:%M:%SZ), uscita in ${USCITA_FASE:-(il terminale di chi lancia)}" > "$LUCCHETTO"
+    ;;
+esac
 cd "$RADICE"
 
 # ⛔ IL PASSO DI SICUREZZA NON E' UN CONSIGLIO: E' UNA PRECONDIZIONE DELLO SCAMBIO.
@@ -82,9 +144,11 @@ if [ "$FASE" = "prima" ]; then
   echo "=== [1a] PUNTO DI RITORNO — scritto E RILETTO dal disco"
   TS=$(date +%Y%m%d-%H%M%S)
   PRIMA=$(git rev-parse --short HEAD)
-  echo "$PRIMA" > "/root/PRE_DEPLOY_$TS.commit"
-  echo "  scritto:  /root/PRE_DEPLOY_$TS.commit"
-  echo "  RILETTO:  $(cat "/root/PRE_DEPLOY_$TS.commit")   (deve dire $PRIMA)"
+  # nella cartella dei registri come la fase nginx (sul server e' /root): a percorso fisso, una prova lanciata da root
+  # lasciava un punto di ritorno finto in /root, che l'esame del deploy avrebbe preso per vero (27/11/2026)
+  echo "$PRIMA" > "$REGISTRI/PRE_DEPLOY_$TS.commit"
+  echo "  scritto:  $REGISTRI/PRE_DEPLOY_$TS.commit"
+  echo "  RILETTO:  $(cat "$REGISTRI/PRE_DEPLOY_$TS.commit")   (deve dire $PRIMA)"
 
   echo
   echo "=== [1b] PARACADUTE :prec — ri-agganciato all'immagine CHE GIRA ADESSO"
@@ -250,7 +314,6 @@ fi
 # cambio dell'impronta). Se il disco e' gia' piu' avanti (codice preso prima da uno `scambio`), il ritorno rimette
 # immagine e configurazione ma non le altre righe nuove di nginx nel compose (RIPRENDI_QUI.md, n7).
 if [ "$FASE" = "nginx" ]; then
-  REGISTRI="${REGISTRI_D17:-/root}"
   TS=$(date +%Y%m%d-%H%M%S)        # un nome nuovo per ogni giro: il ritorno di un giro vecchio puo' essere montato
   NUOVO="$REGISTRI/nginx_nuovo_$TS.yml"
   CN="docker compose -f $NUOVO --project-directory $RADICE"
